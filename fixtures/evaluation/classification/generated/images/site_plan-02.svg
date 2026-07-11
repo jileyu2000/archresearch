@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="720" viewBox="0 0 960 720" role="img" aria-labelledby="title desc">
+  <title id="title">Site plan synthetic evaluation fixture 2</title>
+  <desc id="desc">plot boundary, multiple footprints, north arrow</desc>
+  <rect width="960" height="720" fill="#f8faf8"/>
+  <path d="M100 120L820 85L900 560L650 650L120 600Z" fill="#edf1ed" stroke="#59615d" stroke-width="5" stroke-dasharray="14 9"/>
+  <g fill="#d9dfda" stroke="#202522" stroke-width="6"><rect x="220" y="210" width="250" height="170" transform="rotate(-4 345 295)"/><rect x="570" y="300" width="190" height="220" transform="rotate(7 665 410)"/></g>
+  <path d="M120 510C300 430 410 470 560 570S790 600 880 520" fill="none" stroke="#2d846b" stroke-width="18" stroke-opacity="0.55"/>
+  <g fill="none" stroke="#7a837e" stroke-width="3"><path d="M120 170C300 120 450 150 850 120"/><path d="M110 200C300 150 480 195 860 150"/><path d="M130 620C330 550 540 650 820 590"/></g>
+  <path d="M790 205V105M790 105l-18 34M790 105l18 34" stroke="#202522" stroke-width="6"/><text x="775" y="92" font-family="monospace" font-size="24">N</text>
+</svg>

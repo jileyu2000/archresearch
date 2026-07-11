@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Riverside Arts Centre Drawings</title>
+  </head>
+  <body>
+    <main>
+      <h1>Riverside Arts Centre</h1>
+      <div class="gallery" aria-label="Project drawings">
+        <figure>
+          <img
+            data-src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1400' height='900'%3E%3Crect width='1400' height='900' fill='%23fafafa'/%3E%3Cpath d='M90 760L1310 760L1100 220L260 220Z' stroke='%23222' fill='none' stroke-width='7'/%3E%3C/svg%3E"
+            width="1400"
+            height="900"
+            alt="Section perspective of the riverside foyer"
+          />
+          <figcaption>Section perspective showing the public route rising from the waterfront.</figcaption>
+        </figure>
+      </div>
+      <button type="button" aria-label="Show more drawings">Show more</button>
+    </main>
+    <script>
+      const image = document.querySelector('[data-src]');
+      setTimeout(() => {
+        image.src = image.dataset.src;
+        image.removeAttribute('data-src');
+      }, 50);
+    </script>
+  </body>
+</html>

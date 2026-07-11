@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ArchResearch Bridge</title>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">Browser bridge</p>
+        <h1>ArchResearch</h1>
+      </header>
+      <section class="status-grid" aria-label="Bridge status">
+        <div class="status-item">
+          <span class="label">Local API</span>
+          <p class="value" data-role="connection">Checking</p>
+        </div>
+        <div class="status-item">
+          <span class="label">Research access</span>
+          <p class="value" data-role="permission">Checking</p>
+        </div>
+      </section>
+      <form data-role="pair-form">
+        <label>
+          Local endpoint
+          <input data-role="endpoint" type="url" value="ws://127.0.0.1:8000/v1/browser" required>
+        </label>
+        <label>
+          One-time pairing code
+          <input data-role="token" inputmode="numeric" autocomplete="one-time-code" required>
+        </label>
+        <button type="submit">Pair with local service</button>
+      </form>
+      <div class="actions">
+        <button type="button" data-command="permissions.request">Grant site access</button>
+        <button type="button" data-command="permissions.revoke">Revoke access</button>
+        <button class="wide" type="button" data-command="disconnect">Disconnect</button>
+      </div>
+      <p class="error" data-role="error" role="alert"></p>
+      <p class="boundary">Access is requested for the active research session and revoked when it ends.</p>
+    </main>
+    <script type="module" src="/src/popup.ts"></script>
+  </body>
+</html>

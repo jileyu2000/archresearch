@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="720" viewBox="0 0 960 720" role="img" aria-labelledby="title desc">
+  <title id="title">Analysis diagram synthetic evaluation fixture 2</title>
+  <desc id="desc">legend swatches, zoned overlays, annotated relationships</desc>
+  <rect width="960" height="720" fill="#f8faf8"/>
+  <g fill="none" stroke="#303834" stroke-width="5"><path d="M150 560L310 190L520 120L800 270L720 590Z"/></g>
+  <path d="M150 560L310 190L470 360L360 590Z" fill="#2d846b" fill-opacity="0.42"/>
+  <path d="M470 360L520 120L800 270L640 430Z" fill="#2d846b" fill-opacity="0.34"/>
+  <path d="M360 590L470 360L640 430L720 590Z" fill="#e6b84a" fill-opacity="0.46"/>
+  <g fill="#202522"><circle cx="310" cy="190" r="12"/><circle cx="470" cy="360" r="12"/><circle cx="640" cy="430" r="12"/></g>
+  <g font-family="monospace" font-size="18"><rect x="720" y="90" width="24" height="24" fill="#2d846b"/><text x="755" y="109">PUBLIC</text><rect x="720" y="125" width="24" height="24" fill="#2d846b"/><text x="755" y="144">CLIMATE</text><rect x="720" y="160" width="24" height="24" fill="#e6b84a"/><text x="755" y="179">SERVICE</text></g>
+</svg>

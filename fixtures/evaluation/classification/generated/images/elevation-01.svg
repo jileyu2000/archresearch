@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="720" viewBox="0 0 960 720" role="img" aria-labelledby="title desc">
+  <title id="title">Elevation synthetic evaluation fixture 1</title>
+  <desc id="desc">facade grid, window openings, roof silhouette</desc>
+  <rect width="960" height="720" fill="#f8faf8"/>
+  <g fill="#eef1ee" stroke="#202522" stroke-width="6">
+    <path d="M120 610V190L310 120L520 165L700 115L850 190V610Z"/>
+    <g fill="#e4583e" fill-opacity="0.16">
+      <rect x="170" y="245" width="110" height="90"/><rect x="340" y="245" width="110" height="90"/><rect x="510" y="245" width="110" height="90"/><rect x="680" y="245" width="110" height="90"/>
+      <rect x="170" y="405" width="110" height="120"/><rect x="340" y="405" width="110" height="120"/><rect x="510" y="405" width="110" height="120"/><rect x="680" y="405" width="110" height="120"/>
+    </g>
+    <path d="M310 120V610 M520 165V610 M700 115V610 M120 365H850"/>
+  </g>
+  <path d="M80 610H900" stroke="#303834" stroke-width="10"/>
+</svg>

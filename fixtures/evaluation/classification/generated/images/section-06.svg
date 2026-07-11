@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="720" viewBox="0 0 960 720" role="img" aria-labelledby="title desc">
+  <title id="title">Section synthetic evaluation fixture 6</title>
+  <desc id="desc">ground line, cut floor plates, vertical level changes</desc>
+  <rect width="960" height="720" fill="#f8faf8"/>
+  <path d="M80 610H900" stroke="#303834" stroke-width="12"/>
+  <g fill="none" stroke="#202522" stroke-width="7">
+    <path d="M130 600V170L360 90L650 170H850V600"/>
+    <path d="M130 480H850 M210 360H760 M360 170V600 M650 170V600"/>
+    <path d="M430 480l110-120h80" stroke="#2d846b" stroke-width="8"/>
+  </g>
+  <g fill="#2d846b"><circle cx="470" cy="445" r="9"/><circle cx="560" cy="348" r="9"/></g>
+  <g fill="#303834" font-family="monospace" font-size="18"><text x="92" y="478">+106</text><text x="92" y="358">+1060</text></g>
+</svg>

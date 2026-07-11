@@ -10,16 +10,26 @@ __pycache__/
 node_modules/
 dist/
 coverage/
+*.tsbuildinfo
 
 # Local runtime
-.env
+.env*
+!.env.example
 *.db
 *.sqlite3
 .archresearch/
 data/workspaces/
 
+# Browser test output
+playwright-report/
+test-results/
+
 # Planning companion
 .superpowers/
+
+# Codex scratch and generated handoff artifacts
+work/
+outputs/
 
 # Editors / OS
 .DS_Store

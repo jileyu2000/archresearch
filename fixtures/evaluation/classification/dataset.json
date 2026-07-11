@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0.0",
+  "dataset_version": "2026-07-11.1",
+  "generated_on": "2026-07-11",
+  "license": "CC0-1.0",
+  "seed": 20260711,
+  "variants_per_class": 12,
+  "description": "Deterministic synthetic SVG fixtures for the nine ArchResearch architecture asset classes. No third-party images are included.",
+  "asset_types": [
+    {"id":"plan","title":"Floor plan","explicit_caption":"Ground floor plan with rooms, walls and door openings","implicit_caption":"Orthographic drawing of an interior level","observable_cues":["room boundaries","wall openings","top-down circulation"]},
+    {"id":"section","title":"Section","explicit_caption":"Longitudinal building section through floors and roof","implicit_caption":"Vertical cut showing levels and occupied spaces","observable_cues":["ground line","cut floor plates","vertical level changes"]},
+    {"id":"elevation","title":"Elevation","explicit_caption":"South elevation with facade bays and openings","implicit_caption":"Orthographic exterior face of the building","observable_cues":["facade grid","window openings","roof silhouette"]},
+    {"id":"site_plan","title":"Site plan","explicit_caption":"Site plan with building footprints, paths and north arrow","implicit_caption":"Top-down drawing of buildings in their wider plot","observable_cues":["plot boundary","multiple footprints","north arrow"]},
+    {"id":"axonometric","title":"Axonometric","explicit_caption":"Exploded axonometric of stacked architectural volumes","implicit_caption":"Parallel-projection three-dimensional assembly drawing","observable_cues":["parallel diagonal axes","visible top faces","stacked volumes"]},
+    {"id":"circulation","title":"Circulation diagram","explicit_caption":"Circulation diagram with routes, direction arrows and nodes","implicit_caption":"Movement paths over a simplified architectural base","observable_cues":["direction arrows","route hierarchy","entry nodes"]},
+    {"id":"analysis_diagram","title":"Analysis diagram","explicit_caption":"Environmental analysis diagram with layers, zones and legend","implicit_caption":"Abstract architectural relationships encoded with color","observable_cues":["legend swatches","zoned overlays","annotated relationships"]},
+    {"id":"render","title":"Architectural render","explicit_caption":"Exterior architectural render with perspective, sky and material shading","implicit_caption":"Composed perspective view of a proposed building","observable_cues":["perspective convergence","material fills","cast shadows"]},
+    {"id":"photograph","title":"Project photograph","explicit_caption":"Exterior project photograph with lens framing and surrounding context","implicit_caption":"Camera-like view of a completed building","observable_cues":["lens-like framing","irregular texture","real-world context"]}
+  ]
+}

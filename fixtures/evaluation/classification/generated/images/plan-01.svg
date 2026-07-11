@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="720" viewBox="0 0 960 720" role="img" aria-labelledby="title desc">
+  <title id="title">Floor plan synthetic evaluation fixture 1</title>
+  <desc id="desc">room boundaries, wall openings, top-down circulation</desc>
+  <rect width="960" height="720" fill="#f8faf8"/>
+  <g fill="none" stroke="#202522" stroke-width="7">
+    <rect x="120" y="110" width="720" height="500"/>
+    <path d="M360 110V330H120 M360 330H620V610 M620 110V330 M620 440H840"/>
+    <path d="M330 110v34 M360 300h34 M590 330v34 M620 410h34" stroke="#f8faf8" stroke-width="13"/>
+    <path d="M330 144a30 30 0 0 1 30-30 M394 300a30 30 0 0 0-30 30" stroke="#e4583e" stroke-width="4"/>
+  </g>
+  <g fill="#303834" font-family="monospace" font-size="20"><text x="130" y="650">LEVEL 01</text><text x="690" y="650">1:200</text></g>
+</svg>

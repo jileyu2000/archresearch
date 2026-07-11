@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Lazy Drawing Gallery</title>
+    <style>
+      body { margin: 0; font-family: sans-serif; min-height: 2400px; }
+      main { padding: 32px; }
+      figure { margin: 0 0 1200px; width: 640px; }
+      figure img { display: block; width: 640px; height: 360px; }
+    </style>
+  </head>
+  <body>
+    <main id="gallery">
+      <figure>
+        <img src="/assets/plan.svg" alt="Ground floor plan">
+        <figcaption>Existing ground floor plan.</figcaption>
+      </figure>
+    </main>
+    <script>
+      let loaded = false;
+      window.addEventListener("scroll", () => {
+        if (loaded) return;
+        loaded = true;
+        const figure = document.createElement("figure");
+        figure.innerHTML = '<img id="lazy-section" src="/assets/lazy-section.svg" alt="Loaded section"><figcaption>Section loaded after scrolling.</figcaption>';
+        document.querySelector("#gallery").append(figure);
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="720" viewBox="0 0 960 720" role="img" aria-labelledby="title desc">
+  <title id="title">Architectural render synthetic evaluation fixture 6</title>
+  <desc id="desc">perspective convergence, material fills, cast shadows</desc>
+  <rect width="960" height="720" fill="#f8faf8"/>
+  <rect width="960" height="450" fill="#dfe8e5"/>
+  <rect y="450" width="960" height="270" fill="#c9d2cb"/>
+  <path d="M160 510L390 250L780 335L590 575Z" fill="#f1f2ef" stroke="#505854" stroke-width="4"/>
+  <path d="M390 250L780 335L780 500L590 575L590 415L390 365Z" fill="#bbc6bf" stroke="#505854" stroke-width="4"/>
+  <path d="M160 510L390 365L590 415L590 575Z" fill="#2d846b" fill-opacity="0.32" stroke="#505854" stroke-width="4"/>
+  <g fill="#313936"><rect x="420" y="385" width="65" height="105"/><rect x="505" y="405" width="55" height="100"/></g>
+  <path d="M260 575L640 650L850 565L500 520Z" fill="#5b625e" opacity="0.28"/>
+  <g fill="#4c5b51"><circle cx="110" cy="430" r="48"/><rect x="104" y="430" width="12" height="110"/><circle cx="855" cy="455" r="56"/><rect x="848" y="455" width="14" height="120"/></g>
+</svg>

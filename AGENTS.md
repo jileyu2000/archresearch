@@ -8,6 +8,7 @@
 
 ## Engineering
 
+- Use PowerShell 7 (`pwsh`) for project commands by default. Use Windows PowerShell (`powershell`) only for explicit compatibility tests.
 - Write a failing behavior test before production code.
 - Use Pydantic models as the backend schema source and generate/align TypeScript contracts.
 - Keep the browser protocol enumerated; never accept executable code, arbitrary selectors, credentials, social actions, or general form submission.
@@ -20,4 +21,3 @@
 - TypeScript: lint, type check, unit tests, production builds.
 - Extension: manifest validation and browser protocol tests.
 - Never require live provider keys for the default test suite or demo.
-

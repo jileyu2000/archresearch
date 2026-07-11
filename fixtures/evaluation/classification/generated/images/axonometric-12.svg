@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="720" viewBox="0 0 960 720" role="img" aria-labelledby="title desc">
+  <title id="title">Axonometric synthetic evaluation fixture 12</title>
+  <desc id="desc">parallel diagonal axes, visible top faces, stacked volumes</desc>
+  <rect width="960" height="720" fill="#f8faf8"/>
+  <g stroke="#202522" stroke-width="6" stroke-linejoin="round">
+    <path d="M190 420L460 270L760 420L485 585Z" fill="#e8ece8"/>
+    <path d="M190 420V540L485 705V585Z" fill="#d6ddd8"/>
+    <path d="M485 585V705L760 540V420Z" fill="#c8d1cb"/>
+    <path d="M310 300L470 210L650 310L485 410Z" fill="#315cf4" fill-opacity="0.28"/>
+    <path d="M310 300V370L485 470V410Z M485 410V470L650 370V310Z" fill="#e2e8e3"/>
+    <path d="M410 170L480 130L560 175L485 220Z" fill="#315cf4" fill-opacity="0.55"/>
+  </g>
+  <g stroke="#315cf4" stroke-width="3" stroke-dasharray="10 8"><path d="M485 220V410"/><path d="M310 370L190 420"/><path d="M650 370L760 420"/></g>
+</svg>
