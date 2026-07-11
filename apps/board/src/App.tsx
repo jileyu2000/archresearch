@@ -47,18 +47,6 @@ const tierLabels: Record<ResultTier, string> = {
   visual_lead: '视觉线索参考',
 }
 
-const tierCodes: Record<ResultTier, string> = {
-  verified: 'V / VERIFIED',
-  partial: 'P / PARTIAL',
-  visual_lead: 'L / VISUAL LEAD',
-}
-
-const tierDescriptions: Record<ResultTier, string> = {
-  verified: '项目与图纸归属均有来源支持',
-  partial: '至少一段证据链仍待补齐',
-  visual_lead: '仅承诺可见特征与表达线索',
-}
-
 const modeLabels: Record<ResearchMode, string> = {
   quick: 'Quick',
   balanced: 'Balanced',
@@ -77,6 +65,10 @@ const assetLabels: Record<AssetType, string> = {
   photograph: '项目照片',
   diagram: '分析图',
 }
+
+const filterAssetTypes = (Object.keys(assetLabels) as AssetType[]).filter(
+  (assetType) => assetType !== 'diagram',
+)
 
 const stageLabels: Array<{ status: RunStatus; label: string }> = [
   { status: 'planning', label: '规划' },
@@ -215,6 +207,10 @@ export default function App() {
   const [styleProfile, setStyleProfile] = useState<StyleDraft>(defaultStyle)
   const [styleStatus, setStyleStatus] = useState('')
   const [traceEvents, setTraceEvents] = useState<TraceEvent[]>([])
+  const [composerOpen, setComposerOpen] = useState(!demoMode)
+  const [researchOptionsOpen, setResearchOptionsOpen] = useState(false)
+  const [workspaceCreateOpen, setWorkspaceCreateOpen] = useState(false)
+  const [inspectorOpen, setInspectorOpen] = useState(false)
 
   const selectedResult = results.find((result) => result.id === selectedResultId)
 
@@ -231,6 +227,9 @@ export default function App() {
     setNotes({})
     setTraceEvents([])
     setStyleProfile(defaultStyle)
+    setComposerOpen(true)
+    setResearchOptionsOpen(false)
+    setInspectorOpen(false)
   }, [])
 
   useEffect(() => {
@@ -274,6 +273,8 @@ export default function App() {
     const nextResults = apiResults.map(toWorkResult)
     setResults(nextResults)
     setSelectedResultId(nextResults[0]?.id ?? '')
+    setComposerOpen(nextResults.length === 0)
+    setInspectorOpen(false)
     setBoardId(board.id)
     setComparisonIds(board.selected_asset_ids)
     setSavedIds(userState.saved.map((item) => item.asset_candidate_id))
@@ -364,6 +365,7 @@ export default function App() {
       setLoading(true)
       setActiveWorkspaceId(created.id)
       setNewWorkspaceName('')
+      setWorkspaceCreateOpen(false)
     } catch (error) {
       setActionError(apiMessage(error))
     }
@@ -381,6 +383,7 @@ export default function App() {
     setActionError('')
     if (demoMode) {
       setAnnouncement(`${modeLabels[mode]} 模式研究已开始（本地演示）`)
+      setComposerOpen(false)
       return
     }
     try {
@@ -401,6 +404,8 @@ export default function App() {
         setAnnouncement(runAnnouncement(run))
         setPollingRunId(run.id)
       }
+      setComposerOpen(false)
+      setResearchOptionsOpen(false)
     } catch (error) {
       setActionError(apiMessage(error))
     }
@@ -535,186 +540,218 @@ export default function App() {
     const result = results.find((item) => item.id === id)
     return result && ['user_owned', 'open_license', 'permissioned'].includes(result.rightsStatus)
   }).length
-  const visibleResults = results.filter(
-    (result) => assetFilter === 'all' || result.assetType === assetFilter,
+  const visibleResults = results.filter((result) =>
+    assetFilter === 'all'
+    || result.assetType === assetFilter
+    || (assetFilter === 'analysis_diagram' && result.assetType === 'diagram'),
   )
   const activeStatus = activeRun?.status
   const isRunActive = activeStatus ? !terminalStatuses.has(activeStatus) : false
+  const workspaceItems = demoMode ? demoWorkspaces : workspaces
+  const currentWorkspaceId = demoMode ? (demoWorkspaces[0]?.id ?? '') : activeWorkspaceId
 
   return (
     <main className="research-desk" aria-label="建筑研究画板">
       <header className="app-header">
         <div className="app-brand">
-          <strong>ARCH / RESEARCH</strong>
+          <strong>ArchResearch</strong>
           <span>{demoMode ? 'DEMO / 本地演示数据' : 'V2.1 LOCAL'}</span>
-          <p>建筑图纸证据工作台</p>
+        </div>
+        <div className="workspace-switcher">
+          <label htmlFor="workspace-switcher">
+            <span>工作区</span>
+            <select
+              id="workspace-switcher"
+              value={currentWorkspaceId}
+              disabled={demoMode}
+              onChange={(event) => handleWorkspaceChange(event.target.value)}
+            >
+              {workspaceItems.map((workspace) => (
+                <option key={workspace.id} value={workspace.id}>
+                  {'title' in workspace ? workspace.title : workspace.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {!demoMode && (
+            <button type="button" onClick={() => setWorkspaceCreateOpen((current) => !current)}>
+              {workspaceCreateOpen ? '取消' : '新建'}
+            </button>
+          )}
+          {workspaceCreateOpen && !demoMode && (
+            <form className="workspace-create" onSubmit={(event) => void handleCreateWorkspace(event)}>
+              <label htmlFor="workspace-name">工作区名称</label>
+              <input
+                id="workspace-name"
+                value={newWorkspaceName}
+                onChange={(event) => setNewWorkspaceName(event.target.value)}
+                placeholder="例如：毕业设计 / 城市更新"
+                autoFocus
+              />
+              <button type="submit" disabled={!newWorkspaceName.trim()}>创建</button>
+            </form>
+          )}
         </div>
         <div className="header-actions">
-          <button
-            className="button-secondary"
-            type="button"
-            disabled={comparisonIds.length === 0}
-            onClick={() => void handleExport('private')}
-          >
-            导出私有研究板
-          </button>
-          <button
-            className="button-primary"
-            type="button"
-            disabled={comparisonIds.length === 0}
-            onClick={() => setShareSummaryOpen(true)}
-          >
-            生成分享版
-          </button>
+          {results.length > 0 && !composerOpen && (
+            <button className="button-primary" type="button" onClick={() => setComposerOpen(true)}>
+              发起新研究
+            </button>
+          )}
+          <details className="tools-menu">
+            <summary>工具</summary>
+            <div>
+              <button type="button" disabled={comparisonIds.length < 2} onClick={() => setComparisonOpen(true)}>
+                打开对比
+              </button>
+              <button type="button" disabled={results.length === 0} onClick={() => setStyleProfileOpen(true)}>
+                打开表达规范
+              </button>
+              <button type="button" disabled={comparisonIds.length === 0} onClick={() => void handleExport('private')}>
+                导出私有研究板
+              </button>
+              <button type="button" disabled={comparisonIds.length === 0} onClick={() => setShareSummaryOpen(true)}>
+                生成分享版
+              </button>
+              <button type="button" onClick={() => setTraceOpen((current) => !current)}>
+                {traceOpen ? '关闭研究 Trace' : '打开研究 Trace'}
+              </button>
+            </div>
+          </details>
         </div>
       </header>
 
-      <nav className="workspace-rail" aria-label="工作区">
-        <div className="rail-heading">
-          <span>{demoMode ? 'DEMO / 03' : `LOCAL / ${workspaces.length.toString().padStart(2, '0')}`}</span>
-          <h2>工作区</h2>
-        </div>
-        {(demoMode ? demoWorkspaces : workspaces).map((workspace, index) => {
-          const id = workspace.id
-          const title = 'title' in workspace ? workspace.title : workspace.name
-          const subtitle = 'subtitle' in workspace ? workspace.subtitle : workspace.brief || '本地设计研究'
-          const count = 'resultCount' in workspace ? workspace.resultCount : id === activeWorkspaceId ? results.length : 0
-          const code = 'code' in workspace ? workspace.code : `WS–${String(index + 1).padStart(2, '0')}`
-          return (
-            <button
-              className="workspace-item"
-              key={id}
-              type="button"
-              aria-current={(demoMode ? index === 0 : id === activeWorkspaceId) ? 'page' : undefined}
-              onClick={() => handleWorkspaceChange(id)}
-            >
-              <span className="workspace-code">{code}</span>
-              <strong>{title}</strong>
-              <small>{subtitle}</small>
-              <span className="workspace-count">{count} 项参考</span>
-            </button>
-          )
-        })}
-        {!demoMode && (
-          <form className="workspace-create" onSubmit={(event) => void handleCreateWorkspace(event)}>
-            <label htmlFor="workspace-name">新工作区</label>
-            <input
-              id="workspace-name"
-              value={newWorkspaceName}
-              onChange={(event) => setNewWorkspaceName(event.target.value)}
-              placeholder="例如：毕业设计 / 城市更新"
-            />
-            <button type="submit" disabled={!newWorkspaceName.trim()}>
-              创建工作区
-            </button>
-          </form>
-        )}
-        <div className="workspace-storage">
-          <span>LOCAL STORAGE</span>
-          <strong>SQLite</strong>
-          <small>候选资产 7 天后清理</small>
-        </div>
-      </nav>
-
       <section className="board-workspace" aria-label="图纸参考板">
-        <form className="research-form" aria-label="新建研究" onSubmit={(event) => void handleResearchSubmit(event)}>
-          <div className="research-field research-field--question">
-            <label htmlFor="research-question">研究问题</label>
-            <textarea
-              id="research-question"
-              value={question}
-              onChange={(event) => setQuestion(event.target.value)}
-              placeholder="例如：旧建筑植入新功能时，如何拆分公共流线与后勤流线？"
-              required
-            />
-          </div>
-          <div className="research-field research-field--url">
-            <label htmlFor="reference-url">参考网页</label>
-            <input
-              id="reference-url"
-              type="url"
-              value={referenceUrl}
-              onChange={(event) => setReferenceUrl(event.target.value)}
-              placeholder="https://"
-            />
-          </div>
-          <div className="research-field research-field--files">
-            <label htmlFor="research-files">上传草图、图片或 PDF</label>
-            <input
-              id="research-files"
-              type="file"
-              accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
-              multiple
-              onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
-            />
-            {files.length > 0 && (
-              <ul className="pending-files" aria-label="待上传文件">
-                {files.map((file) => <li key={`${file.name}-${file.size}`}>{file.name}</li>)}
-              </ul>
-            )}
-          </div>
-          <fieldset className="segmented-control research-goal">
-            <legend>研究目标</legend>
-            {([
-              ['precedent_research', '案例策略'],
-              ['source_lookup', '来源反查'],
-              ['visual_reference_search', '视觉参考'],
-            ] as Array<[ResearchGoal, string]>).map(([value, label]) => (
-              <label key={value}>
-                <input
-                  type="radio"
-                  name="goal"
-                  value={value}
-                  checked={goal === value}
-                  onChange={() => setGoal(value)}
+        {composerOpen && (
+          <section className="research-composer" aria-label="新建研究">
+            <header>
+              <div>
+                <h1>{results.length > 0 ? '继续研究一个问题' : '你现在想解决什么设计问题？'}</h1>
+                <p>描述空间、流线、更新或图纸表达问题，其余设置可以保持默认。</p>
+              </div>
+              {results.length > 0 && (
+                <button type="button" onClick={() => setComposerOpen(false)}>收起</button>
+              )}
+            </header>
+            <form className="research-form" onSubmit={(event) => void handleResearchSubmit(event)}>
+              <div className="research-prompt">
+                <label htmlFor="research-question">研究问题</label>
+                <textarea
+                  id="research-question"
+                  value={question}
+                  onChange={(event) => setQuestion(event.target.value)}
+                  placeholder="例如：旧建筑植入新功能时，如何拆分公共流线与后勤流线？"
+                  required
                 />
-                {label}
-              </label>
-            ))}
-          </fieldset>
-          <fieldset className="segmented-control research-mode">
-            <legend>研究模式</legend>
-            {(Object.keys(modeLabels) as ResearchMode[]).map((value) => (
-              <label key={value}>
-                <input
-                  type="radio"
-                  name="mode"
-                  value={value}
-                  checked={mode === value}
-                  onChange={() => setMode(value)}
-                />
-                {modeLabels[value]}
-              </label>
-            ))}
-          </fieldset>
-          <button className="research-submit" type="submit" disabled={isRunActive || loading || (!demoMode && !activeWorkspaceId)}>
-            {isRunActive ? '研究进行中…' : '开始研究'}
-          </button>
-          {isRunActive && (
-            <button className="research-cancel" type="button" onClick={() => void handleCancel()}>
-              取消研究
-            </button>
-          )}
-          {activeRun && ['partial', 'blocked', 'failed', 'cancelled'].includes(activeRun.status) && (
-            <button className="research-retry" type="button" onClick={() => void handleRetry()}>
-              重试研究
-            </button>
-          )}
-          {announcement && <p className="research-status" role="status">{announcement}</p>}
-        </form>
+                <button className="research-submit" type="submit" disabled={isRunActive || loading || (!demoMode && !activeWorkspaceId)}>
+                  {isRunActive ? '研究进行中…' : '开始研究'}
+                </button>
+              </div>
+              <div className="research-quick-actions">
+                <button
+                  type="button"
+                  aria-expanded={researchOptionsOpen}
+                  onClick={() => setResearchOptionsOpen((current) => !current)}
+                >
+                  添加资料和研究设置
+                </button>
+                {files.length > 0 && <span>{files.length} 个文件待上传</span>}
+              </div>
+              {researchOptionsOpen && (
+                <div className="research-options">
+                  <div className="research-field">
+                    <label htmlFor="reference-url">参考网页</label>
+                    <input
+                      id="reference-url"
+                      type="url"
+                      value={referenceUrl}
+                      onChange={(event) => setReferenceUrl(event.target.value)}
+                      placeholder="https://"
+                    />
+                  </div>
+                  <div className="research-field">
+                    <label htmlFor="research-files">上传草图、图片或 PDF</label>
+                    <input
+                      id="research-files"
+                      type="file"
+                      accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
+                      multiple
+                      onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
+                    />
+                    {files.length > 0 && (
+                      <ul className="pending-files" aria-label="待上传文件">
+                        {files.map((file) => <li key={`${file.name}-${file.size}`}>{file.name}</li>)}
+                      </ul>
+                    )}
+                  </div>
+                  <fieldset className="segmented-control">
+                    <legend>研究目标</legend>
+                    {([
+                      ['precedent_research', '设计策略'],
+                      ['source_lookup', '来源反查'],
+                      ['visual_reference_search', '视觉参考'],
+                    ] as Array<[ResearchGoal, string]>).map(([value, label]) => (
+                      <label key={value}>
+                        <input type="radio" name="goal" value={value} checked={goal === value} onChange={() => setGoal(value)} />
+                        {label}
+                      </label>
+                    ))}
+                  </fieldset>
+                  <fieldset className="segmented-control">
+                    <legend>研究深度</legend>
+                    {(Object.keys(modeLabels) as ResearchMode[]).map((value) => (
+                      <label key={value}>
+                        <input type="radio" name="mode" value={value} checked={mode === value} onChange={() => setMode(value)} />
+                        {modeLabels[value]}
+                      </label>
+                    ))}
+                  </fieldset>
+                </div>
+              )}
+              <div className="research-run-actions">
+                {isRunActive && <button className="research-cancel" type="button" onClick={() => void handleCancel()}>取消研究</button>}
+                {activeRun && ['partial', 'blocked', 'failed', 'cancelled'].includes(activeRun.status) && (
+                  <button className="research-retry" type="button" onClick={() => void handleRetry()}>重试研究</button>
+                )}
+              </div>
+            </form>
+          </section>
+        )}
+
+        {(announcement || activeRun) && (
+          <section className="run-status-strip" role="status">
+            <div>
+              <span className="status-dot" data-active={isRunActive || undefined} aria-hidden="true" />
+              <strong>{announcement || '研究已准备就绪'}</strong>
+              <small>{results.length} 项参考</small>
+            </div>
+            <div className="run-status-actions">
+              {isRunActive && <button className="research-cancel" type="button" onClick={() => void handleCancel()}>取消研究</button>}
+              {activeRun && ['partial', 'blocked', 'failed', 'cancelled'].includes(activeRun.status) && (
+                <button className="research-retry" type="button" onClick={() => void handleRetry()}>重试研究</button>
+              )}
+              <details>
+                <summary>查看研究进度</summary>
+                <ol className="stage-list">
+                  {stageLabels.map((stage) => (
+                    <li key={stage.status} aria-current={activeStatus === stage.status ? 'step' : undefined}>{stage.label}</li>
+                  ))}
+                </ol>
+              </details>
+            </div>
+          </section>
+        )}
 
         {actionError && <p className="workbench-error" role="alert">{actionError}</p>}
 
         {activeRun?.status === 'partial' && (
-          <section className="coverage-summary" aria-label="部分结果覆盖">
-            <h2>覆盖报告</h2>
-            <p>
-              {activeRun.coverageReport?.usable_assets ?? 0} 张可用图纸 ·{' '}
-              {activeRun.coverageReport?.project_count ?? 0} 个项目
-            </p>
+          <details className="coverage-summary">
+            <summary>
+              已返回部分结果 · {activeRun.coverageReport?.usable_assets ?? 0} 张图纸，{activeRun.coverageReport?.project_count ?? 0} 个项目
+            </summary>
             <p>{activeRun.stopReason}</p>
             {(activeRun.coverageReport?.gaps ?? []).map((gap) => <span key={gap}>{gap}</span>)}
-          </section>
+          </details>
         )}
 
         {loading && <section className="board-loading" aria-label="正在加载工作区"><p>正在读取本地工作区…</p></section>}
@@ -726,35 +763,39 @@ export default function App() {
         )}
 
         {results.length > 0 && (
-          <div className="asset-toolbar" role="toolbar" aria-label="图纸类型筛选">
-            <span className="toolbar-label">ASSET TYPE</span>
-            <button type="button" aria-pressed={assetFilter === 'all'} onClick={() => setAssetFilter('all')}>查看全部图纸</button>
-            {(Object.keys(assetLabels) as AssetType[]).map((assetType) => (
-              <button key={assetType} type="button" aria-pressed={assetFilter === assetType} onClick={() => setAssetFilter(assetType)}>
-                只看{assetLabels[assetType]}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {(Object.keys(tierLabels) as ResultTier[]).map((tier) => {
-          const tierResults = visibleResults.filter((result) => result.tier === tier)
-          if (results.length === 0) return null
-          return (
-            <section className="evidence-tier" data-tier={tier} key={tier} aria-label={tierLabels[tier]}>
-              <header className="tier-heading">
-                <div><span>{tierCodes[tier]}</span><h2>{tierLabels[tier]}</h2></div>
-                <p>{tierDescriptions[tier]}</p>
-                <strong>{tierResults.length.toString().padStart(2, '0')}</strong>
-              </header>
-              <div className="reference-grid">
-                {tierResults.map((result) => (
-                  <article
-                    className="reference-card"
-                    data-selected={selectedResultId === result.id || undefined}
-                    data-saved={savedIds.includes(result.id) || undefined}
-                    data-rejected={rejectedIds.includes(result.id) || undefined}
-                    key={result.id}
+          <section className="results-section" aria-label="研究结果">
+            <header className="results-header">
+              <div>
+                <h2>参考图纸</h2>
+                <p>{visibleResults.length} 项结果，按证据完整度和问题相关性排序</p>
+              </div>
+              <label htmlFor="asset-filter">
+                <span>图纸类型</span>
+                <select id="asset-filter" value={assetFilter} onChange={(event) => setAssetFilter(event.target.value as 'all' | AssetType)}>
+                  <option value="all">全部类型</option>
+                  {filterAssetTypes.map((assetType) => (
+                    <option key={assetType} value={assetType}>{assetLabels[assetType]}</option>
+                  ))}
+                </select>
+              </label>
+            </header>
+            <div className="reference-grid">
+              {visibleResults.map((result) => (
+                <article
+                  className="reference-card"
+                  data-selected={selectedResultId === result.id || undefined}
+                  data-saved={savedIds.includes(result.id) || undefined}
+                  data-rejected={rejectedIds.includes(result.id) || undefined}
+                  key={result.id}
+                >
+                  <button
+                    className="reference-main"
+                    type="button"
+                    aria-label={`查看 ${result.project} 证据`}
+                    onClick={() => {
+                      setSelectedResultId(result.id)
+                      setInspectorOpen(true)
+                    }}
                   >
                     <figure className="drawing-preview" data-drawing={result.drawing}>
                       {result.previewUrl ? (
@@ -762,45 +803,40 @@ export default function App() {
                       ) : (
                         <div className="preview-unavailable" role="img" aria-label={`${result.project} 暂无预览`}>预览不可用</div>
                       )}
-                      <figcaption><span>{assetLabels[result.assetType]}</span><span>REL {result.relevance} / 4</span></figcaption>
+                      <figcaption><span>{assetLabels[result.assetType]}</span><span>{tierLabels[result.tier]}</span></figcaption>
                     </figure>
-                    <div className="evidence-chain" aria-label={`${result.project} 证据链`}>
-                      <span data-status={result.publicationTier}><i aria-hidden="true" />发布者 · {result.publicationTier}</span>
-                      <span data-status={result.projectIdentity}><i aria-hidden="true" />项目 · {result.projectIdentity}</span>
-                      <span data-status={result.assetAssociation}><i aria-hidden="true" />图纸 · {result.assetAssociation}</span>
-                    </div>
                     <div className="reference-copy">
                       <p className="reference-project">{result.project}</p>
                       <h3>{result.title}</h3>
-                      <p className="reference-meta">{result.location} · {result.year} · {result.sourceName}</p>
+                      <p>{result.observation}</p>
                     </div>
-                    <div className="reference-actions">
-                      <button type="button" onClick={() => setSelectedResultId(result.id)}>检视 {result.project}</button>
-                      <button
-                        type="button"
-                        aria-pressed={comparisonIds.includes(result.id)}
-                        disabled={comparisonIds.length >= 6 && !comparisonIds.includes(result.id)}
-                        onClick={() => void toggleComparison(result.id)}
-                      >
-                        {comparisonIds.includes(result.id) ? '移出对比' : '加入对比'} {result.project}
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </section>
-          )
-        })}
+                  </button>
+                  <footer className="reference-actions">
+                    <span>相关度 {result.relevance} / 4</span>
+                    <button
+                      type="button"
+                      aria-pressed={comparisonIds.includes(result.id)}
+                      aria-label={`${comparisonIds.includes(result.id) ? '移出对比' : '加入对比'} ${result.project}`}
+                      disabled={comparisonIds.length >= 6 && !comparisonIds.includes(result.id)}
+                      onClick={() => void toggleComparison(result.id)}
+                    >
+                      {comparisonIds.includes(result.id) ? '移出对比' : '加入对比'}
+                    </button>
+                  </footer>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
 
         {results.length > 0 && visibleResults.length === 0 && (
           <section className="empty-filter"><h2>当前筛选没有图纸</h2><p>切换图纸类型，或继续研究补齐这个证据缺口。</p></section>
         )}
 
-        {results.length > 0 && (
+        {comparisonIds.length > 0 && (
           <section className="comparison-dock" aria-label="对比选择">
             <p>{comparisonIds.length} / 6 项已选择</p>
             <button type="button" disabled={comparisonIds.length < 2} onClick={() => setComparisonOpen(true)}>打开 {comparisonIds.length} 项对比</button>
-            <button type="button" onClick={() => setStyleProfileOpen(true)}>打开表达规范</button>
           </section>
         )}
 
@@ -847,59 +883,71 @@ export default function App() {
         )}
       </section>
 
-      <aside className="source-inspector" aria-label="来源检视器">
-        <div className="inspector-heading"><span>EVIDENCE / SOURCE</span><h2>来源检视器</h2></div>
-        {selectedResult ? (
-          <>
-            <strong className="inspector-project">项目 / {selectedResult.project}</strong>
-            <p className="inspector-location">{selectedResult.location} · {selectedResult.year}</p>
-            <dl className="evidence-matrix">
-              <div><dt>发布来源</dt><dd>{selectedResult.publicationTier}</dd></div>
-              <div><dt>项目身份</dt><dd>{selectedResult.projectIdentity}</dd></div>
-              <div><dt>图纸归属</dt><dd>{selectedResult.assetAssociation}</dd></div>
-              <div><dt>权利状态</dt><dd>{selectedResult.rightsStatus}</dd></div>
-            </dl>
-            <section className="claim-block claim-block--fact"><h3>来源支持的事实</h3><p>{selectedResult.fact}</p></section>
-            <section className="claim-block claim-block--observation"><h3>图像直接观察</h3><p>{selectedResult.observation}</p></section>
-            <section className="claim-block claim-block--inference"><h3>设计方法推断</h3><p>{selectedResult.inference}</p></section>
-            <section className="claim-block claim-block--limitation"><h3>适用边界</h3><p>{selectedResult.limitation}</p></section>
-            {selectedResult.evidenceClaims.map((claim) => (
-              <section className="evidence-locator" key={claim.id}>
-                <h3>{claim.claim_type === 'fact' ? '事实证据定位' : '补充证据定位'}</h3>
-                <p>{claim.statement}</p>
-                {claim.pdf_page && <p>PDF 第 {claim.pdf_page} 页</p>}
-                {claim.text_excerpt && <blockquote>{claim.text_excerpt}</blockquote>}
-                {claim.source_url && <a href={claim.source_url} target="_blank" rel="noreferrer">打开证据定位</a>}
+      {inspectorOpen && selectedResult && (
+        <>
+          <button className="drawer-backdrop" type="button" aria-label="关闭来源检视器" onClick={() => setInspectorOpen(false)} />
+          <aside className="source-inspector" aria-label="来源检视器">
+            <header className="inspector-heading">
+              <div><span>来源与证据</span><h2>{assetLabels[selectedResult.assetType]}</h2></div>
+              <button type="button" onClick={() => setInspectorOpen(false)}>关闭</button>
+            </header>
+            <div className="inspector-content">
+              <strong className="inspector-project">{selectedResult.project}</strong>
+              <p className="inspector-location">{selectedResult.location} · {selectedResult.year}</p>
+              <section className="inspector-highlight">
+                <h3>为什么值得看</h3>
+                <p>{selectedResult.inference}</p>
               </section>
-            ))}
-            <a className="source-link" href={selectedResult.sourceUrl} target="_blank" rel="noreferrer">打开原始来源</a>
-            <div className="inspector-actions">
-              <button type="button" aria-pressed={savedIds.includes(selectedResult.id)} onClick={() => void toggleSaved(selectedResult.id)}>{savedIds.includes(selectedResult.id) ? '取消收藏' : '收藏参考'}</button>
-              <button type="button" aria-pressed={rejectedIds.includes(selectedResult.id)} onClick={() => void toggleRejected(selectedResult.id)}>{rejectedIds.includes(selectedResult.id) ? '撤销拒绝' : '拒绝参考'}</button>
+              <section className="inspector-observation">
+                <h3>图中直接可见</h3>
+                <p>{selectedResult.observation}</p>
+              </section>
+              <details className="inspector-details" open>
+                <summary>来源与核验</summary>
+                <dl className="evidence-matrix">
+                  <div><dt>发布来源</dt><dd>{selectedResult.publicationTier}</dd></div>
+                  <div><dt>项目身份</dt><dd>{selectedResult.projectIdentity}</dd></div>
+                  <div><dt>图纸归属</dt><dd>{selectedResult.assetAssociation}</dd></div>
+                  <div><dt>权利状态</dt><dd>{selectedResult.rightsStatus}</dd></div>
+                </dl>
+                <section className="claim-block"><h3>来源支持的事实</h3><p>{selectedResult.fact}</p></section>
+                {selectedResult.evidenceClaims.map((claim) => (
+                  <section className="evidence-locator" key={claim.id}>
+                    <h3>{claim.claim_type === 'fact' ? '事实证据定位' : '补充证据定位'}</h3>
+                    <p>{claim.statement}</p>
+                    {claim.pdf_page && <p>PDF 第 {claim.pdf_page} 页</p>}
+                    {claim.text_excerpt && <blockquote>{claim.text_excerpt}</blockquote>}
+                    {claim.source_url && <a href={claim.source_url} target="_blank" rel="noreferrer">打开证据定位</a>}
+                  </section>
+                ))}
+                <a className="source-link" href={selectedResult.sourceUrl} target="_blank" rel="noreferrer">打开原始来源</a>
+              </details>
+              <details className="inspector-details">
+                <summary>适用边界</summary>
+                <p>{selectedResult.limitation}</p>
+              </details>
+              <div className="inspector-actions">
+                <button type="button" aria-pressed={savedIds.includes(selectedResult.id)} onClick={() => void toggleSaved(selectedResult.id)}>{savedIds.includes(selectedResult.id) ? '取消收藏' : '收藏参考'}</button>
+                <button type="button" aria-pressed={rejectedIds.includes(selectedResult.id)} onClick={() => void toggleRejected(selectedResult.id)}>{rejectedIds.includes(selectedResult.id) ? '撤销拒绝' : '拒绝参考'}</button>
+              </div>
+              <label htmlFor={`note-${selectedResult.id}`}>研究备注</label>
+              <textarea
+                id={`note-${selectedResult.id}`}
+                value={notes[selectedResult.id] ?? ''}
+                onChange={(event) => setNotes((current) => ({ ...current, [selectedResult.id]: event.target.value }))}
+                onBlur={(event) => void saveNote(selectedResult.id, event.target.value)}
+                placeholder="记录为何有用、还要核验什么。"
+              />
             </div>
-            <label htmlFor={`note-${selectedResult.id}`}>研究备注</label>
-            <textarea
-              id={`note-${selectedResult.id}`}
-              value={notes[selectedResult.id] ?? ''}
-              onChange={(event) => setNotes((current) => ({ ...current, [selectedResult.id]: event.target.value }))}
-              onBlur={(event) => void saveNote(selectedResult.id, event.target.value)}
-              placeholder="记录为何有用、需要验证的尺寸，或与自己的方案差异。"
-            />
-          </>
-        ) : (
-          <p>{results.length > 0 ? '选择一张图纸查看证据与来源。' : '研究结果会在这里显示来源、观察、推断与适用边界。'}</p>
-        )}
-      </aside>
+          </aside>
+        </>
+      )}
 
-      <nav className="stage-rail" aria-label="研究阶段">
-        <div className="rail-heading"><span>{activeRun ? `RUN / ${activeRun.status.toUpperCase()}` : 'RUN / READY'}</span><h2>研究阶段</h2></div>
-        <button className="trace-toggle" type="button" onClick={() => setTraceOpen((current) => !current)}>{traceOpen ? '关闭研究 Trace' : '打开研究 Trace'}</button>
-        <ol className="stage-list">
-          {stageLabels.map((stage) => <li key={stage.status} aria-current={activeStatus === stage.status ? 'step' : undefined}>{stage.label}</li>)}
-        </ol>
-        {traceOpen && (
+      {traceOpen && (
+        <>
+          <button className="drawer-backdrop" type="button" aria-label="关闭研究 Trace" onClick={() => setTraceOpen(false)} />
           <section className="trace-panel" aria-label="研究 Trace">
-            <header><span>RUN LOG</span><h3>研究 Trace</h3></header>
+            <header><div><span>运行记录</span><h3>研究 Trace</h3></div><button type="button" onClick={() => setTraceOpen(false)}>关闭</button></header>
             <ol className="trace-list">
               {(demoMode ? traceItems : traceEvents).map((item) => (
                 <li key={item.id}>
@@ -910,8 +958,8 @@ export default function App() {
               ))}
             </ol>
           </section>
-        )}
-      </nav>
+        </>
+      )}
     </main>
   )
 }

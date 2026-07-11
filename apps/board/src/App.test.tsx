@@ -267,17 +267,37 @@ describe('research board', () => {
       '/demo/kamala-plan.jpg',
     )
     expect(screen.queryByText('预览不可用')).not.toBeInTheDocument()
-    expect(screen.getByText('项目 / Kamala Narayana Temple Survey')).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: '查看 Kamala Narayana Temple Survey 证据' }))
+    expect(screen.getByRole('complementary', { name: '来源检视器' })).toHaveTextContent('Kamala Narayana Temple Survey')
     expect(screen.getByText('DEMO / 本地演示数据')).toBeVisible()
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it('keeps the result canvas simple until the user asks for details', async () => {
+    const user = userEvent.setup()
+    renderBoard('?demo=1')
+
+    expect(await screen.findByRole('heading', { name: '参考图纸' })).toBeVisible()
+    expect(screen.getByRole('combobox', { name: '图纸类型' })).toHaveValue('all')
+    expect(screen.getByRole('button', { name: '发起新研究' })).toBeVisible()
+    expect(screen.queryByRole('complementary', { name: '来源检视器' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: '研究阶段' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '查看 Kamala Narayana Temple Survey 证据' }))
+    expect(screen.getByRole('complementary', { name: '来源检视器' })).toBeVisible()
+  })
+
   it('loads the real workspace and teaches the initial empty state', async () => {
+    const user = userEvent.setup()
     vi.stubGlobal('fetch', createLiveFetch())
     renderBoard()
 
     expect(await screen.findByText('真实工作区')).toBeVisible()
-    expect(screen.getByText('从一个具体设计问题开始')).toBeVisible()
+    expect(screen.getByRole('heading', { name: '你现在想解决什么设计问题？' })).toBeVisible()
+    expect(screen.getByRole('textbox', { name: '研究问题' })).toBeVisible()
+    expect(screen.queryByRole('textbox', { name: '参考网页' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '添加资料和研究设置' }))
+    expect(screen.getByRole('textbox', { name: '参考网页' })).toBeVisible()
     expect(screen.queryByText('Kamala Narayana Temple Survey')).not.toBeInTheDocument()
   })
 
@@ -286,10 +306,9 @@ describe('research board', () => {
     renderBoard()
 
     expect(await screen.findByText('Live Mill Conversion')).toBeVisible()
-    expect(screen.getByText('项目 / Live Mill Conversion')).toBeVisible()
     expect(screen.getByRole('img', { name: 'Live Mill Conversion 暂无预览' })).toBeVisible()
     expect(screen.getByRole('status')).toHaveTextContent('研究已完成')
-    expect(screen.getByText('RUN / COMPLETED')).toBeVisible()
+    expect(screen.queryByRole('complementary', { name: '来源检视器' })).not.toBeInTheDocument()
   })
 
   it('shows a real bootstrap error instead of substituting mock projects', async () => {
@@ -323,7 +342,7 @@ describe('research board', () => {
     await startLiveResearch(user)
 
     expect(await screen.findByText('已交付部分结果')).toBeVisible()
-    expect(screen.getByText('1 张可用图纸 · 1 个项目')).toBeVisible()
+    await user.click(screen.getByText(/1 张图纸，1 个项目/))
     expect(screen.getByText(/budget_exhausted/)).toBeVisible()
     await user.click(screen.getByRole('button', { name: '重试研究' }))
     expect(screen.getByRole('status')).toHaveTextContent('已创建')
@@ -353,6 +372,7 @@ describe('research board', () => {
     await startLiveResearch(user)
 
     await screen.findByText('Live Mill Conversion')
+    await user.click(screen.getByRole('button', { name: '查看 Live Mill Conversion 证据' }))
     const inspector = screen.getByRole('complementary', { name: '来源检视器' })
     expect(within(inspector).getByRole('button', { name: '取消收藏' })).toBePressed()
     expect(within(inspector).getByRole('textbox', { name: '研究备注' })).toHaveValue('重点比较旧结构')
@@ -375,6 +395,7 @@ describe('research board', () => {
     renderBoard()
     await startLiveResearch(user)
     await screen.findByText('Live Mill Conversion')
+    await user.click(screen.getByRole('button', { name: '查看 Live Mill Conversion 证据' }))
 
     await user.click(screen.getByRole('button', { name: '收藏参考' }))
     expect(screen.getByRole('button', { name: '取消收藏' })).toBePressed()
@@ -400,6 +421,7 @@ describe('research board', () => {
     renderBoard()
     await startLiveResearch(user)
     await screen.findByText('Live Mill Conversion')
+    await user.click(screen.getByRole('button', { name: '查看 Live Mill Conversion 证据' }))
 
     const note = screen.getByRole('textbox', { name: '研究备注' })
     await user.type(note, '这条备注暂时未保存')
@@ -417,6 +439,7 @@ describe('research board', () => {
     await startLiveResearch(user)
     await screen.findByText('Live Mill Conversion')
 
+    await user.click(screen.getByText('工具'))
     expect(screen.getByRole('button', { name: '导出私有研究板' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: '加入对比 Live Mill Conversion' }))
     await user.click(screen.getByRole('button', { name: '导出私有研究板' }))
@@ -440,6 +463,7 @@ describe('research board', () => {
     await screen.findByText('Live Mill Conversion')
 
     await user.click(screen.getByRole('button', { name: '加入对比 Live Mill Conversion' }))
+    await user.click(screen.getByText('工具'))
     await user.click(screen.getByRole('button', { name: '生成分享版' }))
     expect(screen.getByText('1 张图片可嵌入')).toBeVisible()
     expect(
@@ -467,6 +491,7 @@ describe('research board', () => {
     await startLiveResearch(user)
     await screen.findByText('Live Mill Conversion')
 
+    await user.click(screen.getByText('工具'))
     await user.click(screen.getByRole('button', { name: '打开表达规范' }))
     const stylePanel = screen.getByRole('region', { name: '表达规范' })
     expect(within(stylePanel).getByLabelText('主色')).toHaveValue('#2d846b')
@@ -476,15 +501,15 @@ describe('research board', () => {
     expect(within(stylePanel).getByRole('status')).toHaveTextContent('表达规范已保存')
   })
 
-  it('retains the evidence-tier, filter, and comparison visual language in demo mode', async () => {
+  it('filters the flat result grid and compares selected references in demo mode', async () => {
     const user = userEvent.setup()
     renderBoard('?demo=1')
 
-    const verified = await screen.findByRole('region', { name: '已核验参考' })
-    expect(within(verified).getAllByRole('article')).toHaveLength(3)
-    await user.click(screen.getByRole('button', { name: '只看剖面图' }))
+    await screen.findByRole('heading', { name: '参考图纸' })
+    expect(screen.getAllByRole('option', { name: '分析图' })).toHaveLength(1)
+    await user.selectOptions(screen.getByRole('combobox', { name: '图纸类型' }), 'section')
     expect(screen.getAllByRole('article')).toHaveLength(1)
-    await user.click(screen.getByRole('button', { name: '查看全部图纸' }))
+    await user.selectOptions(screen.getByRole('combobox', { name: '图纸类型' }), 'all')
     await user.click(screen.getByRole('button', { name: '加入对比 Section Layers Replay' }))
     await user.click(screen.getByRole('button', { name: '加入对比 Layered Axon Replay' }))
     await user.click(screen.getByRole('button', { name: '打开 2 项对比' }))

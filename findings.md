@@ -20,11 +20,23 @@
 ## Frontend Direction
 
 - Subject: an architectural evidence desk, not a chat application.
-- Layout: compact project rail, central drawing board, evidence inspector, and a research-stage rail.
+- Layout: compact top bar, one research composer and a flat drawing grid. Workspaces use a selector; evidence and Trace use contextual drawers; compare actions appear only after selection.
 - Palette: vellum `#F3F5F2`, graphite `#171B19`, blueprint `#315CF4`, signal red `#E4583E`, evidence green `#2D846B`, fog `#DDE3DF`.
 - Type: system Chinese sans for readability, condensed/mono utility labels for drawing metadata.
-- Signature: every reference card has an evidence rail and registration-mark corners, visually connecting the drawing to its source chain.
-- Avoid generic rounded SaaS cards, decorative gradients, and chat-first layout.
+- Default disclosure: cards show the drawing, project, type, evidence tier and one useful sentence; provenance, claims, boundaries, notes, StyleProfile, exports and Trace stay one explicit action away.
+- Avoid permanent side rails, repeated filter buttons, generic rounded SaaS cards, decorative gradients, and chat-first layout.
+
+## M7 Usability Simplification
+
+- The current 1330 px screenshot exposes four permanent regions, nine asset filters, full evidence metadata, four evidence prose blocks, comparison/export controls and the stage rail at once. The feature set is valid, but the default disclosure level is too high for first-time users.
+- The primary task is singular: describe a design problem and review useful drawings. Workspace administration, evidence audit, comparison, StyleProfile, exports and Trace are secondary and should not compete with that path.
+- Mature references support a simpler pattern: Perplexica centers one research prompt and defers modes; Zotero keeps the item list primary and details contextual; Karakeep shows an immediate asset collection with filters and metadata available on demand.
+- The redesign should use a compact top bar plus a single results canvas. Workspaces become a menu, asset filters become one horizontal segmented row with an overflow menu, and source evidence becomes a contextual drawer opened from the selected result.
+- Result cards should show only image, project, asset type, evidence tier and one useful sentence by default. Detailed source status, facts, observations, inferences, boundaries, notes and evidence locators remain available in the drawer.
+- Advanced actions remain complete but move behind clear entry points: compare selection in a bottom action bar, StyleProfile/Trace/export in a tools menu, and research progress in a compact status strip.
+- Accepted implementation: the default result screen contains only the workspace selector, new-research action, tools menu, one asset-type select and a flat reference grid. Source evidence opens from a card; advanced research inputs stay collapsed; cancel/retry remain directly reachable from the run status.
+- Responsive acceptance passed at 1440, 1024 and 390 px: four/three/one-column grids, no document-level horizontal overflow, full-width mobile evidence drawer, no permanent inspector or stage navigation, and no browser console warnings or errors.
+- The legacy `diagram` label remains readable but is merged into the single `analysis_diagram` filter option, preventing duplicate “分析图” choices.
 
 ## External Capability Facts
 
@@ -53,7 +65,7 @@
 - A separate packaged-Chrome replay now proves the missing half of that loop: real FastAPI WebSocket pairing, fixed-page inspection, `captureVisibleTab`, PNG persistence, content delivery and terminal permission revocation.
 - Chrome requires task-scoped optional `<all_urls>` for continuous `captureVisibleTab`; no permanent host permission or manifest content script exists, and API/protocol/final-tab tests still reject `file:`, `ftp:`, `chrome:`, loopback, private and reserved destinations.
 - Uvicorn declares `websockets>=14,<16`, so the production launcher supports the same real network handshake exercised by E2E.
-- `scripts/verify.ps1` is the complete offline delivery gate: 105 API tests, 25 Board tests, 111 extension tests, 6 packaged Chrome E2E cases, lint/type/build checks, PowerShell safety/process tests, 30 research tasks and 108 deterministic classification samples.
+- `scripts/verify.ps1` is the complete offline delivery gate: 105 API tests, 26 Board tests, 111 extension tests, 6 packaged Chrome E2E cases, lint/type/build checks, PowerShell safety/process tests, 30 research tasks and 108 deterministic classification samples.
 - Remaining acceptance is external rather than unfinished code: a user-provided TinEye live test, opt-in paid execution and human labeling of 30 live tasks, 100+ independent rights-cleared real images, six-student usability research and a normal-profile logged-in Chrome run.
 
 ## Open-source reference study (M6)
