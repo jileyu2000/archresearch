@@ -32,3 +32,7 @@
 - Completed M7 usability simplification: removed permanent workspace/evidence/stage rails, reduced the result controls to one asset-type select, converted evidence and Trace to drawers, collapsed advanced research inputs, and exposed compare/export/style actions only when relevant. Cancel/retry remain directly available from the compact run status.
 - Accepted the simplified Board at 1440/1024/390 px with four/three/one-column grids, no horizontal overflow, a full-width mobile evidence drawer, one non-duplicated analysis-diagram filter, and zero browser console warnings/errors.
 - Re-ran the repository-wide delivery gate after the redesign: 105 API tests, 26 Board tests, 111 extension tests, 6 packaged Chrome E2E cases, all lint/type/build checks, PowerShell safety/process tests, and all 30/108 evaluation fixtures pass.
+
+## 2026-07-12
+
+- Recovered the local runtime after the user saw `ERR_CONNECTION_REFUSED`: confirmed both ports were inactive despite a stale launcher state file, restarted through `scripts/start.ps1`, and verified Board HTTP 200 plus API health on the stored 梭子蟹 `gpt-5.5` provider.

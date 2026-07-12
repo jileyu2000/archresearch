@@ -56,6 +56,7 @@
 - Candidate inspection sends at most three cropped regions per page to the visual classifier; full pages and image data are excluded from Trace.
 - API DNS resolution rejects failed, private, reserved, and IPv4-mapped private A/AAAA results before navigation; the extension rechecks final URLs.
 - Saved-reference snapshots survive temporary candidate cleanup. Startup cleanup removes expired candidates, source metadata, queries, and Trace, then resumes active runs.
+- Board and API currently run as user-session background processes, not Windows services. A reboot or host process cleanup can leave the saved launcher state behind while ports 5173/8000 are no longer listening; `scripts/start.ps1` safely recreates both listeners and rewrites the state file.
 
 ## M6 Delivery Status
 
