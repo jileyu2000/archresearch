@@ -6,17 +6,27 @@ import json
 import struct
 import threading
 import zlib
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 from sqlalchemy import select
 
 from archresearch_api.browser import BrowserBroker
 from archresearch_api.config import Settings
 from archresearch_api.database import Database
+from archresearch_api.inspection import InspectionBudget, inspect_source_page
 from archresearch_api.main import create_app
-from archresearch_api.models import AssetCandidate, ResearchRun, TraceEvent, Workspace
+from archresearch_api.models import (
+    AssetCandidate,
+    EvidenceClaim,
+    ResearchRun,
+    TraceEvent,
+    Workspace,
+)
 from archresearch_api.providers import ProviderAsset, ProviderSearchResult, ProviderSource
 from archresearch_api.schemas import (
     AssociationStatus,
@@ -54,6 +64,9 @@ def _crop_png(pattern: int) -> bytes:
             [0, 32, 64, 96, 128, 160, 192, 224, 255],
             [255, 224, 192, 160, 128, 96, 64, 32, 0],
             [0, 255, 0, 255, 0, 255, 0, 255, 0],
+            [255, 0, 0, 255, 255, 0, 0, 255, 255],
+            [0, 64, 128, 255, 128, 64, 0, 64, 128],
+            [128, 64, 0, 64, 128, 255, 128, 64, 0],
         ][pattern]
         for _ in range(8)
     ]
@@ -126,7 +139,7 @@ class RecordingBrowser:
                             "height": 500,
                         },
                     }
-                    for index in range(4)
+                    for index in range(7)
                 ]
             }
         if action == "capture_region":
@@ -164,6 +177,43 @@ class RecordingClassifier:
             asset_type=ArchitectureAssetType.section,
             relevance=4,
             observations=["可见剖切构件与多层空间关系。"],
+        )
+
+
+class SingleLargeCropBrowser(RecordingBrowser):
+    def __init__(self) -> None:
+        super().__init__()
+        image = Image.new("RGB", (2_400, 1_200), "#f4f0e8")
+        buffer = BytesIO()
+        image.save(buffer, format="PNG")
+        self.original_crop = buffer.getvalue()
+
+    def send_command_sync(
+        self,
+        action: str,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: float = 30,
+    ) -> Any:
+        if action == "enumerate_media":
+            response = super().send_command_sync(
+                action,
+                payload,
+                timeout_seconds=timeout_seconds,
+            )
+            response["media"] = response["media"][:1]
+            return response
+        if action == "capture_region":
+            self.calls.append((action, payload))
+            encoded = base64.b64encode(self.original_crop).decode()
+            return {
+                "image_data_url": f"data:image/png;base64,{encoded}",
+                "media_type": "image/png",
+            }
+        return super().send_command_sync(
+            action,
+            payload,
+            timeout_seconds=timeout_seconds,
         )
 
 
@@ -225,7 +275,7 @@ def _provider_result(*source_urls: str) -> ProviderSearchResult:
     )
 
 
-def test_workflow_inspects_pages_with_read_only_actions_and_persists_three_visual_leads(
+def test_workflow_inspects_pages_with_read_only_actions_and_persists_six_visual_leads(
     tmp_path: Path,
 ) -> None:
     database, run_id = _database_with_run(tmp_path)
@@ -250,10 +300,13 @@ def test_workflow_inspects_pages_with_read_only_actions_and_persists_three_visua
         "capture_region",
         "capture_region",
         "capture_region",
+        "capture_region",
+        "capture_region",
+        "capture_region",
         "close_tab",
     ]
     assert not ({"safe_click", "type_search_query", "scroll"} & set(actions))
-    assert len(classifier.calls) == 3
+    assert len(classifier.calls) == 6
     assert all(len(call["caption"]) <= 500 for call in classifier.calls)
     assert all(len(call["project_text"]) <= 1_200 for call in classifier.calls)
     assert all(len(call["question"]) <= 1_000 for call in classifier.calls)
@@ -269,8 +322,8 @@ def test_workflow_inspects_pages_with_read_only_actions_and_persists_three_visua
         browser_assets = [asset for asset in assets if asset.project_name == "待核验项目"]
         trace_events = list(session.scalars(select(TraceEvent).where(TraceEvent.run_id == run_id)))
 
-    assert len(assets) == 4
-    assert len(browser_assets) == 3
+    assert len(assets) == 7
+    assert len(browser_assets) == 6
     assert all(asset.asset_type == ArchitectureAssetType.section.value for asset in browser_assets)
     assert all(asset.result_tier == ResultTier.visual_lead.value for asset in browser_assets)
     assert all(
@@ -362,6 +415,344 @@ def test_undecodable_browser_crops_are_not_sent_to_the_visual_classifier(tmp_pat
         )
     assert len(assets) == 1
     assert assets[0].project_name == "已检索项目"
+    assert list((tmp_path / "candidates").rglob("*.png")) == []
+
+
+def test_shared_inspection_budget_deduplicates_before_classification_across_pages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    browser = RecordingBrowser()
+    classifier = RecordingClassifier()
+    budget = InspectionBudget(max_calls=8, max_bytes=24 * 1024 * 1024)
+    writes: list[Path] = []
+    original_write_bytes = Path.write_bytes
+
+    def record_write(path: Path, data: bytes) -> int:
+        writes.append(path)
+        return original_write_bytes(path, data)
+
+    monkeypatch.setattr(Path, "write_bytes", record_write)
+
+    first = inspect_source_page(
+        browser,
+        classifier,
+        run_id="shared-run",
+        source_url="https://studio.example/one",
+        question="旧建筑中如何形成有层次的剖面？",
+        candidate_root=tmp_path,
+        budget=budget,
+    )
+    second = inspect_source_page(
+        browser,
+        classifier,
+        run_id="shared-run",
+        source_url="https://studio.example/two",
+        question="旧建筑中如何形成有层次的剖面？",
+        candidate_root=tmp_path,
+        budget=budget,
+    )
+
+    assert len(first) == 6
+    assert len(second) == 2
+    assert all(item.source_url == "https://studio.example/two" for item in second)
+    assert all(item.storage_path is None for item in second)
+    assert [item.perceptual_hash for item in second] == [item.perceptual_hash for item in first[:2]]
+    assert all(item.asset_type == ArchitectureAssetType.section for item in second)
+    assert all(item.relevance == 4 for item in second)
+    assert all(item.observations == ["可见剖切构件与多层空间关系。"] for item in second)
+    assert len(classifier.calls) == 6
+    assert [action for action, _ in browser.calls].count("capture_region") == 8
+    assert budget.used_calls == 8
+    assert len(budget.seen_perceptual_hashes) == 6
+    assert len(writes) == 6
+
+
+def test_failed_classification_is_retried_before_a_duplicate_relation_is_reused(
+    tmp_path: Path,
+) -> None:
+    class SingleMediaBrowser(RecordingBrowser):
+        def send_command_sync(
+            self,
+            action: str,
+            payload: dict[str, Any],
+            *,
+            timeout_seconds: float = 30,
+        ) -> Any:
+            response = super().send_command_sync(
+                action,
+                payload,
+                timeout_seconds=timeout_seconds,
+            )
+            if action == "enumerate_media":
+                response["media"] = response["media"][:1]
+            return response
+
+    class FailOnceClassifier(RecordingClassifier):
+        def classify(
+            self,
+            image_data_url: str,
+            *,
+            question: str,
+            caption: str,
+            project_text: str,
+        ) -> VisualClassification:
+            if not self.calls:
+                self.calls.append(
+                    {
+                        "image_data_url": image_data_url,
+                        "question": question,
+                        "caption": caption,
+                        "project_text": project_text,
+                    }
+                )
+                raise RuntimeError("temporary classifier failure")
+            return super().classify(
+                image_data_url,
+                question=question,
+                caption=caption,
+                project_text=project_text,
+            )
+
+    browser = SingleMediaBrowser()
+    classifier = FailOnceClassifier()
+    budget = InspectionBudget(max_calls=3, max_bytes=6 * 1024 * 1024)
+
+    failed = inspect_source_page(
+        browser,
+        classifier,
+        run_id="retry-classification-run",
+        source_url="https://aggregator.example/project",
+        question="分析剖面。",
+        candidate_root=tmp_path,
+        budget=budget,
+    )
+    accepted = inspect_source_page(
+        browser,
+        classifier,
+        run_id="retry-classification-run",
+        source_url="https://studio.example/project",
+        question="分析剖面。",
+        candidate_root=tmp_path,
+        budget=budget,
+    )
+    reused = inspect_source_page(
+        browser,
+        classifier,
+        run_id="retry-classification-run",
+        source_url="https://archive.example/project",
+        question="分析剖面。",
+        candidate_root=tmp_path,
+        budget=budget,
+    )
+
+    assert failed == []
+    assert len(accepted) == 1
+    assert accepted[0].storage_path is not None
+    assert len(reused) == 1
+    assert reused[0].source_url == "https://archive.example/project"
+    assert reused[0].storage_path is None
+    assert reused[0].perceptual_hash == accepted[0].perceptual_hash
+    assert len(classifier.calls) == 2
+    assert len(list(tmp_path.rglob("*.png"))) == 1
+
+
+def test_duplicate_classification_cache_is_scoped_to_the_research_question(
+    tmp_path: Path,
+) -> None:
+    class SingleMediaBrowser(RecordingBrowser):
+        def send_command_sync(
+            self,
+            action: str,
+            payload: dict[str, Any],
+            *,
+            timeout_seconds: float = 30,
+        ) -> Any:
+            response = super().send_command_sync(
+                action,
+                payload,
+                timeout_seconds=timeout_seconds,
+            )
+            if action == "enumerate_media":
+                response["media"] = response["media"][:1]
+            return response
+
+    class QuestionAwareClassifier(RecordingClassifier):
+        def classify(
+            self,
+            image_data_url: str,
+            *,
+            question: str,
+            caption: str,
+            project_text: str,
+        ) -> VisualClassification:
+            self.calls.append(
+                {
+                    "image_data_url": image_data_url,
+                    "question": question,
+                    "caption": caption,
+                    "project_text": project_text,
+                }
+            )
+            return VisualClassification(
+                asset_type=ArchitectureAssetType.section,
+                relevance=4 if "流线" in question else 2,
+                observations=[f"针对{question}的可见观察。"],
+            )
+
+    browser = SingleMediaBrowser()
+    classifier = QuestionAwareClassifier()
+    budget = InspectionBudget(max_calls=3, max_bytes=6 * 1024 * 1024)
+
+    circulation = inspect_source_page(
+        browser,
+        classifier,
+        run_id="question-cache-run",
+        source_url="https://studio.example/project",
+        question="如何组织流线？",
+        candidate_root=tmp_path,
+        budget=budget,
+    )
+    section = inspect_source_page(
+        browser,
+        classifier,
+        run_id="question-cache-run",
+        source_url="https://studio.example/project",
+        question="如何形成剖面层次？",
+        candidate_root=tmp_path,
+        budget=budget,
+    )
+    section_reused = inspect_source_page(
+        browser,
+        classifier,
+        run_id="question-cache-run",
+        source_url="https://archive.example/project",
+        question="如何形成剖面层次？",
+        candidate_root=tmp_path,
+        budget=budget,
+    )
+
+    assert circulation[0].relevance == 4
+    assert circulation[0].storage_path is not None
+    assert section[0].relevance == 2
+    assert section[0].observations == ["针对如何形成剖面层次？的可见观察。"]
+    assert section[0].storage_path is None
+    assert section_reused[0].relevance == 2
+    assert section_reused[0].storage_path is None
+    assert len(classifier.calls) == 2
+    assert len(list(tmp_path.rglob("*.png"))) == 1
+
+
+def test_classifier_receives_a_bounded_preview_while_original_crop_is_preserved(
+    tmp_path: Path,
+) -> None:
+    browser = SingleLargeCropBrowser()
+    classifier = RecordingClassifier()
+
+    inspected = inspect_source_page(
+        browser,
+        classifier,
+        run_id="preview-run",
+        source_url="https://studio.example/large-drawing",
+        question="分析剖面的空间层次。",
+        candidate_root=tmp_path,
+    )
+
+    assert len(inspected) == 1
+    preview_data_url = classifier.calls[0]["image_data_url"]
+    preview_header, encoded_preview = preview_data_url.split(",", maxsplit=1)
+    assert preview_header in {"data:image/jpeg;base64", "data:image/png;base64"}
+    preview_bytes = base64.b64decode(encoded_preview)
+    assert len(preview_bytes) <= 2 * 1024 * 1024
+    with Image.open(BytesIO(preview_bytes)) as preview:
+        assert max(preview.size) <= 1_600
+    assert inspected[0].storage_path.read_bytes() == browser.original_crop
+
+
+def test_shared_inspection_budget_caps_capture_attempts_and_discards_rejected_crops(
+    tmp_path: Path,
+) -> None:
+    call_browser = RecordingBrowser()
+    call_classifier = RecordingClassifier()
+    call_budget = InspectionBudget(max_calls=2, max_bytes=4 * 1024 * 1024)
+    call_results = inspect_source_page(
+        call_browser,
+        call_classifier,
+        run_id="call-capped-run",
+        source_url="https://studio.example/call-cap",
+        question="分析剖面。",
+        candidate_root=tmp_path / "calls",
+        budget=call_budget,
+    )
+
+    assert len(call_results) == 2
+    assert len(call_classifier.calls) == 2
+    assert call_budget.used_calls == 2
+    assert call_budget.used_bytes <= call_budget.max_bytes
+    assert [action for action, _ in call_browser.calls].count("capture_region") == 2
+    assert len(list((tmp_path / "calls" / "call-capped-run" / "candidates").glob("*.png"))) == 2
+
+    byte_browser = RecordingBrowser()
+    byte_classifier = RecordingClassifier()
+    byte_budget = InspectionBudget(max_calls=6, max_bytes=1)
+    byte_results = inspect_source_page(
+        byte_browser,
+        byte_classifier,
+        run_id="byte-capped-run",
+        source_url="https://studio.example/byte-cap",
+        question="分析剖面。",
+        candidate_root=tmp_path / "bytes",
+        budget=byte_budget,
+    )
+
+    assert byte_results == []
+    assert byte_classifier.calls == []
+    assert byte_budget.used_bytes <= byte_budget.max_bytes
+    assert [action for action, _ in byte_browser.calls].count("capture_region") == 1
+    assert list((tmp_path / "bytes").rglob("*.png")) == []
+
+
+def test_inspection_budget_reports_only_successful_reservations_and_limit_changes() -> None:
+    changes: list[tuple[int, int, bool]] = []
+    budget = InspectionBudget(
+        max_calls=1,
+        max_bytes=10,
+        on_change=lambda changed: changes.append(
+            (changed.used_calls, changed.used_bytes, changed.byte_limit_reached)
+        ),
+    )
+
+    assert budget.reserve_capture() is True
+    assert budget.reserve_capture() is False
+    assert budget.reserve_preview(6) is True
+    assert budget.reserve_preview(5) is False
+
+    assert changes == [
+        (1, 0, False),
+        (1, 6, False),
+        (1, 6, True),
+    ]
+
+
+def test_zero_inspection_call_budget_never_captures_or_writes_candidates(
+    tmp_path: Path,
+) -> None:
+    browser = RecordingBrowser()
+    classifier = RecordingClassifier()
+
+    inspected = inspect_source_page(
+        browser,
+        classifier,
+        run_id="zero-call-run",
+        source_url="https://studio.example/no-capture",
+        question="分析剖面。",
+        candidate_root=tmp_path,
+        budget=InspectionBudget(max_calls=0, max_bytes=4 * 1024 * 1024),
+    )
+
+    assert inspected == []
+    assert classifier.calls == []
+    assert [action for action, _ in browser.calls].count("capture_region") == 0
+    assert list(tmp_path.rglob("*.png")) == []
 
 
 def test_page_budget_limits_browser_attempts_without_limiting_web_results(tmp_path: Path) -> None:
@@ -390,6 +781,132 @@ def test_page_budget_limits_browser_attempts_without_limiting_web_results(tmp_pa
     assert len(assets) == 1
 
 
+def test_workflow_shares_a_quick_run_inspection_budget_across_pages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database, run_id = _database_with_run(tmp_path, max_pages=2)
+    observed_budgets: list[InspectionBudget] = []
+
+    def record_budget(*args: Any, budget: InspectionBudget, **kwargs: Any) -> list[Any]:
+        del args, kwargs
+        observed_budgets.append(budget)
+        return []
+
+    monkeypatch.setattr("archresearch_api.workflow.inspect_source_page", record_budget)
+    execute_research_run(
+        database,
+        run_id,
+        SingleBatchProvider(
+            _provider_result("https://studio.example/one", "https://studio.example/two")
+        ),
+        browser_client=RecordingBrowser(),
+        visual_classifier=RecordingClassifier(),
+        candidate_root=tmp_path / "candidates",
+    )
+
+    assert len(observed_budgets) == 2
+    assert observed_budgets[0] is observed_budgets[1]
+    assert observed_budgets[0].max_calls == 12
+    assert observed_budgets[0].max_bytes == 24 * 1024 * 1024
+
+
+def test_workflow_restores_and_persists_the_run_wide_inspection_budget(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path)
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assert run is not None
+        run.visual_calls_used = 11
+        session.commit()
+    browser = RecordingBrowser()
+
+    execute_research_run(
+        database,
+        run_id,
+        SingleBatchProvider(_provider_result("https://studio.example/project")),
+        browser_client=browser,
+        visual_classifier=RecordingClassifier(),
+        candidate_root=tmp_path / "candidates",
+    )
+
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+    assert run is not None
+    assert [action for action, _ in browser.calls].count("capture_region") == 1
+    assert run.visual_calls_used == 12
+    assert run.visual_bytes_used > 0
+
+
+def test_real_inspection_upgrades_a_provider_asset_to_its_stronger_duplicate_source(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, max_pages=2)
+    aggregator_url = "https://aggregator.example/foundry"
+    primary_url = "https://studio.example/foundry"
+    result = ProviderSearchResult(
+        assets=[
+            ProviderAsset(
+                project_name="Foundry project",
+                asset_type="section",
+                source_url=aggregator_url,
+                image_url="https://images.example/drawing-0.png",
+                publication_tier=PublicationTier.aggregator,
+                result_tier=ResultTier.partial,
+                relevance=4,
+                facts=["聚合页面展示了该图纸。"],
+            )
+        ],
+        sources=[
+            ProviderSource(
+                url=aggregator_url,
+                publisher="Aggregator",
+                title="Foundry repost",
+                publication_tier=PublicationTier.aggregator,
+            ),
+            ProviderSource(
+                url=primary_url,
+                publisher="Studio",
+                title="Foundry project",
+                publication_tier=PublicationTier.primary,
+            ),
+        ],
+    )
+
+    execute_research_run(
+        database,
+        run_id,
+        SingleBatchProvider(result),
+        browser_client=RecordingBrowser(),
+        visual_classifier=RecordingClassifier(),
+        candidate_root=tmp_path / "candidates",
+    )
+
+    with database.session_factory() as session:
+        candidate = session.scalar(
+            select(AssetCandidate).where(
+                AssetCandidate.run_id == run_id,
+                AssetCandidate.project_name == "Foundry project",
+            )
+        )
+        assert candidate is not None
+        claims = list(
+            session.scalars(
+                select(EvidenceClaim).where(
+                    EvidenceClaim.asset_candidate_id == candidate.id,
+                    EvidenceClaim.claim_type == "observation",
+                )
+            )
+        )
+
+    assert candidate.source_url == primary_url
+    assert candidate.publication_tier == PublicationTier.primary.value
+    assert candidate.perceptual_hash is not None
+    assert candidate.storage_path is not None
+    assert Path(candidate.storage_path).is_file()
+    assert {claim.source_url for claim in claims} == {aggregator_url, primary_url}
+
+
 def test_identical_browser_crops_are_deduplicated_across_source_pages(tmp_path: Path) -> None:
     database, run_id = _database_with_run(tmp_path, max_pages=2)
     browser = RecordingBrowser()
@@ -409,8 +926,8 @@ def test_identical_browser_crops_are_deduplicated_across_source_pages(tmp_path: 
             session.scalars(select(AssetCandidate).where(AssetCandidate.run_id == run_id))
         )
     browser_assets = [asset for asset in assets if asset.project_name == "待核验项目"]
-    assert len(browser_assets) == 3
-    assert len({asset.perceptual_hash for asset in browser_assets}) == 3
+    assert len(browser_assets) == 6
+    assert len({asset.perceptual_hash for asset in browser_assets}) == 6
 
 
 def test_browser_broker_can_send_a_command_from_a_sync_worker_thread() -> None:
@@ -477,8 +994,8 @@ def test_create_app_injects_browser_and_visual_dependencies_into_inline_runs(
         results = client.get(f"/v1/runs/{response.json()['id']}/results").json()
 
     assert response.status_code == 201
-    assert len(results) == 4
-    assert len(classifier.calls) == 3
+    assert len(results) == 7
+    assert len(classifier.calls) == 6
 
 
 def test_retry_keeps_browser_and_visual_dependencies_for_inline_runs(tmp_path: Path) -> None:
@@ -517,4 +1034,4 @@ def test_retry_keeps_browser_and_visual_dependencies_for_inline_runs(tmp_path: P
 
     assert retried.status_code == 200
     assert any(action == "open_url" for action, _ in browser.calls)
-    assert len(classifier.calls) == 3
+    assert len(classifier.calls) == 6

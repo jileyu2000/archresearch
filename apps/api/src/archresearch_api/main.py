@@ -115,7 +115,7 @@ def create_app(
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         resolved_settings.data_dir.mkdir(parents=True, exist_ok=True)
-        database.create_all()
+        database.migrate()
         resolved_browser_broker.bind_loop()
         cleanup_expired_data(
             database,

@@ -1,4 +1,5 @@
 $ErrorActionPreference = "Stop"
+$PSNativeCommandUseErrorActionPreference = $true
 
 . (Join-Path $PSScriptRoot "dev-common.ps1")
 

@@ -32,4 +32,9 @@ if (-not $runtime.Pnpm.EndsWith("pnpm.cmd")) {
     throw "Expected a pnpm executable."
 }
 
+$verifyScript = Get-Content -Raw (Join-Path $workspace.Path "scripts\verify.ps1")
+if (-not $verifyScript.Contains('$PSNativeCommandUseErrorActionPreference = $true')) {
+    throw "Expected verify.ps1 to stop when a native verification command fails."
+}
+
 Write-Output "dev-common tests passed"

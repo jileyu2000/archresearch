@@ -29,11 +29,13 @@ import {
   type ResearchGoal,
   type ResearchMode,
   type ResearchRun,
+  type ResearchSubquestion,
   type RunStatus,
   type TraceEvent,
   type Workspace,
 } from './api/client'
 import {
+  demoSubquestions,
   evidenceResults,
   traceItems,
   workspaces as demoWorkspaces,
@@ -47,6 +49,15 @@ import { StudioBackdrop } from './components/StudioBackdrop'
 type WorkResult = EvidenceResult & {
   evidenceClaims: ApiEvidenceClaim[]
   previewUrl: string | null
+  subquestionAnalysis: Record<string, ResultAnalysis>
+}
+
+type ResultAnalysis = {
+  projectContext: string
+  designMechanism: string
+  transferStrategy: string[]
+  observations: string[]
+  limitations: string[]
 }
 
 type StyleDraft = {
@@ -228,6 +239,33 @@ function toWorkResult(candidate: ApiAssetCandidate): WorkResult {
     sourceName: candidate.publication_tier,
     sourceUrl: candidate.source_url,
     imageUrl: candidate.image_url,
+    subquestionIds: candidate.subquestion_ids ?? [],
+    subquestionAnalysis: Object.fromEntries(
+      Object.entries(candidate.subquestion_analysis ?? {}).map(([id, analysis]) => [
+        id,
+        {
+          projectContext: analysis.project_context ?? '',
+          designMechanism: analysis.design_mechanism ?? '',
+          transferStrategy: analysis.transfer_strategy ?? [],
+          observations: analysis.observations ?? [],
+          limitations: analysis.limitations ?? [],
+        },
+      ]),
+    ),
+    projectContext:
+      candidate.project_context
+      || candidate.facts.join(' ')
+      || '当前来源尚未提供足够的项目条件。',
+    designMechanism:
+      candidate.design_mechanism
+      || candidate.observations.join(' ')
+      || '当前图纸尚未形成稳定的空间机制判断。',
+    transferStrategy:
+      candidate.transfer_strategy?.length
+        ? candidate.transfer_strategy
+        : candidate.inferences.length
+          ? candidate.inferences
+          : ['回到原始来源，补齐条件后再判断怎样转译。'],
     previewUrl:
       candidate.image_url ??
       (candidate.has_local_content ? `/v1/assets/${candidate.id}/content` : null),
@@ -251,7 +289,62 @@ function demoResults(): WorkResult[] {
     ...result,
     previewUrl: result.imageUrl ?? null,
     evidenceClaims: [],
+    subquestionAnalysis: {},
   }))
+}
+
+function fallbackSubquestions(results: WorkResult[], question: string): ResearchSubquestion[] {
+  const labels: Record<string, { question: string; rationale: string }> = {
+    program: {
+      question: '新增功能怎样进入现有空间与结构？',
+      rationale: '核对保留边界、植入方式和新旧系统之间的关系。',
+    },
+    circulation: {
+      question: '公共、后勤或人车流线怎样减少冲突？',
+      rationale: '追踪每套路径的连续段，并定位不可避免的交叉节点。',
+    },
+    section: {
+      question: '剖面怎样建立连续的空间层次？',
+      rationale: '同时比较平台、竖核、采光和视线，而不是只看楼板高差。',
+    },
+    expression: {
+      question: '怎样把设计关系表达得更清楚？',
+      rationale: '检查图纸中的线型、图层和图形角色能否相互对应。',
+    },
+  }
+  const ids = [...new Set(results.flatMap((result) => result.subquestionIds))]
+  if (ids.length === 0) {
+    return [{ id: 'general', question, rationale: '先从当前证据中识别可迁移的方法和适用边界。' }]
+  }
+  return ids.map((id) => ({
+    id,
+    question: labels[id]?.question ?? question,
+    rationale: labels[id]?.rationale ?? '该分支来自已保存的研究结果，下面的项目图纸用于支撑判断。',
+  }))
+}
+
+function supportsSubquestion(
+  result: WorkResult,
+  subquestionId: string,
+  subquestions: ResearchSubquestion[],
+) {
+  const knownAssociations = result.subquestionIds.filter((id) =>
+    subquestions.some((item) => item.id === id),
+  )
+  return knownAssociations.length > 0
+    ? knownAssociations.includes(subquestionId)
+    : subquestionId === subquestions[0]?.id
+}
+
+function analysisFor(result: WorkResult, subquestionId: string) {
+  const scoped = result.subquestionAnalysis[subquestionId]
+  return {
+    projectContext: scoped?.projectContext.trim() || result.projectContext,
+    designMechanism: scoped?.designMechanism.trim() || result.designMechanism,
+    transferStrategy: scoped?.transferStrategy.length ? scoped.transferStrategy : result.transferStrategy,
+    observation: scoped?.observations.find((item) => item.trim()) || result.observation,
+    limitation: scoped?.limitations.find((item) => item.trim()) || result.limitation,
+  }
 }
 
 function traceSummary(summary: unknown) {
@@ -266,6 +359,9 @@ export default function App() {
   const [results, setResults] = useState<WorkResult[]>(demoMode ? demoResults() : [])
   const [selectedResultId, setSelectedResultId] = useState(
     demoMode ? (evidenceResults[0]?.id ?? '') : '',
+  )
+  const [selectedSubquestionId, setSelectedSubquestionId] = useState(
+    demoMode ? (demoSubquestions[0]?.id ?? '') : '',
   )
   const [question, setQuestion] = useState('')
   const [referenceUrl, setReferenceUrl] = useState('')
@@ -352,6 +448,7 @@ export default function App() {
     setAnnouncement('')
     setResults([])
     setSelectedResultId('')
+    setSelectedSubquestionId('')
     setBoardId('')
     setComparisonIds([])
     setSavedIds([])
@@ -374,6 +471,7 @@ export default function App() {
   const clearRunView = useCallback(() => {
     setResults([])
     setSelectedResultId('')
+    setSelectedSubquestionId('')
     setBoardId('')
     setComparisonIds([])
     setSavedIds([])
@@ -425,6 +523,7 @@ export default function App() {
     const nextResults = apiResults.map(toWorkResult)
     setResults(nextResults)
     setSelectedResultId(nextResults[0]?.id ?? '')
+    setSelectedSubquestionId(nextResults[0]?.subquestionIds[0] ?? '')
     setInspectorOpen(false)
     setBoardId(board.id)
     setComparisonIds(board.selected_asset_ids)
@@ -761,10 +860,49 @@ export default function App() {
     || (assetFilter === 'analysis_diagram' && result.assetType === 'diagram'),
   )
   const researchQuestion = activeRun?.question ?? (demoMode ? demoResearchQuestion : question)
-  const researchInsights = results
-    .filter((result, index, items) => items.findIndex((item) => item.assetType === result.assetType) === index)
-    .slice(0, 3)
+  const researchSubquestions = demoMode
+    ? demoSubquestions
+    : activeRun?.subquestions.length
+      ? activeRun.subquestions
+      : fallbackSubquestions(results, researchQuestion)
+  const subquestionSummaries = researchSubquestions.map((subquestion) => {
+    const assets = results.filter(
+      (result) => supportsSubquestion(result, subquestion.id, researchSubquestions),
+    )
+    return {
+      ...subquestion,
+      assetCount: assets.length,
+      projectCount: new Set(assets.map((result) => result.project)).size,
+    }
+  })
+  const caseGroups = researchSubquestions.map((subquestion, index) => {
+    const assets = visibleResults.filter(
+      (result) => supportsSubquestion(result, subquestion.id, researchSubquestions),
+    )
+    const dossiers = [...assets.reduce((projects, result) => {
+      const current = projects.get(result.project) ?? []
+      current.push(result)
+      projects.set(result.project, current)
+      return projects
+    }, new Map<string, WorkResult[]>()).entries()].map(([project, projectAssets]) => {
+      const primary = projectAssets.find((result) => result.subquestionAnalysis[subquestion.id])
+        ?? projectAssets[0]
+      return {
+        project,
+        assets: projectAssets,
+        primary,
+        analysis: analysisFor(primary, subquestion.id),
+      }
+    })
+    return { index, subquestion, assets, dossiers }
+  }).filter((group) => group.assets.length > 0)
   const selectedComparisonResults = results.filter((result) => comparisonIds.includes(result.id))
+  const selectedAnalysis = selectedResult
+    ? analysisFor(
+        selectedResult,
+        selectedSubquestionId || selectedResult.subquestionIds[0] || researchSubquestions[0]?.id || 'general',
+      )
+    : null
   const comparisonFocuses = [...new Set(selectedComparisonResults.map((result) => comparisonFocusLabels[result.assetType]))]
   const comparisonOverview = comparisonFocuses.length === 1
     ? `这 ${selectedComparisonResults.length} 项都在回答“${comparisonFocuses[0]}”，重点比较可借鉴方法、证据状态和使用边界。`
@@ -1069,107 +1207,189 @@ export default function App() {
 
         {resultViewOpen && results.length > 0 && (
           <section className="results-section" aria-label="研究结果">
-            <section className="research-answer" aria-label="研究结论">
-              <div className="research-question-block">
-                <span className="research-eyebrow">{demoMode ? '演示任务' : '本次研究任务'}</span>
-                <h1>{researchQuestion}</h1>
-              </div>
-              <div className="research-answer-heading">
+            <header className="result-task-heading">
+              <span>{demoMode ? '演示任务' : '本次研究任务'}</span>
+              <h1>{researchQuestion}</h1>
+              <p>Agent 先把总问题拆成可检索的证据问题，再用具体项目的多张图纸回答。结论和来源不会混在一起。</p>
+            </header>
+
+            <section className="question-decomposition" aria-label="子问题清单">
+              <h2 className="visually-hidden">研究给出的方向</h2>
+              <header className="section-heading">
                 <div>
-                  <h2>研究给出的方向</h2>
-                  <p>从当前图纸证据中整理出的可迁移方法，不是可直接套用的答案。</p>
+                  <h2>问题拆解</h2>
+                  <p>每个子问题都有自己的项目和图纸证据；先判断哪一项最接近你当前卡住的地方。</p>
                 </div>
-                <span>{researchInsights.length} 个方法方向</span>
-              </div>
-              <ol className="research-insight-list">
-                {researchInsights.map((result) => (
-                  <li key={result.id}>
-                    <span>{assetLabels[result.assetType]} · {comparisonFocusLabels[result.assetType]}</span>
-                    <h3>{result.title}</h3>
-                    <p>{result.inference}</p>
+                <span>{researchSubquestions.length} 个子问题</span>
+              </header>
+              <ol className="subquestion-list">
+                {subquestionSummaries.map((subquestion, index) => (
+                  <li key={subquestion.id}>
+                    <span className="subquestion-number" aria-hidden="true">{index + 1}</span>
+                    <div>
+                      <h3>{subquestion.question}</h3>
+                      <p>{subquestion.rationale}</p>
+                    </div>
+                    <span className="subquestion-coverage">
+                      {subquestion.projectCount} 个项目 · {subquestion.assetCount} 张图纸
+                    </span>
                   </li>
                 ))}
               </ol>
             </section>
-            <header className="results-header">
-              <div>
-                <h2>支撑这些方向的图纸</h2>
-                <p>{visibleResults.length} 项图纸证据，按证据完整度和问题相关性排序。点开查看观察、来源和使用边界。</p>
-              </div>
-              <label htmlFor="asset-filter">
-                <span>图纸类型</span>
-                <select id="asset-filter" value={assetFilter} onChange={(event) => setAssetFilter(event.target.value as 'all' | AssetType)}>
-                  <option value="all">全部类型</option>
-                  {filterAssetTypes.map((assetType) => (
-                    <option key={assetType} value={assetType}>{assetLabels[assetType]}</option>
-                  ))}
-                </select>
-              </label>
-            </header>
-            <section className="reference-grid" aria-label="图纸证据列表">
-              {visibleResults.map((result, index) => (
-                <article
-                  className="reference-card"
-                  data-selected={inspectorOpen && selectedResultId === result.id || undefined}
-                  data-saved={savedIds.includes(result.id) || undefined}
-                  data-rejected={rejectedIds.includes(result.id) || undefined}
-                  key={result.id}
-                >
-                  <button
-                    className="reference-main"
-                    type="button"
-                    aria-label={`查看 ${result.project} 证据`}
-                    onClick={(event) => {
-                      overlayTriggerRef.current = event.currentTarget
-                      setSelectedResultId(result.id)
-                      setInspectorOpen(true)
-                    }}
-                  >
-                    <figure className="drawing-preview" data-drawing={result.drawing}>
-                      {result.previewUrl ? (
-                        <img
-                          src={result.previewUrl}
-                          alt={`${result.project} ${assetLabels[result.assetType]}`}
-                          loading={index < 8 ? 'eager' : 'lazy'}
-                          decoding="async"
-                          fetchPriority={index < 4 ? 'high' : 'auto'}
-                        />
-                      ) : (
-                        <div className="preview-unavailable" role="img" aria-label={`${result.project} 暂无预览`}>预览不可用</div>
-                      )}
-                      <figcaption>
-                        <span>{assetLabels[result.assetType]}</span>
-                        <span data-tier={result.tier}>
-                          {result.tier === 'verified' && <ShieldCheck aria-hidden="true" />}
-                          {result.tier === 'partial' && <CircleDashed aria-hidden="true" />}
-                          {result.tier === 'visual_lead' && <Eye aria-hidden="true" />}
-                          {tierLabels[result.tier]}
-                        </span>
-                      </figcaption>
-                    </figure>
-                    <div className="reference-copy">
-                      <p className="reference-project">{result.project}</p>
-                      <span className="reference-method-label">可借鉴方法</span>
-                      <h3>{result.title}</h3>
-                      <p>{result.inference}</p>
+
+            <section className="case-analysis" aria-label="案例分析">
+              <header className="results-header section-heading">
+                <div>
+                  <h2>案例分析</h2>
+                  <p>{visibleResults.length} 张图纸按子问题和项目归组。每个项目先解释空间机制，再给出可转译步骤和使用边界。</p>
+                </div>
+                <label htmlFor="asset-filter">
+                  <span>图纸类型</span>
+                  <select id="asset-filter" value={assetFilter} onChange={(event) => setAssetFilter(event.target.value as 'all' | AssetType)}>
+                    <option value="all">全部类型</option>
+                    {filterAssetTypes.map((assetType) => (
+                      <option key={assetType} value={assetType}>{assetLabels[assetType]}</option>
+                    ))}
+                  </select>
+                </label>
+              </header>
+
+              <div className="case-chapters">
+                {caseGroups.map((group) => (
+                  <section className="case-chapter" key={group.subquestion.id} aria-labelledby={`case-chapter-${group.subquestion.id}`}>
+                    <header className="case-chapter-heading">
+                      <span aria-hidden="true">{group.index + 1}</span>
+                      <div>
+                        <h3 id={`case-chapter-${group.subquestion.id}`}>{group.subquestion.question}</h3>
+                        <p>{group.dossiers.length} 个项目 · {group.assets.length} 张支撑图纸</p>
+                      </div>
+                    </header>
+
+                    <div className="dossier-list">
+                      {group.dossiers.map((dossier) => (
+                        <article className="project-dossier" aria-label={`案例分析 ${dossier.project}`} key={dossier.project}>
+                          <header className="dossier-heading">
+                            <div>
+                              <span>项目案例</span>
+                              <h4>{dossier.project}</h4>
+                              <p>{dossier.primary.location} · {dossier.primary.year}</p>
+                            </div>
+                            <div className="dossier-verification" data-tier={dossier.primary.tier}>
+                              {dossier.primary.tier === 'verified' && <ShieldCheck aria-hidden="true" />}
+                              {dossier.primary.tier === 'partial' && <CircleDashed aria-hidden="true" />}
+                              {dossier.primary.tier === 'visual_lead' && <Eye aria-hidden="true" />}
+                              <span>{tierLabels[dossier.primary.tier]}</span>
+                            </div>
+                          </header>
+
+                          <div className="dossier-analysis-grid">
+                            <section>
+                              <h5>项目条件</h5>
+                              <p>{dossier.analysis.projectContext}</p>
+                            </section>
+                            <section>
+                              <h5>空间机制</h5>
+                              <p>{dossier.analysis.designMechanism}</p>
+                            </section>
+                            <section>
+                              <h5>怎么转译</h5>
+                              <ol>
+                                {dossier.analysis.transferStrategy.map((step) => <li key={step}>{step}</li>)}
+                              </ol>
+                            </section>
+                            <section>
+                              <h5>适用边界</h5>
+                              <p>{dossier.analysis.limitation}</p>
+                            </section>
+                          </div>
+
+                          <section className="dossier-evidence-set" aria-label={`${dossier.project} 图纸证据`}>
+                            <header>
+                              <h5>支撑图纸</h5>
+                              <span>{dossier.assets.length} 张 · 点击图纸查看来源和证据定位</span>
+                            </header>
+                            <div className="dossier-gallery">
+                              {dossier.assets.map((result) => {
+                                const resultIndex = results.findIndex((item) => item.id === result.id)
+                                const compared = comparisonIds.includes(result.id)
+                                const resultAnalysis = analysisFor(result, group.subquestion.id)
+                                return (
+                                  <div
+                                    className="evidence-sheet"
+                                    data-selected={
+                                      inspectorOpen
+                                      && selectedResultId === result.id
+                                      && selectedSubquestionId === group.subquestion.id
+                                      || undefined
+                                    }
+                                    data-saved={savedIds.includes(result.id) || undefined}
+                                    data-rejected={rejectedIds.includes(result.id) || undefined}
+                                    key={result.id}
+                                  >
+                                    <button
+                                      className="evidence-sheet-main"
+                                      type="button"
+                                      aria-label={`查看 ${result.project} ${assetLabels[result.assetType]}证据`}
+                                      onClick={(event) => {
+                                        overlayTriggerRef.current = event.currentTarget
+                                        setSelectedResultId(result.id)
+                                        setSelectedSubquestionId(group.subquestion.id)
+                                        setInspectorOpen(true)
+                                      }}
+                                    >
+                                      <figure>
+                                        <div className="evidence-image" data-drawing={result.drawing}>
+                                          {result.previewUrl ? (
+                                            <img
+                                              src={result.previewUrl}
+                                              alt={`${result.project} ${assetLabels[result.assetType]}`}
+                                              loading={resultIndex < 6 ? 'eager' : 'lazy'}
+                                              decoding="async"
+                                              fetchPriority={resultIndex < 3 ? 'high' : 'auto'}
+                                            />
+                                          ) : (
+                                            <div className="preview-unavailable" role="img" aria-label={`${result.project} 暂无预览`}>预览不可用</div>
+                                          )}
+                                          <span>{assetLabels[result.assetType]}</span>
+                                        </div>
+                                        <figcaption>
+                                          <strong>{result.title}</strong>
+                                          <p>{resultAnalysis.observation}</p>
+                                        </figcaption>
+                                      </figure>
+                                    </button>
+                                    <footer className="evidence-sheet-actions">
+                                      <span>问题匹配 {result.relevance} / 4</span>
+                                      <button
+                                        type="button"
+                                        aria-pressed={compared}
+                                        aria-label={`${compared ? '移出方法对照' : '加入方法对照'} ${result.project} ${assetLabels[result.assetType]}`}
+                                        title={compared ? '移出方法对照' : '加入方法对照'}
+                                        disabled={comparisonIds.length >= 6 && !compared}
+                                        onClick={() => void toggleComparison(result.id)}
+                                      >
+                                        {compared ? <Check aria-hidden="true" /> : <Plus aria-hidden="true" />}
+                                        <span>{compared ? '已加入对照' : '加入对照'}</span>
+                                      </button>
+                                    </footer>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </section>
+
+                          <footer className="dossier-source">
+                            <span>来源与权利分开记录</span>
+                            <p>{dossier.primary.sourceName} · {dossier.primary.publicationTier} · 权利 {dossier.primary.rightsStatus}</p>
+                            <a href={dossier.primary.sourceUrl} target="_blank" rel="noreferrer">打开项目来源</a>
+                          </footer>
+                        </article>
+                      ))}
                     </div>
-                  </button>
-                  <footer className="reference-actions">
-                    <span>{rejectedIds.includes(result.id) ? '已拒绝 · ' : ''}问题匹配 {result.relevance} / 4</span>
-                    <button
-                      type="button"
-                      aria-pressed={comparisonIds.includes(result.id)}
-                      aria-label={`${comparisonIds.includes(result.id) ? '移出方法对照' : '加入方法对照'} ${result.project}`}
-                      title={comparisonIds.includes(result.id) ? '移出方法对照' : '加入方法对照'}
-                      disabled={comparisonIds.length >= 6 && !comparisonIds.includes(result.id)}
-                      onClick={() => void toggleComparison(result.id)}
-                    >
-                      {comparisonIds.includes(result.id) ? <Check aria-hidden="true" /> : <Plus aria-hidden="true" />}
-                      <span className="visually-hidden">{comparisonIds.includes(result.id) ? '移出方法对照' : '加入方法对照'}</span>
-                    </button>
-                  </footer>
-                </article>
-              ))}
+                  </section>
+                ))}
+              </div>
             </section>
           </section>
         )}
@@ -1267,7 +1487,7 @@ export default function App() {
         )}
       </section>
 
-      {inspectorOpen && selectedResult && (
+      {inspectorOpen && selectedResult && selectedAnalysis && (
         <>
           <button className="drawer-backdrop" type="button" tabIndex={-1} aria-hidden="true" onClick={closeOverlays} />
           <aside className="source-inspector" role="dialog" aria-modal="true" aria-label="来源检视器">
@@ -1278,13 +1498,25 @@ export default function App() {
             <div className="inspector-content">
               <strong className="inspector-project">{selectedResult.project}</strong>
               <p className="inspector-location">{selectedResult.location} · {selectedResult.year}</p>
+              <section className="inspector-project-context">
+                <h3>项目条件</h3>
+                <p>{selectedAnalysis.projectContext}</p>
+              </section>
+              <section className="inspector-mechanism">
+                <h3>空间机制</h3>
+                <p>{selectedAnalysis.designMechanism}</p>
+              </section>
               <section className="inspector-highlight">
-                <h3>为什么值得看</h3>
-                <p>{selectedResult.inference}</p>
+                <h3>怎么转译</h3>
+                <ol>{selectedAnalysis.transferStrategy.map((step) => <li key={step}>{step}</li>)}</ol>
               </section>
               <section className="inspector-observation">
                 <h3>图中直接可见</h3>
-                <p>{selectedResult.observation}</p>
+                <p>{selectedAnalysis.observation}</p>
+              </section>
+              <section className="inspector-inference">
+                <h3>设计方法推断</h3>
+                <p>{selectedResult.inference}</p>
               </section>
               <details className="inspector-details" open>
                 <summary>来源与核验</summary>
@@ -1308,7 +1540,7 @@ export default function App() {
               </details>
               <details className="inspector-details">
                 <summary>适用边界</summary>
-                <p>{selectedResult.limitation}</p>
+                <p>{selectedAnalysis.limitation}</p>
               </details>
               <div className="inspector-actions">
                 <button type="button" aria-pressed={savedIds.includes(selectedResult.id)} onClick={() => void toggleSaved(selectedResult.id)}>{savedIds.includes(selectedResult.id) ? '取消收藏' : '收藏参考'}</button>

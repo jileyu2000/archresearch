@@ -33,6 +33,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | 13. M12 Global architectural studio canvas | complete | One global 128px drafting canvas, 1760/1600px responsive composition, route-specific plan/section fragments, 2048/1440/1024/700/390 acceptance, 39 Board tests and the full repository gate |
 | 14. M13 Research prompt vertical proportion | complete | Semantic 152/132/108px prompt heights, 2048/1440/1024/700/390 visual acceptance, zero detector findings and 40 Board tests |
 | 15. M14 Research answer and method comparison | complete | Result task provenance, evidence-backed method summary and five-row comparison matrix pass 1440/390 browser acceptance and 40 Board tests |
+| 16. M15 Decomposed deep research dossiers | complete | Post-audit depth, evidence, retry, durable traffic and retention boundaries pass 137 API tests, 41 Board tests, 111 Extension tests, 6 packaged-Chrome E2E cases and the full repository gate |
 
 ## M6 completion summary
 
@@ -40,6 +41,15 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 2. Durable workbench complete: real workspaces, restoration/polling, evidence detail, save/reject/note, comparison Board, StyleProfile and rights-filtered exports.
 3. Browser loop complete: real FastAPI WebSocket pairing, packaged MV3 page inspection, PNG crop persistence, content delivery, permission revoke and disconnect recovery.
 4. Evaluation/delivery complete: security fixtures, 30 research tasks, 108 deterministic classification samples, clean launcher, full verification, README, architecture/failure notes and three demos.
+
+## M15 implementation checkpoint
+
+1. Research depth is now persisted as `task → 3–6 subquestions → project dossiers → multiple supporting assets`; mode-specific targets govern subquestion, project and asset coverage without creating a case library or cross-workspace index.
+2. Each subquestion association retains its own project context, mechanism, transfer strategy, observations and boundary. Query state is grouped by execution generation and latest query-key state, so crash recovery resumes inherited completions while a deliberate retry after a complete partial run can research again.
+3. Browser inspection is bounded by SQLite-persisted run-level call, byte and page budgets. Accepted duplicate images can carry a source relation without reclassification or another file, provider-first assets adopt the real crop/hash, and unused duplicate files are removed.
+4. The Board presents case chapters and multi-image dossiers, and keeps the evidence drawer aligned with the subquestion the user opened. Provider, browser and follow-up passes merge analysis monotonically instead of clearing supported context, mechanism or earlier observations.
+5. Candidate retention resolves the default `.archresearch/...` storage form consistently, so the lifecycle sweep removes only genuine orphan crops. Desktop 1440px and mobile 390px visual acceptance covers home, result chapters, project dossiers and evidence drawers with no document-level horizontal overflow.
+6. The final `scripts/verify.ps1` gate exits 0: 137 API tests, 41 Board tests, 111 Extension tests, 6 packaged-Chrome E2E cases, PowerShell contracts, type/lint/build checks and all 30/108 evaluation fixtures pass without live provider calls.
 
 ## External acceptance gates
 
@@ -96,3 +106,25 @@ The code delivery is complete. These product claims require user-owned credentia
 | Chrome's raw `--window-size=390` screenshot cropped an outer window and looked like page overflow | 1 | Re-test with an exact Playwright 390px viewport; DOM width, expanded settings and long filename states all remain within the viewport |
 | The first CSS contract test resolved `import.meta.url` to Vite's non-file module URL | 1 | Switch away from URL-based filesystem loading; the next gate then exposed the browser-only TypeScript boundary before the final `?raw` fix |
 | The CSS contract test's Node filesystem fallback was excluded by the Board browser-only TypeScript config | 1 | Import the stylesheet through Vite's typed `?raw` contract so the same source is available to Vitest without adding Node types to browser code |
+| M15 resume inspection referenced the obsolete `apps/board/src/index.css` path | 1 | Use the current global stylesheet at `apps/board/src/styles.css`; no production file was changed |
+| M15 startup inspection referenced a nonexistent `archresearch_api/app.py` | 1 | Locate the application lifespan from the package file list before changing startup; no production file was changed |
+| Three legacy workflow tests still encoded the pre-M15 six-asset threshold and flat duplicate semantics | 1 | Update the tests to require 12 Balanced assets and treat a first-time subquestion association as useful progress |
+| Two API integration tests still selected/asserted all six Mock results after Mock depth increased to twelve | 1 | Keep the Board comparison limit at six by selecting the first six, and update result persistence to expect all twelve |
+| M15 documentation review looked for `PRODUCT.md` at repository root | 1 | Use the existing app product context at `apps/board/PRODUCT.md`; keep root `DESIGN.md` as the global visual authority |
+| The first shared visual-budget test patch targeted a stale assertion line | 1 | Re-read the focused test section and insert the regression test at the verified page-budget boundary |
+| The first M15 Board association test patch expected a nonexistent neighboring test name | 1 | Re-read the exact test boundary and insert the focused regression test after the verified inspector test |
+| The first service smoke check used `/v1/health`, but health is not versioned | 1 | Use the implemented `/health` route; it returns 200 and reports `gpt-5.5` |
+| The in-app browser backend rejected `networkidle` although the generic docs list it | 1 | Use the supported `load` state and verify rendered content directly |
+| A combined PowerShell source-range inspection built a malformed default range for `inspection.py` | 1 | Read the visual inspection loop in a separate bounded command before changing it |
+| M15 final recovery again invoked the disabled system `python` alias | 1 | Switch immediately to `apps/api/.venv/Scripts/python.exe` for every project recovery command |
+| The first stale-retry regression expected a fourth program query after the run had already stopped on two duplicate replay batches | 1 | Assert the actual boundary: previously completed program and circulation queries are replayed; normal no-new-assets stopping remains intact |
+| Parallel API verification yielded the long pytest process without printing its reusable session id | 1 | Keep Ruff/Mypy results and rerun pytest alone with a 30-second yield so its final exit code is captured |
+| The read-only final audit's first PowerShell range helper passed an array to `[Math]::Min` | 1 | The audit switched to a fixed file range and continued without modifying the repository |
+| The first final-audit mailbox wait used 1 second below the tool's 10-second minimum | 1 | Retry with the documented 10-second minimum; no project work was affected |
+| The first durable-budget model patch referenced SQLAlchemy `Boolean` without importing it | 1 | Add the missing model import before rerunning the focused migration/retry tests |
+| Final audit searched two stale test filenames that do not exist | 1 | Use the actual workflow/API test files found by `rg`; no repository files were changed by the audit |
+| `verify.ps1` continued after Ruff's native format check returned non-zero | 1 | Add a red-first PowerShell contract and enable `$PSNativeCommandUseErrorActionPreference`; the gate now stops on native command failures |
+| The first changed-file secret scan nested two command result arrays and reported only two aggregate entries | 1 | Flatten both Git file lists before scanning file contents; never print matched secret text |
+| The first post-audit static gate found two unformatted Python files and one unsorted import block | 1 | Apply the project Ruff formatter/import fixer, then rerun the complete API and repository gates |
+| A read-only audit started a second full verification before the main gate | 1 | Stop launching commands from the audit workstream and treat the main thread's single exit-0 run as the authoritative result |
+| The final secret scan treated a newline after an empty `.env` assignment as a value | 1 | Restrict assignment whitespace to spaces/tabs instead of `\s`; all 39 changed files then scan with zero credential-pattern matches |

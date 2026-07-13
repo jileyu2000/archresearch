@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     DateTime,
     Float,
     ForeignKey,
@@ -78,11 +79,16 @@ class ResearchRun(TimestampMixin, Base):
     budget_mode: Mapped[str] = mapped_column(String(20))
     budget: Mapped[dict[str, int]] = mapped_column(JSON)
     allowed_domains: Mapped[list[str]] = mapped_column(JSON, default=list)
+    subquestions: Mapped[list[dict[str, str]]] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(String(30), default="created", index=True)
     checkpoint_stage: Mapped[str | None] = mapped_column(String(30))
     coverage_report: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     stop_reason: Mapped[str | None] = mapped_column(String(200))
     attempt: Mapped[int] = mapped_column(Integer, default=0)
+    visual_calls_used: Mapped[int] = mapped_column(Integer, default=0)
+    visual_bytes_used: Mapped[int] = mapped_column(Integer, default=0)
+    visual_byte_limit_reached: Mapped[bool] = mapped_column(Boolean, default=False)
+    browser_pages_attempted: Mapped[int] = mapped_column(Integer, default=0)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     queries: Mapped[list[QueryAttempt]] = relationship(cascade="all, delete-orphan")
@@ -100,6 +106,9 @@ class QueryAttempt(Base):
         ForeignKey("research_runs.id", ondelete="CASCADE"), index=True
     )
     round_number: Mapped[int] = mapped_column(Integer)
+    subquestion_id: Mapped[str | None] = mapped_column(String(64))
+    run_attempt: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(30), default="started")
     query: Mapped[str] = mapped_column(Text)
     language: Mapped[str] = mapped_column(String(10))
     purpose: Mapped[str] = mapped_column(String(100))
@@ -153,6 +162,11 @@ class AssetCandidate(Base):
     rights_status: Mapped[str] = mapped_column(String(30), default="unknown")
     result_tier: Mapped[str] = mapped_column(String(30), default="visual_lead", index=True)
     relevance: Mapped[int] = mapped_column(Integer, default=0)
+    subquestion_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    project_context: Mapped[str] = mapped_column(Text, default="")
+    design_mechanism: Mapped[str] = mapped_column(Text, default="")
+    transfer_strategy: Mapped[list[str]] = mapped_column(JSON, default=list)
+    subquestion_analysis: Mapped[dict[str, dict[str, Any]]] = mapped_column(JSON, default=dict)
     facts: Mapped[list[str]] = mapped_column(JSON, default=list)
     observations: Mapped[list[str]] = mapped_column(JSON, default=list)
     inferences: Mapped[list[str]] = mapped_column(JSON, default=list)

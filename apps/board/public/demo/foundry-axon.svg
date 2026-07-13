@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" role="img" aria-labelledby="title desc">
+  <title id="title">Foundry Commons layered axonometric</title>
+  <desc id="desc">Axonometric separating the retained frame, inserted program boxes and public route.</desc>
+  <rect width="960" height="600" fill="#fff"/>
+  <g fill="none" stroke="#171a18" stroke-width="3" stroke-linejoin="round">
+    <path d="m120 390 330-190 390 170-330 190z"/>
+    <path d="M120 390V230L450 40l390 170v160" opacity=".52"/>
+    <path d="M230 327V167M340 264V104M450 200V40M580 257V97M710 313V153M840 370V210" opacity=".52"/>
+    <path d="m120 230 390 170 330-190M230 167l390 170M340 104l390 170M450 40l390 170" opacity=".32"/>
+  </g>
+  <g fill="#edf1ff" stroke="#2f5bff" stroke-width="4" stroke-linejoin="round">
+    <path d="m285 351 105-61 116 51-105 60z"/>
+    <path d="m540 398 105-61 116 51-105 60z"/>
+    <path d="M285 351v-105l116 51v104M390 290V185l116 51v105" opacity=".74"/>
+    <path d="M540 398V293l116 51v104M645 337V232l116 51v105" opacity=".74"/>
+  </g>
+  <path d="M170 404c148 50 223-70 337-24 103 42 175 24 283-18" fill="none" stroke="#1f7a5a" stroke-width="7" stroke-linecap="round"/>
+  <path d="m772 350 18 12-17 13" fill="none" stroke="#1f7a5a" stroke-width="5"/>
+  <g font-family="Segoe UI, sans-serif" font-size="18" font-weight="600">
+    <text x="54" y="60" fill="#171a18">OLD FRAME / NEW BOXES / PUBLIC RESIDUAL SPACE</text>
+    <text x="300" y="448" fill="#2f5bff">INDEPENDENT PROGRAM</text>
+    <text x="590" y="500" fill="#1f7a5a">PUBLIC ROUTE</text>
+  </g>
+</svg>

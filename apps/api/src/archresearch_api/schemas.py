@@ -86,11 +86,61 @@ class Budget(BaseModel):
     max_seconds: int
 
 
+class DepthTarget(BaseModel):
+    subquestions: int
+    projects: int
+    assets: int
+    multi_asset_projects: int
+    verified_or_partial: int
+
+
 BUDGETS: dict[BudgetMode, Budget] = {
     BudgetMode.quick: Budget(max_rounds=2, max_queries=4, max_pages=12, max_seconds=240),
     BudgetMode.balanced: Budget(max_rounds=3, max_queries=8, max_pages=30, max_seconds=720),
     BudgetMode.deep: Budget(max_rounds=5, max_queries=16, max_pages=60, max_seconds=1800),
 }
+
+
+DEPTH_TARGETS: dict[BudgetMode, DepthTarget] = {
+    BudgetMode.quick: DepthTarget(
+        subquestions=3,
+        projects=2,
+        assets=6,
+        multi_asset_projects=1,
+        verified_or_partial=4,
+    ),
+    BudgetMode.balanced: DepthTarget(
+        subquestions=4,
+        projects=4,
+        assets=12,
+        multi_asset_projects=2,
+        verified_or_partial=6,
+    ),
+    BudgetMode.deep: DepthTarget(
+        subquestions=6,
+        projects=6,
+        assets=18,
+        multi_asset_projects=3,
+        verified_or_partial=9,
+    ),
+}
+
+
+class ResearchSubquestion(BaseModel):
+    id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{1,63}$")
+    question: str = Field(min_length=3, max_length=500)
+    rationale: str = Field(min_length=3, max_length=1_000)
+
+
+class ResearchPlan(BaseModel):
+    subquestions: list[ResearchSubquestion] = Field(min_length=3, max_length=6)
+
+    @model_validator(mode="after")
+    def require_unique_subquestions(self) -> ResearchPlan:
+        ids = [item.id for item in self.subquestions]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Research subquestion ids must be unique")
+        return self
 
 
 class ResearchSpec(BaseModel):
@@ -162,6 +212,9 @@ class CoverageReport(BaseModel):
     usable_assets: int = 0
     project_count: int = 0
     verified_or_partial: int = 0
+    subquestion_count: int = 0
+    covered_subquestions: int = 0
+    multi_asset_projects: int = 0
     gaps: list[str] = Field(default_factory=list)
 
 
@@ -174,6 +227,7 @@ class ResearchRunRead(BaseModel):
     goal: ResearchGoal
     budget_mode: BudgetMode
     budget: dict[str, int]
+    subquestions: list[ResearchSubquestion]
     status: RunStatus
     checkpoint_stage: str | None
     coverage_report: dict[str, Any]
@@ -209,6 +263,14 @@ class EvidenceClaimRead(EvidenceClaimCreate):
     created_at: datetime
 
 
+class SubquestionAssetAnalysis(BaseModel):
+    project_context: str = ""
+    design_mechanism: str = ""
+    transfer_strategy: list[str] = Field(default_factory=list)
+    observations: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+
+
 class AssetCandidateRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -226,6 +288,11 @@ class AssetCandidateRead(BaseModel):
     rights_status: RightsStatus
     result_tier: ResultTier
     relevance: int
+    subquestion_ids: list[str]
+    project_context: str
+    design_mechanism: str
+    transfer_strategy: list[str]
+    subquestion_analysis: dict[str, SubquestionAssetAnalysis]
     facts: list[str]
     observations: list[str]
     inferences: list[str]

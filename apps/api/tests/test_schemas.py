@@ -3,10 +3,13 @@ from pydantic import ValidationError
 
 from archresearch_api.schemas import (
     BUDGETS,
+    DEPTH_TARGETS,
     BudgetMode,
     EvidenceClaimCreate,
     ResearchGoal,
+    ResearchPlan,
     ResearchSpec,
+    ResearchSubquestion,
     RunStatus,
     UrlInputCreate,
 )
@@ -31,6 +34,52 @@ def test_research_modes_have_the_approved_fixed_budgets() -> None:
         "max_pages": 60,
         "max_seconds": 1800,
     }
+
+
+def test_research_modes_have_distinct_evidence_obligations() -> None:
+    assert DEPTH_TARGETS[BudgetMode.quick].model_dump() == {
+        "subquestions": 3,
+        "projects": 2,
+        "assets": 6,
+        "multi_asset_projects": 1,
+        "verified_or_partial": 4,
+    }
+    assert DEPTH_TARGETS[BudgetMode.balanced].model_dump() == {
+        "subquestions": 4,
+        "projects": 4,
+        "assets": 12,
+        "multi_asset_projects": 2,
+        "verified_or_partial": 6,
+    }
+    assert DEPTH_TARGETS[BudgetMode.deep].model_dump() == {
+        "subquestions": 6,
+        "projects": 6,
+        "assets": 18,
+        "multi_asset_projects": 3,
+        "verified_or_partial": 9,
+    }
+
+
+def test_research_plan_requires_unique_bounded_subquestions() -> None:
+    plan = ResearchPlan(
+        subquestions=[
+            ResearchSubquestion(
+                id="program", question="新功能放在哪里？", rationale="定位植入关系"
+            ),
+            ResearchSubquestion(
+                id="circulation", question="流线怎样分开？", rationale="检查冲突节点"
+            ),
+            ResearchSubquestion(
+                id="section", question="剖面怎样形成层次？", rationale="检查竖向联系"
+            ),
+        ]
+    )
+    assert [item.id for item in plan.subquestions] == ["program", "circulation", "section"]
+
+    with pytest.raises(ValidationError):
+        ResearchPlan(
+            subquestions=[plan.subquestions[0], plan.subquestions[0], plan.subquestions[2]]
+        )
 
 
 def test_research_spec_accepts_only_the_three_routing_goals() -> None:

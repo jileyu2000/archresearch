@@ -54,7 +54,16 @@ export interface CoverageReport {
   usable_assets?: number
   project_count?: number
   verified_or_partial?: number
+  subquestion_count?: number
+  covered_subquestions?: number
+  multi_asset_projects?: number
   gaps?: string[]
+}
+
+export interface ResearchSubquestion {
+  id: string
+  question: string
+  rationale: string
 }
 
 export interface ResearchRun {
@@ -64,6 +73,7 @@ export interface ResearchRun {
   goal: ResearchGoal
   status: RunStatus
   mode: ResearchMode
+  subquestions: ResearchSubquestion[]
   budget?: Record<string, number>
   checkpointStage?: string | null
   coverageReport?: CoverageReport
@@ -80,6 +90,7 @@ interface ApiResearchRun {
   goal: ResearchGoal
   status: RunStatus
   budget_mode: ResearchMode
+  subquestions?: ResearchSubquestion[]
   budget?: Record<string, number>
   checkpoint_stage?: string | null
   coverage_report?: CoverageReport
@@ -101,6 +112,14 @@ export interface ApiEvidenceClaim {
   created_at?: string
 }
 
+export interface ApiSubquestionAnalysis {
+  project_context?: string
+  design_mechanism?: string
+  transfer_strategy?: string[]
+  observations?: string[]
+  limitations?: string[]
+}
+
 export interface ApiAssetCandidate {
   id: string
   run_id: string
@@ -116,6 +135,11 @@ export interface ApiAssetCandidate {
   rights_status: 'user_owned' | 'open_license' | 'permissioned' | 'unknown' | 'restricted'
   result_tier: 'verified' | 'partial' | 'visual_lead'
   relevance: number
+  subquestion_ids?: string[]
+  project_context?: string
+  design_mechanism?: string
+  transfer_strategy?: string[]
+  subquestion_analysis?: Record<string, ApiSubquestionAnalysis>
   facts: string[]
   observations: string[]
   inferences: string[]
@@ -200,6 +224,7 @@ function normalizeRun(run: ApiResearchRun): ResearchRun {
     goal: run.goal,
     status: run.status,
     mode: run.budget_mode,
+    subquestions: run.subquestions ?? [],
     budget: run.budget,
     checkpointStage: run.checkpoint_stage,
     coverageReport: run.coverage_report,

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" role="img" aria-labelledby="title desc">
+  <title id="title">Section Layers public loop plan</title>
+  <desc id="desc">Plan showing three staggered public platforms wrapping a stable service core.</desc>
+  <rect width="960" height="600" fill="#fff"/>
+  <g stroke="#d5dad6" stroke-width="1">
+    <path d="M90 90H870M90 190H870M90 290H870M90 390H870M90 490H870"/>
+    <path d="M90 90V510M220 90V510M350 90V510M480 90V510M610 90V510M740 90V510M870 90V510"/>
+  </g>
+  <rect x="100" y="110" width="760" height="380" fill="none" stroke="#171a18" stroke-width="5"/>
+  <rect x="425" y="215" width="125" height="170" fill="#f0f2f0" stroke="#5e6661" stroke-width="4"/>
+  <g fill="#edf1ff" stroke="#2f5bff" stroke-width="4">
+    <path d="M155 160H425v105H270v100H155z"/>
+    <path d="M550 160h255v205H670V265H550z"/>
+    <path d="M270 365h400v75H270z"/>
+  </g>
+  <path d="M185 210H375v105H620v-105H765M745 192l20 18-20 18" fill="none" stroke="#1f7a5a" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <g font-family="Segoe UI, sans-serif" font-size="18" font-weight="600">
+    <text x="100" y="65" fill="#171a18">STAGGERED PUBLIC LOOP / STABLE SERVICE CORE</text>
+    <text x="439" y="302" fill="#5e6661">CORE</text>
+    <text x="350" y="474" fill="#2f5bff">PUBLIC PLATFORM 03</text>
+    <text x="585" y="145" fill="#1f7a5a">CONTINUOUS LOOP</text>
+  </g>
+</svg>

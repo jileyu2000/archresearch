@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from time import sleep
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -134,6 +135,112 @@ def test_cleanup_removes_expired_temporary_data_but_keeps_saved_snapshots(
         assert [saved.note for saved in session.scalars(select(SavedReference))] == ["keep"]
         assert [event.sequence for event in session.scalars(select(TraceEvent))] == [2]
         assert [query.query for query in session.scalars(select(QueryAttempt))] == ["fresh"]
+
+
+def test_cleanup_removes_only_unreferenced_pngs_from_run_candidate_directories(
+    tmp_path: Path,
+) -> None:
+    runtime_dir = tmp_path / "runtime"
+    database = Database(f"sqlite:///{(tmp_path / 'orphan-crops.db').as_posix()}")
+    database.create_all()
+    with database.session_factory() as session:
+        workspace = Workspace(name="Orphan crop cleanup")
+        session.add(workspace)
+        session.flush()
+        run = ResearchRun(
+            workspace_id=workspace.id,
+            question="cleanup orphan crops",
+            goal=ResearchGoal.precedent_research.value,
+            budget_mode=BudgetMode.quick.value,
+            budget=BUDGETS[BudgetMode.quick].model_dump(),
+            allowed_domains=[],
+            status=RunStatus.completed.value,
+            coverage_report={},
+        )
+        session.add(run)
+        session.flush()
+
+        candidate_dir = runtime_dir / "runs" / run.id / "candidates"
+        candidate_dir.mkdir(parents=True)
+        referenced_file = candidate_dir / "referenced.png"
+        referenced_file.write_bytes(b"referenced")
+        orphan_file = candidate_dir / "orphan.png"
+        orphan_file.write_bytes(b"orphan")
+        non_png_file = candidate_dir / "notes.txt"
+        non_png_file.write_text("keep", encoding="utf-8")
+        outside_file = tmp_path / "outside.png"
+        outside_file.write_bytes(b"outside")
+        unrelated_runtime_file = runtime_dir / "exports" / "unreferenced.png"
+        unrelated_runtime_file.parent.mkdir(parents=True)
+        unrelated_runtime_file.write_bytes(b"export")
+
+        session.add(
+            AssetCandidate(
+                run_id=run.id,
+                project_name="Referenced",
+                asset_type="section",
+                source_url="https://example.com/referenced",
+                storage_path=str(referenced_file),
+            )
+        )
+        session.commit()
+
+    report = cleanup_expired_data(database, data_dir=runtime_dir)
+
+    assert report.orphan_files == 1
+    assert referenced_file.is_file()
+    assert not orphan_file.exists()
+    assert non_png_file.is_file()
+    assert outside_file.is_file()
+    assert unrelated_runtime_file.is_file()
+
+
+def test_cleanup_preserves_default_relative_candidate_storage_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    data_dir = Path(".archresearch")
+    database = Database(f"sqlite:///{(tmp_path / 'relative-paths.db').as_posix()}")
+    database.create_all()
+    with database.session_factory() as session:
+        workspace = Workspace(name="Relative path cleanup")
+        session.add(workspace)
+        session.flush()
+        run = ResearchRun(
+            workspace_id=workspace.id,
+            question="preserve referenced relative crop",
+            goal=ResearchGoal.precedent_research.value,
+            budget_mode=BudgetMode.quick.value,
+            budget=BUDGETS[BudgetMode.quick].model_dump(),
+            allowed_domains=[],
+            status=RunStatus.completed.value,
+            coverage_report={},
+        )
+        session.add(run)
+        session.flush()
+        candidate_dir = data_dir / "runs" / run.id / "candidates"
+        candidate_dir.mkdir(parents=True)
+        referenced_file = candidate_dir / "referenced.png"
+        referenced_file.write_bytes(b"referenced")
+        orphan_file = candidate_dir / "orphan.png"
+        orphan_file.write_bytes(b"orphan")
+        session.add(
+            AssetCandidate(
+                run_id=run.id,
+                project_name="Referenced",
+                asset_type="section",
+                source_url="https://example.com/relative",
+                storage_path=str(referenced_file),
+            )
+        )
+        session.commit()
+
+    report = cleanup_expired_data(database, data_dir=data_dir)
+
+    assert report.orphan_files == 1
+    assert referenced_file.is_file()
+    assert not orphan_file.exists()
 
 
 def test_lifespan_resumes_an_incomplete_run_from_sqlite(tmp_path: Path) -> None:

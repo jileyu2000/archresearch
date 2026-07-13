@@ -56,7 +56,7 @@ def test_share_export_embeds_only_assets_with_allowed_rights(
     run_id, results = _run_with_results(client, workspace_id)
     board = client.patch(
         f"/v1/runs/{run_id}/board",
-        json={"selected_asset_ids": [result["id"] for result in results]},
+        json={"selected_asset_ids": [result["id"] for result in results[:6]]},
     ).json()
 
     response = client.post(f"/v1/boards/{board['id']}/exports", json={"mode": "share"})

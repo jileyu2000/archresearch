@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" role="img" aria-labelledby="title desc">
+  <title id="title">Circulation Split site plan</title>
+  <desc id="desc">Site plan separating a direct public arrival axis from a perimeter service vehicle loop.</desc>
+  <rect width="960" height="600" fill="#fff"/>
+  <path d="M55 500H905" stroke="#171a18" stroke-width="34"/>
+  <path d="M55 500H905" stroke="#fff" stroke-width="2" stroke-dasharray="24 18"/>
+  <rect x="210" y="85" width="540" height="315" fill="#f6f7f5" stroke="#171a18" stroke-width="5"/>
+  <rect x="265" y="135" width="430" height="210" fill="#fff" stroke="#5e6661" stroke-width="4"/>
+  <rect x="410" y="330" width="140" height="30" fill="#edf1ff" stroke="#2f5bff" stroke-width="3"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M480 490V360" stroke="#1f7a5a" stroke-width="11"/>
+    <path d="m458 384 22-24 22 24" stroke="#1f7a5a" stroke-width="7"/>
+    <path d="M790 485c70-115 32-342-98-342" stroke="#d6533c" stroke-width="10"/>
+    <path d="m718 126-26 17 25 18" stroke="#d6533c" stroke-width="7"/>
+  </g>
+  <circle cx="705" cy="145" r="46" fill="none" stroke="#d6533c" stroke-width="3" stroke-dasharray="8 7"/>
+  <g font-family="Segoe UI, sans-serif" font-size="18" font-weight="600">
+    <text x="210" y="55" fill="#171a18">DIRECT PUBLIC ARRIVAL / PERIMETER SERVICE LOOP</text>
+    <text x="392" y="548" fill="#1f7a5a">PUBLIC ARRIVAL</text>
+    <text x="708" y="230" fill="#d6533c">SERVICE LOOP</text>
+    <text x="654" y="91" fill="#d6533c">TURNING YARD</text>
+  </g>
+</svg>

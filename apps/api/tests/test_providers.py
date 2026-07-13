@@ -14,7 +14,7 @@ from archresearch_api.providers import (
     ProviderSource,
     TinEyeProvider,
 )
-from archresearch_api.schemas import ResearchGoal
+from archresearch_api.schemas import BudgetMode, ResearchGoal, ResearchPlan
 from archresearch_api.visual import ArchitectureAssetType
 
 
@@ -44,7 +44,18 @@ def test_mock_provider_is_deterministic() -> None:
     first = provider.search("旧建筑 剖面 更新", ResearchGoal.precedent_research)
     second = provider.search("旧建筑 剖面 更新", ResearchGoal.precedent_research)
     assert first == second
-    assert len(first.assets) == 6
+    assert len(first.assets) == 12
+    plan = provider.plan(
+        "旧建筑中如何植入新功能？",
+        ResearchGoal.precedent_research,
+        BudgetMode.balanced,
+        "保留主结构",
+    )
+    assert isinstance(plan, ResearchPlan)
+    assert len(plan.subquestions) == 4
+    assert all(asset.project_context for asset in first.assets)
+    assert all(asset.design_mechanism for asset in first.assets)
+    assert all(len(asset.transfer_strategy) >= 2 for asset in first.assets)
 
 
 def test_live_openai_provider_requires_an_explicit_key() -> None:
@@ -136,6 +147,50 @@ def test_openai_provider_uses_relay_compatible_web_search_and_domain_fields() ->
     assert request["text_format"] is ProviderSearchResult
 
 
+def test_openai_provider_plans_bounded_subquestions_before_searching() -> None:
+    calls: list[dict[str, Any]] = []
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(
+                output_parsed={
+                    "subquestions": [
+                        {"id": "structure", "question": "保留什么？", "rationale": "识别结构边界"},
+                        {"id": "program", "question": "植入什么？", "rationale": "明确功能关系"},
+                        {"id": "circulation", "question": "怎样分流？", "rationale": "检查冲突"},
+                        {
+                            "id": "section",
+                            "question": "怎样形成层次？",
+                            "rationale": "检查竖向空间",
+                        },
+                    ]
+                }
+            )
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+
+    plan = provider.plan(
+        "旧建筑如何植入新功能？",
+        ResearchGoal.precedent_research,
+        BudgetMode.balanced,
+        "保留主桁架",
+    )
+
+    assert len(plan.subquestions) == 4
+    request = calls[0]
+    assert request["model"] == "gpt-5.5"
+    assert request["reasoning"] == {"effort": "low"}
+    assert request["max_output_tokens"] == 1_200
+    assert request["text_format"] is ResearchPlan
+    assert "exactly 4" in request["input"]
+    assert "untrusted" in request["input"].lower()
+
+
 def test_openai_provider_rejects_a_missing_structured_result() -> None:
     class FakeResponses:
         def parse(self, **kwargs: Any) -> SimpleNamespace:
@@ -191,6 +246,86 @@ def test_openai_search_never_self_certifies_provenance_or_image_rights() -> None
     assert asset.primary_source == "candidate"
     assert asset.rights_status == "unknown"
     assert asset.result_tier == "partial"
+
+
+def test_openai_search_caps_assets_and_keeps_only_sources_for_retained_assets() -> None:
+    assets = [
+        ProviderAsset(
+            project_name=f"Project {index}",
+            asset_type="plan",
+            source_url=f"https://studio.example/project-{index}",
+        )
+        for index in range(1, 7)
+    ]
+    claimed = ProviderSearchResult(
+        assets=assets,
+        sources=[
+            ProviderSource(url="https://publisher.example/unrelated"),
+            *[ProviderSource(url=asset.source_url, title=asset.project_name) for asset in assets],
+        ],
+    )
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            del kwargs
+            return SimpleNamespace(output_parsed=claimed)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+
+    result = provider.search("adaptive reuse plans", ResearchGoal.precedent_research)
+
+    assert [asset.project_name for asset in result.assets] == [
+        "Project 1",
+        "Project 2",
+        "Project 3",
+        "Project 4",
+    ]
+    retained_urls = {asset.source_url for asset in result.assets}
+    assert len(result.sources) == 4
+    assert all(source.url in retained_urls for source in result.sources)
+
+
+def test_openai_search_clears_project_context_without_an_exact_fact_match() -> None:
+    claimed = ProviderSearchResult(
+        assets=[
+            ProviderAsset(
+                project_name="Supported",
+                asset_type="section",
+                source_url="https://studio.example/supported",
+                project_context="  The hall retains its original steel frame.  ",
+                facts=["The hall retains its original steel frame."],
+            ),
+            ProviderAsset(
+                project_name="Unsupported",
+                asset_type="plan",
+                source_url="https://studio.example/unsupported",
+                project_context="The warehouse was built in 1912.",
+                facts=["The project page describes an early twentieth-century warehouse."],
+            ),
+        ]
+    )
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            del kwargs
+            return SimpleNamespace(output_parsed=claimed)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+
+    result = provider.search("warehouse reuse", ResearchGoal.precedent_research)
+
+    assert result.assets[0].project_context.strip() == (
+        "The hall retains its original steel frame."
+    )
+    assert result.assets[1].project_context == ""
 
 
 def test_tineye_provider_maps_matches_without_live_requests() -> None:

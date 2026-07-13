@@ -24,12 +24,12 @@ def test_mock_run_persists_stage_checkpoints_and_results(
     run = _create_run(client, workspace_id)
     assert run["status"] == "completed"
     assert run["stop_reason"] == "coverage_satisfied"
-    assert run["coverage_report"] == {
-        "usable_assets": 6,
-        "project_count": 3,
-        "verified_or_partial": 6,
-        "gaps": [],
-    }
+    assert len(run["subquestions"]) == 4
+    assert run["coverage_report"]["usable_assets"] >= 12
+    assert run["coverage_report"]["project_count"] >= 4
+    assert run["coverage_report"]["covered_subquestions"] == 4
+    assert run["coverage_report"]["multi_asset_projects"] >= 2
+    assert run["coverage_report"]["gaps"] == []
 
     fetched = client.get(f"/v1/runs/{run['id']}")
     assert fetched.status_code == 200
@@ -39,10 +39,24 @@ def test_mock_run_persists_stage_checkpoints_and_results(
     assert results.status_code == 200
     tiers = [item["result_tier"] for item in results.json()]
     assert tiers[:2] == ["verified", "verified"]
-    assert len(results.json()) == 6
+    assert len(results.json()) >= 12
     assert all(item["evidence_claims"] for item in results.json())
     assert all(
         item["facts"] and item["observations"] and item["inferences"] and item["limitations"]
+        for item in results.json()
+    )
+    assert all(item["subquestion_ids"] for item in results.json())
+    assert all(len(item["subquestion_ids"]) == 1 for item in results.json())
+    assert all(item["project_context"] for item in results.json())
+    assert all(item["design_mechanism"] for item in results.json())
+    assert all(len(item["transfer_strategy"]) >= 2 for item in results.json())
+    assert all(
+        any(
+            claim["claim_type"] == "fact"
+            and claim["statement"] == item["project_context"]
+            and claim["source_url"] == item["source_url"]
+            for claim in item["evidence_claims"]
+        )
         for item in results.json()
     )
 
@@ -102,7 +116,7 @@ def test_cancel_and_idempotent_retry_preserve_existing_results(
     second_retry = client.post(f"/v1/runs/{run['id']}/retry")
     assert second_retry.status_code == 200
     assert second_retry.json()["attempt"] == first_retry.json()["attempt"]
-    assert len(client.get(f"/v1/runs/{run['id']}/results").json()) == 6
+    assert len(client.get(f"/v1/runs/{run['id']}/results").json()) == 12
 
 
 def test_save_and_reject_are_workspace_scoped(client: TestClient, workspace_id: str) -> None:

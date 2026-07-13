@@ -33,6 +33,10 @@ const candidate = {
   rights_status: 'open_license',
   result_tier: 'verified',
   relevance: 4,
+  subquestion_ids: ['program'],
+  project_context: '旧厂房保留主结构，并植入新的公共使用层。',
+  design_mechanism: '新公共层穿过原有框架，通过竖向交通核连接首层与上部空间。',
+  transfer_strategy: ['先标出现有结构不可改动范围', '再将公共层与服务核作为独立系统植入'],
   facts: ['事务所项目页确认了改造范围。'],
   observations: ['剖面显示公共层从旧结构中穿过。'],
   inferences: ['可把公共层作为人车分流的垂直缓冲。'],
@@ -62,9 +66,14 @@ interface LiveFetchOptions {
   saveFails?: boolean
   styleProfile?: Record<string, unknown> | null
   existingRunStatus?: string | null
+  subquestions?: typeof liveSubquestions
+  candidateOverrides?: Record<string, unknown>
 }
 
 const liveQuestion = '旧厂房如何植入新的公共功能？'
+const liveSubquestions = [
+  { id: 'program', question: '新功能怎样进入旧结构？', rationale: '识别保留与植入的空间关系' },
+]
 
 function createLiveFetch(options: LiveFetchOptions = {}) {
   let pollIndex = 0
@@ -84,6 +93,7 @@ function createLiveFetch(options: LiveFetchOptions = {}) {
             id: 'run-live',
             workspace_id: 'workspace-live',
             question: liveQuestion,
+            subquestions: options.subquestions ?? liveSubquestions,
             goal: 'precedent_research',
             status: initialStatus,
             budget_mode: 'balanced',
@@ -132,6 +142,7 @@ function createLiveFetch(options: LiveFetchOptions = {}) {
           id: 'run-live',
           workspace_id: 'workspace-live',
           question: liveQuestion,
+          subquestions: options.subquestions ?? liveSubquestions,
           goal: 'precedent_research',
           status,
           budget_mode: 'balanced',
@@ -154,6 +165,7 @@ function createLiveFetch(options: LiveFetchOptions = {}) {
           id: 'run-live',
           workspace_id: 'workspace-live',
           question: liveQuestion,
+          subquestions: options.subquestions ?? liveSubquestions,
           goal: 'precedent_research',
           status: 'cancelled',
           budget_mode: 'balanced',
@@ -172,7 +184,11 @@ function createLiveFetch(options: LiveFetchOptions = {}) {
     }
     if (path === '/v1/runs/run-live/results') {
       return Promise.resolve(
-        jsonResponse([{ ...candidate, has_local_content: options.hasLocalContent ?? false }]),
+        jsonResponse([{
+          ...candidate,
+          ...options.candidateOverrides,
+          has_local_content: options.hasLocalContent ?? false,
+        }]),
       )
     }
     if (path === '/v1/runs/run-live/board' && method === 'GET') {
@@ -516,34 +532,40 @@ describe('research board', () => {
       '/demo/kamala-plan.jpg',
     )
     expect(screen.queryByText('预览不可用')).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: '查看 Kamala Narayana Temple Survey 证据' }))
+    await userEvent.click(screen.getByRole('button', { name: '查看 Kamala Narayana Temple Survey 平面图证据' }))
     expect(screen.getByRole('dialog', { name: '来源检视器' })).toHaveTextContent('Kamala Narayana Temple Survey')
     expect(screen.getByText('演示数据')).toBeVisible()
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it('keeps the result canvas simple until the user asks for details', async () => {
+  it('organizes detailed project dossiers under decomposed research questions', async () => {
     const user = userEvent.setup()
     renderBoard('?demo=1')
 
-    expect(await screen.findByRole('heading', { name: '研究给出的方向' })).toBeVisible()
+    expect(await screen.findByRole('heading', { name: '问题拆解' })).toBeVisible()
     expect(screen.getByText('旧建筑更新中，如何植入新功能，并组织公共与后勤流线和剖面层次？')).toBeVisible()
-    expect(screen.getByRole('heading', { name: '支撑这些方向的图纸' })).toBeVisible()
+    expect(screen.getByRole('region', { name: '子问题清单' })).toBeVisible()
+    expect(screen.getByRole('region', { name: '案例分析' })).toBeVisible()
+    const programChapter = screen.getByRole('region', {
+      name: '新增功能怎样进入旧结构，同时减少对原构件的改动？',
+    })
+    const foundryDossier = within(programChapter).getByRole('article', { name: '案例分析 Foundry Commons Replay' })
+    expect(within(foundryDossier).getByRole('heading', { name: '项目条件' })).toBeVisible()
+    expect(within(foundryDossier).getByRole('heading', { name: '空间机制' })).toBeVisible()
+    expect(within(foundryDossier).getByRole('heading', { name: '怎么转译' })).toBeVisible()
+    expect(within(foundryDossier).getByRole('heading', { name: '适用边界' })).toBeVisible()
+    expect(foundryDossier.querySelectorAll('img').length).toBeGreaterThanOrEqual(3)
     expect(screen.getByRole('combobox', { name: '图纸类型' })).toHaveValue('all')
     expect(screen.getByRole('button', { name: '发起新研究' })).toBeVisible()
-    expect(screen.getByRole('region', { name: '图纸证据列表' })).toBeVisible()
-    const firstReference = screen.getByRole('button', { name: '查看 Kamala Narayana Temple Survey 证据' }).closest('article')
-    expect(firstReference).not.toHaveAttribute('data-selected')
-    expect(screen.getByRole('button', { name: '加入方法对照 Kamala Narayana Temple Survey' })).toHaveAttribute('title', '加入方法对照')
+    expect(screen.getByRole('button', { name: '加入方法对照 Kamala Narayana Temple Survey 平面图' })).toHaveAttribute('title', '加入方法对照')
     expect(screen.queryByRole('dialog', { name: '来源检视器' })).not.toBeInTheDocument()
     expect(screen.queryByRole('navigation', { name: '研究阶段' })).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '查看 Kamala Narayana Temple Survey 证据' }))
-    expect(firstReference).toHaveAttribute('data-selected', 'true')
+    await user.click(screen.getByRole('button', { name: '查看 Kamala Narayana Temple Survey 平面图证据' }))
     expect(screen.getByRole('dialog', { name: '来源检视器' })).toBeVisible()
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog', { name: '来源检视器' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '查看 Kamala Narayana Temple Survey 证据' })).toHaveFocus()
+    expect(screen.getByRole('button', { name: '查看 Kamala Narayana Temple Survey 平面图证据' })).toHaveFocus()
   })
 
   it('loads a useful research-workbench home without exposing result cards', async () => {
@@ -840,7 +862,7 @@ describe('research board', () => {
     await startLiveResearch(user)
 
     await screen.findByText('Live Mill Conversion')
-    await user.click(screen.getByRole('button', { name: '查看 Live Mill Conversion 证据' }))
+    await user.click(screen.getByRole('button', { name: '查看 Live Mill Conversion 剖面图证据' }))
     const inspector = screen.getByRole('dialog', { name: '来源检视器' })
     expect(within(inspector).getByRole('button', { name: '取消收藏' })).toBePressed()
     expect(within(inspector).getByRole('textbox', { name: '研究备注' })).toHaveValue('重点比较旧结构')
@@ -856,6 +878,48 @@ describe('research board', () => {
     )
   })
 
+  it('keeps one asset associated with each subquestion analysis instead of collapsing it into the first chapter', async () => {
+    const user = userEvent.setup()
+    const circulationQuestion = '公共路径怎样避免和后勤路径反复冲突？'
+    vi.stubGlobal('fetch', createLiveFetch({
+      subquestions: [
+        ...liveSubquestions,
+        { id: 'circulation', question: circulationQuestion, rationale: '分别追踪两套连续路径' },
+      ],
+      candidateOverrides: {
+        subquestion_ids: ['program', 'circulation'],
+        subquestion_analysis: {
+          program: {
+            project_context: candidate.project_context,
+            design_mechanism: candidate.design_mechanism,
+            transfer_strategy: candidate.transfer_strategy,
+            observations: candidate.observations,
+            limitations: candidate.limitations,
+          },
+          circulation: {
+            project_context: '旧厂房只有一个公共门厅，后勤入口位于场地背面。',
+            design_mechanism: '公共路径与后勤路径各自连续，只在门厅的受控节点交叉。',
+            transfer_strategy: ['先分别画出公共与后勤路径', '再把交叉压缩到可管理的门厅节点'],
+            observations: ['剖面中的两条路径在门厅相遇后立即分开。'],
+            limitations: ['单一门厅需要复核高峰期容量。'],
+          },
+        },
+      },
+    }))
+    renderBoard()
+    await startLiveResearch(user)
+
+    expect(await screen.findAllByText('Live Mill Conversion')).toHaveLength(2)
+    const circulationChapter = screen.getByRole('region', { name: circulationQuestion })
+    expect(within(circulationChapter).getByText('公共路径与后勤路径各自连续，只在门厅的受控节点交叉。')).toBeVisible()
+
+    await user.click(within(circulationChapter).getByRole('button', { name: '查看 Live Mill Conversion 剖面图证据' }))
+    const inspector = screen.getByRole('dialog', { name: '来源检视器' })
+    expect(within(inspector).getByText('公共路径与后勤路径各自连续，只在门厅的受控节点交叉。')).toBeVisible()
+    await user.click(within(inspector).getByText('适用边界'))
+    expect(within(inspector).getByText('单一门厅需要复核高峰期容量。')).toBeVisible()
+  })
+
   it('keeps save and reject mutually exclusive and persists undo actions', async () => {
     const user = userEvent.setup()
     const fetchMock = createLiveFetch()
@@ -863,7 +927,7 @@ describe('research board', () => {
     renderBoard()
     await startLiveResearch(user)
     await screen.findByText('Live Mill Conversion')
-    await user.click(screen.getByRole('button', { name: '查看 Live Mill Conversion 证据' }))
+    await user.click(screen.getByRole('button', { name: '查看 Live Mill Conversion 剖面图证据' }))
 
     await user.click(screen.getByRole('button', { name: '收藏参考' }))
     expect(screen.getByRole('button', { name: '取消收藏' })).toBePressed()
@@ -889,7 +953,7 @@ describe('research board', () => {
     renderBoard()
     await startLiveResearch(user)
     await screen.findByText('Live Mill Conversion')
-    await user.click(screen.getByRole('button', { name: '查看 Live Mill Conversion 证据' }))
+    await user.click(screen.getByRole('button', { name: '查看 Live Mill Conversion 剖面图证据' }))
 
     const note = screen.getByRole('textbox', { name: '研究备注' })
     await user.type(note, '这条备注暂时未保存')
@@ -909,7 +973,7 @@ describe('research board', () => {
 
     await user.click(screen.getByText('工具'))
     expect(screen.getByRole('button', { name: '导出私有研究板' })).toBeDisabled()
-    await user.click(screen.getByRole('button', { name: '加入方法对照 Live Mill Conversion' }))
+    await user.click(screen.getByRole('button', { name: '加入方法对照 Live Mill Conversion 剖面图' }))
     await user.click(screen.getByRole('button', { name: '导出私有研究板' }))
 
     expect(await screen.findByRole('status')).toHaveTextContent('C:/exports/board-private.json')
@@ -930,7 +994,7 @@ describe('research board', () => {
     await startLiveResearch(user)
     await screen.findByText('Live Mill Conversion')
 
-    await user.click(screen.getByRole('button', { name: '加入方法对照 Live Mill Conversion' }))
+    await user.click(screen.getByRole('button', { name: '加入方法对照 Live Mill Conversion 剖面图' }))
     await user.click(screen.getByText('工具'))
     await user.click(screen.getByRole('button', { name: '生成分享版' }))
     expect(screen.getByText('1 张图片可嵌入')).toBeVisible()
@@ -973,13 +1037,13 @@ describe('research board', () => {
     const user = userEvent.setup()
     renderBoard('?demo=1')
 
-    await screen.findByRole('heading', { name: '研究给出的方向' })
+    await screen.findByRole('heading', { name: '问题拆解' })
     expect(screen.getAllByRole('option', { name: '分析图' })).toHaveLength(1)
     await user.selectOptions(screen.getByRole('combobox', { name: '图纸类型' }), 'section')
-    expect(screen.getAllByRole('article')).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: '查看 Section Layers Replay 剖面图证据' })).toHaveLength(1)
     await user.selectOptions(screen.getByRole('combobox', { name: '图纸类型' }), 'all')
-    await user.click(screen.getByRole('button', { name: '加入方法对照 Section Layers Replay' }))
-    await user.click(screen.getByRole('button', { name: '加入方法对照 Layered Axon Replay' }))
+    await user.click(screen.getByRole('button', { name: '加入方法对照 Section Layers Replay 剖面图' }))
+    await user.click(screen.getByRole('button', { name: '加入方法对照 Layered Axon Replay 轴测图' }))
     await user.click(screen.getByRole('button', { name: '对照方法与边界' }))
     const comparison = screen.getByRole('dialog', { name: '方法对照' })
     expect(comparison).toBeVisible()

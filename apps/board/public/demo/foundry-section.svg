@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" role="img" aria-labelledby="title desc">
+  <title id="title">Foundry Commons retained hall section</title>
+  <desc id="desc">Section showing a retained truss hall, two independent service cores and a suspended public mezzanine.</desc>
+  <rect width="960" height="600" fill="#fff"/>
+  <g stroke="#d5dad6" stroke-width="1">
+    <path d="M80 100V520M200 100V520M320 100V520M440 100V520M560 100V520M680 100V520M800 100V520M920 100V520"/>
+    <path d="M80 160H920M80 260H920M80 360H920M80 460H920"/>
+  </g>
+  <g fill="none" stroke="#171a18" stroke-width="5" stroke-linejoin="round">
+    <path d="M100 500V220L250 110L400 220L550 110L700 220L850 110L920 170V500"/>
+    <path d="M100 500H920"/>
+    <path d="M250 110V500M550 110V500M850 110V500" stroke-width="3" stroke-dasharray="8 8"/>
+  </g>
+  <g fill="#edf1ff" stroke="#2f5bff" stroke-width="4">
+    <rect x="210" y="302" width="540" height="34"/>
+    <rect x="165" y="336" width="110" height="164"/>
+    <rect x="685" y="336" width="110" height="164"/>
+  </g>
+  <g fill="none" stroke="#1f7a5a" stroke-width="5" stroke-linecap="round">
+    <path d="M135 452H215L260 320H710L760 452H885"/>
+    <path d="m870 438 15 14-15 14"/>
+  </g>
+  <g font-family="Segoe UI, sans-serif" font-size="18" font-weight="600">
+    <text x="116" y="72" fill="#171a18">RETAINED TRUSS HALL / INSERTED PUBLIC MEZZANINE</text>
+    <text x="390" y="292" fill="#2f5bff">NEW PUBLIC PLATE</text>
+    <text x="168" y="364" fill="#2f5bff">SERVICE</text>
+    <text x="688" y="364" fill="#2f5bff">SERVICE</text>
+    <text x="408" y="482" fill="#1f7a5a">CONTINUOUS PUBLIC SEQUENCE</text>
+  </g>
+</svg>

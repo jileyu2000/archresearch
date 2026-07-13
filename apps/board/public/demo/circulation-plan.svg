@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" role="img" aria-labelledby="title desc">
+  <title id="title">Circulation Split ground-floor plan</title>
+  <desc id="desc">Ground-floor plan with a central public lobby, edge service corridor and one controlled crossing.</desc>
+  <rect width="960" height="600" fill="#fff"/>
+  <g fill="none" stroke="#171a18" stroke-width="5">
+    <rect x="90" y="90" width="780" height="410"/>
+    <path d="M330 90V500M630 90V500M90 335H870"/>
+  </g>
+  <g fill="#f6f7f5" stroke="#adb5b0" stroke-width="2">
+    <rect x="115" y="115" width="190" height="195"/>
+    <rect x="655" y="115" width="190" height="195"/>
+    <rect x="115" y="360" width="190" height="115"/>
+    <rect x="655" y="360" width="190" height="115"/>
+  </g>
+  <rect x="410" y="300" width="140" height="70" fill="#fff0ec" stroke="#d6533c" stroke-width="3" stroke-dasharray="8 5"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M480 545V370c0-70-120-94-250-94M480 370c0-70 120-94 250-94" stroke="#1f7a5a" stroke-width="10"/>
+    <path d="M900 430H760c-104 0-210-10-280-95" stroke="#d6533c" stroke-width="9"/>
+    <path d="m875 415 25 15-25 15" stroke="#d6533c" stroke-width="6"/>
+  </g>
+  <g font-family="Segoe UI, sans-serif" font-size="18" font-weight="600">
+    <text x="90" y="55" fill="#171a18">CENTRAL PUBLIC LOBBY / EDGE SERVICE CORRIDOR</text>
+    <text x="404" y="257" fill="#1f7a5a">PUBLIC LOBBY</text>
+    <text x="412" y="342" fill="#d6533c">CONTROLLED CROSSING</text>
+    <text x="715" y="463" fill="#d6533c">SERVICE</text>
+  </g>
+</svg>

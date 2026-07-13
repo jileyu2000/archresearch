@@ -25,6 +25,7 @@ class CleanupReport:
     evidence_claims: int = 0
     trace_events: int = 0
     queries: int = 0
+    orphan_files: int = 0
 
 
 def cleanup_expired_data(
@@ -73,14 +74,22 @@ def cleanup_expired_data(
             session.delete(asset)
         for item in (*expired_claims, *expired_sources, *old_trace, *old_queries):
             session.delete(item)
+        session.flush()
+        referenced_storage_paths = list(
+            session.scalars(
+                select(AssetCandidate.storage_path).where(AssetCandidate.storage_path.is_not(None))
+            )
+        )
         session.commit()
 
+    orphan_files = _remove_orphan_candidate_files(data_dir, referenced_storage_paths)
     return CleanupReport(
         assets=len(expired_assets),
         sources=len(expired_sources),
         evidence_claims=len(expired_claims),
         trace_events=len(old_trace),
         queries=len(old_queries),
+        orphan_files=orphan_files,
     )
 
 
@@ -114,3 +123,32 @@ def _remove_candidate_file(storage_path: str | None, data_dir: Path) -> None:
         return
     if candidate.is_file():
         candidate.unlink()
+
+
+def _remove_orphan_candidate_files(
+    data_dir: Path,
+    referenced_storage_paths: list[str | None],
+) -> int:
+    root = data_dir.resolve()
+    runs_root = (root / "runs").resolve()
+    if runs_root != root and root not in runs_root.parents:
+        return 0
+
+    referenced = {
+        _resolve_storage_path(storage_path)
+        for storage_path in referenced_storage_paths
+        if storage_path
+    }
+    removed = 0
+    for candidate in runs_root.glob("*/candidates/*.png"):
+        resolved_candidate = candidate.resolve()
+        if runs_root not in resolved_candidate.parents or resolved_candidate in referenced:
+            continue
+        if resolved_candidate.is_file():
+            resolved_candidate.unlink()
+            removed += 1
+    return removed
+
+
+def _resolve_storage_path(storage_path: str) -> Path:
+    return Path(storage_path).resolve()
