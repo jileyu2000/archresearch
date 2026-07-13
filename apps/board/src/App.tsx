@@ -1,4 +1,23 @@
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  Activity,
+  ArrowUp,
+  Check,
+  CircleDashed,
+  Columns3,
+  Download,
+  Eye,
+  FolderPlus,
+  LayoutGrid,
+  Palette,
+  Paperclip,
+  Plus,
+  Search,
+  Share2,
+  ShieldCheck,
+  SlidersHorizontal,
+  X,
+} from 'lucide-react'
 
 import {
   ApiError,
@@ -211,8 +230,52 @@ export default function App() {
   const [researchOptionsOpen, setResearchOptionsOpen] = useState(false)
   const [workspaceCreateOpen, setWorkspaceCreateOpen] = useState(false)
   const [inspectorOpen, setInspectorOpen] = useState(false)
+  const overlayTriggerRef = useRef<HTMLElement | null>(null)
 
   const selectedResult = results.find((result) => result.id === selectedResultId)
+  const overlayOpen = inspectorOpen || traceOpen || comparisonOpen || shareSummaryOpen || styleProfileOpen
+
+  const closeOverlays = useCallback(() => {
+    const trigger = overlayTriggerRef.current
+    setInspectorOpen(false)
+    setTraceOpen(false)
+    setComparisonOpen(false)
+    setShareSummaryOpen(false)
+    setStyleProfileOpen(false)
+    trigger?.focus()
+  }, [])
+
+  useEffect(() => {
+    if (!overlayOpen) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        closeOverlays()
+        return
+      }
+      if (event.key !== 'Tab') return
+      const dialog = document.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]')
+      if (!dialog) return
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary'))
+      if (focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [closeOverlays, overlayOpen])
 
   const resetWorkspaceView = useCallback(() => {
     setPollingRunId('')
@@ -554,8 +617,8 @@ export default function App() {
     <main className="research-desk" aria-label="建筑研究画板">
       <header className="app-header">
         <div className="app-brand">
-          <strong>ArchResearch</strong>
-          <span>{demoMode ? 'DEMO / 本地演示数据' : 'V2.1 LOCAL'}</span>
+          <span className="brand-mark" aria-hidden="true"><LayoutGrid /></span>
+          <div><strong>ArchResearch</strong><span>{demoMode ? '演示数据' : '本地研究工具'}</span></div>
         </div>
         <div className="workspace-switcher">
           <label htmlFor="workspace-switcher">
@@ -574,7 +637,8 @@ export default function App() {
             </select>
           </label>
           {!demoMode && (
-            <button type="button" onClick={() => setWorkspaceCreateOpen((current) => !current)}>
+            <button className="icon-text-button" type="button" onClick={() => setWorkspaceCreateOpen((current) => !current)}>
+              {workspaceCreateOpen ? <X aria-hidden="true" /> : <FolderPlus aria-hidden="true" />}
               {workspaceCreateOpen ? '取消' : '新建'}
             </button>
           )}
@@ -595,26 +659,26 @@ export default function App() {
         <div className="header-actions">
           {results.length > 0 && !composerOpen && (
             <button className="button-primary" type="button" onClick={() => setComposerOpen(true)}>
-              发起新研究
+              <Plus aria-hidden="true" />发起新研究
             </button>
           )}
           <details className="tools-menu">
-            <summary>工具</summary>
+            <summary><SlidersHorizontal aria-hidden="true" /><span>工具</span></summary>
             <div>
-              <button type="button" disabled={comparisonIds.length < 2} onClick={() => setComparisonOpen(true)}>
-                打开对比
+              <button type="button" disabled={comparisonIds.length < 2} onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setComparisonOpen(true) }}>
+                <Columns3 aria-hidden="true" />打开对比
               </button>
-              <button type="button" disabled={results.length === 0} onClick={() => setStyleProfileOpen(true)}>
-                打开表达规范
+              <button type="button" disabled={results.length === 0} onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setStyleProfileOpen(true) }}>
+                <Palette aria-hidden="true" />打开表达规范
               </button>
               <button type="button" disabled={comparisonIds.length === 0} onClick={() => void handleExport('private')}>
-                导出私有研究板
+                <Download aria-hidden="true" />导出私有研究板
               </button>
-              <button type="button" disabled={comparisonIds.length === 0} onClick={() => setShareSummaryOpen(true)}>
-                生成分享版
+              <button type="button" disabled={comparisonIds.length === 0} onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setShareSummaryOpen(true) }}>
+                <Share2 aria-hidden="true" />生成分享版
               </button>
-              <button type="button" onClick={() => setTraceOpen((current) => !current)}>
-                {traceOpen ? '关闭研究 Trace' : '打开研究 Trace'}
+              <button type="button" onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setTraceOpen((current) => !current) }}>
+                <Activity aria-hidden="true" />{traceOpen ? '关闭研究 Trace' : '打开研究 Trace'}
               </button>
             </div>
           </details>
@@ -635,6 +699,7 @@ export default function App() {
             </header>
             <form className="research-form" onSubmit={(event) => void handleResearchSubmit(event)}>
               <div className="research-prompt">
+                <Search className="research-prompt-icon" aria-hidden="true" />
                 <label htmlFor="research-question">研究问题</label>
                 <textarea
                   id="research-question"
@@ -644,7 +709,7 @@ export default function App() {
                   required
                 />
                 <button className="research-submit" type="submit" disabled={isRunActive || loading || (!demoMode && !activeWorkspaceId)}>
-                  {isRunActive ? '研究进行中…' : '开始研究'}
+                  {isRunActive ? '研究进行中…' : <><span>开始研究</span><ArrowUp aria-hidden="true" /></>}
                 </button>
               </div>
               <div className="research-quick-actions">
@@ -653,7 +718,7 @@ export default function App() {
                   aria-expanded={researchOptionsOpen}
                   onClick={() => setResearchOptionsOpen((current) => !current)}
                 >
-                  添加资料和研究设置
+                  <Paperclip aria-hidden="true" />添加资料和研究设置
                 </button>
                 {files.length > 0 && <span>{files.length} 个文件待上传</span>}
               </div>
@@ -779,11 +844,11 @@ export default function App() {
                 </select>
               </label>
             </header>
-            <div className="reference-grid">
-              {visibleResults.map((result) => (
+            <section className="reference-grid" aria-label="图纸参考墙">
+              {visibleResults.map((result, index) => (
                 <article
                   className="reference-card"
-                  data-selected={selectedResultId === result.id || undefined}
+                  data-selected={inspectorOpen && selectedResultId === result.id || undefined}
                   data-saved={savedIds.includes(result.id) || undefined}
                   data-rejected={rejectedIds.includes(result.id) || undefined}
                   key={result.id}
@@ -792,18 +857,33 @@ export default function App() {
                     className="reference-main"
                     type="button"
                     aria-label={`查看 ${result.project} 证据`}
-                    onClick={() => {
+                    onClick={(event) => {
+                      overlayTriggerRef.current = event.currentTarget
                       setSelectedResultId(result.id)
                       setInspectorOpen(true)
                     }}
                   >
                     <figure className="drawing-preview" data-drawing={result.drawing}>
                       {result.previewUrl ? (
-                        <img src={result.previewUrl} alt={`${result.project} ${assetLabels[result.assetType]}`} />
+                        <img
+                          src={result.previewUrl}
+                          alt={`${result.project} ${assetLabels[result.assetType]}`}
+                          loading={index < 8 ? 'eager' : 'lazy'}
+                          decoding="async"
+                          fetchPriority={index < 4 ? 'high' : 'auto'}
+                        />
                       ) : (
                         <div className="preview-unavailable" role="img" aria-label={`${result.project} 暂无预览`}>预览不可用</div>
                       )}
-                      <figcaption><span>{assetLabels[result.assetType]}</span><span>{tierLabels[result.tier]}</span></figcaption>
+                      <figcaption>
+                        <span>{assetLabels[result.assetType]}</span>
+                        <span data-tier={result.tier}>
+                          {result.tier === 'verified' && <ShieldCheck aria-hidden="true" />}
+                          {result.tier === 'partial' && <CircleDashed aria-hidden="true" />}
+                          {result.tier === 'visual_lead' && <Eye aria-hidden="true" />}
+                          {tierLabels[result.tier]}
+                        </span>
+                      </figcaption>
                     </figure>
                     <div className="reference-copy">
                       <p className="reference-project">{result.project}</p>
@@ -812,20 +892,22 @@ export default function App() {
                     </div>
                   </button>
                   <footer className="reference-actions">
-                    <span>相关度 {result.relevance} / 4</span>
+                    <span>{rejectedIds.includes(result.id) ? '已拒绝 · ' : ''}相关度 {result.relevance} / 4</span>
                     <button
                       type="button"
                       aria-pressed={comparisonIds.includes(result.id)}
                       aria-label={`${comparisonIds.includes(result.id) ? '移出对比' : '加入对比'} ${result.project}`}
+                      title={comparisonIds.includes(result.id) ? '移出对比' : '加入对比'}
                       disabled={comparisonIds.length >= 6 && !comparisonIds.includes(result.id)}
                       onClick={() => void toggleComparison(result.id)}
                     >
-                      {comparisonIds.includes(result.id) ? '移出对比' : '加入对比'}
+                      {comparisonIds.includes(result.id) ? <Check aria-hidden="true" /> : <Plus aria-hidden="true" />}
+                      <span className="visually-hidden">{comparisonIds.includes(result.id) ? '移出对比' : '加入对比'}</span>
                     </button>
                   </footer>
                 </article>
               ))}
-            </div>
+            </section>
           </section>
         )}
 
@@ -836,13 +918,13 @@ export default function App() {
         {comparisonIds.length > 0 && (
           <section className="comparison-dock" aria-label="对比选择">
             <p>{comparisonIds.length} / 6 项已选择</p>
-            <button type="button" disabled={comparisonIds.length < 2} onClick={() => setComparisonOpen(true)}>打开 {comparisonIds.length} 项对比</button>
+            <button type="button" disabled={comparisonIds.length < 2} onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setComparisonOpen(true) }}>打开 {comparisonIds.length} 项对比</button>
           </section>
         )}
 
         {styleProfileOpen && (
-          <section className="floating-panel style-panel" aria-label="表达规范">
-            <header className="panel-heading"><h2>表达规范</h2><button type="button" onClick={() => setStyleProfileOpen(false)}>关闭表达规范</button></header>
+          <section className="floating-panel style-panel" role="dialog" aria-modal="true" aria-label="表达规范">
+            <header className="panel-heading"><h2>表达规范</h2><button type="button" autoFocus onClick={closeOverlays}>关闭表达规范</button></header>
             <label htmlFor="style-primary-color">主色</label>
             <input id="style-primary-color" type="color" value={styleProfile.primaryColor} onChange={(event) => setStyleProfile((current) => ({ ...current, primaryColor: event.target.value }))} />
             <label htmlFor="style-line-hierarchy">线型层级</label>
@@ -859,8 +941,8 @@ export default function App() {
         )}
 
         {comparisonOpen && (
-          <section className="floating-panel comparison-panel" aria-label="对比视图">
-            <header className="panel-heading"><h2>图纸对比</h2><button type="button" onClick={() => setComparisonOpen(false)}>关闭对比</button></header>
+          <section className="floating-panel comparison-panel" role="dialog" aria-modal="true" aria-label="对比视图">
+            <header className="panel-heading"><h2>图纸对比</h2><button type="button" autoFocus onClick={closeOverlays}>关闭对比</button></header>
             <div className="comparison-grid">
               {comparisonIds.map((resultId) => {
                 const result = results.find((item) => item.id === resultId)
@@ -872,24 +954,24 @@ export default function App() {
         )}
 
         {shareSummaryOpen && (
-          <section className="floating-panel share-panel" aria-label="分享版导出摘要">
+          <section className="floating-panel share-panel" role="dialog" aria-modal="true" aria-label="分享版导出摘要">
             <h2>分享版权利检查</h2>
             <p>{shareableCount} 张图片可嵌入</p>
             <p>{comparisonIds.length - shareableCount} 项将改为来源卡</p>
             <p>来源卡保留项目、发布者、署名和原始链接，不复制受限图片。</p>
             <button type="button" onClick={() => void handleExport('share')}>确认生成分享版</button>
-            <button type="button" onClick={() => setShareSummaryOpen(false)}>返回画板</button>
+            <button type="button" autoFocus onClick={closeOverlays}>返回画板</button>
           </section>
         )}
       </section>
 
       {inspectorOpen && selectedResult && (
         <>
-          <button className="drawer-backdrop" type="button" aria-label="关闭来源检视器" onClick={() => setInspectorOpen(false)} />
-          <aside className="source-inspector" aria-label="来源检视器">
+          <button className="drawer-backdrop" type="button" tabIndex={-1} aria-hidden="true" onClick={closeOverlays} />
+          <aside className="source-inspector" role="dialog" aria-modal="true" aria-label="来源检视器">
             <header className="inspector-heading">
               <div><span>来源与证据</span><h2>{assetLabels[selectedResult.assetType]}</h2></div>
-              <button type="button" onClick={() => setInspectorOpen(false)}>关闭</button>
+              <button type="button" autoFocus onClick={closeOverlays}>关闭</button>
             </header>
             <div className="inspector-content">
               <strong className="inspector-project">{selectedResult.project}</strong>
@@ -945,9 +1027,9 @@ export default function App() {
 
       {traceOpen && (
         <>
-          <button className="drawer-backdrop" type="button" aria-label="关闭研究 Trace" onClick={() => setTraceOpen(false)} />
-          <section className="trace-panel" aria-label="研究 Trace">
-            <header><div><span>运行记录</span><h3>研究 Trace</h3></div><button type="button" onClick={() => setTraceOpen(false)}>关闭</button></header>
+          <button className="drawer-backdrop" type="button" tabIndex={-1} aria-hidden="true" onClick={closeOverlays} />
+          <section className="trace-panel" role="dialog" aria-modal="true" aria-label="研究 Trace">
+            <header><div><span>运行记录</span><h3>研究 Trace</h3></div><button type="button" autoFocus onClick={closeOverlays}>关闭</button></header>
             <ol className="trace-list">
               {(demoMode ? traceItems : traceEvents).map((item) => (
                 <li key={item.id}>

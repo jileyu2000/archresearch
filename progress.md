@@ -36,3 +36,12 @@
 ## 2026-07-12
 
 - Recovered the local runtime after the user saw `ERR_CONNECTION_REFUSED`: confirmed both ports were inactive despite a stale launcher state file, restarted through `scripts/start.ps1`, and verified Board HTTP 200 plus API health on the stored 梭子蟹 `gpt-5.5` provider.
+- Started M8 after the user rejected the simplified Board as visually rigid. The new goal is a mature architectural asset-browser language informed by proven collection and research products, while preserving the completed evidence workflow and progressive disclosure.
+
+## 2026-07-13
+
+- Implemented the M8 digital pin-up wall: a compact branded shell, command-like research composer, ordered responsive drawing wall, intrinsic image ratios, tier-specific evidence pins, Lucide action language, contextual modal drawers and mobile 44px targets.
+- Added root `DESIGN.md` as the single global UI authority and removed the obsolete Board-local design file. The system now defines semantic colors, type/line-height tiers, spacing, radii, elevation, z-index, icon, motion and breakpoint rules.
+- Completed M8 interaction hardening: evidence levels now have distinct icons/colors, saved/rejected states do not reuse evidence semantics, dialogs trap focus, Escape closes overlays, trigger focus returns, first-screen images load eagerly and later images remain lazy.
+- Accepted M8 at 1440/1024/390 px with four/three/one ordered columns, no horizontal overflow, zero console warnings/errors and zero design-system detector findings.
+- Re-ran the full delivery gate after the redesign: 105 API tests, 26 Board tests, 111 extension tests, 6 packaged Chrome E2E cases, lint/type/build, PowerShell contracts and all evaluation fixtures pass.

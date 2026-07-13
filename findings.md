@@ -38,6 +38,23 @@
 - Responsive acceptance passed at 1440, 1024 and 390 px: four/three/one-column grids, no document-level horizontal overflow, full-width mobile evidence drawer, no permanent inspector or stage navigation, and no browser console warnings or errors.
 - The legacy `diagram` label remains readable but is merged into the single `analysis_diagram` filter option, preventing duplicate “分析图” choices.
 
+## M8 Mature-product UI study
+
+- Karakeep's strongest transferable pattern is an image-first masonry collection: mixed-height assets fill the canvas, metadata is quiet, actions live at card edges, and navigation/search remain stable. ArchResearch should borrow the browsing rhythm, not its generic bookmark taxonomy.
+- Linkwarden confirms that a permanent full dashboard, metric tiles and a dark shell would be wrong for this product. Architecture drawings need a light inspection surface and should not compete with summary statistics.
+- Vane/Perplexica confirms that sources and research progress work best as compact, collapsible context near the active question. ArchResearch should keep evidence one action away and avoid turning the result board into a prose answer page.
+- Chosen direction: a restrained light asset browser with a slim utility rail, a command-like research bar, a masonry drawing wall and a contextual evidence drawer. The distinctive domain cue is a “digital pin-up wall”: drawing sheets retain their native aspect ratios, hover lifts only the active sheet, and evidence appears as small source pins rather than decorative borders.
+- Palette: neutral studio canvas `#EEF0ED`, paper `#FFFFFF`, graphite `#171A18`, secondary ink `#5E6661`, blueprint action `#2F5BFF`, verified green `#1F7A5A`, and warning vermilion `#D6533C`. Color stays restrained and functional.
+- UI typography remains a single system sans family for trust and speed. Drawings, project titles and one method sentence form the hierarchy; uppercase utility labels and mono metadata are reduced rather than used as a visual theme.
+- First 1440 px implementation check confirms the intended asset-browser hierarchy: four masonry columns, drawing sheets with varied heights, compact source pins, icon actions, no permanent inspector and no horizontal overflow. The previous engineering-table feel is gone.
+- The first visual pass also exposed two token-alignment refinements: the sticky header should lose its redundant visible “工作区” field label to approach the documented compact shell height, and card method text should use the documented 13px compact-body tier instead of 12px.
+- The refined mobile pass is a clean single-column drawing feed with the workspace on its own second row, no horizontal overflow and intact evidence pins. The remaining concrete mobile issue is the 30px compare icon target; the design system requires a 44px touch target below 620px.
+- The consistency audit found that the repository had both a legacy `apps/board/DESIGN.md` and the new root `DESIGN.md`. M8 removes the legacy file so the root system is the single inherited authority for Board and later extension surfaces.
+- The 1024 px pass showed why generic CSS masonry is wrong for ranked evidence: column-first flow visually placed result 2 below results 3/5. The final system uses an ordered 1/2/3/4-column pin-up grid with intrinsic image ratios, so browsing stays lively without sacrificing relevance order.
+- Final ordered-grid checks pass at 1024 and 390 px: result order remains 1→2→3→4, the grid resolves to three/one columns, mobile compare targets are 44px, and neither viewport has document-level horizontal overflow. The first eight images load eagerly so the initial desktop and tablet wall does not reveal blank lazy placeholders; later results remain lazy.
+- The source drawer passes the mobile interaction check at full viewport width with no overflow, initial focus on “关闭”, Escape support and return focus covered by the Board test. The final 1440 px wall resolves to four ordered columns, a 60px shell and zero console warnings/errors.
+- The final Impeccable design-system detector returns an empty finding set: CSS no longer uses an undocumented font, radius or color, and the root `DESIGN.md` is the only design authority.
+
 ## External Capability Facts
 
 - OpenAI Responses web search supports text and image results, raw result metadata, source lists, and domain filters.
