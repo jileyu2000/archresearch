@@ -179,3 +179,12 @@
 - The 1600px-wide composer made the former 108px textarea read as a shallow strip. The user's requested correction is vertical working space, not another width increase or a chat-style layout change.
 - The prompt now uses one semantic responsive token: 152px on desktop, 132px at `≤860px` and the existing 108px at `≤620px`. Vertical resize remains available for longer briefs.
 - Exact Chromium acceptance at 2048/1440/1024/700/390px confirms the intended heights, unchanged mobile density and no document-level horizontal overflow. The design detector reports zero findings; Board verification passes 40 tests plus lint, typecheck and production build.
+
+## M14 Result comprehension and method comparison
+
+- The demo route had shown a drawing wall without restating its preset task, so users could not tell whether results answered their own input or an example. Result provenance is now explicit: `演示任务` for `?demo=1`, otherwise the persisted `ResearchRun.question` as `本次研究任务`.
+- A result is now presented as `task → evidence-backed method directions → supporting drawings`. The three directions reuse existing ranked `inference` values and prefer distinct drawing types; they do not introduce a new unsupported synthesis claim.
+- Drawing cards state `可借鉴方法` and `问题匹配`; detailed observations, source claims and limitations remain in the evidence inspector. This preserves the fact/observation/inference/boundary separation.
+- “对比” was ambiguous because the former modal only repeated card text in columns. The accepted “方法对照” matrix compares `解决什么 / 可借鉴方法 / 图中看到 / 证据状态 / 使用边界`, explains whether references compete or combine, and uses the first ranked selected result only as a starting recommendation rather than inventing a new score.
+- Exact browser acceptance at 1440×1000 and 390×844 confirms no document-level overflow. On mobile the matrix scrolls inside its own container, keeps the dimension column sticky and exposes an explicit horizontal-swipe hint.
+- The complete offline verification remains green after M14: 105 API tests, 40 Board tests, 111 extension tests, 6 packaged-Chrome E2E cases, PowerShell safety/process contracts and all 30/108 evaluation fixtures.

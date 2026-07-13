@@ -127,6 +127,21 @@ const assetLabels: Record<AssetType, string> = {
   diagram: '分析图',
 }
 
+const comparisonFocusLabels: Record<AssetType, string> = {
+  plan: '平面组织与功能关系',
+  section: '剖面层次与竖向联系',
+  elevation: '立面节奏与新旧界面',
+  site_plan: '场地关系与总体组织',
+  axonometric: '构成层次与空间关系',
+  circulation: '公共、后勤与人车流线',
+  analysis_diagram: '设计逻辑与策略表达',
+  render: '空间氛围与材料感受',
+  photograph: '建成状态与使用方式',
+  diagram: '设计逻辑与策略表达',
+}
+
+const demoResearchQuestion = '旧建筑更新中，如何植入新功能，并组织公共与后勤流线和剖面层次？'
+
 const filterAssetTypes = (Object.keys(assetLabels) as AssetType[]).filter(
   (assetType) => assetType !== 'diagram',
 )
@@ -745,6 +760,16 @@ export default function App() {
     || result.assetType === assetFilter
     || (assetFilter === 'analysis_diagram' && result.assetType === 'diagram'),
   )
+  const researchQuestion = activeRun?.question ?? (demoMode ? demoResearchQuestion : question)
+  const researchInsights = results
+    .filter((result, index, items) => items.findIndex((item) => item.assetType === result.assetType) === index)
+    .slice(0, 3)
+  const selectedComparisonResults = results.filter((result) => comparisonIds.includes(result.id))
+  const comparisonFocuses = [...new Set(selectedComparisonResults.map((result) => comparisonFocusLabels[result.assetType]))]
+  const comparisonOverview = comparisonFocuses.length === 1
+    ? `这 ${selectedComparisonResults.length} 项都在回答“${comparisonFocuses[0]}”，重点比较可借鉴方法、证据状态和使用边界。`
+    : `这 ${selectedComparisonResults.length} 项分别覆盖“${comparisonFocuses.join('、')}”。它们更适合组合使用，而不是选一个“赢家”。`
+  const recommendedComparisonResult = selectedComparisonResults[0]
   const activeStatus = activeRun?.status
   const isRunActive = activeStatus ? !terminalStatuses.has(activeStatus) : false
   const resultViewOpen = !composerOpen
@@ -817,7 +842,7 @@ export default function App() {
             <summary><SlidersHorizontal aria-hidden="true" /><span>工具</span></summary>
             <div>
               <button type="button" disabled={comparisonIds.length < 2} onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setComparisonOpen(true) }}>
-                <Columns3 aria-hidden="true" />打开对比
+                <Columns3 aria-hidden="true" />打开方法对照
               </button>
               <button type="button" disabled={results.length === 0} onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setStyleProfileOpen(true) }}>
                 <Palette aria-hidden="true" />打开表达规范
@@ -1044,10 +1069,32 @@ export default function App() {
 
         {resultViewOpen && results.length > 0 && (
           <section className="results-section" aria-label="研究结果">
+            <section className="research-answer" aria-label="研究结论">
+              <div className="research-question-block">
+                <span className="research-eyebrow">{demoMode ? '演示任务' : '本次研究任务'}</span>
+                <h1>{researchQuestion}</h1>
+              </div>
+              <div className="research-answer-heading">
+                <div>
+                  <h2>研究给出的方向</h2>
+                  <p>从当前图纸证据中整理出的可迁移方法，不是可直接套用的答案。</p>
+                </div>
+                <span>{researchInsights.length} 个方法方向</span>
+              </div>
+              <ol className="research-insight-list">
+                {researchInsights.map((result) => (
+                  <li key={result.id}>
+                    <span>{assetLabels[result.assetType]} · {comparisonFocusLabels[result.assetType]}</span>
+                    <h3>{result.title}</h3>
+                    <p>{result.inference}</p>
+                  </li>
+                ))}
+              </ol>
+            </section>
             <header className="results-header">
               <div>
-                <h2>研究结果</h2>
-                <p>{visibleResults.length} 项结果，按证据完整度和问题相关性排序</p>
+                <h2>支撑这些方向的图纸</h2>
+                <p>{visibleResults.length} 项图纸证据，按证据完整度和问题相关性排序。点开查看观察、来源和使用边界。</p>
               </div>
               <label htmlFor="asset-filter">
                 <span>图纸类型</span>
@@ -1059,7 +1106,7 @@ export default function App() {
                 </select>
               </label>
             </header>
-            <section className="reference-grid" aria-label="研究结果列表">
+            <section className="reference-grid" aria-label="图纸证据列表">
               {visibleResults.map((result, index) => (
                 <article
                   className="reference-card"
@@ -1102,22 +1149,23 @@ export default function App() {
                     </figure>
                     <div className="reference-copy">
                       <p className="reference-project">{result.project}</p>
+                      <span className="reference-method-label">可借鉴方法</span>
                       <h3>{result.title}</h3>
-                      <p>{result.observation}</p>
+                      <p>{result.inference}</p>
                     </div>
                   </button>
                   <footer className="reference-actions">
-                    <span>{rejectedIds.includes(result.id) ? '已拒绝 · ' : ''}相关度 {result.relevance} / 4</span>
+                    <span>{rejectedIds.includes(result.id) ? '已拒绝 · ' : ''}问题匹配 {result.relevance} / 4</span>
                     <button
                       type="button"
                       aria-pressed={comparisonIds.includes(result.id)}
-                      aria-label={`${comparisonIds.includes(result.id) ? '移出对比' : '加入对比'} ${result.project}`}
-                      title={comparisonIds.includes(result.id) ? '移出对比' : '加入对比'}
+                      aria-label={`${comparisonIds.includes(result.id) ? '移出方法对照' : '加入方法对照'} ${result.project}`}
+                      title={comparisonIds.includes(result.id) ? '移出方法对照' : '加入方法对照'}
                       disabled={comparisonIds.length >= 6 && !comparisonIds.includes(result.id)}
                       onClick={() => void toggleComparison(result.id)}
                     >
                       {comparisonIds.includes(result.id) ? <Check aria-hidden="true" /> : <Plus aria-hidden="true" />}
-                      <span className="visually-hidden">{comparisonIds.includes(result.id) ? '移出对比' : '加入对比'}</span>
+                      <span className="visually-hidden">{comparisonIds.includes(result.id) ? '移出方法对照' : '加入方法对照'}</span>
                     </button>
                   </footer>
                 </article>
@@ -1131,9 +1179,9 @@ export default function App() {
         )}
 
         {resultViewOpen && comparisonIds.length > 0 && (
-          <section className="comparison-dock" aria-label="对比选择">
-            <p>{comparisonIds.length} / 6 项已选择</p>
-            <button type="button" disabled={comparisonIds.length < 2} onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setComparisonOpen(true) }}>打开 {comparisonIds.length} 项对比</button>
+          <section className="comparison-dock" aria-label="方法对照选择">
+            <p>已选 {comparisonIds.length} 个参考</p>
+            <button type="button" disabled={comparisonIds.length < 2} onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setComparisonOpen(true) }}>对照方法与边界</button>
           </section>
         )}
 
@@ -1156,14 +1204,53 @@ export default function App() {
         )}
 
         {comparisonOpen && (
-          <section className="floating-panel comparison-panel" role="dialog" aria-modal="true" aria-label="对比视图">
-            <header className="panel-heading"><h2>图纸对比</h2><button type="button" autoFocus onClick={closeOverlays}>关闭对比</button></header>
-            <div className="comparison-grid">
-              {comparisonIds.map((resultId) => {
-                const result = results.find((item) => item.id === resultId)
-                if (!result) return null
-                return <section className="comparison-item" key={result.id}><h3>{result.project}</h3><p>{assetLabels[result.assetType]}</p><p>{result.observation}</p><p>{result.inference}</p></section>
-              })}
+          <section className="floating-panel comparison-panel" role="dialog" aria-modal="true" aria-label="方法对照">
+            <header className="panel-heading">
+              <div><h2>方法对照</h2><p>比较这些参考怎样回答你的设计问题</p></div>
+              <button type="button" autoFocus onClick={closeOverlays}>关闭方法对照</button>
+            </header>
+            <section className="comparison-guide" aria-labelledby="comparison-guide-title">
+              <div>
+                <span>阅读提示</span>
+                <h3 id="comparison-guide-title">这组对照怎么看</h3>
+                <p>{comparisonOverview}</p>
+              </div>
+              {recommendedComparisonResult && (
+                <div>
+                  <span>建议先带回方案</span>
+                  <h3>{recommendedComparisonResult.title}</h3>
+                  <p>先用它处理{comparisonFocusLabels[recommendedComparisonResult.assetType]}，再用其他参考校核相邻层级和使用边界。</p>
+                </div>
+              )}
+            </section>
+            <p className="comparison-scroll-hint">横向滑动查看各项参考 →</p>
+            <div className="comparison-table-wrap">
+              <table className="comparison-table" aria-label="方法对照表">
+                <thead>
+                  <tr>
+                    <th scope="col">对照维度</th>
+                    {selectedComparisonResults.map((result) => (
+                      <th scope="col" key={result.id}>
+                        <div className="comparison-thumb">
+                          {result.previewUrl
+                            ? <img src={result.previewUrl} alt="" />
+                            : <span>预览不可用</span>}
+                        </div>
+                        <span className="comparison-column-meta">{assetLabels[result.assetType]} · {tierLabels[result.tier]}</span>
+                        <strong>{result.title}</strong>
+                        <small>{result.project} · 问题匹配 {result.relevance} / 4</small>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><th scope="row">解决什么</th>{selectedComparisonResults.map((result) => <td key={result.id}>{comparisonFocusLabels[result.assetType]}</td>)}</tr>
+                  <tr><th scope="row">可借鉴方法</th>{selectedComparisonResults.map((result) => <td key={result.id}>{result.inference}</td>)}</tr>
+                  <tr><th scope="row">图中看到</th>{selectedComparisonResults.map((result) => <td key={result.id}>{result.observation}</td>)}</tr>
+                  <tr><th scope="row">证据状态</th>{selectedComparisonResults.map((result) => <td key={result.id}>{tierLabels[result.tier]} · {result.sourceName}</td>)}</tr>
+                  <tr><th scope="row">使用边界</th>{selectedComparisonResults.map((result) => <td key={result.id}>{result.limitation}</td>)}</tr>
+                </tbody>
+              </table>
             </div>
           </section>
         )}
