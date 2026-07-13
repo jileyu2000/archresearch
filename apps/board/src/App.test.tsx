@@ -492,6 +492,21 @@ describe('research board', () => {
     vi.restoreAllMocks()
   })
 
+  it('keeps one decorative studio canvas behind both home and result routes', () => {
+    const home = renderBoard()
+    const homeBackdrop = screen.getByTestId('studio-backdrop')
+    expect(homeBackdrop).toHaveAttribute('aria-hidden', 'true')
+    expect(homeBackdrop).toHaveAttribute('data-view', 'home')
+    expect(homeBackdrop.querySelectorAll('svg')).toHaveLength(2)
+
+    home.unmount()
+    renderBoard('?demo=1')
+    const resultBackdrop = screen.getByTestId('studio-backdrop')
+    expect(resultBackdrop).toHaveAttribute('aria-hidden', 'true')
+    expect(resultBackdrop).toHaveAttribute('data-view', 'results')
+    expect(resultBackdrop.querySelectorAll('svg')).toHaveLength(2)
+  })
+
   it('uses fixed references only in explicit demo mode', async () => {
     renderBoard('?demo=1')
 

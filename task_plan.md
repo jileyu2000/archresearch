@@ -30,6 +30,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | 10. M9 Problem-first home and result separation | complete | Completed runs no longer replace the default question composer; explicit “查看上次结果 / 发起新研究” transitions pass 27 Board tests and live-browser acceptance |
 | 11. M10 Useful research-workbench home | complete | One composer, three research paths, four problem starters and lazy-loaded recent runs pass 1280/1024/700/390 browser acceptance, workspace-race regression tests and the full repository gate |
 | 12. M11 Livelier studio identity | complete | Product-first motion study, blueprint task island, global visual/motion rules, 1440/1024/700/390 acceptance, zero design-detector findings and the full repository gate |
+| 13. M12 Global architectural studio canvas | complete | One global 128px drafting canvas, 1760/1600px responsive composition, route-specific plan/section fragments, 2048/1440/1024/700/390 acceptance, 39 Board tests and the full repository gate |
 
 ## M6 completion summary
 
@@ -91,3 +92,5 @@ The code delivery is complete. These product claims require user-owned credentia
 | A GitHub directory click for the React Bits Magnet source did not complete | 1 | Stop the hung request after the ClickSpark source and live preview already provided sufficient comparative evidence |
 | The first motion pass chose an effect before finishing the mature-product behavior audit | 1 | Reorder the work as requested: audit FigJam/Miro/Milanote/Eagle/Cosmos first, then map only the supported task feedback to React Bits and move the spark to the single launch action |
 | Chrome's raw `--window-size=390` screenshot cropped an outer window and looked like page overflow | 1 | Re-test with an exact Playwright 390px viewport; DOM width, expanded settings and long filename states all remain within the viewport |
+| The first CSS contract test resolved `import.meta.url` to Vite's non-file module URL | 1 | Switch away from URL-based filesystem loading; the next gate then exposed the browser-only TypeScript boundary before the final `?raw` fix |
+| The CSS contract test's Node filesystem fallback was excluded by the Board browser-only TypeScript config | 1 | Import the stylesheet through Vite's typed `?raw` contract so the same source is available to Vitest without adding Node types to browser code |

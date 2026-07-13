@@ -76,6 +76,11 @@
   --duration-fast: 160ms;
   --duration-base: 220ms;
 
+  /* Layout and drafting canvas */
+  --layout-shell-max: 1760px;
+  --layout-stage-max: 1600px;
+  --studio-grid-size: 128px;
+
   /* Layer scale */
   --z-sticky: 100;
   --z-dropdown: 200;
@@ -198,8 +203,139 @@ h3 {
 }
 
 .research-desk {
+  position: relative;
+  isolation: isolate;
   min-height: 100vh;
   background: var(--color-canvas);
+}
+
+.studio-backdrop {
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.studio-backdrop::before {
+  position: absolute;
+  inset: 0;
+  background-image: url('/studio-grid.svg');
+  background-size: var(--studio-grid-size) var(--studio-grid-size);
+  content: "";
+  opacity: 0.9;
+}
+
+.studio-backdrop[data-view="results"]::before {
+  opacity: 0.45;
+}
+
+.studio-crop-mark {
+  position: absolute;
+  width: 48px;
+  height: 48px;
+  opacity: 0.62;
+}
+
+.studio-crop-mark::before,
+.studio-crop-mark::after {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: var(--color-line-strong);
+  content: "";
+}
+
+.studio-crop-mark::before {
+  width: 48px;
+  height: 1px;
+}
+
+.studio-crop-mark::after {
+  width: 1px;
+  height: 48px;
+}
+
+.studio-crop-mark--start {
+  top: 92px;
+  left: var(--space-5);
+}
+
+.studio-crop-mark--end {
+  right: var(--space-5);
+  bottom: var(--space-5);
+  transform: rotate(180deg);
+}
+
+.studio-backdrop[data-view="results"] .studio-crop-mark {
+  opacity: 0.34;
+}
+
+.studio-diagram {
+  position: absolute;
+  display: none;
+  width: min(16vw, 320px);
+  pointer-events: none;
+}
+
+.studio-diagram-line,
+.studio-diagram-strong,
+.studio-diagram-route,
+.studio-diagram-fill,
+.studio-diagram-node,
+.studio-diagram-marker {
+  vector-effect: non-scaling-stroke;
+}
+
+.studio-diagram-line {
+  stroke: var(--color-action);
+  stroke-width: 1.2;
+}
+
+.studio-diagram-strong {
+  stroke: var(--color-ink);
+  stroke-width: 1.5;
+}
+
+.studio-diagram-route {
+  stroke: var(--color-action);
+  stroke-dasharray: 7 7;
+  stroke-width: 1.5;
+}
+
+.studio-diagram-fill {
+  fill: var(--color-action-soft);
+  stroke: var(--color-action-line);
+  stroke-width: 1;
+}
+
+.studio-diagram-node {
+  fill: var(--color-surface);
+  stroke: var(--color-action);
+  stroke-width: 1.5;
+}
+
+.studio-diagram-marker {
+  fill: var(--color-marker);
+  stroke: var(--color-marker-ink);
+  stroke-width: 1.5;
+}
+
+.studio-diagram--plan {
+  top: 152px;
+  left: -28px;
+  opacity: 0.42;
+}
+
+.studio-diagram--section {
+  right: -24px;
+  bottom: 92px;
+  opacity: 0.2;
+}
+
+.studio-backdrop[data-view="results"] .studio-diagram-line,
+.studio-backdrop[data-view="results"] .studio-diagram-strong {
+  stroke: var(--color-ink);
 }
 
 /* App shell */
@@ -430,13 +566,14 @@ h3 {
 
 /* Research composer */
 .board-workspace {
-  width: min(1440px, 100%);
+  width: min(var(--layout-shell-max), 100%);
   margin: 0 auto;
-  padding: var(--space-6) var(--space-5) 96px;
+  padding: var(--space-6) clamp(var(--space-5), 3.5vw, var(--space-7)) 96px;
 }
 
 .research-composer {
-  max-width: 1040px;
+  width: 100%;
+  max-width: var(--layout-stage-max);
   margin: 0 auto var(--space-5);
   padding: 0 0 var(--space-2);
   border: 1px solid var(--color-action-hover);
@@ -743,7 +880,8 @@ h3 {
 /* Workbench home */
 .home-sections {
   display: grid;
-  max-width: 1040px;
+  width: 100%;
+  max-width: var(--layout-stage-max);
   grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
   gap: var(--space-6);
   margin: var(--space-6) auto 0;
@@ -967,7 +1105,7 @@ h3 {
 /* Run and system states */
 .run-status-strip {
   display: flex;
-  max-width: 1280px;
+  max-width: var(--layout-stage-max);
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
@@ -1066,7 +1204,7 @@ h3 {
 
 .workbench-error,
 .coverage-summary {
-  max-width: 1280px;
+  max-width: var(--layout-stage-max);
   margin: 0 auto var(--space-4);
 }
 
@@ -1138,7 +1276,7 @@ h3 {
 
 /* Drawing wall */
 .results-section {
-  max-width: 1320px;
+  max-width: var(--layout-stage-max);
   margin: 0 auto;
 }
 
@@ -1771,6 +1909,22 @@ h3 {
   line-height: 1.5;
 }
 
+@media (min-width: 1380px) {
+  .studio-backdrop[data-view="home"] .studio-diagram--plan,
+  .studio-backdrop[data-view="results"] .studio-diagram--section {
+    display: block;
+  }
+
+  .home-sections {
+    grid-template-columns: minmax(0, 3fr) minmax(360px, 1fr);
+    gap: var(--space-7);
+  }
+
+  .starter-list {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 1180px) {
   .reference-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1778,6 +1932,21 @@ h3 {
 }
 
 @media (max-width: 860px) {
+  .studio-backdrop::before,
+  .studio-backdrop[data-view="results"]::before {
+    opacity: 0.45;
+  }
+
+  .studio-crop-mark--end {
+    display: none;
+  }
+
+  .studio-crop-mark--start {
+    top: 124px;
+    left: var(--space-4);
+    opacity: 0.36;
+  }
+
   .app-header {
     flex-wrap: wrap;
     gap: var(--space-2) var(--space-3);
@@ -1799,6 +1968,12 @@ h3 {
 
   .header-actions {
     margin-left: auto;
+  }
+
+  .app-header button,
+  .tools-menu > summary,
+  .workspace-switcher select {
+    min-height: 44px;
   }
 
   .board-workspace {
@@ -1841,9 +2016,26 @@ h3 {
   .reference-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .reference-actions {
+    min-height: 50px;
+    padding-top: 3px;
+    padding-bottom: 3px;
+  }
+
+  .reference-actions button {
+    width: 44px;
+    min-height: 44px;
+    opacity: 1;
+  }
 }
 
 @media (max-width: 620px) {
+  .studio-backdrop::before,
+  .studio-crop-mark {
+    display: none;
+  }
+
   .app-header {
     min-height: 0;
   }
@@ -1980,21 +2172,6 @@ h3 {
     margin-bottom: 0;
   }
 
-  .reference-actions {
-    min-height: 50px;
-    padding-top: 3px;
-    padding-bottom: 3px;
-  }
-
-  .reference-actions button {
-    width: 44px;
-    min-height: 44px;
-    opacity: 1;
-  }
-
-  .app-header button,
-  .tools-menu > summary,
-  .workspace-switcher select,
   .segmented-control label {
     min-height: 44px;
   }

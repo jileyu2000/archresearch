@@ -42,6 +42,7 @@ import {
   type ResultTier,
 } from './data/mock'
 import { ClickSpark } from './components/ClickSpark'
+import { StudioBackdrop } from './components/StudioBackdrop'
 
 type WorkResult = EvidenceResult & {
   evidenceClaims: ApiEvidenceClaim[]
@@ -751,7 +752,8 @@ export default function App() {
   const currentWorkspaceId = demoMode ? (demoWorkspaces[0]?.id ?? '') : activeWorkspaceId
 
   return (
-    <main className="research-desk" aria-label="建筑研究画板">
+    <main className="research-desk" data-view={resultViewOpen ? 'results' : 'home'} aria-label="建筑研究画板">
+      <StudioBackdrop view={resultViewOpen ? 'results' : 'home'} />
       <header className="app-header">
         <div className="app-brand">
           <span className="brand-mark" aria-hidden="true"><LayoutGrid /></span>
