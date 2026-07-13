@@ -336,7 +336,6 @@ export default function App() {
     const nextResults = apiResults.map(toWorkResult)
     setResults(nextResults)
     setSelectedResultId(nextResults[0]?.id ?? '')
-    setComposerOpen(nextResults.length === 0)
     setInspectorOpen(false)
     setBoardId(board.id)
     setComparisonIds(board.selected_asset_ids)
@@ -377,7 +376,10 @@ export default function App() {
         setActiveRun(latest)
         setAnnouncement(runAnnouncement(latest))
         await hydrateRun(latest.id, () => active)
-        if (active && !terminalStatuses.has(latest.status)) setPollingRunId(latest.id)
+        if (active && !terminalStatuses.has(latest.status)) {
+          setComposerOpen(false)
+          setPollingRunId(latest.id)
+        }
       })
       .catch((error) => {
         if (active) setActionError(apiMessage(error))
@@ -610,6 +612,7 @@ export default function App() {
   )
   const activeStatus = activeRun?.status
   const isRunActive = activeStatus ? !terminalStatuses.has(activeStatus) : false
+  const resultViewOpen = !composerOpen
   const workspaceItems = demoMode ? demoWorkspaces : workspaces
   const currentWorkspaceId = demoMode ? (demoWorkspaces[0]?.id ?? '') : activeWorkspaceId
 
@@ -657,12 +660,17 @@ export default function App() {
           )}
         </div>
         <div className="header-actions">
+          {results.length > 0 && composerOpen && (
+            <button className="icon-text-button" type="button" onClick={() => setComposerOpen(false)}>
+              <LayoutGrid aria-hidden="true" />查看上次结果
+            </button>
+          )}
           {results.length > 0 && !composerOpen && (
             <button className="button-primary" type="button" onClick={() => setComposerOpen(true)}>
               <Plus aria-hidden="true" />发起新研究
             </button>
           )}
-          <details className="tools-menu">
+          {resultViewOpen && <details className="tools-menu">
             <summary><SlidersHorizontal aria-hidden="true" /><span>工具</span></summary>
             <div>
               <button type="button" disabled={comparisonIds.length < 2} onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setComparisonOpen(true) }}>
@@ -681,21 +689,18 @@ export default function App() {
                 <Activity aria-hidden="true" />{traceOpen ? '关闭研究 Trace' : '打开研究 Trace'}
               </button>
             </div>
-          </details>
+          </details>}
         </div>
       </header>
 
-      <section className="board-workspace" aria-label="图纸参考板">
+      <section className="board-workspace" aria-label="研究工作区">
         {composerOpen && (
           <section className="research-composer" aria-label="新建研究">
             <header>
               <div>
-                <h1>{results.length > 0 ? '继续研究一个问题' : '你现在想解决什么设计问题？'}</h1>
+                <h1>你现在想解决什么设计问题？</h1>
                 <p>描述空间、流线、更新或图纸表达问题，其余设置可以保持默认。</p>
               </div>
-              {results.length > 0 && (
-                <button type="button" onClick={() => setComposerOpen(false)}>收起</button>
-              )}
             </header>
             <form className="research-form" onSubmit={(event) => void handleResearchSubmit(event)}>
               <div className="research-prompt">
@@ -783,7 +788,7 @@ export default function App() {
           </section>
         )}
 
-        {(announcement || activeRun) && (
+        {resultViewOpen && (announcement || activeRun) && (
           <section className="run-status-strip" role="status">
             <div>
               <span className="status-dot" data-active={isRunActive || undefined} aria-hidden="true" />
@@ -809,7 +814,7 @@ export default function App() {
 
         {actionError && <p className="workbench-error" role="alert">{actionError}</p>}
 
-        {activeRun?.status === 'partial' && (
+        {resultViewOpen && activeRun?.status === 'partial' && (
           <details className="coverage-summary">
             <summary>
               已返回部分结果 · {activeRun.coverageReport?.usable_assets ?? 0} 张图纸，{activeRun.coverageReport?.project_count ?? 0} 个项目
@@ -820,18 +825,18 @@ export default function App() {
         )}
 
         {loading && <section className="board-loading" aria-label="正在加载工作区"><p>正在读取本地工作区…</p></section>}
-        {!loading && !demoMode && results.length === 0 && !actionError && (
+        {!loading && resultViewOpen && !demoMode && results.length === 0 && !actionError && (
           <section className="board-empty" aria-label="尚无研究结果">
             <h2>从一个具体设计问题开始</h2>
             <p>描述需要解决的空间、流线、更新或图纸表达问题，研究结果会按证据等级进入这里。</p>
           </section>
         )}
 
-        {results.length > 0 && (
+        {resultViewOpen && results.length > 0 && (
           <section className="results-section" aria-label="研究结果">
             <header className="results-header">
               <div>
-                <h2>参考图纸</h2>
+                <h2>研究结果</h2>
                 <p>{visibleResults.length} 项结果，按证据完整度和问题相关性排序</p>
               </div>
               <label htmlFor="asset-filter">
@@ -844,7 +849,7 @@ export default function App() {
                 </select>
               </label>
             </header>
-            <section className="reference-grid" aria-label="图纸参考墙">
+            <section className="reference-grid" aria-label="研究结果列表">
               {visibleResults.map((result, index) => (
                 <article
                   className="reference-card"
@@ -911,11 +916,11 @@ export default function App() {
           </section>
         )}
 
-        {results.length > 0 && visibleResults.length === 0 && (
+        {resultViewOpen && results.length > 0 && visibleResults.length === 0 && (
           <section className="empty-filter"><h2>当前筛选没有图纸</h2><p>切换图纸类型，或继续研究补齐这个证据缺口。</p></section>
         )}
 
-        {comparisonIds.length > 0 && (
+        {resultViewOpen && comparisonIds.length > 0 && (
           <section className="comparison-dock" aria-label="对比选择">
             <p>{comparisonIds.length} / 6 项已选择</p>
             <button type="button" disabled={comparisonIds.length < 2} onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setComparisonOpen(true) }}>打开 {comparisonIds.length} 项对比</button>

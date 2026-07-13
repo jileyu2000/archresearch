@@ -99,3 +99,10 @@
 - Linkwarden's orthogonal search/filter/sort/bulk-action views map well to Run-as-temporary-collection plus asset type, evidence tier, project and rights filters. ArchResearch will not add permanent page archives or a global library.
 - Excalidraw and tldraw validate separating durable document assets from transient selection/session state. The first board remains a constrained evidence grid with persisted comparison selection; a general canvas dependency is unnecessary, and tldraw's current production-license restriction rules it out.
 - Chrome's official permissions lifecycle requires `permissions.request()` from an extension user gesture and `permissions.remove()` when the task ends. The extension side panel therefore remains the explicit “authorize and start” surface; the localhost board cannot silently grant host access.
+
+## M9 Problem-first navigation contract
+
+- The default `/` surface did contain a question field, but `hydrateRun()` automatically collapsed it as soon as the latest completed run restored. This made a persisted result page silently replace the homepage and caused the user's confusion.
+- A completed historical run is now data restored in the background, not the current view. The homepage remains a single problem composer and exposes “查看上次结果” only when history exists; the result view exposes the inverse “发起新研究” transition.
+- An unfinished run is the intentional exception: it resumes directly into progress/results so cancellation and recovery remain visible. Explicit `?demo=1` continues to open a result demonstration.
+- “研究结果” names the result section; “图纸类型” remains only a filter. The accessible collection name is “研究结果列表”, and the shared page container is “研究工作区”.

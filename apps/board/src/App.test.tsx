@@ -277,10 +277,10 @@ describe('research board', () => {
     const user = userEvent.setup()
     renderBoard('?demo=1')
 
-    expect(await screen.findByRole('heading', { name: '参考图纸' })).toBeVisible()
+    expect(await screen.findByRole('heading', { name: '研究结果' })).toBeVisible()
     expect(screen.getByRole('combobox', { name: '图纸类型' })).toHaveValue('all')
     expect(screen.getByRole('button', { name: '发起新研究' })).toBeVisible()
-    expect(screen.getByRole('region', { name: '图纸参考墙' })).toBeVisible()
+    expect(screen.getByRole('region', { name: '研究结果列表' })).toBeVisible()
     const firstReference = screen.getByRole('button', { name: '查看 Kamala Narayana Temple Survey 证据' }).closest('article')
     expect(firstReference).not.toHaveAttribute('data-selected')
     expect(screen.getByRole('button', { name: '加入对比 Kamala Narayana Temple Survey' })).toHaveAttribute('title', '加入对比')
@@ -309,10 +309,26 @@ describe('research board', () => {
     expect(screen.queryByText('Kamala Narayana Temple Survey')).not.toBeInTheDocument()
   })
 
-  it('restores the latest persisted run after a reload', async () => {
+  it('keeps restored results behind an explicit action on the problem-first home', async () => {
+    const user = userEvent.setup()
     vi.stubGlobal('fetch', createLiveFetch({ existingRunStatus: 'completed' }))
     renderBoard()
 
+    expect(await screen.findByRole('textbox', { name: '研究问题' })).toBeVisible()
+    expect(await screen.findByRole('button', { name: '查看上次结果' })).toBeVisible()
+    expect(screen.queryByRole('heading', { name: '研究结果' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '查看上次结果' }))
+    expect(await screen.findByRole('heading', { name: '研究结果' })).toBeVisible()
+    expect(screen.queryByRole('textbox', { name: '研究问题' })).not.toBeInTheDocument()
+  })
+
+  it('restores the latest persisted run after the user opens it', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', createLiveFetch({ existingRunStatus: 'completed' }))
+    renderBoard()
+
+    await user.click(await screen.findByRole('button', { name: '查看上次结果' }))
     expect(await screen.findByText('Live Mill Conversion')).toBeVisible()
     expect(screen.getByRole('img', { name: 'Live Mill Conversion 暂无预览' })).toBeVisible()
     expect(screen.getByRole('status')).toHaveTextContent('研究已完成')
@@ -364,7 +380,7 @@ describe('research board', () => {
 
     await user.click(screen.getByRole('button', { name: '取消研究' }))
     expect(screen.getByRole('status')).toHaveTextContent('已取消')
-    expect(screen.getByRole('region', { name: '图纸参考板' })).toBeVisible()
+    expect(screen.getByRole('region', { name: '研究工作区' })).toBeVisible()
   })
 
   it('hydrates saved notes and renders precise evidence locators with an asset fallback', async () => {
@@ -513,7 +529,7 @@ describe('research board', () => {
     const user = userEvent.setup()
     renderBoard('?demo=1')
 
-    await screen.findByRole('heading', { name: '参考图纸' })
+    await screen.findByRole('heading', { name: '研究结果' })
     expect(screen.getAllByRole('option', { name: '分析图' })).toHaveLength(1)
     await user.selectOptions(screen.getByRole('combobox', { name: '图纸类型' }), 'section')
     expect(screen.getAllByRole('article')).toHaveLength(1)
