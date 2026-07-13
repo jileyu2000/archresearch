@@ -535,7 +535,7 @@ describe('research board', () => {
     renderBoard()
 
     expect(await screen.findByText('真实工作区')).toBeVisible()
-    expect(screen.getByRole('heading', { name: '从一个具体设计问题开始' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: '从一个卡住你的地方开始' })).toBeVisible()
     const questionInput = screen.getByRole('textbox', { name: '研究问题' })
     expect(questionInput).toBeVisible()
     expect(screen.getByRole('button', { name: '设计策略' })).toHaveAttribute('aria-pressed', 'true')
@@ -543,7 +543,11 @@ describe('research board', () => {
     expect(screen.getByRole('button', { name: '视觉参考' })).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getByRole('heading', { name: '不知道怎么描述？' })).toBeVisible()
     expect(screen.getByRole('heading', { name: '最近研究' })).toBeVisible()
-    await user.click(screen.getByRole('button', { name: '填入问题：流线组织，人车在入口冲突，如何重组落客和步行路径？' }))
+    const startButton = screen.getByRole('button', { name: '开始研究' })
+    const starterButton = screen.getByRole('button', { name: '填入问题：流线组织，人车在入口冲突，如何重组落客和步行路径？' })
+    expect(startButton.closest('.research-submit-spark')).not.toBeNull()
+    expect(starterButton.closest('.click-spark')).toBeNull()
+    await user.click(starterButton)
     expect(questionInput).toHaveValue('人车在入口冲突，如何重组落客和步行路径？')
     expect(questionInput).toHaveFocus()
     await user.click(screen.getByRole('button', { name: '来源反查' }))
@@ -733,7 +737,7 @@ describe('research board', () => {
       await new Promise<void>((resolve) => setTimeout(resolve, 0))
     })
 
-    expect(screen.getByRole('heading', { name: '从一个具体设计问题开始' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: '从一个卡住你的地方开始' })).toBeVisible()
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
@@ -753,7 +757,7 @@ describe('research board', () => {
       await Promise.resolve()
     })
 
-    expect(screen.getByRole('heading', { name: '从一个具体设计问题开始' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: '从一个卡住你的地方开始' })).toBeVisible()
     expect(screen.queryByRole('button', { name: '打开研究：等待取消的旧工作区任务' })).not.toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })

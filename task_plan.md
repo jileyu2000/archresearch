@@ -29,6 +29,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | 9. M8 Mature-product visual redesign | complete | Mature-product study, global DESIGN.md, ordered digital pin-up wall, modal accessibility, 1440/1024/390 acceptance, zero design-detector findings and full repository verification pass |
 | 10. M9 Problem-first home and result separation | complete | Completed runs no longer replace the default question composer; explicit “查看上次结果 / 发起新研究” transitions pass 27 Board tests and live-browser acceptance |
 | 11. M10 Useful research-workbench home | complete | One composer, three research paths, four problem starters and lazy-loaded recent runs pass 1280/1024/700/390 browser acceptance, workspace-race regression tests and the full repository gate |
+| 12. M11 Livelier studio identity | complete | Product-first motion study, blueprint task island, global visual/motion rules, 1440/1024/700/390 acceptance, zero design-detector findings and the full repository gate |
 
 ## M6 completion summary
 
@@ -85,3 +86,8 @@ The code delivery is complete. These product claims require user-owned credentia
 | The cached browser-skill version path changed between sessions | 1 | Discover the installed `SKILL.md` with `rg --files` and use the current package path |
 | The first M9 test insertion used a stale neighboring test name | 1 | Inspect the exact test boundaries and reapply the small patch at the verified location |
 | A multiline inline Python contrast probe was escaped literally by PowerShell | 1 | Replace it with a single-line Node calculation; the placeholder contrast is 5.25:1 |
+| Browser tab recovery first called the wrong `tabs.claim` surface | 1 | Use the documented `browser.user.claimTab` method and retain the existing browser binding |
+| The first M11 combined CSS patch expected an empty `.research-quick-actions` rule that does not exist | 1 | Re-read the exact selector block and split the implementation into smaller verified patches; no production CSS was changed |
+| A GitHub directory click for the React Bits Magnet source did not complete | 1 | Stop the hung request after the ClickSpark source and live preview already provided sufficient comparative evidence |
+| The first motion pass chose an effect before finishing the mature-product behavior audit | 1 | Reorder the work as requested: audit FigJam/Miro/Milanote/Eagle/Cosmos first, then map only the supported task feedback to React Bits and move the spark to the single launch action |
+| Chrome's raw `--window-size=390` screenshot cropped an outer window and looked like page overflow | 1 | Re-test with an exact Playwright 390px viewport; DOM width, expanded settings and long filename states all remain within the viewport |

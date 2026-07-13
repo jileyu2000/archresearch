@@ -41,6 +41,7 @@ import {
   type EvidenceResult,
   type ResultTier,
 } from './data/mock'
+import { ClickSpark } from './components/ClickSpark'
 
 type WorkResult = EvidenceResult & {
   evidenceClaims: ApiEvidenceClaim[]
@@ -838,8 +839,8 @@ export default function App() {
           <section className="research-composer" aria-label="新建研究">
             <header>
               <div>
-                <h1>从一个具体设计问题开始</h1>
-                <p>描述你卡住的空间、流线或表达问题，也可以附上草图、平面、剖面、PDF 或网页。</p>
+                <h1>从一个卡住你的地方开始</h1>
+                <p>空间、流线、剖面或表达，说具体一点就够了。也可以直接附上草图、图纸、PDF 或网页。</p>
               </div>
             </header>
             <form className="research-form" onSubmit={(event) => void handleResearchSubmit(event)}>
@@ -876,9 +877,11 @@ export default function App() {
                     <Paperclip aria-hidden="true" />添加资料和研究设置
                   </button>
                   {files.length > 0 && <span>{files.length} 个文件待上传</span>}
-                  <button className="research-submit" type="submit" disabled={isRunActive || loading || (!demoMode && !activeWorkspaceId)}>
-                    {isRunActive ? '研究进行中…' : <><span>开始研究</span><ArrowUp aria-hidden="true" /></>}
-                  </button>
+                  <ClickSpark className="research-submit-spark" duration={300} sparkRadius={12} sparkSize={6}>
+                    <button className="research-submit" type="submit" disabled={isRunActive || loading || (!demoMode && !activeWorkspaceId)}>
+                      {isRunActive ? '研究进行中…' : <><span>开始研究</span><ArrowUp aria-hidden="true" /></>}
+                    </button>
+                  </ClickSpark>
                 </div>
               </div>
               {researchOptionsOpen && (
@@ -947,7 +950,7 @@ export default function App() {
                       onClick={() => applyProblemStarter(starter.prompt, starter.goal)}
                     >
                       <span className="starter-label">{starter.label}</span>
-                      <span>{starter.prompt}</span>
+                      <span className="starter-prompt">{starter.prompt}</span>
                       <Plus aria-hidden="true" />
                     </button>
                   </li>
