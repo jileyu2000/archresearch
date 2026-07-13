@@ -206,6 +206,15 @@ export interface BoardExport {
   item_count: number
 }
 
+export interface BrowserStatus {
+  connected: boolean
+}
+
+export interface BrowserPairingCode {
+  code: string
+  expires_in_seconds: number
+}
+
 export class ApiError extends Error {
   readonly status: number | null
 
@@ -260,6 +269,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function createApiClient(baseUrl = '/v1') {
   return {
+    getBrowserStatus() {
+      return request<BrowserStatus>(`${baseUrl}/browser/status`)
+    },
+
+    createBrowserPairingCode() {
+      return request<BrowserPairingCode>(`${baseUrl}/browser/pairing-code`, {
+        method: 'POST',
+      })
+    },
+
     listWorkspaces() {
       return request<Workspace[]>(`${baseUrl}/workspaces`)
     },

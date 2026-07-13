@@ -1025,16 +1025,35 @@ def _persist_inspected_assets(
             for candidate in existing_assets
             if candidate.perceptual_hash is not None
         }
+        unresolved_by_source_and_type: dict[tuple[str, str], list[AssetCandidate]] = {}
+        for candidate in existing_assets:
+            if (
+                candidate.image_url is None
+                and candidate.storage_path is None
+                and candidate.perceptual_hash is None
+            ):
+                unresolved_by_source_and_type.setdefault(
+                    (candidate.source_url, candidate.asset_type), []
+                ).append(candidate)
         added_usable = 0
         for item in inspected:
             image_identity = (item.source_url, item.image_url)
             duplicate = existing_hashes.get(item.perceptual_hash)
             if duplicate is None and item.image_url is not None:
                 duplicate = existing_image_urls.get(image_identity)
+            unresolved_key = (item.source_url, item.asset_type.value)
+            if duplicate is None:
+                unresolved = unresolved_by_source_and_type.get(unresolved_key, [])
+                if len(unresolved) == 1:
+                    duplicate = unresolved[0]
+                    unresolved_by_source_and_type.pop(unresolved_key, None)
             if duplicate is not None:
                 if duplicate.perceptual_hash is None:
                     duplicate.perceptual_hash = item.perceptual_hash
                 existing_hashes[item.perceptual_hash] = duplicate
+                if duplicate.image_url is None and item.image_url is not None:
+                    duplicate.image_url = item.image_url
+                    existing_image_urls[image_identity] = duplicate
                 if item.storage_path is not None:
                     if duplicate.storage_path is None:
                         duplicate.storage_path = str(item.storage_path)

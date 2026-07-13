@@ -66,6 +66,7 @@
   --control-height: 36px;
   --icon-sm: 16px;
   --icon-md: 20px;
+  --icon-lg: 24px;
 
   /* Elevation and motion */
   --shadow-sheet: 0 1px 2px rgb(17 24 20 / 6%), 0 8px 24px rgb(17 24 20 / 5%);
@@ -879,6 +880,94 @@ h3 {
   display: none;
 }
 
+.browser-readiness,
+.drawing-recovery {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-action-line);
+  border-radius: var(--radius-sm);
+  background: var(--color-action-soft);
+}
+
+.browser-readiness {
+  margin-top: var(--space-3);
+}
+
+.browser-readiness > svg,
+.drawing-recovery > svg {
+  width: var(--icon-lg);
+  height: var(--icon-lg);
+  margin-top: 2px;
+  color: var(--color-action-hover);
+}
+
+.browser-readiness-copy,
+.drawing-recovery-copy {
+  min-width: 0;
+}
+
+.browser-readiness-copy > strong,
+.drawing-recovery h2 {
+  display: block;
+  margin: 0;
+  color: var(--color-ink);
+  font-size: var(--font-base);
+  line-height: var(--leading-title);
+}
+
+.browser-readiness-copy > p,
+.drawing-recovery-copy > p {
+  max-width: 72ch;
+  margin: var(--space-1) 0 0;
+  color: var(--color-ink-secondary);
+  font-size: var(--font-compact);
+  line-height: var(--leading-body);
+}
+
+.browser-readiness-actions,
+.drawing-recovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.browser-pairing-code {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.browser-pairing-code > span,
+.browser-pairing-code > small,
+.browser-pairing-status {
+  color: var(--color-ink-secondary);
+  font-size: var(--font-xs);
+}
+
+.browser-pairing-code > strong {
+  color: var(--color-action-hover);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: var(--font-md);
+  letter-spacing: 0.08em;
+}
+
+.browser-pairing-code > small {
+  flex-basis: 100%;
+  line-height: var(--leading-body);
+}
+
+.browser-pairing-status {
+  display: block;
+  margin-top: var(--space-1);
+}
+
 /* Workbench home */
 .home-sections {
   display: grid;
@@ -1116,6 +1205,12 @@ h3 {
   border: 1px solid var(--color-line);
   border-radius: var(--radius-md);
   background: rgb(255 255 255 / 78%);
+}
+
+.drawing-recovery {
+  max-width: var(--layout-stage-max);
+  margin: 0 auto var(--space-5);
+  background: rgb(237 241 255 / 88%);
 }
 
 .run-status-strip > div {
@@ -1686,12 +1781,38 @@ h3 {
 }
 
 .preview-unavailable {
-  display: grid;
+  display: flex;
   width: 100%;
   min-height: 210px;
-  place-items: center;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-4);
   color: var(--color-ink-secondary);
   font-size: var(--font-sm);
+  text-align: center;
+}
+
+.preview-unavailable svg {
+  width: var(--icon-lg);
+  height: var(--icon-lg);
+  color: var(--color-ink-tertiary);
+}
+
+.preview-unavailable strong {
+  max-width: 28ch;
+  color: var(--color-ink);
+  font-size: var(--font-base);
+  line-height: var(--leading-title);
+  text-wrap: pretty;
+}
+
+.preview-unavailable p {
+  max-width: 38ch;
+  margin: 0;
+  line-height: 1.55;
+  text-wrap: pretty;
 }
 
 .evidence-image > span {
@@ -1747,6 +1868,31 @@ h3 {
 .evidence-sheet-actions > span {
   color: var(--color-ink-tertiary);
   font-size: 10px;
+}
+
+.evidence-source-action {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 5px var(--space-2);
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-action-hover);
+  font-size: var(--font-xs);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.evidence-source-action:hover {
+  border-color: var(--color-action-line);
+  background: var(--color-action-soft);
+}
+
+.evidence-source-action svg {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
 }
 
 .evidence-sheet-actions button {
@@ -2348,6 +2494,17 @@ h3 {
   :root {
     --research-prompt-min-height: 132px;
     --font-result-question: 34px;
+  }
+
+  .browser-readiness,
+  .drawing-recovery {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .browser-readiness-actions,
+  .drawing-recovery-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
   }
 
   .studio-backdrop::before,

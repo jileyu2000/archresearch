@@ -147,6 +147,39 @@ def test_openai_provider_uses_relay_compatible_web_search_and_domain_fields() ->
     assert request["text_format"] is ProviderSearchResult
 
 
+@pytest.mark.parametrize("query", ["adaptive reuse section", "旧建筑剖面更新"])
+def test_openai_search_requires_simplified_chinese_analysis_fields(query: str) -> None:
+    calls: list[dict[str, Any]] = []
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=ProviderSearchResult(assets=[], sources=[]))
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+
+    provider.search(query, ResearchGoal.precedent_research)
+
+    prompt = calls[0]["input"]
+    assert "Simplified Chinese" in prompt
+    assert "regardless of the query or source language" in prompt
+    for field in (
+        "project_context",
+        "design_mechanism",
+        "transfer_strategy",
+        "facts",
+        "observations",
+        "inferences",
+        "limitations",
+    ):
+        assert field in prompt
+    assert "Official project names may remain in their original language" in prompt
+
+
 def test_openai_provider_plans_bounded_subquestions_before_searching() -> None:
     calls: list[dict[str, Any]] = []
 
@@ -189,6 +222,8 @@ def test_openai_provider_plans_bounded_subquestions_before_searching() -> None:
     assert request["text_format"] is ResearchPlan
     assert "exactly 4" in request["input"]
     assert "untrusted" in request["input"].lower()
+    assert "Simplified Chinese" in request["input"]
+    assert "question and rationale" in request["input"]
 
 
 def test_openai_provider_rejects_a_missing_structured_result() -> None:

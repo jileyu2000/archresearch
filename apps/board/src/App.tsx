@@ -8,11 +8,16 @@ import {
   Columns3,
   Download,
   Eye,
+  ExternalLink,
   FolderPlus,
+  ImageOff,
+  KeyRound,
   LayoutGrid,
+  MonitorUp,
   Palette,
   Paperclip,
   Plus,
+  RefreshCw,
   Search,
   Share2,
   ShieldCheck,
@@ -78,6 +83,39 @@ const tierLabels: Record<ResultTier, string> = {
   verified: '已核验参考',
   partial: '部分核验参考',
   visual_lead: '视觉线索参考',
+}
+
+const publicationTierLabels: Record<ApiAssetCandidate['publication_tier'], string> = {
+  primary: '项目或设计方首发',
+  trusted_secondary: '可信二手来源',
+  aggregator: '聚合来源',
+  unknown: '来源未知',
+}
+
+const associationLabels: Record<ApiAssetCandidate['project_identity'], string> = {
+  confirmed: '已确认',
+  probable: '较可能',
+  unknown: '未知',
+  conflict: '存在冲突',
+}
+
+const rightsStatusLabels: Record<ApiAssetCandidate['rights_status'], string> = {
+  user_owned: '用户自有',
+  open_license: '开放许可',
+  permissioned: '已获授权',
+  unknown: '权利未知',
+  restricted: '受限',
+}
+
+const chineseCharacterPattern = /[\u3400-\u9fff]/
+
+function chineseText(value: string | undefined, fallback: string) {
+  const trimmed = value?.trim() ?? ''
+  return chineseCharacterPattern.test(trimmed) ? trimmed : fallback
+}
+
+function chineseItems(values: string[] | undefined) {
+  return (values ?? []).map((item) => item.trim()).filter((item) => chineseCharacterPattern.test(item))
 }
 
 const modeLabels: Record<ResearchMode, string> = {
@@ -222,9 +260,14 @@ function drawingFor(assetType: AssetType): EvidenceResult['drawing'] {
 
 function toWorkResult(candidate: ApiAssetCandidate): WorkResult {
   const assetType = candidate.asset_type as ArchitectureAssetType
+  const facts = chineseItems(candidate.facts)
+  const observations = chineseItems(candidate.observations)
+  const inferences = chineseItems(candidate.inferences)
+  const limitations = chineseItems(candidate.limitations)
+  const transferStrategy = chineseItems(candidate.transfer_strategy)
   return {
     id: candidate.id,
-    title: candidate.inferences[0] ?? `${assetLabels[assetType]}研究线索`,
+    title: chineseText(candidate.inferences[0], `${assetLabels[assetType]}研究线索`),
     project: candidate.project_name,
     location: '实时网页研究',
     year: '待核验',
@@ -236,7 +279,7 @@ function toWorkResult(candidate: ApiAssetCandidate): WorkResult {
     assetAssociation: candidate.asset_association,
     primarySource: candidate.primary_source,
     rightsStatus: candidate.rights_status,
-    sourceName: candidate.publication_tier,
+    sourceName: publicationTierLabels[candidate.publication_tier],
     sourceUrl: candidate.source_url,
     imageUrl: candidate.image_url,
     subquestionIds: candidate.subquestion_ids ?? [],
@@ -244,35 +287,47 @@ function toWorkResult(candidate: ApiAssetCandidate): WorkResult {
       Object.entries(candidate.subquestion_analysis ?? {}).map(([id, analysis]) => [
         id,
         {
-          projectContext: analysis.project_context ?? '',
-          designMechanism: analysis.design_mechanism ?? '',
-          transferStrategy: analysis.transfer_strategy ?? [],
-          observations: analysis.observations ?? [],
-          limitations: analysis.limitations ?? [],
+          projectContext: chineseText(
+            analysis.project_context,
+            '此历史结果的项目条件为外文；重新研究后可生成中文分析。',
+          ),
+          designMechanism: chineseText(
+            analysis.design_mechanism,
+            '此历史结果的空间机制为外文；重新研究后可生成中文分析。',
+          ),
+          transferStrategy: chineseItems(analysis.transfer_strategy).length
+            ? chineseItems(analysis.transfer_strategy)
+            : ['连接扩展并重新研究，生成中文转译步骤。'],
+          observations: chineseItems(analysis.observations).length
+            ? chineseItems(analysis.observations)
+            : ['尚未生成中文视觉观察。'],
+          limitations: chineseItems(analysis.limitations).length
+            ? chineseItems(analysis.limitations)
+            : ['尚未生成中文适用边界。'],
         },
       ]),
     ),
     projectContext:
-      candidate.project_context
-      || candidate.facts.join(' ')
-      || '当前来源尚未提供足够的项目条件。',
+      chineseCharacterPattern.test(candidate.project_context ?? '')
+        ? candidate.project_context ?? ''
+        : facts.join(' ') || '此历史结果的项目条件为外文；重新研究后可生成中文分析。',
     designMechanism:
-      candidate.design_mechanism
-      || candidate.observations.join(' ')
-      || '当前图纸尚未形成稳定的空间机制判断。',
+      chineseCharacterPattern.test(candidate.design_mechanism ?? '')
+        ? candidate.design_mechanism ?? ''
+        : observations.join(' ') || '此历史结果的空间机制为外文；重新研究后可生成中文分析。',
     transferStrategy:
-      candidate.transfer_strategy?.length
-        ? candidate.transfer_strategy
-        : candidate.inferences.length
-          ? candidate.inferences
-          : ['回到原始来源，补齐条件后再判断怎样转译。'],
+      transferStrategy.length
+        ? transferStrategy
+        : inferences.length
+          ? inferences
+          : ['连接扩展并重新研究，生成中文转译步骤。'],
     previewUrl:
       candidate.image_url ??
       (candidate.has_local_content ? `/v1/assets/${candidate.id}/content` : null),
-    fact: candidate.facts[0] ?? '当前来源没有可绑定的正式事实。',
-    observation: candidate.observations[0] ?? '当前图块尚未形成可靠的视觉观察。',
-    inference: candidate.inferences[0] ?? '尚未形成可转译的设计方法推断。',
-    limitation: candidate.limitations[0] ?? '需要回到原始页面继续核对适用条件。',
+    fact: facts[0] ?? '此历史结果的来源事实为外文，请打开原始页面核对。',
+    observation: observations[0] ?? '尚未生成中文视觉观察。',
+    inference: inferences[0] ?? '尚未生成中文设计方法推断。',
+    limitation: limitations[0] ?? '尚未生成中文适用边界。',
     accent:
       candidate.result_tier === 'verified'
         ? '#2D846B'
@@ -280,7 +335,10 @@ function toWorkResult(candidate: ApiAssetCandidate): WorkResult {
           ? '#315CF4'
           : '#7D817E',
     drawing: drawingFor(assetType),
-    evidenceClaims: candidate.evidence_claims,
+    evidenceClaims: candidate.evidence_claims.map((claim) => ({
+      ...claim,
+      statement: chineseText(claim.statement, '该证据原文为外文，请通过来源定位核对。'),
+    })),
   }
 }
 
@@ -351,6 +409,21 @@ function traceSummary(summary: unknown) {
   return typeof summary === 'string' ? summary : JSON.stringify(summary)
 }
 
+function browserWasUnavailableForSource(events: TraceEvent[], sourceUrl: string) {
+  return events.some((event) => {
+    if (event.tool !== 'browser') return false
+    const summary = event.summary as unknown
+    if (typeof summary === 'string') {
+      return summary.includes('BrowserUnavailableError')
+        || summary.includes('Browser extension is not connected')
+    }
+    if (!summary || typeof summary !== 'object') return false
+    const details = summary as { error_type?: unknown; source_url?: unknown }
+    if (details.error_type !== 'BrowserUnavailableError') return false
+    return typeof details.source_url !== 'string' || details.source_url === sourceUrl
+  })
+}
+
 export default function App() {
   const demoMode = useMemo(() => new URLSearchParams(window.location.search).get('demo') === '1', [])
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
@@ -387,6 +460,10 @@ export default function App() {
   const [styleProfile, setStyleProfile] = useState<StyleDraft>(defaultStyle)
   const [styleStatus, setStyleStatus] = useState('')
   const [traceEvents, setTraceEvents] = useState<TraceEvent[]>([])
+  const [browserConnected, setBrowserConnected] = useState<boolean | null>(null)
+  const [browserPairingCode, setBrowserPairingCode] = useState('')
+  const [browserPairingStatus, setBrowserPairingStatus] = useState('')
+  const [rerunStarting, setRerunStarting] = useState(false)
   const [composerOpen, setComposerOpen] = useState(!demoMode)
   const [researchOptionsOpen, setResearchOptionsOpen] = useState(false)
   const [workspaceCreateOpen, setWorkspaceCreateOpen] = useState(false)
@@ -512,12 +589,29 @@ export default function App() {
     }
   }, [demoMode])
 
+  useEffect(() => {
+    if (demoMode) return
+    let active = true
+    void apiClient
+      .getBrowserStatus()
+      .then((status) => {
+        if (active) setBrowserConnected(status.connected)
+      })
+      .catch(() => {
+        if (active) setBrowserConnected(null)
+      })
+    return () => {
+      active = false
+    }
+  }, [demoMode])
+
   const hydrateRun = useCallback(async (runId: string, shouldApply: () => boolean = () => true) => {
-    const [apiResults, board, userState, events] = await Promise.all([
+    const [apiResults, board, userState, events, browserStatus] = await Promise.all([
       apiClient.getResults(runId),
       apiClient.getBoard(runId),
       apiClient.getUserState(runId),
       apiClient.getEvents(runId),
+      apiClient.getBrowserStatus().catch(() => null),
     ])
     if (!shouldApply()) return
     const nextResults = apiResults.map(toWorkResult)
@@ -533,6 +627,7 @@ export default function App() {
       Object.fromEntries(userState.saved.map((item) => [item.asset_candidate_id, item.note])),
     )
     setTraceEvents(events)
+    setBrowserConnected(browserStatus?.connected ?? null)
     const profile = await apiClient.getStyleProfile(board.id)
     if (!shouldApply()) return
     if (profile) {
@@ -734,6 +829,62 @@ export default function App() {
     }
   }
 
+  async function refreshBrowserConnection() {
+    setBrowserPairingStatus('正在检查连接…')
+    try {
+      const status = await apiClient.getBrowserStatus()
+      setBrowserConnected(status.connected)
+      setBrowserPairingStatus(status.connected ? '图纸提取扩展已连接' : '扩展尚未连接')
+    } catch (error) {
+      setBrowserConnected(null)
+      setBrowserPairingStatus(apiMessage(error))
+    }
+  }
+
+  async function handleCreatePairingCode() {
+    setBrowserPairingStatus('正在生成配对码…')
+    try {
+      const pairing = await apiClient.createBrowserPairingCode()
+      setBrowserPairingCode(pairing.code)
+      setBrowserPairingStatus('配对码已生成')
+    } catch (error) {
+      setBrowserPairingStatus(apiMessage(error))
+    }
+  }
+
+  async function handleRerunWithBrowser() {
+    if (!activeRun || !activeWorkspaceId || browserConnected !== true) return
+    const requestId = hydrateRequestRef.current + 1
+    hydrateRequestRef.current = requestId
+    setRerunStarting(true)
+    setActionError('')
+    try {
+      const run = await apiClient.startResearch({
+        workspaceId: activeWorkspaceId,
+        question: activeRun.question,
+        goal: activeRun.goal,
+        mode: activeRun.mode,
+      })
+      if (hydrateRequestRef.current !== requestId) return
+      updateRecentRun(run)
+      clearRunView()
+      setActiveRun(run)
+      setAnnouncement(runAnnouncement(run))
+      setComposerOpen(false)
+      if (terminalStatuses.has(run.status)) {
+        if (run.status !== 'cancelled') {
+          await hydrateRun(run.id, () => hydrateRequestRef.current === requestId)
+        }
+      } else {
+        setPollingRunId(run.id)
+      }
+    } catch (error) {
+      if (hydrateRequestRef.current === requestId) setActionError(apiMessage(error))
+    } finally {
+      if (hydrateRequestRef.current === requestId) setRerunStarting(false)
+    }
+  }
+
   async function toggleSaved(resultId: string) {
     const isSaved = savedIds.includes(resultId)
     setActionError('')
@@ -911,6 +1062,10 @@ export default function App() {
   const activeStatus = activeRun?.status
   const isRunActive = activeStatus ? !terminalStatuses.has(activeStatus) : false
   const resultViewOpen = !composerOpen
+  const allResultsMissingPreviews = results.length > 0 && results.every((result) => !result.previewUrl)
+  const runHadBrowserUnavailable = results.some((result) => (
+    browserWasUnavailableForSource(traceEvents, result.sourceUrl)
+  ))
   const workspaceItems = demoMode ? demoWorkspaces : workspaces
   const currentWorkspaceId = demoMode ? (demoWorkspaces[0]?.id ?? '') : activeWorkspaceId
 
@@ -1087,6 +1242,35 @@ export default function App() {
                   </fieldset>
                 </div>
               )}
+              {!demoMode && browserConnected !== true && (
+                <section className="browser-readiness" aria-label="图纸提取连接">
+                  <MonitorUp aria-hidden="true" />
+                  <div className="browser-readiness-copy">
+                    <strong>{browserConnected === false ? '图纸提取未连接' : '正在检查图纸提取连接'}</strong>
+                    <p>
+                      {browserConnected === false
+                        ? '仍可开始研究，但只能返回文字线索。'
+                        : '连接状态确认后，系统才能从项目网页中提取平面、剖面和分析图。'}
+                    </p>
+                    {browserPairingCode && (
+                      <div className="browser-pairing-code">
+                        <span>配对码</span>
+                        <strong>{browserPairingCode}</strong>
+                        <small>在 ArchResearch Chrome 扩展中输入配对码，并授予本次网页读取权限。</small>
+                      </div>
+                    )}
+                    {browserPairingStatus && <small className="browser-pairing-status" aria-live="polite">{browserPairingStatus}</small>}
+                  </div>
+                  <div className="browser-readiness-actions">
+                    <button type="button" onClick={() => void handleCreatePairingCode()}>
+                      <KeyRound aria-hidden="true" />生成配对码
+                    </button>
+                    <button type="button" onClick={() => void refreshBrowserConnection()}>
+                      <RefreshCw aria-hidden="true" />检查连接
+                    </button>
+                  </div>
+                </section>
+              )}
               <div className="research-run-actions">
                 {isRunActive && <button className="research-cancel" type="button" onClick={() => void handleCancel()}>取消研究</button>}
                 {activeRun && ['partial', 'blocked', 'failed', 'cancelled'].includes(activeRun.status) && (
@@ -1195,6 +1379,48 @@ export default function App() {
             <p>{activeRun.stopReason}</p>
             {(activeRun.coverageReport?.gaps ?? []).map((gap) => <span key={gap}>{gap}</span>)}
           </details>
+        )}
+
+        {!demoMode && resultViewOpen && allResultsMissingPreviews && (
+          <section className="drawing-recovery" aria-labelledby="drawing-recovery-title">
+            <MonitorUp aria-hidden="true" />
+            <div className="drawing-recovery-copy">
+              <h2 id="drawing-recovery-title">这次研究没有提取到图纸</h2>
+              <p>
+                {runHadBrowserUnavailable
+                  ? browserConnected === true
+                    ? '扩展现已连接，重新研究后可提取网页中的图纸。'
+                    : '研究时浏览器扩展未连接，因此只保留了网页文字和来源。'
+                  : '来源页没有返回可展示图片；可先打开原始页面核对，再重新研究。'}
+              </p>
+              {browserPairingCode && (
+                <div className="browser-pairing-code">
+                  <span>配对码</span>
+                  <strong>{browserPairingCode}</strong>
+                  <small>在 ArchResearch Chrome 扩展中输入配对码，并授予本次网页读取权限。</small>
+                </div>
+              )}
+              {browserPairingStatus && <small className="browser-pairing-status" aria-live="polite">{browserPairingStatus}</small>}
+            </div>
+            <div className="drawing-recovery-actions">
+              {browserConnected !== true && (
+                <button type="button" onClick={() => void handleCreatePairingCode()}>
+                  <KeyRound aria-hidden="true" />生成配对码
+                </button>
+              )}
+              <button type="button" onClick={() => void refreshBrowserConnection()}>
+                <RefreshCw aria-hidden="true" />检查连接
+              </button>
+              <button
+                className="button-primary"
+                type="button"
+                disabled={browserConnected !== true || rerunStarting}
+                onClick={() => void handleRerunWithBrowser()}
+              >
+                {rerunStarting ? '正在重新研究…' : '重新研究'}
+              </button>
+            </div>
+          </section>
         )}
 
         {loading && <section className="board-loading" aria-label="正在加载工作区"><p>正在读取本地工作区…</p></section>}
@@ -1314,6 +1540,10 @@ export default function App() {
                                 const resultIndex = results.findIndex((item) => item.id === result.id)
                                 const compared = comparisonIds.includes(result.id)
                                 const resultAnalysis = analysisFor(result, group.subquestion.id)
+                                const browserWasUnavailable = browserWasUnavailableForSource(
+                                  traceEvents,
+                                  result.sourceUrl,
+                                )
                                 return (
                                   <div
                                     className="evidence-sheet"
@@ -1349,7 +1579,15 @@ export default function App() {
                                               fetchPriority={resultIndex < 3 ? 'high' : 'auto'}
                                             />
                                           ) : (
-                                            <div className="preview-unavailable" role="img" aria-label={`${result.project} 暂无预览`}>预览不可用</div>
+                                            <div className="preview-unavailable">
+                                              <ImageOff aria-hidden="true" />
+                                              <strong>
+                                                {browserWasUnavailable
+                                                  ? '此次未连接浏览器扩展，未能提取图纸'
+                                                  : '未提取到图纸'}
+                                              </strong>
+                                              <p>打开原始页面查看图纸，并核对图纸与项目的对应关系。</p>
+                                            </div>
                                           )}
                                           <span>{assetLabels[result.assetType]}</span>
                                         </div>
@@ -1361,6 +1599,17 @@ export default function App() {
                                     </button>
                                     <footer className="evidence-sheet-actions">
                                       <span>问题匹配 {result.relevance} / 4</span>
+                                      {!result.previewUrl && (
+                                        <a
+                                          className="evidence-source-action"
+                                          href={result.sourceUrl}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                        >
+                                          <ExternalLink aria-hidden="true" />
+                                          <span>打开原始图纸页</span>
+                                        </a>
+                                      )}
                                       <button
                                         type="button"
                                         aria-pressed={compared}
@@ -1381,7 +1630,7 @@ export default function App() {
 
                           <footer className="dossier-source">
                             <span>来源与权利分开记录</span>
-                            <p>{dossier.primary.sourceName} · {dossier.primary.publicationTier} · 权利 {dossier.primary.rightsStatus}</p>
+                            <p>{publicationTierLabels[dossier.primary.publicationTier]} · 权利 {rightsStatusLabels[dossier.primary.rightsStatus]}</p>
                             <a href={dossier.primary.sourceUrl} target="_blank" rel="noreferrer">打开项目来源</a>
                           </footer>
                         </article>
@@ -1521,10 +1770,10 @@ export default function App() {
               <details className="inspector-details" open>
                 <summary>来源与核验</summary>
                 <dl className="evidence-matrix">
-                  <div><dt>发布来源</dt><dd>{selectedResult.publicationTier}</dd></div>
-                  <div><dt>项目身份</dt><dd>{selectedResult.projectIdentity}</dd></div>
-                  <div><dt>图纸归属</dt><dd>{selectedResult.assetAssociation}</dd></div>
-                  <div><dt>权利状态</dt><dd>{selectedResult.rightsStatus}</dd></div>
+                  <div><dt>发布来源</dt><dd>{publicationTierLabels[selectedResult.publicationTier]}</dd></div>
+                  <div><dt>项目身份</dt><dd>{associationLabels[selectedResult.projectIdentity]}</dd></div>
+                  <div><dt>图纸归属</dt><dd>{associationLabels[selectedResult.assetAssociation]}</dd></div>
+                  <div><dt>权利状态</dt><dd>{rightsStatusLabels[selectedResult.rightsStatus]}</dd></div>
                 </dl>
                 <section className="claim-block"><h3>来源支持的事实</h3><p>{selectedResult.fact}</p></section>
                 {selectedResult.evidenceClaims.map((claim) => (

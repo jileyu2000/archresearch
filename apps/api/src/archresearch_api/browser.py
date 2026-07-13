@@ -42,6 +42,10 @@ class PairingCodeRead(StrictModel):
     expires_in_seconds: int = PAIRING_CODE_TTL_SECONDS
 
 
+class BrowserStatusRead(StrictModel):
+    connected: bool
+
+
 class BrowserAuthenticate(StrictModel):
     type: Literal["browser.authenticate"]
     protocol_version: Literal[1]
@@ -273,6 +277,10 @@ class BrowserBroker:
     def bind_loop(self) -> None:
         self._loop = asyncio.get_running_loop()
 
+    @property
+    def connected(self) -> bool:
+        return self._socket is not None
+
     async def attach(self, socket: BrowserSocket) -> None:
         if self._socket is not socket:
             self._fail_pending(BrowserUnavailableError("Browser connection was replaced"))
@@ -412,6 +420,10 @@ def create_browser_router(
     )
     def issue_pairing_code() -> PairingCodeRead:
         return PairingCodeRead(code=authority.issue_code())
+
+    @router.get("/browser/status", response_model=BrowserStatusRead)
+    def browser_status() -> BrowserStatusRead:
+        return BrowserStatusRead(connected=broker.connected)
 
     @router.websocket("/browser")
     async def browser_socket(websocket: WebSocket) -> None:

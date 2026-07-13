@@ -34,6 +34,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | 14. M13 Research prompt vertical proportion | complete | Semantic 152/132/108px prompt heights, 2048/1440/1024/700/390 visual acceptance, zero detector findings and 40 Board tests |
 | 15. M14 Research answer and method comparison | complete | Result task provenance, evidence-backed method summary and five-row comparison matrix pass 1440/390 browser acceptance and 40 Board tests |
 | 16. M15 Decomposed deep research dossiers | complete | Post-audit depth, evidence, retry, durable traffic and retention boundaries pass 137 API tests, 41 Board tests, 111 Extension tests, 6 packaged-Chrome E2E cases and the full repository gate |
+| 17. M16 Chinese research results and reliable previews | complete | Chinese provider contracts, browser readiness/pairing, conservative crop enrichment and truthful legacy recovery pass 141 API tests, 45 Board tests, 111 Extension tests, 6 packaged-Chrome E2E cases and 1440/390 Chromium acceptance |
 
 ## M6 completion summary
 
@@ -128,3 +129,13 @@ The code delivery is complete. These product claims require user-owned credentia
 | The first post-audit static gate found two unformatted Python files and one unsorted import block | 1 | Apply the project Ruff formatter/import fixer, then rerun the complete API and repository gates |
 | A read-only audit started a second full verification before the main gate | 1 | Stop launching commands from the audit workstream and treat the main thread's single exit-0 run as the authoritative result |
 | The final secret scan treated a newline after an empty `.env` assignment as a value | 1 | Restrict assignment whitespace to spaces/tabs instead of `\s`; all 39 changed files then scan with zero credential-pattern matches |
+| The cached in-app browser skill path changed before M16 | 1 | Discover the currently installed `control-in-app-browser/SKILL.md` with `rg --files` before browser acceptance |
+| The first M16 API summary expanded the wrong PowerShell result property | 1 | Inspect the actual result item contract, then summarize the eight `project_name` records without changing data |
+| A Windows `rg` command passed a wildcard path literally to the executable | 1 | Enumerate package files first and filter them with `rg`; do not pass `browser*.py` as a Windows path argument |
+| The image-pipeline audit selected a stale, nonexistent content-route test node | 1 | Locate the current test name with `rg` before running a focused pytest node |
+| A Board audit repeated the Windows wildcard-path mistake on `*.py` | 1 | Use explicit files or enumerate paths before filtering; no project code was affected |
+| The first crop-association format gate found one unformatted workflow block | 1 | Run Ruff format on the touched workflow file, then re-run Ruff check and format check |
+| An `rg` pattern beginning with `--icon-lg` was parsed as a command flag | 1 | Add the `--` end-of-options marker before patterns that start with hyphens |
+| The first responsive CSS patch assumed the media query began with `.app-header` | 1 | Inspect the exact `@media` opening and insert the rules after its existing `:root` block |
+| The new-run UI test expected a non-existent “正在检索网页” status phrase | 1 | Reuse the product's established “正在搜索” state vocabulary and keep the implementation unchanged |
+| The ChatGPT Chrome control extension was unavailable after the documented retry | 1 | Keep browser-profile state untouched and use isolated system-Chrome Playwright only for local ArchResearch visual acceptance |

@@ -437,7 +437,8 @@ class OpenAIResearchProvider:
                 f"Research goal: {goal.value}. Create exactly {target} distinct, searchable "
                 "architecture research subquestions. Each subquestion must isolate one "
                 "design, source-verification, or visible-reference issue; give it a short "
-                "stable lowercase ASCII id and explain why evidence is needed. "
+                "stable lowercase ASCII id and explain why evidence is needed. Write every "
+                "user-facing subquestion question and rationale in Simplified Chinese. "
                 f"User question: {question}. Workspace context: {workspace_context or '(none)'}."
             ),
             text_format=ResearchPlan,
@@ -476,6 +477,11 @@ class OpenAIResearchProvider:
                 "mechanism visible across the evidence, and at least two concrete transfer "
                 "steps with limitations. When one project exposes complementary drawings, "
                 "prefer 2 or 3 useful assets from that project instead of a single image. "
+                "Write all user-facing analysis in Simplified Chinese, regardless of the "
+                "query or source language. This applies to project_context, "
+                "design_mechanism, every item in transfer_strategy, facts, observations, "
+                "inferences, and limitations. Official project names may remain in their "
+                "original language, with a Simplified Chinese name added when available. "
                 "Every project condition presented as fact must be source-supported; repeat "
                 "that supported project context in the facts list. "
                 "Prefer project or publisher pages that expose plan, section, elevation, "

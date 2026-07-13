@@ -1036,6 +1036,61 @@ def test_browser_observation_enriches_provider_analysis_without_clearing_it(
     assert candidate.observations == analysis["observations"]
 
 
+def test_browser_crop_attaches_to_unique_same_source_provider_candidate_without_image(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
+    source = ProviderSource(
+        url="https://studio.example/foundry",
+        publisher="Studio",
+        title="Foundry project",
+        publication_tier=PublicationTier.primary,
+    )
+    provider_asset = _asset("foundry", 1).model_copy(
+        update={
+            "source_url": source.url,
+            "image_url": None,
+            "asset_type": ArchitectureAssetType.section,
+        }
+    )
+    result = ProviderSearchResult(assets=[provider_asset], sources=[source])
+    _persist_sources(database, run_id, result)
+    _persist_assets(database, run_id, result, subquestion_id="program")
+    crop_path = tmp_path / "foundry-section.png"
+    crop_path.write_bytes(b"crop")
+
+    added = _persist_inspected_assets(
+        database,
+        run_id,
+        source,
+        [
+            InspectedVisual(
+                source_url=source.url,
+                image_url="https://studio.example/images/foundry-section.png",
+                storage_path=crop_path,
+                perceptual_hash="foundry-section",
+                asset_type=ArchitectureAssetType.section,
+                relevance=4,
+                observations=["裁图中可见新功能层与旧桁架脱开。"],
+            )
+        ],
+        subquestion_id="program",
+    )
+
+    with database.session_factory() as session:
+        assets = list(
+            session.scalars(select(AssetCandidate).where(AssetCandidate.run_id == run_id))
+        )
+    assert added == 0
+    assert len(assets) == 1
+    assert assets[0].project_name == provider_asset.project_name
+    assert assets[0].asset_type == ArchitectureAssetType.section.value
+    assert assets[0].image_url == "https://studio.example/images/foundry-section.png"
+    assert assets[0].storage_path == str(crop_path)
+    assert assets[0].perceptual_hash == "foundry-section"
+    assert assets[0].observations[-1] == "裁图中可见新功能层与旧桁架脱开。"
+
+
 def test_same_url_source_and_candidate_publication_tiers_only_upgrade(
     tmp_path: Path,
 ) -> None:

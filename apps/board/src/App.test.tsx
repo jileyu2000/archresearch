@@ -68,6 +68,10 @@ interface LiveFetchOptions {
   existingRunStatus?: string | null
   subquestions?: typeof liveSubquestions
   candidateOverrides?: Record<string, unknown>
+  eventSummary?: unknown
+  eventTool?: string
+  browserConnected?: boolean
+  pairingCode?: string
 }
 
 const liveQuestion = '旧厂房如何植入新的公共功能？'
@@ -82,6 +86,15 @@ function createLiveFetch(options: LiveFetchOptions = {}) {
     const path = String(input)
     const method = init?.method ?? 'GET'
 
+    if (path === '/v1/browser/status' && method === 'GET') {
+      return Promise.resolve(jsonResponse({ connected: options.browserConnected ?? false }))
+    }
+    if (path === '/v1/browser/pairing-code' && method === 'POST') {
+      return Promise.resolve(jsonResponse({
+        code: options.pairingCode ?? '482917',
+        expires_in_seconds: 300,
+      }, 201))
+    }
     if (path === '/v1/workspaces' && method === 'GET') return Promise.resolve(jsonResponse([workspace]))
     if (path === '/v1/workspaces' && method === 'POST') {
       return Promise.resolve(jsonResponse({ ...workspace, id: 'workspace-new', name: '新工作区' }, 201))
@@ -220,11 +233,11 @@ function createLiveFetch(options: LiveFetchOptions = {}) {
             id: 'trace-live',
             sequence: 1,
             stage: 'searching',
-            tool: 'web_search',
+            tool: options.eventTool ?? 'web_search',
             duration_ms: 120,
             cost_usd: 0.02,
             retry_count: 0,
-            summary: '已完成实时网页查询',
+            summary: options.eventSummary ?? '已完成实时网页查询',
           })}\n\n`,
           { headers: { 'content-type': 'text/event-stream' } },
         ),
@@ -627,9 +640,103 @@ describe('research board', () => {
 
     await user.click(await screen.findByRole('button', { name: `打开研究：${liveQuestion}` }))
     expect(await screen.findByText('Live Mill Conversion')).toBeVisible()
-    expect(screen.getByRole('img', { name: 'Live Mill Conversion 暂无预览' })).toBeVisible()
+    expect(screen.getByText('未提取到图纸')).toBeVisible()
+    expect(screen.getByText('打开原始页面查看图纸，并核对图纸与项目的对应关系。')).toBeVisible()
+    expect(screen.getByRole('link', { name: '打开原始图纸页' })).toHaveAttribute(
+      'href',
+      'https://example.com/live-mill',
+    )
+    expect(screen.queryByText('预览不可用')).not.toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('研究已完成')
     expect(screen.queryByRole('dialog', { name: '来源检视器' })).not.toBeInTheDocument()
+  })
+
+  it('replaces legacy English analysis and evidence enums with honest Chinese display text', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', createLiveFetch({
+      existingRunStatus: 'completed',
+      candidateOverrides: {
+        project_context: 'The project retains the original factory frame.',
+        design_mechanism: 'A new public route crosses the old hall.',
+        transfer_strategy: ['Separate public and service circulation.'],
+        facts: ['The project page identifies the retained structure.'],
+        observations: ['The section shows a new inserted floor.'],
+        inferences: ['Use the inserted floor as a circulation buffer.'],
+        limitations: ['The structural span must be checked.'],
+        publication_tier: 'trusted_secondary',
+        rights_status: 'restricted',
+      },
+    }))
+    renderBoard()
+
+    await user.click(await screen.findByRole('button', { name: `打开研究：${liveQuestion}` }))
+    expect(await screen.findByText('此历史结果的项目条件为外文；重新研究后可生成中文分析。')).toBeVisible()
+    expect(screen.getByText('可信二手来源 · 权利 受限')).toBeVisible()
+    expect(screen.queryByText('The project retains the original factory frame.')).not.toBeInTheDocument()
+    expect(screen.queryByText('A new public route crosses the old hall.')).not.toBeInTheDocument()
+  })
+
+  it('explains when drawings are missing because the browser extension was disconnected', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', createLiveFetch({
+      existingRunStatus: 'completed',
+      eventTool: 'browser',
+      eventSummary: {
+        source_url: 'https://example.com/live-mill',
+        status: 'skipped',
+        error_type: 'BrowserUnavailableError',
+      },
+    }))
+    renderBoard()
+
+    await user.click(await screen.findByRole('button', { name: `打开研究：${liveQuestion}` }))
+    expect(await screen.findByText('此次未连接浏览器扩展，未能提取图纸')).toBeVisible()
+    expect(screen.getByRole('link', { name: '打开原始图纸页' })).toHaveAttribute(
+      'href',
+      'https://example.com/live-mill',
+    )
+    expect(screen.getByRole('button', { name: '重新研究' })).toBeDisabled()
+  })
+
+  it('shows a pairing code before research when drawing extraction is disconnected', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', createLiveFetch({ browserConnected: false, pairingCode: '731904' }))
+    renderBoard()
+
+    expect(await screen.findByText('图纸提取未连接')).toBeVisible()
+    expect(screen.getByText('仍可开始研究，但只能返回文字线索。')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '生成配对码' }))
+    expect(await screen.findByText('731904')).toBeVisible()
+    expect(screen.getByText('在 ArchResearch Chrome 扩展中输入配对码，并授予本次网页读取权限。')).toBeVisible()
+  })
+
+  it('starts a new run from an image-less completed result after the extension connects', async () => {
+    const user = userEvent.setup()
+    const fetchMock = createLiveFetch({
+      existingRunStatus: 'completed',
+      initialStatus: 'searching',
+      browserConnected: true,
+      eventTool: 'browser',
+      eventSummary: {
+        source_url: 'https://example.com/live-mill',
+        status: 'skipped',
+        error_type: 'BrowserUnavailableError',
+      },
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    await user.click(await screen.findByRole('button', { name: `打开研究：${liveQuestion}` }))
+    expect(await screen.findByText('扩展现已连接，重新研究后可提取网页中的图纸。')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '重新研究' }))
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/v1/workspaces/workspace-live/runs',
+        expect.objectContaining({ method: 'POST' }),
+      )
+    })
+    expect(screen.getByRole('status')).toHaveTextContent('正在搜索')
   })
 
   it('does not flash the previous run results after a new run starts', async () => {

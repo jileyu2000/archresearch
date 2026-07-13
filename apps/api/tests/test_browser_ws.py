@@ -82,6 +82,24 @@ def test_pairing_code_rotates_once_and_persistent_token_survives_restart(tmp_pat
             }
 
 
+def test_browser_status_tracks_authenticated_extension_connection(client: TestClient) -> None:
+    assert client.get("/v1/browser/status").json() == {"connected": False}
+    pairing_code = client.post("/v1/browser/pairing-code").json()["code"]
+
+    with client.websocket_connect("/v1/browser") as websocket:
+        websocket.send_json(
+            {
+                "type": "browser.authenticate",
+                "protocol_version": 1,
+                "token": pairing_code,
+            }
+        )
+        assert websocket.receive_json()["type"] == "browser.paired"
+        assert client.get("/v1/browser/status").json() == {"connected": True}
+
+    assert client.get("/v1/browser/status").json() == {"connected": False}
+
+
 def test_invalid_authentication_is_rejected_without_echoing_secret(client: TestClient) -> None:
     hostile_secret = "secret-from-password-field"
 
