@@ -173,3 +173,9 @@
 - M12 ships without a new animation dependency. The existing task-bound `ClickSpark` remains the only expressive motion, while the global canvas is static and supports `prefers-reduced-motion` by construction.
 - Tablet QA found the only non-blocking usability gap: 700px header actions were 38px high and comparison controls were 30px. The `≤860px` global contract now promotes both to 44px, keeps card actions visible for touch input and preserves the two-column result wall without overflow.
 - Repository verification after M12 passes 105 API tests, 39 Board tests, 111 extension tests and 6 packaged-Chrome E2E cases, plus Python/TypeScript lint, type checks, production builds, PowerShell contracts and all 30/108 evaluation fixtures.
+
+## M13 Research prompt vertical proportion
+
+- The 1600px-wide composer made the former 108px textarea read as a shallow strip. The user's requested correction is vertical working space, not another width increase or a chat-style layout change.
+- The prompt now uses one semantic responsive token: 152px on desktop, 132px at `≤860px` and the existing 108px at `≤620px`. Vertical resize remains available for longer briefs.
+- Exact Chromium acceptance at 2048/1440/1024/700/390px confirms the intended heights, unchanged mobile density and no document-level horizontal overflow. The design detector reports zero findings; Board verification passes 40 tests plus lint, typecheck and production build.

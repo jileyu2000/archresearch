@@ -58,3 +58,5 @@
 - Accepted M12 at 2048/1440/1024/700/390px with exact viewport widths, no page overflow, wide-only line fragments, compact-screen decoration reduction and correct modal stacking. The design detector reports zero findings.
 - Closed the tablet touch-target follow-up with a versioned design-system contract: at `≤860px`, header and card actions are at least 44px and remain visible for touch input without changing desktop density.
 - Re-ran the complete delivery gate after M12: 105 API tests, 39 Board tests, 111 extension tests, 6 packaged Chrome E2E cases, lint/type/build, PowerShell contracts and all 30/108 evaluation fixtures pass.
+- Completed M13 prompt proportion correction: increased the main problem input to 152px on desktop and 132px on tablet while preserving the 108px mobile height and user-controlled vertical resize.
+- Accepted the updated homepage at 2048/1440/1024/700/390px with no page overflow and zero design-detector findings. Board verification passes 40 tests, lint, typecheck and production build.

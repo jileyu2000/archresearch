@@ -31,6 +31,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | 11. M10 Useful research-workbench home | complete | One composer, three research paths, four problem starters and lazy-loaded recent runs pass 1280/1024/700/390 browser acceptance, workspace-race regression tests and the full repository gate |
 | 12. M11 Livelier studio identity | complete | Product-first motion study, blueprint task island, global visual/motion rules, 1440/1024/700/390 acceptance, zero design-detector findings and the full repository gate |
 | 13. M12 Global architectural studio canvas | complete | One global 128px drafting canvas, 1760/1600px responsive composition, route-specific plan/section fragments, 2048/1440/1024/700/390 acceptance, 39 Board tests and the full repository gate |
+| 14. M13 Research prompt vertical proportion | complete | Semantic 152/132/108px prompt heights, 2048/1440/1024/700/390 visual acceptance, zero detector findings and 40 Board tests |
 
 ## M6 completion summary
 
