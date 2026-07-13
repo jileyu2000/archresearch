@@ -60,6 +60,8 @@ export interface CoverageReport {
 export interface ResearchRun {
   id: string
   workspaceId?: string
+  question: string
+  goal: ResearchGoal
   status: RunStatus
   mode: ResearchMode
   budget?: Record<string, number>
@@ -74,6 +76,8 @@ export interface ResearchRun {
 interface ApiResearchRun {
   id: string
   workspace_id?: string
+  question: string
+  goal: ResearchGoal
   status: RunStatus
   budget_mode: ResearchMode
   budget?: Record<string, number>
@@ -192,6 +196,8 @@ function normalizeRun(run: ApiResearchRun): ResearchRun {
   return {
     id: run.id,
     workspaceId: run.workspace_id,
+    question: run.question,
+    goal: run.goal,
     status: run.status,
     mode: run.budget_mode,
     budget: run.budget,

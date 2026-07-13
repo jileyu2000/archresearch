@@ -109,6 +109,8 @@ describe('local API client', () => {
         {
           id: 'run-latest',
           workspace_id: 'workspace-live',
+          question: '旧厂房如何植入新的公共功能？',
+          goal: 'precedent_research',
           status: 'completed',
           budget_mode: 'quick',
           checkpoint_stage: 'composing',
@@ -122,6 +124,8 @@ describe('local API client', () => {
       expect.objectContaining({
         id: 'run-latest',
         workspaceId: 'workspace-live',
+        question: '旧厂房如何植入新的公共功能？',
+        goal: 'precedent_research',
         status: 'completed',
         mode: 'quick',
         checkpointStage: 'composing',

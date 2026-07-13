@@ -106,3 +106,32 @@
 - A completed historical run is now data restored in the background, not the current view. The homepage remains a single problem composer and exposes “查看上次结果” only when history exists; the result view exposes the inverse “发起新研究” transition.
 - An unfinished run is the intentional exception: it resumes directly into progress/results so cancellation and recovery remain visible. Explicit `?demo=1` continues to open a result demonstration.
 - “研究结果” names the result section; “图纸类型” remains only a filter. The accessible collection name is “研究结果列表”, and the shared page container is “研究工作区”.
+
+## M10 Homepage audit
+
+- Audit scope: the logged-in `/` workbench at 1280×720. The user goal is to state a concrete architecture problem, understand what kinds of research are possible, and reopen prior work without landing in a full result wall.
+- Strengths: the screen has one unmistakable primary action, a properly labelled question field, a visible workspace switcher and an explicit route to the previous result.
+- Structural risk: after the composer, roughly two thirds of the viewport is inert canvas. The page tells users where to type but does not teach the three supported research goals, provide varied architecture-specific starting points or make previous work legible in context.
+- The single example sentence forces all onboarding into placeholder text, which disappears as soon as the user types. “查看上次结果” in the far header is useful navigation but too weak to function as a recent-work surface.
+- The accepted direction is a workbench home, not a marketing landing: one dominant composer, three compact goal paths, four problem starters and a small recent-research list. Full result cards, feature sales copy, dashboards and generic “how it works” panels remain excluded.
+- Accessibility evidence from the current DOM confirms a labelled textarea and named buttons. Screenshot evidence alone cannot establish keyboard order, focus visibility, contrast or zoom resilience; those remain implementation checks.
+
+## M10 Mature-product homepage patterns
+
+- Perplexity starts a session from the homepage query box and keeps search mode, source choice and file attachment adjacent to that primary input; durable sessions move to History rather than remaining as full answers on the homepage. Source: https://www.perplexity.ai/help-center/en/articles/10354769-what-is-a-thread
+- NotebookLM pairs a “create/find sources” prompt with named recent-work groupings such as Recent, Shared and Title. Its source-search results explain why each source relates before import. This supports a compact recent-research section below ArchResearch's composer, not a restored result wall. Source: https://support.google.com/notebooklm/answer/16296687
+- Figma's file browser makes Recents a first-class return path and keeps templates/community discovery nearby. The transferable idea is “continue work + start from a known pattern”; ArchResearch should use architecture problem starters instead of generic templates or a marketplace. Source: https://help.figma.com/hc/en-us/articles/14381406380183-Guide-to-the-file-browser
+- Notion places its AI search module at the top of Home while search surfaces recently viewed pages for immediate return. The transferable idea is to combine one dominant action with contextual recent work, without visually equating both. Source: https://www.notion.com/help/search
+- Linear team home uses pinned resources and shortcuts to common destinations. For a single-user architecture tool, three goal-specific research paths are enough; adding a permanent sidebar, team metrics or configurable dashboard would be unnecessary. Source: https://linear.app/docs/default-team-pages
+- Combined pattern: one primary composer, lightweight mode affordances next to it, 3–4 domain-specific starter questions, and recent work below. This is materially more useful than a lone hero form but remains a workbench rather than a marketing homepage.
+
+## M10 Accepted workbench home
+
+- The homepage now combines one dominant problem composer with three visible research paths, four architecture-specific problem starters and up to three recent task summaries. Full drawing cards and evidence remain exclusive to the result view.
+- Completed historical runs no longer trigger result/board/evidence hydration during bootstrap. Opening “查看上次结果” or a recent-task row loads the selected run on demand, while unfinished runs still resume automatically.
+- The starter rows fill and focus the question without submitting; research-path buttons expose pressed state and remain in the request contract. Attachment fields and research depth stay progressively disclosed.
+- The home follows the global 4/8px rhythm, 960px work surface, flat structure-line hierarchy and one blue primary action. Static composer shadow was removed; the lower index uses open rows rather than generic feature cards.
+- Every research path now has a specific prompt, starter actions say that they fill the question, and global geometry is aligned to the documented 36px controls, 16/20px icons and 8px control radius.
+- Historical hydration, terminal-result hydration, new-run submission, active polling, cancellation and retry are request-scoped. Switching workspaces cannot revive an old poll, inject a late response, close the new home or flash the previous result wall; a completed in-flight poll cannot overwrite a successful cancellation.
+- Browser acceptance passed at 1280×720, 1024×768, 700×800 and 390×844 with no horizontal overflow. The 700px footer reflows before controls collide; mobile research-path, attachment and submit targets are at least 44px high. The before/after comparison confirms that the former inert canvas is now used for starting and continuing work without becoming a result wall.
+- Repository verification remains green: 105 API tests, 35 Board tests, 111 extension tests, 6 packaged Chrome E2E cases, lint/type/build checks, PowerShell contracts and all 30/108 evaluation fixtures. The design detector reports no findings and the muted prompt text measures 5.25:1 contrast.

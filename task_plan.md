@@ -28,6 +28,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | 8. M7 Board usability simplification | complete | One prompt-and-results workflow, contextual evidence/tools, 1440/1024/390 acceptance, 26 Board tests and repository-wide verification pass |
 | 9. M8 Mature-product visual redesign | complete | Mature-product study, global DESIGN.md, ordered digital pin-up wall, modal accessibility, 1440/1024/390 acceptance, zero design-detector findings and full repository verification pass |
 | 10. M9 Problem-first home and result separation | complete | Completed runs no longer replace the default question composer; explicit “查看上次结果 / 发起新研究” transitions pass 27 Board tests and live-browser acceptance |
+| 11. M10 Useful research-workbench home | complete | One composer, three research paths, four problem starters and lazy-loaded recent runs pass 1280/1024/700/390 browser acceptance, workspace-race regression tests and the full repository gate |
 
 ## M6 completion summary
 
@@ -83,3 +84,4 @@ The code delivery is complete. These product claims require user-owned credentia
 | The system `python` alias was unavailable during M9 session recovery | 1 | Re-run recovery with the project-owned API virtual environment instead of relying on a machine-global alias |
 | The cached browser-skill version path changed between sessions | 1 | Discover the installed `SKILL.md` with `rg --files` and use the current package path |
 | The first M9 test insertion used a stale neighboring test name | 1 | Inspect the exact test boundaries and reapply the small patch at the verified location |
+| A multiline inline Python contrast probe was escaped literally by PowerShell | 1 | Replace it with a single-line Node calculation; the placeholder contrast is 5.25:1 |

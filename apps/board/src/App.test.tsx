@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -64,6 +64,8 @@ interface LiveFetchOptions {
   existingRunStatus?: string | null
 }
 
+const liveQuestion = '旧厂房如何植入新的公共功能？'
+
 function createLiveFetch(options: LiveFetchOptions = {}) {
   let pollIndex = 0
   const initialStatus = options.initialStatus ?? 'completed'
@@ -80,6 +82,9 @@ function createLiveFetch(options: LiveFetchOptions = {}) {
         jsonResponse(
           {
             id: 'run-live',
+            workspace_id: 'workspace-live',
+            question: liveQuestion,
+            goal: 'precedent_research',
             status: initialStatus,
             budget_mode: 'balanced',
             coverage_report:
@@ -105,10 +110,13 @@ function createLiveFetch(options: LiveFetchOptions = {}) {
                 {
                   id: 'run-live',
                   workspace_id: 'workspace-live',
+                  question: liveQuestion,
+                  goal: 'precedent_research',
                   status: options.existingRunStatus,
                   budget_mode: 'balanced',
                   checkpoint_stage: options.existingRunStatus,
                   coverage_report: {},
+                  created_at: '2026-07-13T08:30:00Z',
                 },
               ]
             : [],
@@ -122,6 +130,9 @@ function createLiveFetch(options: LiveFetchOptions = {}) {
       return Promise.resolve(
         jsonResponse({
           id: 'run-live',
+          workspace_id: 'workspace-live',
+          question: liveQuestion,
+          goal: 'precedent_research',
           status,
           budget_mode: 'balanced',
           coverage_report:
@@ -139,11 +150,25 @@ function createLiveFetch(options: LiveFetchOptions = {}) {
     }
     if (path === '/v1/runs/run-live/cancel' && method === 'POST') {
       return Promise.resolve(
-        jsonResponse({ id: 'run-live', status: 'cancelled', budget_mode: 'balanced' }),
+        jsonResponse({
+          id: 'run-live',
+          workspace_id: 'workspace-live',
+          question: liveQuestion,
+          goal: 'precedent_research',
+          status: 'cancelled',
+          budget_mode: 'balanced',
+        }),
       )
     }
     if (path === '/v1/runs/run-live/retry' && method === 'POST') {
-      return Promise.resolve(jsonResponse({ id: 'run-live', status: 'created', budget_mode: 'balanced' }))
+      return Promise.resolve(jsonResponse({
+        id: 'run-live',
+        workspace_id: 'workspace-live',
+        question: liveQuestion,
+        goal: 'precedent_research',
+        status: 'created',
+        budget_mode: 'balanced',
+      }))
     }
     if (path === '/v1/runs/run-live/results') {
       return Promise.resolve(
@@ -229,6 +254,215 @@ function createLiveFetch(options: LiveFetchOptions = {}) {
   return fetchMock
 }
 
+function createWorkspaceRaceFetch() {
+  let releaseHydration = () => {}
+  const hydrationGate = new Promise<void>((resolve) => {
+    releaseHydration = resolve
+  })
+  const secondWorkspace = { ...workspace, id: 'workspace-two', name: '第二工作区' }
+  const latestRun = {
+    id: 'run-latest',
+    workspace_id: 'workspace-live',
+    question: '已完成的新任务',
+    goal: 'precedent_research',
+    status: 'completed',
+    budget_mode: 'balanced',
+  }
+  const oldRun = {
+    id: 'run-old',
+    workspace_id: 'workspace-live',
+    question: '仍在运行的旧任务',
+    goal: 'precedent_research',
+    status: 'searching',
+    budget_mode: 'quick',
+  }
+  const delayed = (response: Response) => hydrationGate.then(() => response)
+  const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+    const path = String(input)
+    if (path === '/v1/workspaces') return Promise.resolve(jsonResponse([workspace, secondWorkspace]))
+    if (path === '/v1/workspaces/workspace-live/runs') {
+      return Promise.resolve(jsonResponse([latestRun, oldRun]))
+    }
+    if (path === '/v1/workspaces/workspace-two/runs') return Promise.resolve(jsonResponse([]))
+    if (path === '/v1/runs/run-old/results') return delayed(jsonResponse([]))
+    if (path === '/v1/runs/run-old/board') {
+      return delayed(jsonResponse({ id: 'board-old', run_id: 'run-old', selected_asset_ids: [] }))
+    }
+    if (path === '/v1/runs/run-old/user-state') {
+      return delayed(jsonResponse({ saved: [], rejected: [] }))
+    }
+    if (path === '/v1/runs/run-old/events') {
+      return delayed(new Response('', { headers: { 'content-type': 'text/event-stream' } }))
+    }
+    if (path === '/v1/runs/run-old') {
+      return Promise.resolve(jsonResponse({ ...oldRun, status: 'completed' }))
+    }
+    return Promise.reject(new TypeError(`Unexpected request: GET ${path}`))
+  })
+  return { fetchMock, releaseHydration }
+}
+
+function createSubmitRaceFetch(fail = false) {
+  let releaseStart = () => {}
+  const startGate = new Promise<void>((resolve) => {
+    releaseStart = resolve
+  })
+  const secondWorkspace = { ...workspace, id: 'workspace-two', name: '第二工作区' }
+  const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input)
+    const method = init?.method ?? 'GET'
+    if (path === '/v1/workspaces' && method === 'GET') {
+      return Promise.resolve(jsonResponse([workspace, secondWorkspace]))
+    }
+    if (path === '/v1/workspaces/workspace-live/runs' && method === 'GET') {
+      return Promise.resolve(jsonResponse([]))
+    }
+    if (path === '/v1/workspaces/workspace-two/runs' && method === 'GET') {
+      return Promise.resolve(jsonResponse([]))
+    }
+    if (path === '/v1/workspaces/workspace-live/runs' && method === 'POST') {
+      return startGate.then(() => {
+        if (fail) throw new TypeError('旧工作区请求失败')
+        return jsonResponse({
+          id: 'run-old-workspace',
+          workspace_id: 'workspace-live',
+          question: '来自旧工作区的请求',
+          goal: 'precedent_research',
+          status: 'searching',
+          budget_mode: 'balanced',
+        }, 201)
+      })
+    }
+    return Promise.reject(new TypeError(`Unexpected request: ${method} ${path}`))
+  })
+  return { fetchMock, releaseStart, startGate }
+}
+
+function createPollingWorkspaceRaceFetch() {
+  let releasePoll = () => {}
+  const pollGate = new Promise<void>((resolve) => {
+    releasePoll = resolve
+  })
+  const secondWorkspace = { ...workspace, id: 'workspace-two', name: '第二工作区' }
+  const activeRun = {
+    id: 'run-polling',
+    workspace_id: 'workspace-live',
+    question: '旧工作区正在研究的任务',
+    goal: 'precedent_research',
+    status: 'searching',
+    budget_mode: 'balanced',
+  }
+  const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input)
+    const method = init?.method ?? 'GET'
+    if (path === '/v1/workspaces') return Promise.resolve(jsonResponse([workspace, secondWorkspace]))
+    if (path === '/v1/workspaces/workspace-live/runs') return Promise.resolve(jsonResponse([activeRun]))
+    if (path === '/v1/workspaces/workspace-two/runs') return Promise.resolve(jsonResponse([]))
+    if (path === '/v1/runs/run-polling/results') return Promise.resolve(jsonResponse([]))
+    if (path === '/v1/runs/run-polling/board') {
+      return Promise.resolve(jsonResponse({ id: 'board-polling', run_id: 'run-polling', selected_asset_ids: [] }))
+    }
+    if (path === '/v1/runs/run-polling/user-state') {
+      return Promise.resolve(jsonResponse({ saved: [], rejected: [] }))
+    }
+    if (path === '/v1/runs/run-polling/events') {
+      return Promise.resolve(new Response('', { headers: { 'content-type': 'text/event-stream' } }))
+    }
+    if (path === '/v1/boards/board-polling/style-profile') {
+      return Promise.resolve(jsonResponse({ detail: 'Style profile not found' }, 404))
+    }
+    if (path === '/v1/runs/run-polling/cancel' && method === 'POST') {
+      return Promise.resolve(jsonResponse({ ...activeRun, status: 'cancelled' }))
+    }
+    if (path === '/v1/runs/run-polling') {
+      return pollGate.then(() => jsonResponse({ ...activeRun, status: 'completed' }))
+    }
+    return Promise.reject(new TypeError(`Unexpected request: GET ${path}`))
+  })
+  return { fetchMock, releasePoll, pollGate }
+}
+
+function createTerminalSubmitHydrationRaceFetch() {
+  let releaseHydration = () => {}
+  const hydrationGate = new Promise<void>((resolve) => {
+    releaseHydration = resolve
+  })
+  const secondWorkspace = { ...workspace, id: 'workspace-two', name: '第二工作区' }
+  const completedRun = {
+    id: 'run-terminal-submit',
+    workspace_id: 'workspace-live',
+    question: '即时完成的旧工作区任务',
+    goal: 'precedent_research',
+    status: 'completed',
+    budget_mode: 'balanced',
+  }
+  const delayed = (response: Response) => hydrationGate.then(() => response)
+  const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input)
+    const method = init?.method ?? 'GET'
+    if (path === '/v1/workspaces') return Promise.resolve(jsonResponse([workspace, secondWorkspace]))
+    if (path === '/v1/workspaces/workspace-live/runs' && method === 'GET') return Promise.resolve(jsonResponse([]))
+    if (path === '/v1/workspaces/workspace-two/runs' && method === 'GET') return Promise.resolve(jsonResponse([]))
+    if (path === '/v1/workspaces/workspace-live/runs' && method === 'POST') {
+      return Promise.resolve(jsonResponse(completedRun, 201))
+    }
+    if (path === '/v1/runs/run-terminal-submit/results') return delayed(jsonResponse([]))
+    if (path === '/v1/runs/run-terminal-submit/board') {
+      return delayed(jsonResponse({ id: 'board-terminal-submit', run_id: 'run-terminal-submit', selected_asset_ids: [] }))
+    }
+    if (path === '/v1/runs/run-terminal-submit/user-state') {
+      return delayed(jsonResponse({ saved: [], rejected: [] }))
+    }
+    if (path === '/v1/runs/run-terminal-submit/events') {
+      return delayed(new Response('', { headers: { 'content-type': 'text/event-stream' } }))
+    }
+    return Promise.reject(new TypeError(`Unexpected request: ${method} ${path}`))
+  })
+  return { fetchMock, releaseHydration, hydrationGate }
+}
+
+function createCancelWorkspaceRaceFetch() {
+  let releaseCancel = () => {}
+  const cancelGate = new Promise<void>((resolve) => {
+    releaseCancel = resolve
+  })
+  const secondWorkspace = { ...workspace, id: 'workspace-two', name: '第二工作区' }
+  const activeRun = {
+    id: 'run-cancel-race',
+    workspace_id: 'workspace-live',
+    question: '等待取消的旧工作区任务',
+    goal: 'precedent_research',
+    status: 'searching',
+    budget_mode: 'balanced',
+  }
+  const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input)
+    const method = init?.method ?? 'GET'
+    if (path === '/v1/workspaces') return Promise.resolve(jsonResponse([workspace, secondWorkspace]))
+    if (path === '/v1/workspaces/workspace-live/runs') return Promise.resolve(jsonResponse([activeRun]))
+    if (path === '/v1/workspaces/workspace-two/runs') return Promise.resolve(jsonResponse([]))
+    if (path === '/v1/runs/run-cancel-race/results') return Promise.resolve(jsonResponse([]))
+    if (path === '/v1/runs/run-cancel-race/board') {
+      return Promise.resolve(jsonResponse({ id: 'board-cancel-race', run_id: 'run-cancel-race', selected_asset_ids: [] }))
+    }
+    if (path === '/v1/runs/run-cancel-race/user-state') {
+      return Promise.resolve(jsonResponse({ saved: [], rejected: [] }))
+    }
+    if (path === '/v1/runs/run-cancel-race/events') {
+      return Promise.resolve(new Response('', { headers: { 'content-type': 'text/event-stream' } }))
+    }
+    if (path === '/v1/boards/board-cancel-race/style-profile') {
+      return Promise.resolve(jsonResponse({ detail: 'Style profile not found' }, 404))
+    }
+    if (path === '/v1/runs/run-cancel-race/cancel' && method === 'POST') {
+      return cancelGate.then(() => jsonResponse({ ...activeRun, status: 'cancelled' }))
+    }
+    if (path === '/v1/runs/run-cancel-race') return Promise.resolve(jsonResponse(activeRun))
+    return Promise.reject(new TypeError(`Unexpected request: ${method} ${path}`))
+  })
+  return { fetchMock, releaseCancel, cancelGate }
+}
+
 function renderBoard(search = '') {
   window.history.replaceState({}, '', `/${search}`)
   const queryClient = new QueryClient({
@@ -295,17 +529,33 @@ describe('research board', () => {
     expect(screen.getByRole('button', { name: '查看 Kamala Narayana Temple Survey 证据' })).toHaveFocus()
   })
 
-  it('loads the real workspace and teaches the initial empty state', async () => {
+  it('loads a useful research-workbench home without exposing result cards', async () => {
     const user = userEvent.setup()
     vi.stubGlobal('fetch', createLiveFetch())
     renderBoard()
 
     expect(await screen.findByText('真实工作区')).toBeVisible()
-    expect(screen.getByRole('heading', { name: '你现在想解决什么设计问题？' })).toBeVisible()
-    expect(screen.getByRole('textbox', { name: '研究问题' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: '从一个具体设计问题开始' })).toBeVisible()
+    const questionInput = screen.getByRole('textbox', { name: '研究问题' })
+    expect(questionInput).toBeVisible()
+    expect(screen.getByRole('button', { name: '设计策略' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '来源反查' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: '视觉参考' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('heading', { name: '不知道怎么描述？' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: '最近研究' })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '填入问题：流线组织，人车在入口冲突，如何重组落客和步行路径？' }))
+    expect(questionInput).toHaveValue('人车在入口冲突，如何重组落客和步行路径？')
+    expect(questionInput).toHaveFocus()
+    await user.click(screen.getByRole('button', { name: '来源反查' }))
+    expect(screen.getByRole('button', { name: '来源反查' })).toHaveAttribute('aria-pressed', 'true')
+    expect(questionInput).toHaveAttribute(
+      'placeholder',
+      '上传截图或粘贴网页链接，说明你想确认的项目或原始出处。',
+    )
     expect(screen.queryByRole('textbox', { name: '参考网页' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '添加资料和研究设置' }))
     expect(screen.getByRole('textbox', { name: '参考网页' })).toBeVisible()
+    expect(screen.queryByRole('group', { name: '研究目标' })).not.toBeInTheDocument()
     expect(screen.queryByText('Kamala Narayana Temple Survey')).not.toBeInTheDocument()
   })
 
@@ -315,8 +565,12 @@ describe('research board', () => {
     renderBoard()
 
     expect(await screen.findByRole('textbox', { name: '研究问题' })).toBeVisible()
+    expect(await screen.findByText(liveQuestion)).toBeVisible()
     expect(await screen.findByRole('button', { name: '查看上次结果' })).toBeVisible()
     expect(screen.queryByRole('heading', { name: '研究结果' })).not.toBeInTheDocument()
+    expect(
+      (fetch as ReturnType<typeof vi.fn>).mock.calls.some(([path]) => path === '/v1/runs/run-live/results'),
+    ).toBe(false)
 
     await user.click(screen.getByRole('button', { name: '查看上次结果' }))
     expect(await screen.findByRole('heading', { name: '研究结果' })).toBeVisible()
@@ -328,11 +582,180 @@ describe('research board', () => {
     vi.stubGlobal('fetch', createLiveFetch({ existingRunStatus: 'completed' }))
     renderBoard()
 
-    await user.click(await screen.findByRole('button', { name: '查看上次结果' }))
+    await user.click(await screen.findByRole('button', { name: `打开研究：${liveQuestion}` }))
     expect(await screen.findByText('Live Mill Conversion')).toBeVisible()
     expect(screen.getByRole('img', { name: 'Live Mill Conversion 暂无预览' })).toBeVisible()
     expect(screen.getByRole('status')).toHaveTextContent('研究已完成')
     expect(screen.queryByRole('dialog', { name: '来源检视器' })).not.toBeInTheDocument()
+  })
+
+  it('does not flash the previous run results after a new run starts', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal(
+      'fetch',
+      createLiveFetch({ existingRunStatus: 'completed', initialStatus: 'searching' }),
+    )
+    renderBoard()
+
+    await user.click(await screen.findByRole('button', { name: `打开研究：${liveQuestion}` }))
+    expect(await screen.findByText('Live Mill Conversion')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '发起新研究' }))
+    await user.type(screen.getByRole('textbox', { name: '研究问题' }), '开始另一个研究任务')
+    await user.click(screen.getByRole('button', { name: '开始研究' }))
+
+    expect(screen.queryByText('Live Mill Conversion')).not.toBeInTheDocument()
+  })
+
+  it('does not resume polling a historical run after switching workspaces', async () => {
+    const user = userEvent.setup()
+    const { fetchMock, releaseHydration } = createWorkspaceRaceFetch()
+    const intervalSpy = vi.spyOn(window, 'setInterval')
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    await user.click(await screen.findByRole('button', { name: '打开研究：仍在运行的旧任务' }))
+    await user.selectOptions(screen.getByRole('combobox', { name: '工作区' }), 'workspace-two')
+    await screen.findByText('第二工作区')
+    await act(async () => {
+      releaseHydration()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(intervalSpy.mock.calls.some(([, delay]) => delay === 1000)).toBe(false)
+    expect(screen.queryByText('仍在运行的旧任务')).not.toBeInTheDocument()
+  })
+
+  it('ignores a new-run response after the user switches workspaces', async () => {
+    const user = userEvent.setup()
+    const { fetchMock, releaseStart, startGate } = createSubmitRaceFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    await screen.findByText('真实工作区')
+    await user.type(screen.getByRole('textbox', { name: '研究问题' }), '来自旧工作区的请求')
+    await user.click(screen.getByRole('button', { name: '开始研究' }))
+    await user.selectOptions(screen.getByRole('combobox', { name: '工作区' }), 'workspace-two')
+    expect(screen.getByRole('combobox', { name: '工作区' })).toHaveValue('workspace-two')
+    await act(async () => {
+      releaseStart()
+      await startGate
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '打开研究：来自旧工作区的请求' })).not.toBeInTheDocument()
+  })
+
+  it('ignores a new-run failure after the user switches workspaces', async () => {
+    const user = userEvent.setup()
+    const { fetchMock, releaseStart, startGate } = createSubmitRaceFetch(true)
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    await screen.findByText('真实工作区')
+    await user.type(screen.getByRole('textbox', { name: '研究问题' }), '来自旧工作区的请求')
+    await user.click(screen.getByRole('button', { name: '开始研究' }))
+    await user.selectOptions(screen.getByRole('combobox', { name: '工作区' }), 'workspace-two')
+    await act(async () => {
+      releaseStart()
+      await startGate
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(screen.getByRole('combobox', { name: '工作区' })).toHaveValue('workspace-two')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('ignores an in-flight poll after the user switches workspaces', async () => {
+    const user = userEvent.setup()
+    const { fetchMock, releasePoll, pollGate } = createPollingWorkspaceRaceFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    expect(await screen.findByRole('status')).toHaveTextContent('正在搜索')
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => String(input) === '/v1/runs/run-polling')).toBe(true)
+    }, { timeout: 2_000 })
+    await user.selectOptions(screen.getByRole('combobox', { name: '工作区' }), 'workspace-two')
+    await act(async () => {
+      releasePoll()
+      await pollGate
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(screen.getByRole('combobox', { name: '工作区' })).toHaveValue('workspace-two')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.queryByText('旧工作区正在研究的任务')).not.toBeInTheDocument()
+  }, 4_000)
+
+  it('does not let an in-flight poll overwrite a successful cancellation', async () => {
+    const user = userEvent.setup()
+    const { fetchMock, releasePoll, pollGate } = createPollingWorkspaceRaceFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    expect(await screen.findByRole('status')).toHaveTextContent('正在搜索')
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => String(input) === '/v1/runs/run-polling')).toBe(true)
+    }, { timeout: 2_000 })
+    await user.click(screen.getByRole('button', { name: '取消研究' }))
+    expect(screen.getByRole('status')).toHaveTextContent('已取消')
+    await act(async () => {
+      releasePoll()
+      await pollGate
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(screen.getByRole('status')).toHaveTextContent('已取消')
+  }, 4_000)
+
+  it('keeps the new workspace home open when terminal hydration finishes late', async () => {
+    const user = userEvent.setup()
+    const { fetchMock, releaseHydration, hydrationGate } = createTerminalSubmitHydrationRaceFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    await screen.findByText('真实工作区')
+    await user.type(screen.getByRole('textbox', { name: '研究问题' }), '即时完成的旧工作区任务')
+    await user.click(screen.getByRole('button', { name: '开始研究' }))
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => String(input) === '/v1/runs/run-terminal-submit/results')).toBe(true)
+    })
+    await user.selectOptions(screen.getByRole('combobox', { name: '工作区' }), 'workspace-two')
+    await act(async () => {
+      releaseHydration()
+      await hydrationGate
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(screen.getByRole('heading', { name: '从一个具体设计问题开始' })).toBeVisible()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('ignores a cancellation response after the user switches workspaces', async () => {
+    const user = userEvent.setup()
+    const { fetchMock, releaseCancel, cancelGate } = createCancelWorkspaceRaceFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    expect(await screen.findByRole('status')).toHaveTextContent('正在搜索')
+    await user.click(screen.getByRole('button', { name: '取消研究' }))
+    await user.selectOptions(screen.getByRole('combobox', { name: '工作区' }), 'workspace-two')
+    await act(async () => {
+      releaseCancel()
+      await cancelGate
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(screen.getByRole('heading', { name: '从一个具体设计问题开始' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: '打开研究：等待取消的旧工作区任务' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('shows a real bootstrap error instead of substituting mock projects', async () => {

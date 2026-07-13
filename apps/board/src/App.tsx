@@ -1,6 +1,7 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity,
+  ArrowRight,
   ArrowUp,
   Check,
   CircleDashed,
@@ -72,6 +73,45 @@ const modeLabels: Record<ResearchMode, string> = {
   deep: 'Deep',
 }
 
+const goalLabels: Record<ResearchGoal, string> = {
+  precedent_research: '设计策略',
+  source_lookup: '来源反查',
+  visual_reference_search: '视觉参考',
+}
+
+const goalPlaceholders: Record<ResearchGoal, string> = {
+  precedent_research: '例如：旧建筑植入新功能时，如何拆分公共流线与后勤流线？',
+  source_lookup: '上传截图或粘贴网页链接，说明你想确认的项目或原始出处。',
+  visual_reference_search: '例如：寻找浅色轴测图、蓝灰配色和留白版式的相似表达。',
+}
+
+const problemStarters: Array<{
+  label: string
+  prompt: string
+  goal: ResearchGoal
+}> = [
+  {
+    label: '旧建更新',
+    prompt: '原有结构不动，怎样植入新的公共功能？',
+    goal: 'precedent_research',
+  },
+  {
+    label: '流线组织',
+    prompt: '人车在入口冲突，如何重组落客和步行路径？',
+    goal: 'precedent_research',
+  },
+  {
+    label: '剖面空间',
+    prompt: '层高固定，怎样建立连续的空间层次？',
+    goal: 'precedent_research',
+  },
+  {
+    label: '图纸表达',
+    prompt: '如何统一整套图纸的线型、配色和版式？',
+    goal: 'visual_reference_search',
+  },
+]
+
 const assetLabels: Record<AssetType, string> = {
   plan: '平面图',
   section: '剖面图',
@@ -127,6 +167,13 @@ function runAnnouncement(run: ResearchRun) {
     failed: '研究失败，已有结果已保留',
   }
   return labels[run.status]
+}
+
+function formatRunDate(value?: string) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(date)
 }
 
 function drawingFor(assetType: AssetType): EvidenceResult['drawing'] {
@@ -209,6 +256,7 @@ export default function App() {
   const [goal, setGoal] = useState<ResearchGoal>('precedent_research')
   const [mode, setMode] = useState<ResearchMode>('balanced')
   const [activeRun, setActiveRun] = useState<ResearchRun | null>(null)
+  const [recentRuns, setRecentRuns] = useState<ResearchRun[]>([])
   const [pollingRunId, setPollingRunId] = useState('')
   const [announcement, setAnnouncement] = useState('')
   const [actionError, setActionError] = useState('')
@@ -231,6 +279,8 @@ export default function App() {
   const [workspaceCreateOpen, setWorkspaceCreateOpen] = useState(false)
   const [inspectorOpen, setInspectorOpen] = useState(false)
   const overlayTriggerRef = useRef<HTMLElement | null>(null)
+  const questionInputRef = useRef<HTMLTextAreaElement | null>(null)
+  const hydrateRequestRef = useRef(0)
 
   const selectedResult = results.find((result) => result.id === selectedResultId)
   const overlayOpen = inspectorOpen || traceOpen || comparisonOpen || shareSummaryOpen || styleProfileOpen
@@ -278,8 +328,10 @@ export default function App() {
   }, [closeOverlays, overlayOpen])
 
   const resetWorkspaceView = useCallback(() => {
+    hydrateRequestRef.current += 1
     setPollingRunId('')
     setActiveRun(null)
+    setRecentRuns([])
     setAnnouncement('')
     setResults([])
     setSelectedResultId('')
@@ -292,6 +344,26 @@ export default function App() {
     setStyleProfile(defaultStyle)
     setComposerOpen(true)
     setResearchOptionsOpen(false)
+    setInspectorOpen(false)
+  }, [])
+
+  const updateRecentRun = useCallback((nextRun: ResearchRun) => {
+    setRecentRuns((current) => [
+      nextRun,
+      ...current.filter((run) => run.id !== nextRun.id),
+    ].slice(0, 4))
+  }, [])
+
+  const clearRunView = useCallback(() => {
+    setResults([])
+    setSelectedResultId('')
+    setBoardId('')
+    setComparisonIds([])
+    setSavedIds([])
+    setRejectedIds([])
+    setNotes({})
+    setTraceEvents([])
+    setStyleProfile(defaultStyle)
     setInspectorOpen(false)
   }, [])
 
@@ -364,6 +436,27 @@ export default function App() {
     }
   }, [])
 
+  const openRun = useCallback(async (run: ResearchRun) => {
+    const requestId = hydrateRequestRef.current + 1
+    hydrateRequestRef.current = requestId
+    setPollingRunId('')
+    setActionError('')
+    setActiveRun(run)
+    setAnnouncement(runAnnouncement(run))
+    setComposerOpen(false)
+    setResearchOptionsOpen(false)
+    clearRunView()
+    try {
+      await hydrateRun(run.id, () => hydrateRequestRef.current === requestId)
+      if (
+        hydrateRequestRef.current === requestId
+        && !terminalStatuses.has(run.status)
+      ) setPollingRunId(run.id)
+    } catch (error) {
+      if (hydrateRequestRef.current === requestId) setActionError(apiMessage(error))
+    }
+  }, [clearRunView, hydrateRun])
+
   useEffect(() => {
     if (demoMode || !activeWorkspaceId) return
     let active = true
@@ -371,15 +464,14 @@ export default function App() {
       .listRuns(activeWorkspaceId)
       .then(async (runs) => {
         if (!active) return
+        setRecentRuns(runs.slice(0, 4))
         const latest = runs[0]
-        if (!latest) return
+        if (!latest || terminalStatuses.has(latest.status)) return
         setActiveRun(latest)
         setAnnouncement(runAnnouncement(latest))
+        setComposerOpen(false)
         await hydrateRun(latest.id, () => active)
-        if (active && !terminalStatuses.has(latest.status)) {
-          setComposerOpen(false)
-          setPollingRunId(latest.id)
-        }
+        if (active) setPollingRunId(latest.id)
       })
       .catch((error) => {
         if (active) setActionError(apiMessage(error))
@@ -394,6 +486,7 @@ export default function App() {
 
   useEffect(() => {
     if (demoMode || !pollingRunId) return
+    const requestId = hydrateRequestRef.current
     let busy = false
     const timer = window.setInterval(() => {
       if (busy) return
@@ -401,14 +494,20 @@ export default function App() {
       void apiClient
         .getRun(pollingRunId)
         .then(async (nextRun) => {
+          if (hydrateRequestRef.current !== requestId) return
           setActiveRun(nextRun)
+          updateRecentRun(nextRun)
           setAnnouncement(runAnnouncement(nextRun))
           if (terminalStatuses.has(nextRun.status)) {
             setPollingRunId('')
-            await hydrateRun(nextRun.id)
+            await hydrateRun(
+              nextRun.id,
+              () => hydrateRequestRef.current === requestId,
+            )
           }
         })
         .catch((error) => {
+          if (hydrateRequestRef.current !== requestId) return
           setPollingRunId('')
           setActionError(apiMessage(error))
         })
@@ -417,7 +516,7 @@ export default function App() {
         })
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [demoMode, hydrateRun, pollingRunId])
+  }, [demoMode, hydrateRun, pollingRunId, updateRecentRun])
 
   async function handleCreateWorkspace(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -451,6 +550,8 @@ export default function App() {
       setComposerOpen(false)
       return
     }
+    const requestId = hydrateRequestRef.current + 1
+    hydrateRequestRef.current = requestId
     try {
       const run = await apiClient.startResearch({
         workspaceId: activeWorkspaceId,
@@ -460,43 +561,60 @@ export default function App() {
         goal,
         mode,
       })
+      if (hydrateRequestRef.current !== requestId) return
+      updateRecentRun(run)
+      clearRunView()
       if (terminalStatuses.has(run.status)) {
         setActiveRun(run)
         setAnnouncement(runAnnouncement(run))
-        if (run.status !== 'cancelled') await hydrateRun(run.id)
+        if (run.status !== 'cancelled') {
+          await hydrateRun(
+            run.id,
+            () => hydrateRequestRef.current === requestId,
+          )
+        }
       } else {
         setActiveRun(run)
         setAnnouncement(runAnnouncement(run))
         setPollingRunId(run.id)
       }
+      if (hydrateRequestRef.current !== requestId) return
       setComposerOpen(false)
       setResearchOptionsOpen(false)
     } catch (error) {
-      setActionError(apiMessage(error))
+      if (hydrateRequestRef.current === requestId) setActionError(apiMessage(error))
     }
   }
 
   async function handleCancel() {
     if (!activeRun) return
+    const requestId = hydrateRequestRef.current
     try {
       const run = await apiClient.cancelRun(activeRun.id)
+      if (hydrateRequestRef.current !== requestId) return
+      hydrateRequestRef.current += 1
       setPollingRunId('')
       setActiveRun(run)
+      updateRecentRun(run)
       setAnnouncement(runAnnouncement(run))
     } catch (error) {
-      setActionError(apiMessage(error))
+      if (hydrateRequestRef.current === requestId) setActionError(apiMessage(error))
     }
   }
 
   async function handleRetry() {
     if (!activeRun) return
+    const requestId = hydrateRequestRef.current
     try {
       const run = await apiClient.retryRun(activeRun.id)
+      if (hydrateRequestRef.current !== requestId) return
+      hydrateRequestRef.current += 1
       setActiveRun(run)
+      updateRecentRun(run)
       setAnnouncement(runAnnouncement(run))
       if (!terminalStatuses.has(run.status)) setPollingRunId(run.id)
     } catch (error) {
-      setActionError(apiMessage(error))
+      if (hydrateRequestRef.current === requestId) setActionError(apiMessage(error))
     }
   }
 
@@ -601,6 +719,21 @@ export default function App() {
     }
   }
 
+  function applyProblemStarter(prompt: string, starterGoal: ResearchGoal) {
+    setQuestion(prompt)
+    setGoal(starterGoal)
+    questionInputRef.current?.focus()
+  }
+
+  function showNewResearch() {
+    hydrateRequestRef.current += 1
+    setPollingRunId('')
+    setActiveRun(null)
+    setAnnouncement('')
+    setComposerOpen(true)
+    setResearchOptionsOpen(false)
+  }
+
   const shareableCount = comparisonIds.filter((id) => {
     const result = results.find((item) => item.id === id)
     return result && ['user_owned', 'open_license', 'permissioned'].includes(result.rightsStatus)
@@ -660,13 +793,20 @@ export default function App() {
           )}
         </div>
         <div className="header-actions">
-          {results.length > 0 && composerOpen && (
-            <button className="icon-text-button" type="button" onClick={() => setComposerOpen(false)}>
+          {(recentRuns.length > 0 || (demoMode && results.length > 0)) && composerOpen && (
+            <button
+              className="icon-text-button"
+              type="button"
+              onClick={() => {
+                if (demoMode) setComposerOpen(false)
+                else if (recentRuns[0]) void openRun(recentRuns[0])
+              }}
+            >
               <LayoutGrid aria-hidden="true" />查看上次结果
             </button>
           )}
-          {results.length > 0 && !composerOpen && (
-            <button className="button-primary" type="button" onClick={() => setComposerOpen(true)}>
+          {!composerOpen && !isRunActive && (
+            <button className="button-primary" type="button" onClick={showNewResearch}>
               <Plus aria-hidden="true" />发起新研究
             </button>
           )}
@@ -698,8 +838,8 @@ export default function App() {
           <section className="research-composer" aria-label="新建研究">
             <header>
               <div>
-                <h1>你现在想解决什么设计问题？</h1>
-                <p>描述空间、流线、更新或图纸表达问题，其余设置可以保持默认。</p>
+                <h1>从一个具体设计问题开始</h1>
+                <p>描述你卡住的空间、流线或表达问题，也可以附上草图、平面、剖面、PDF 或网页。</p>
               </div>
             </header>
             <form className="research-form" onSubmit={(event) => void handleResearchSubmit(event)}>
@@ -708,24 +848,38 @@ export default function App() {
                 <label htmlFor="research-question">研究问题</label>
                 <textarea
                   id="research-question"
+                  ref={questionInputRef}
                   value={question}
                   onChange={(event) => setQuestion(event.target.value)}
-                  placeholder="例如：旧建筑植入新功能时，如何拆分公共流线与后勤流线？"
+                  placeholder={goalPlaceholders[goal]}
                   required
                 />
-                <button className="research-submit" type="submit" disabled={isRunActive || loading || (!demoMode && !activeWorkspaceId)}>
-                  {isRunActive ? '研究进行中…' : <><span>开始研究</span><ArrowUp aria-hidden="true" /></>}
-                </button>
               </div>
-              <div className="research-quick-actions">
-                <button
-                  type="button"
-                  aria-expanded={researchOptionsOpen}
-                  onClick={() => setResearchOptionsOpen((current) => !current)}
-                >
-                  <Paperclip aria-hidden="true" />添加资料和研究设置
-                </button>
-                {files.length > 0 && <span>{files.length} 个文件待上传</span>}
+              <div className="research-form-footer">
+                <div className="research-goals" role="group" aria-label="研究方式">
+                  <button type="button" aria-label="设计策略" aria-pressed={goal === 'precedent_research'} onClick={() => setGoal('precedent_research')}>
+                    <LayoutGrid aria-hidden="true" /><span>设计策略</span>
+                  </button>
+                  <button type="button" aria-label="来源反查" aria-pressed={goal === 'source_lookup'} onClick={() => setGoal('source_lookup')}>
+                    <ShieldCheck aria-hidden="true" /><span>来源反查</span>
+                  </button>
+                  <button type="button" aria-label="视觉参考" aria-pressed={goal === 'visual_reference_search'} onClick={() => setGoal('visual_reference_search')}>
+                    <Eye aria-hidden="true" /><span>视觉参考</span>
+                  </button>
+                </div>
+                <div className="research-quick-actions">
+                  <button
+                    type="button"
+                    aria-expanded={researchOptionsOpen}
+                    onClick={() => setResearchOptionsOpen((current) => !current)}
+                  >
+                    <Paperclip aria-hidden="true" />添加资料和研究设置
+                  </button>
+                  {files.length > 0 && <span>{files.length} 个文件待上传</span>}
+                  <button className="research-submit" type="submit" disabled={isRunActive || loading || (!demoMode && !activeWorkspaceId)}>
+                    {isRunActive ? '研究进行中…' : <><span>开始研究</span><ArrowUp aria-hidden="true" /></>}
+                  </button>
+                </div>
               </div>
               {researchOptionsOpen && (
                 <div className="research-options">
@@ -755,19 +909,6 @@ export default function App() {
                     )}
                   </div>
                   <fieldset className="segmented-control">
-                    <legend>研究目标</legend>
-                    {([
-                      ['precedent_research', '设计策略'],
-                      ['source_lookup', '来源反查'],
-                      ['visual_reference_search', '视觉参考'],
-                    ] as Array<[ResearchGoal, string]>).map(([value, label]) => (
-                      <label key={value}>
-                        <input type="radio" name="goal" value={value} checked={goal === value} onChange={() => setGoal(value)} />
-                        {label}
-                      </label>
-                    ))}
-                  </fieldset>
-                  <fieldset className="segmented-control">
                     <legend>研究深度</legend>
                     {(Object.keys(modeLabels) as ResearchMode[]).map((value) => (
                       <label key={value}>
@@ -785,6 +926,70 @@ export default function App() {
                 )}
               </div>
             </form>
+          </section>
+        )}
+
+        {composerOpen && (
+          <section className="home-sections" aria-label="研究起点与最近任务">
+            <section className="home-panel starter-panel" aria-labelledby="starter-heading">
+              <header>
+                <div>
+                  <h2 id="starter-heading">不知道怎么描述？</h2>
+                  <p>从常见的建筑设计问题开始，再改成你的项目条件。</p>
+                </div>
+              </header>
+              <ul className="starter-list">
+                {problemStarters.map((starter) => (
+                  <li key={starter.label}>
+                    <button
+                      type="button"
+                      aria-label={`填入问题：${starter.label}，${starter.prompt}`}
+                      onClick={() => applyProblemStarter(starter.prompt, starter.goal)}
+                    >
+                      <span className="starter-label">{starter.label}</span>
+                      <span>{starter.prompt}</span>
+                      <Plus aria-hidden="true" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+
+            <section className="home-panel recent-panel" aria-labelledby="recent-heading">
+              <header>
+                <div>
+                  <h2 id="recent-heading">最近研究</h2>
+                  <p>继续当前工作区里尚未结束或已经完成的任务。</p>
+                </div>
+              </header>
+              {recentRuns.length > 0 ? (
+                <ul className="recent-list">
+                  {recentRuns.slice(0, 3).map((run) => {
+                    const runDate = formatRunDate(run.updatedAt ?? run.createdAt)
+                    const usableAssets = run.coverageReport?.usable_assets
+                    return (
+                      <li key={run.id}>
+                        <button type="button" aria-label={`打开研究：${run.question}`} onClick={() => void openRun(run)}>
+                          <span className="recent-question">{run.question}</span>
+                          <span className="recent-meta">
+                            {[
+                              goalLabels[run.goal] ?? '研究任务',
+                              modeLabels[run.mode],
+                              usableAssets === undefined ? null : `${usableAssets} 张参考`,
+                              runDate || null,
+                            ].filter(Boolean).join(' · ')}
+                          </span>
+                          <span className="recent-status">{runAnnouncement(run)}</span>
+                          <ArrowRight aria-hidden="true" />
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              ) : (
+                <p className="recent-empty">{loading ? '正在读取最近任务…' : '完成第一次研究后，最近任务会保留在这里。'}</p>
+              )}
+            </section>
           </section>
         )}
 
