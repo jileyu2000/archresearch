@@ -262,6 +262,47 @@ function runAnnouncement(run: ResearchRun) {
   return labels[run.status]
 }
 
+function partialReasonTitle(stopReason?: string | null) {
+  if (stopReason === 'budget_exhausted') return '本轮检索额度已用完'
+  if (stopReason === 'time_budget_exhausted') return '本轮研究达到时间上限'
+  if (stopReason === 'no_new_assets') return '连续检索没有找到新的有效图纸'
+  if (stopReason === 'unverified_visual_leads') return '已找到图纸，但来源证据还不够'
+  if (stopReason === 'no_usable_assets') return '暂未找到能直接使用的图纸'
+  if (stopReason?.startsWith('provider_error:')) return '部分网页研究服务暂时不可用'
+  if (stopReason?.startsWith('source_lookup_error:')) return '图片来源反查暂时未完成'
+  return '本次研究先交付当前可用结果'
+}
+
+function partialDiagnosis(run: ResearchRun) {
+  const coverage = run.coverageReport
+  const usable = coverage?.usable_assets ?? 0
+  const projects = coverage?.project_count ?? 0
+  const supported = coverage?.verified_or_partial ?? 0
+  const gapLabels: Record<string, string> = {
+    insufficient_usable_assets: `可用图纸数量未达到“${modeLabels[run.mode]}”深度目标`,
+    fewer_than_six_usable_assets: `可用图纸数量未达到“${modeLabels[run.mode]}”深度目标`,
+    insufficient_project_diversity: '具体项目数量还不足，案例覆盖不够多样',
+    insufficient_verified_or_partial: '达到部分核验或以上的图纸还不够',
+    uncovered_subquestions: '仍有子问题没有足够图纸支撑',
+    insufficient_multi_asset_projects: '部分项目还缺少平面、剖面等互补图纸',
+  }
+  const gaps = [...new Set((coverage?.gaps ?? []).map(
+    (gap) => gapLabels[gap] ?? '仍有研究覆盖项未达到当前深度目标',
+  ))]
+  return {
+    title: partialReasonTitle(run.stopReason),
+    summary: `已保留 ${usable} 张可用图纸，覆盖 ${projects} 个项目，其中 ${supported} 张达到部分核验或以上。`,
+    gaps,
+    nextStep: '可以继续查看现有结果；重试会开启新一轮研究，补找图纸与来源证据。',
+  }
+}
+
+function recentRunAnnouncement(run: ResearchRun) {
+  return run.status === 'partial'
+    ? `部分结果 · ${partialReasonTitle(run.stopReason)}`
+    : runAnnouncement(run)
+}
+
 function formatRunDate(value?: string) {
   if (!value) return ''
   const date = new Date(value)
@@ -1177,6 +1218,9 @@ export default function App() {
     ? stageLabels.findIndex((stage) => stage.status === activeStatus)
     : -1
   const resultViewOpen = !composerOpen
+  const activePartialDiagnosis = activeRun?.status === 'partial'
+    ? partialDiagnosis(activeRun)
+    : null
   const allResultsMissingPreviews = results.length > 0 && results.every((result) => !result.previewUrl)
   const runHadBrowserUnavailable = results.some((result) => (
     browserWasUnavailableForSource(traceEvents, result.sourceUrl)
@@ -1430,7 +1474,7 @@ export default function App() {
                               runDate || null,
                             ].filter(Boolean).join(' · ')}
                           </span>
-                          <span className="recent-status">{runAnnouncement(run)}</span>
+                          <span className="recent-status">{recentRunAnnouncement(run)}</span>
                           <ArrowRight aria-hidden="true" />
                         </button>
                       </li>
@@ -1470,14 +1514,20 @@ export default function App() {
 
         {actionError && <p className="workbench-error" role="alert">{actionError}</p>}
 
-        {resultViewOpen && activeRun?.status === 'partial' && (
-          <details className="coverage-summary">
-            <summary>
-              已返回部分结果 · {activeRun.coverageReport?.usable_assets ?? 0} 张图纸，{activeRun.coverageReport?.project_count ?? 0} 个项目
-            </summary>
-            <p>{activeRun.stopReason}</p>
-            {(activeRun.coverageReport?.gaps ?? []).map((gap) => <span key={gap}>{gap}</span>)}
-          </details>
+        {resultViewOpen && activePartialDiagnosis && (
+          <section className="coverage-summary" aria-labelledby="coverage-summary-title">
+            <CircleDashed aria-hidden="true" />
+            <div>
+              <h2 id="coverage-summary-title">{activePartialDiagnosis.title}</h2>
+              <p>{activePartialDiagnosis.summary}</p>
+              {activePartialDiagnosis.gaps.length > 0 && (
+                <ul>
+                  {activePartialDiagnosis.gaps.map((gap) => <li key={gap}>{gap}</li>)}
+                </ul>
+              )}
+              <p className="coverage-next-step">{activePartialDiagnosis.nextStep}</p>
+            </div>
+          </section>
         )}
 
         {!demoMode && resultViewOpen && allResultsMissingPreviews && (

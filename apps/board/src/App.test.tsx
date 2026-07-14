@@ -155,7 +155,16 @@ function createLiveFetch(options: LiveFetchOptions = {}) {
                   status: options.existingRunStatus,
                   budget_mode: 'balanced',
                   checkpoint_stage: options.existingRunStatus,
-                  coverage_report: options.coverageReport ?? {},
+                  coverage_report: options.coverageReport ?? (
+                    options.existingRunStatus === 'partial'
+                      ? {
+                          usable_assets: 1,
+                          project_count: 1,
+                          verified_or_partial: 1,
+                          gaps: ['insufficient_usable_assets'],
+                        }
+                      : {}),
+                  stop_reason: options.existingRunStatus === 'partial' ? 'budget_exhausted' : null,
                   created_at: '2026-07-13T08:30:00Z',
                 },
               ]
@@ -659,6 +668,16 @@ describe('research board', () => {
     expect(screen.queryByRole('textbox', { name: '研究问题' })).not.toBeInTheDocument()
   })
 
+  it('explains a partial recent run without exposing internal reason codes', async () => {
+    vi.stubGlobal('fetch', createLiveFetch({ existingRunStatus: 'partial' }))
+    renderBoard()
+
+    const recentRun = await screen.findByRole('button', { name: `打开研究：${liveQuestion}` })
+    expect(within(recentRun).getByText('部分结果 · 本轮检索额度已用完')).toBeVisible()
+    expect(screen.queryByText('budget_exhausted')).not.toBeInTheDocument()
+    expect(screen.queryByText('insufficient_usable_assets')).not.toBeInTheDocument()
+  })
+
   it('restores the latest persisted run after the user opens it', async () => {
     const user = userEvent.setup()
     vi.stubGlobal('fetch', createLiveFetch({ existingRunStatus: 'completed' }))
@@ -1070,8 +1089,12 @@ describe('research board', () => {
     await startLiveResearch(user)
 
     expect(await screen.findByText('已交付部分结果')).toBeVisible()
-    await user.click(screen.getByText(/1 张图纸，1 个项目/))
-    expect(screen.getByText(/budget_exhausted/)).toBeVisible()
+    expect(screen.getByRole('heading', { name: '本轮检索额度已用完' })).toBeVisible()
+    expect(screen.getByText('已保留 1 张可用图纸，覆盖 1 个项目，其中 1 张达到部分核验或以上。')).toBeVisible()
+    expect(screen.getByText('可用图纸数量未达到“标准”深度目标')).toBeVisible()
+    expect(screen.getByText('可以继续查看现有结果；重试会开启新一轮研究，补找图纸与来源证据。')).toBeVisible()
+    expect(screen.queryByText('budget_exhausted')).not.toBeInTheDocument()
+    expect(screen.queryByText('fewer_than_six_usable_assets')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '重试研究' }))
     expect(screen.getByRole('status')).toHaveTextContent('已创建')
   })
