@@ -155,3 +155,4 @@ The code delivery is complete. These product claims require user-owned credentia
 | The first M19 static gate found one 101-character test assertion | 1 | Wrap only the failing generator expression, then restart the focused gate from Ruff |
 | M19 Ruff format check requested canonical layout in two touched files | 1 | Apply Ruff formatting only to the workflow and its focused test, then rerun lint/type/tests |
 | The post-ordering M19 full gate found three Mypy optional-client narrowings | 1 | Add explicit non-null assertions under the already computed `can_inspect` guard, then rerun the authoritative gate from the start |
+| The first live Firecrawl credential check returned HTTP 401 | 1 | Explain that the relay/OpenAI key is not a Firecrawl key, reopen hidden Firecrawl input, and require a successful bounded live scrape before accepting configuration |
