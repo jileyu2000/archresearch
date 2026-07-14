@@ -28,7 +28,7 @@ from archresearch_api.models import (
     Workspace,
 )
 from archresearch_api.providers import ProviderAsset, ProviderSearchResult, ProviderSource
-from archresearch_api.public_pages import ParsedPageImage, ParsedPublicPage
+from archresearch_api.public_pages import ParsedPageImage, ParsedPublicPage, PublicSearchLead
 from archresearch_api.schemas import (
     AssociationStatus,
     BudgetMode,
@@ -424,6 +424,140 @@ class RecordingPublicPageParser:
             markdown=self.markdown,
             images=self.images,
         )
+
+
+class RecordingPublicSearchParser(RecordingPublicPageParser):
+    worst_case_call_seconds = 30.0
+
+    def __init__(self, images: list[ParsedPageImage]) -> None:
+        super().__init__(images)
+        self.queries: list[str] = []
+
+    def search(
+        self,
+        query: str,
+        *,
+        limit: int,
+        include_domains: list[str],
+    ) -> list[PublicSearchLead]:
+        del limit, include_domains
+        self.queries.append(query)
+        return [
+            PublicSearchLead(
+                url="https://studio.example/firecrawl-project",
+                title="Firecrawl Project",
+                description="Public source lead",
+            )
+        ]
+
+    def parse(self, url: str) -> ParsedPublicPage:
+        self.urls.append(url)
+        return ParsedPublicPage(
+            source_url=url,
+            title="Firecrawl Project",
+            markdown="# Firecrawl Project",
+            images=self.images,
+        )
+
+
+class TimeoutSearchProvider(SingleBatchProvider):
+    def search(
+        self,
+        query: str,
+        goal: ResearchGoal,
+        allowed_domains: list[str] | None = None,
+    ) -> ProviderSearchResult:
+        del query, goal, allowed_domains
+        raise TimeoutError("model web search timed out")
+
+
+class ReservedSearchProvider(TimeoutSearchProvider):
+    worst_case_call_seconds = 120.0
+
+    def __init__(self) -> None:
+        super().__init__(ProviderSearchResult(sources=[], assets=[]))
+        self.calls = 0
+
+    def search(
+        self,
+        query: str,
+        goal: ResearchGoal,
+        allowed_domains: list[str] | None = None,
+    ) -> ProviderSearchResult:
+        del query, goal, allowed_domains
+        self.calls += 1
+        raise AssertionError("model search should be skipped when only public-search time remains")
+
+
+def test_firecrawl_search_preserves_visual_leads_when_model_search_times_out(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path)
+    parser = RecordingPublicSearchParser(
+        [
+            ParsedPageImage(
+                url="https://cdn.example/firecrawl-plan.png",
+                alt="Ground floor plan",
+            )
+        ]
+    )
+
+    execute_research_run(
+        database,
+        run_id,
+        TimeoutSearchProvider(ProviderSearchResult(sources=[], assets=[])),
+        public_page_parser=parser,
+    )
+
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        leads = list(session.scalars(select(AssetCandidate).where(AssetCandidate.run_id == run_id)))
+        events = list(session.scalars(select(TraceEvent).where(TraceEvent.run_id == run_id)))
+    assert run is not None
+    assert run.status == RunStatus.partial.value
+    assert parser.queries
+    assert parser.queries[0].startswith("建筑项目图纸：")
+    assert "主问题：" not in parser.queries[0]
+    assert "Untrusted user design context" not in parser.queries[0]
+    assert parser.urls == ["https://studio.example/firecrawl-project"]
+    assert [lead.image_url for lead in leads] == ["https://cdn.example/firecrawl-plan.png"]
+    assert any(
+        event.tool == "firecrawl_search" and event.summary["result_count"] == 1 for event in events
+    )
+    assert any(event.tool == "single" and event.summary["status"] == "degraded" for event in events)
+
+
+def test_firecrawl_search_continues_when_model_call_no_longer_fits_deadline(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path)
+    provider = ReservedSearchProvider()
+    parser = RecordingPublicSearchParser(
+        [
+            ParsedPageImage(
+                url="https://cdn.example/firecrawl-section.png",
+                alt="Longitudinal section",
+            )
+        ]
+    )
+    times = iter([0.0, 130.0, 250.0])
+
+    execute_research_run(
+        database,
+        run_id,
+        provider,
+        public_page_parser=parser,
+        clock=lambda: next(times),
+    )
+
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        leads = list(session.scalars(select(AssetCandidate).where(AssetCandidate.run_id == run_id)))
+    assert run is not None
+    assert run.status == RunStatus.partial.value
+    assert provider.calls == 0
+    assert len(parser.queries) == 1
+    assert [lead.image_url for lead in leads] == ["https://cdn.example/firecrawl-section.png"]
 
 
 def test_firecrawl_enriches_normal_browser_research_context_and_image_recall(

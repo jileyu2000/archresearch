@@ -63,7 +63,7 @@ Chrome 的 `captureVisibleTab` 只接受用户手势产生的 `activeTab` 或 `<
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/configure-provider.ps1
 ```
 
-Firecrawl 是可选的公开页面增强器：配置后，每次研究都会在页面预算内解析候选公网来源，把最新 Markdown 加入图纸视觉分类上下文，并补充网页中明确标注类型的图片线索。Chrome 扩展同时负责登录态、动态交互和精确裁图；Firecrawl 线索在完成视觉分类和来源绑定前始终标为未核验，不会自动升级事实、归属或版权。Key 通过隐藏输入保存到 Windows 凭据管理器：
+Firecrawl 是可选的公开网页研究器：配置后，每个子问题会先用一条简短的中英文图纸查询实时发现公网来源，再在页面预算内解析最新 Markdown、链接和图片。已知投放尺寸与跨 CDN 的同图会在当前页面内合并；明确标注类型的图片可作为低置信线索保留。即使模型搜索超时，只要 Firecrawl 已获得来源，系统也会继续后续短查询并交付部分结果。Chrome 扩展同时负责登录态、动态交互和精确裁图；Firecrawl 线索在完成视觉分类和来源绑定前始终标为未核验，不会自动升级事实、归属或版权。Key 通过隐藏输入保存到 Windows 凭据管理器：
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/configure-firecrawl.ps1

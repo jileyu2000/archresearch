@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import ipaddress
 import re
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 from urllib.parse import unquote, urlparse
 
 import httpx
@@ -14,6 +14,14 @@ MAX_MARKDOWN_CHARS = 12_000
 MAX_LINKS = 40
 MAX_IMAGES = 40
 FIRECRAWL_REQUEST_TIMEOUT_SECONDS = 30.0
+IMAGE_DELIVERY_VARIANTS = {
+    "thumb_jpg": 0,
+    "small_jpg": 1,
+    "newsletter": 2,
+    "slideshow": 3,
+    "medium_jpg": 3,
+    "large_jpg": 4,
+}
 
 
 class StrictModel(BaseModel):
@@ -49,10 +57,34 @@ class ParsedPublicPage(StrictModel):
         return [_public_http_url(value) for value in values]
 
 
+class PublicSearchLead(StrictModel):
+    url: str
+    title: str = Field(default="", max_length=500)
+    description: str = Field(default="", max_length=1_000)
+
+    @field_validator("url")
+    @classmethod
+    def require_public_url(cls, value: str) -> str:
+        return _public_http_url(value)
+
+
 class PublicPageParser(Protocol):
     name: str
 
     def parse(self, url: str) -> ParsedPublicPage: ...
+
+
+@runtime_checkable
+class PublicSearchProvider(Protocol):
+    name: str
+
+    def search(
+        self,
+        query: str,
+        *,
+        limit: int,
+        include_domains: list[str],
+    ) -> list[PublicSearchLead]: ...
 
 
 class FirecrawlPageParser:
@@ -71,6 +103,65 @@ class FirecrawlPageParser:
         self.api_key = normalized_key
         self.base_url = _public_https_base_url(base_url)
         self.client = client or httpx.Client(timeout=FIRECRAWL_REQUEST_TIMEOUT_SECONDS)
+
+    def search(
+        self,
+        query: str,
+        *,
+        limit: int = 4,
+        include_domains: list[str] | None = None,
+    ) -> list[PublicSearchLead]:
+        bounded_query = " ".join(query.split())[:500]
+        if not bounded_query:
+            raise ValueError("Firecrawl search query is required")
+        if limit < 1 or limit > 10:
+            raise ValueError("Firecrawl search limit must be between 1 and 10")
+        domains = _bounded_domains(include_domains or [])
+        request_body: dict[str, Any] = {
+            "query": bounded_query,
+            "limit": limit,
+            "sources": ["web"],
+            "ignoreInvalidURLs": True,
+            "timeout": 30_000,
+        }
+        if domains:
+            request_body["includeDomains"] = domains
+        response = self.client.post(
+            f"{self.base_url}/search",
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            json=request_body,
+        )
+        response.raise_for_status()
+        payload: Any = response.json()
+        if not isinstance(payload, dict) or payload.get("success") is not True:
+            raise ValueError("Firecrawl did not return a successful search")
+        data = payload.get("data")
+        if not isinstance(data, dict):
+            raise ValueError("Firecrawl search did not return valid data")
+        web_results = data.get("web")
+        if not isinstance(web_results, list):
+            return []
+
+        leads: list[PublicSearchLead] = []
+        seen: set[str] = set()
+        for item in web_results:
+            if len(leads) >= limit:
+                break
+            if not isinstance(item, dict) or not isinstance(item.get("url"), str):
+                continue
+            try:
+                lead = PublicSearchLead(
+                    url=item["url"],
+                    title=_bounded_string(item.get("title"), 500),
+                    description=_bounded_string(item.get("description"), 1_000),
+                )
+            except ValueError:
+                continue
+            if lead.url in seen:
+                continue
+            seen.add(lead.url)
+            leads.append(lead)
+        return leads
 
     def parse(self, url: str) -> ParsedPublicPage:
         source_url = _public_http_url(url)
@@ -145,20 +236,42 @@ def _page_images(value: Any, markdown: str) -> list[ParsedPageImage]:
                 if isinstance(raw_url, str):
                     candidates.append((raw_url, raw_alt if isinstance(raw_alt, str) else ""))
 
-    images: list[ParsedPageImage] = []
-    seen: set[str] = set()
+    selected: dict[str, tuple[int, ParsedPageImage]] = {}
+    order: list[str] = []
     for raw_url, alt in candidates:
-        if len(images) >= MAX_IMAGES:
-            break
         try:
             image_url = _public_http_url(raw_url)
         except ValueError:
             continue
-        if image_url in seen:
+        key, quality = _image_delivery_identity(image_url)
+        image = ParsedPageImage(url=image_url, alt=" ".join(alt.split())[:300])
+        current = selected.get(key)
+        if current is None:
+            order.append(key)
+            selected[key] = (quality, image)
+        elif quality > current[0]:
+            if not image.alt:
+                image = image.model_copy(update={"alt": current[1].alt})
+            selected[key] = (quality, image)
+    return [selected[key][1] for key in order[:MAX_IMAGES]]
+
+
+def _image_delivery_identity(value: str) -> tuple[str, int]:
+    parsed = urlparse(value)
+    parts = parsed.path.split("/")
+    for index, part in enumerate(parts):
+        quality = IMAGE_DELIVERY_VARIANTS.get(part.lower())
+        if quality is None:
             continue
-        seen.add(image_url)
-        images.append(ParsedPageImage(url=image_url, alt=" ".join(alt.split())[:300]))
-    return images
+        parts[index] = "{variant}"
+        lower_parts = [path_part.lower() for path_part in parts]
+        for media_index in range(len(lower_parts) - 1):
+            if lower_parts[media_index : media_index + 2] == ["media", "images"]:
+                shared_path = "/".join(lower_parts[media_index:])
+                return f"shared-media:{shared_path}", quality
+        identity = parsed._replace(path="/".join(parts), query="", fragment="").geturl()
+        return identity, quality
+    return value, 0
 
 
 def _public_url_list(value: Any, limit: int) -> list[str]:
@@ -183,6 +296,21 @@ def _bounded_string(value: Any, limit: int) -> str:
     return value[:limit] if isinstance(value, str) else ""
 
 
+def _bounded_domains(values: list[str]) -> list[str]:
+    domains: list[str] = []
+    for value in values:
+        domain = value.strip().lower().rstrip(".")
+        if (
+            domain
+            and len(domain) <= 253
+            and "/" not in domain
+            and ":" not in domain
+            and domain not in domains
+        ):
+            domains.append(domain)
+    return domains[:20]
+
+
 def _public_https_base_url(value: str) -> str:
     normalized = _public_http_url(value)
     if urlparse(normalized).scheme != "https":
@@ -191,6 +319,8 @@ def _public_https_base_url(value: str) -> str:
 
 
 def _public_http_url(value: str) -> str:
+    if value.count("(") != value.count(")"):
+        raise ValueError("URL contains unmatched parentheses")
     parsed = urlparse(value)
     if (
         parsed.scheme not in {"http", "https"}

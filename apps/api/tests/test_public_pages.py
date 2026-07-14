@@ -118,3 +118,118 @@ def test_firecrawl_parser_rejects_unsuccessful_or_malformed_responses() -> None:
         parser.parse("https://studio.example/one")
     with pytest.raises(ValueError, match="valid data"):
         parser.parse("https://studio.example/two")
+
+
+def test_firecrawl_search_returns_bounded_public_source_leads() -> None:
+    requests: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "success": True,
+                "data": {
+                    "web": [
+                        {
+                            "url": "https://studio.example/project",
+                            "title": "Courtyard Archive",
+                            "description": "Adaptive reuse project",
+                        },
+                        {
+                            "url": "http://127.0.0.1/private",
+                            "title": "Private",
+                            "description": "Must be filtered",
+                        },
+                    ]
+                },
+                "creditsUsed": 2,
+            },
+        )
+
+    parser = FirecrawlPageParser(
+        api_key="fc-secret",
+        client=httpx.Client(transport=httpx.MockTransport(respond)),
+    )
+
+    leads = parser.search(
+        "industrial building adaptive reuse section",
+        limit=4,
+        include_domains=["archdaily.com", "dezeen.com"],
+    )
+
+    assert [lead.model_dump() for lead in leads] == [
+        {
+            "url": "https://studio.example/project",
+            "title": "Courtyard Archive",
+            "description": "Adaptive reuse project",
+        }
+    ]
+    assert requests[0].url == "https://api.firecrawl.dev/v2/search"
+    assert json.loads(requests[0].content) == {
+        "query": "industrial building adaptive reuse section",
+        "limit": 4,
+        "sources": ["web"],
+        "includeDomains": ["archdaily.com", "dezeen.com"],
+        "ignoreInvalidURLs": True,
+        "timeout": 30_000,
+    }
+
+
+def test_firecrawl_parser_collapses_image_delivery_variants_and_rejects_broken_urls() -> None:
+    def respond(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "success": True,
+                "data": {
+                    "markdown": "![Broken](https://images.example/render_(c)Studio.jpg)",
+                    "images": [
+                        "https://images.example/media/thumb_jpg/section.jpg?1",
+                        "https://images.example/media/newsletter/section.jpg?2",
+                        "https://images.example/media/medium_jpg/section.jpg?3",
+                    ],
+                    "metadata": {},
+                },
+            },
+        )
+
+    parser = FirecrawlPageParser(
+        api_key="fc-secret",
+        client=httpx.Client(transport=httpx.MockTransport(respond)),
+    )
+
+    page = parser.parse("https://studio.example/project")
+
+    assert [image.url for image in page.images] == [
+        "https://images.example/media/medium_jpg/section.jpg?3"
+    ]
+
+
+def test_firecrawl_parser_collapses_shared_media_paths_across_delivery_hosts() -> None:
+    def respond(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "success": True,
+                "data": {
+                    "markdown": "",
+                    "images": [
+                        "https://snoopy.example/images/site/media/images/abcd/slideshow/Kimo_02.jpg?1",
+                        "https://images.example/media/images/abcd/newsletter/Kimo_02.jpg?2",
+                    ],
+                    "metadata": {},
+                },
+            },
+        )
+
+    parser = FirecrawlPageParser(
+        api_key="fc-secret",
+        client=httpx.Client(transport=httpx.MockTransport(respond)),
+    )
+
+    page = parser.parse("https://studio.example/project")
+
+    assert [image.url for image in page.images] == [
+        "https://snoopy.example/images/site/media/images/abcd/slideshow/Kimo_02.jpg?1"
+    ]

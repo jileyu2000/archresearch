@@ -42,6 +42,7 @@ from .providers import (
 from .public_pages import (
     ParsedPublicPage,
     PublicPageParser,
+    PublicSearchProvider,
     infer_architecture_asset_type,
 )
 from .schemas import (
@@ -222,6 +223,14 @@ def execute_research_run(
             if isinstance(provider, CallBudgetAwareResearchProvider)
             else 0.0
         )
+        public_search_provider = (
+            public_page_parser if isinstance(public_page_parser, PublicSearchProvider) else None
+        )
+        public_search_reserve = (
+            float(getattr(public_search_provider, "worst_case_call_seconds", 0.0))
+            if public_search_provider is not None
+            else 0.0
+        )
         stop_reason = "budget_exhausted"
         for query_index, (round_number, language, subquestion_id, query) in enumerate(
             queries, start=1
@@ -231,7 +240,11 @@ def execute_research_run(
                 continue
             _raise_if_cancelled(db, run_id)
             remaining_seconds = deadline - clock()
-            if remaining_seconds <= 0 or remaining_seconds < provider_call_reserve:
+            can_search_publicly = (
+                public_search_provider is not None and remaining_seconds >= public_search_reserve
+            )
+            can_search_with_model = remaining_seconds >= provider_call_reserve
+            if remaining_seconds <= 0 or not (can_search_publicly or can_search_with_model):
                 stop_reason = "time_budget_exhausted"
                 break
             query_attempt_id = _record_query(
@@ -255,7 +268,58 @@ def execute_research_run(
                     "subquestion_id": subquestion_id,
                 },
             )
-            provider_result = provider.search(query, goal, allowed_domains)
+            public_sources: list[ProviderSource] = []
+            if can_search_publicly and public_search_provider is not None:
+                public_sources = _try_public_search(
+                    db,
+                    run_id,
+                    public_search_provider,
+                    _public_search_query(
+                        goal,
+                        language,
+                        subquestion_text[subquestion_id],
+                    ),
+                    allowed_domains,
+                )
+                if public_sources:
+                    _persist_sources(
+                        db,
+                        run_id,
+                        ProviderSearchResult(sources=public_sources, assets=[]),
+                    )
+            if not can_search_with_model:
+                provider_result = ProviderSearchResult(sources=public_sources, assets=[])
+                _checkpoint(
+                    db,
+                    run_id,
+                    RunStatus.searching,
+                    {
+                        "status": "skipped",
+                        "reason": "insufficient_time_reserve",
+                        "retained_source_count": len(public_sources),
+                    },
+                    tool=provider.name,
+                )
+            else:
+                try:
+                    provider_result = provider.search(query, goal, allowed_domains)
+                except Exception as exc:
+                    if not public_sources:
+                        raise
+                    provider_result = ProviderSearchResult(sources=public_sources, assets=[])
+                    _checkpoint(
+                        db,
+                        run_id,
+                        RunStatus.searching,
+                        {
+                            "status": "degraded",
+                            "error_type": type(exc).__name__,
+                            "retained_source_count": len(public_sources),
+                        },
+                        tool=provider.name,
+                    )
+                else:
+                    provider_result = _merge_public_sources(provider_result, public_sources)
             _raise_if_cancelled(db, run_id)
             _persist_sources(db, run_id, provider_result)
             added_usable_assets = _persist_assets(
@@ -401,6 +465,11 @@ def execute_research_run(
         _checkpoint(db, run_id, RunStatus.composing, {"coverage": coverage})
         with db.session_factory() as session:
             run = _get_run(session, run_id)
+            preserved_asset_count = session.scalar(
+                select(func.count())
+                .select_from(AssetCandidate)
+                .where(AssetCandidate.run_id == run_id)
+            )
             run.coverage_report = dict(coverage)
             if source_lookup_error is not None:
                 run.status = RunStatus.partial.value
@@ -411,6 +480,9 @@ def execute_research_run(
             elif coverage["usable_assets"]:
                 run.status = RunStatus.partial.value
                 run.stop_reason = stop_reason
+            elif preserved_asset_count:
+                run.status = RunStatus.partial.value
+                run.stop_reason = "unverified_visual_leads"
             else:
                 run.status = RunStatus.blocked.value
                 run.stop_reason = "no_usable_assets"
@@ -721,6 +793,32 @@ def _queries_for(
     return queries[:max_queries]
 
 
+def _public_search_query(
+    goal: ResearchGoal,
+    language: str,
+    subquestion: str,
+) -> str:
+    terms = {
+        ResearchGoal.precedent_research: (
+            "平面图 剖面图 分析图 项目页面",
+            "floor plan section diagram project page",
+        ),
+        ResearchGoal.source_lookup: (
+            "原项目 来源 图注",
+            "original project source caption",
+        ),
+        ResearchGoal.visual_reference_search: (
+            "建筑图纸 视觉表达",
+            "architecture drawing visual reference",
+        ),
+    }
+    focus = " ".join(subquestion.split())[:320]
+    zh_terms, en_terms = terms[goal]
+    if language == "zh":
+        return f"建筑项目图纸：{focus} {zh_terms}"[:500]
+    return f"architecture project drawings: {focus} {en_terms}"[:500]
+
+
 def _research_context(session: Session, workspace_id: str) -> str:
     workspace = session.get(Workspace, workspace_id)
     parts: list[str] = []
@@ -888,6 +986,61 @@ def _try_parse_public_page(
             tool=parser.name,
         )
         return None
+
+
+def _try_public_search(
+    db: Database,
+    run_id: str,
+    provider: PublicSearchProvider,
+    query: str,
+    allowed_domains: list[str],
+) -> list[ProviderSource]:
+    tool_name = f"{provider.name}_search"
+    try:
+        leads = provider.search(
+            query,
+            limit=4,
+            include_domains=allowed_domains,
+        )
+        sources = [
+            ProviderSource(
+                url=lead.url,
+                title=lead.title,
+                publisher=urlparse(lead.url).hostname or "",
+            )
+            for lead in leads
+        ]
+        _checkpoint(
+            db,
+            run_id,
+            RunStatus.searching,
+            {"status": "completed", "result_count": len(sources)},
+            tool=tool_name,
+        )
+        return sources
+    except Exception as exc:
+        _checkpoint(
+            db,
+            run_id,
+            RunStatus.searching,
+            {"status": "skipped", "error_type": type(exc).__name__},
+            tool=tool_name,
+        )
+        return []
+
+
+def _merge_public_sources(
+    result: ProviderSearchResult,
+    public_sources: list[ProviderSource],
+) -> ProviderSearchResult:
+    merged: list[ProviderSource] = []
+    seen: set[str] = set()
+    for source in [*result.sources, *public_sources]:
+        if source.url in seen:
+            continue
+        seen.add(source.url)
+        merged.append(source)
+    return ProviderSearchResult(sources=merged, assets=result.assets)
 
 
 def _persist_public_page_leads(
