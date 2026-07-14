@@ -120,10 +120,15 @@ export class BrowserCommandExecutor {
     const viewport = (await this.executeInManagedTab(tabId, {
       action: "viewport_metrics",
     })) as ViewportMetrics;
+    const visibleRegion = clipToViewport(region, viewport);
     await this.requireSafeManagedTab(tabId);
     const screenshot = await this.browser.captureTab(tabId);
     await this.requireSafeManagedTab(tabId);
-    const cropped = await this.screenshotCropper(screenshot, region, viewport);
+    const cropped = await this.screenshotCropper(
+      screenshot,
+      visibleRegion,
+      viewport,
+    );
     return { image_data_url: cropped, media_type: "image/png" };
   }
 
@@ -142,6 +147,20 @@ export class BrowserCommandExecutor {
       throw error;
     }
   }
+}
+
+function clipToViewport(
+  region: { x: number; y: number; width: number; height: number },
+  viewport: ViewportMetrics,
+): { x: number; y: number; width: number; height: number } {
+  const x = Math.max(0, region.x);
+  const y = Math.max(0, region.y);
+  const right = Math.min(viewport.width, region.x + region.width);
+  const bottom = Math.min(viewport.height, region.y + region.height);
+  if (right - x < 1 || bottom - y < 1) {
+    throw new Error("Capture region falls outside the visible viewport");
+  }
+  return { x, y, width: right - x, height: bottom - y };
 }
 
 function requireSafePublicTab(tab: BrowserTab): void {

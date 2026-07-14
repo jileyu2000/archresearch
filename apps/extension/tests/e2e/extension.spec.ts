@@ -197,10 +197,12 @@ test.describe.serial("packaged MV3 browser bridge", () => {
     const media = readMedia(
       await coordinator.command("enumerate_media", { tab_id: tabId }),
     );
-    expect(media.map((item) => item.alt)).toEqual([
-      "Ground floor plan",
-      "Loaded section",
-    ]);
+    expect(media.map((item) => item.alt)).toEqual(["Loaded section"]);
+    const captured = await coordinator.command("capture_region", {
+      tab_id: tabId,
+      region: media[0]!.region,
+    });
+    expect(captured.ok, JSON.stringify(captured)).toBe(true);
 
     await coordinator.command("close_tab", { tab_id: tabId });
   });
@@ -571,7 +573,7 @@ class FixtureServer {
 
 async function requestBoardBridge(
   page: Page,
-  action: "pair" | "status" | "permissions.request",
+  action: "pair" | "status",
   payload: Record<string, unknown> = {},
 ): Promise<Record<string, unknown>> {
   return page.evaluate(

@@ -124,6 +124,8 @@ class RecordingBrowser:
             return {"tab_id": 41, "url": payload["url"]}
         if action == "wait":
             return {"waited_ms": payload["milliseconds"]}
+        if action == "scroll":
+            return {"scrolled": True}
         if action == "page_metadata":
             return {
                 "url": "https://studio.example/project",
@@ -194,6 +196,55 @@ class RecordingClassifier:
             asset_type=ArchitectureAssetType.section,
             relevance=4,
             observations=["可见剖切构件与多层空间关系。"],
+        )
+
+
+class LazyLoadingBrowser(RecordingBrowser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.scroll_count = 0
+
+    def send_command_sync(
+        self,
+        action: str,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: float = 30,
+    ) -> Any:
+        if action == "scroll":
+            self.calls.append((action, payload))
+            self.scroll_count += 1
+            return {"scrolled": True}
+        if action == "enumerate_media":
+            self.calls.append((action, payload))
+            media = [
+                {
+                    "media_type": "image",
+                    "url": "https://images.example/plan.png",
+                    "alt": "Ground floor plan",
+                    "adjacent_text": "Existing plan",
+                    "intrinsic_width": 1_200,
+                    "intrinsic_height": 675,
+                    "region": {"x": 10, "y": 20, "width": 640, "height": 360},
+                }
+            ]
+            if self.scroll_count:
+                media.append(
+                    {
+                        "media_type": "image",
+                        "url": "https://images.example/lazy-section.png",
+                        "alt": "Section loaded after scrolling",
+                        "adjacent_text": "Inserted public stair",
+                        "intrinsic_width": 1_200,
+                        "intrinsic_height": 675,
+                        "region": {"x": 20, "y": 80, "width": 640, "height": 360},
+                    }
+                )
+            return {"media": media}
+        return super().send_command_sync(
+            action,
+            payload,
+            timeout_seconds=timeout_seconds,
         )
 
 
@@ -357,7 +408,7 @@ def test_workflow_inspects_pages_with_read_only_actions_and_persists_six_visual_
         "capture_region",
         "close_tab",
     ]
-    assert not ({"safe_click", "type_search_query", "scroll"} & set(actions))
+    assert not ({"safe_click", "type_search_query"} & set(actions))
     assert len(classifier.calls) == 6
     assert all(len(call["caption"]) <= 500 for call in classifier.calls)
     assert all(len(call["project_text"]) <= 1_200 for call in classifier.calls)
@@ -401,6 +452,32 @@ def test_workflow_inspects_pages_with_read_only_actions_and_persists_six_visual_
     assert "ZmFr" not in serialized_trace
 
 
+def test_inspection_scrolls_a_bounded_number_of_times_and_captures_lazy_media(
+    tmp_path: Path,
+) -> None:
+    browser = LazyLoadingBrowser()
+    classifier = RecordingClassifier()
+
+    inspected = inspect_source_page(
+        browser,
+        classifier,
+        run_id="lazy-run",
+        source_url="https://studio.example/lazy-project",
+        question="剖面中如何植入公共流线？",
+        candidate_root=tmp_path,
+    )
+
+    assert [item.image_url for item in inspected] == [
+        "https://images.example/plan.png",
+        "https://images.example/lazy-section.png",
+    ]
+    actions = [action for action, _ in browser.calls]
+    assert actions.count("scroll") == 2
+    assert actions.count("enumerate_media") == 3
+    assert actions.count("capture_region") == 2
+    assert len(classifier.calls) == 2
+
+
 def test_browser_failure_closes_the_tab_and_preserves_web_results(tmp_path: Path) -> None:
     database, run_id = _database_with_run(tmp_path)
     browser = RecordingBrowser(fail_action="enumerate_media")
@@ -422,6 +499,8 @@ def test_browser_failure_closes_the_tab_and_preserves_web_results(tmp_path: Path
         )
     assert run is not None
     assert run.status == RunStatus.partial.value
+    assert run.stop_reason == "browser_inspection_incomplete"
+    assert run.coverage_report["gaps"] == ["browser_inspection_incomplete"]
     assert len(assets) == 1
     assert assets[0].project_name == "已检索项目"
 
@@ -500,6 +579,58 @@ class RecordingPublicSearchParser(RecordingPublicPageParser):
             markdown="# Firecrawl Project",
             images=self.images,
         )
+
+
+class UniquePublicSearchParser(RecordingPublicSearchParser):
+    def search(
+        self,
+        query: str,
+        *,
+        limit: int,
+        include_domains: list[str],
+    ) -> list[PublicSearchLead]:
+        del limit, include_domains
+        self.queries.append(query)
+        index = len(self.queries)
+        return [
+            PublicSearchLead(
+                url=f"https://studio.example/project-{index}",
+                title=f"Project {index}",
+                description="Public source lead",
+            )
+        ]
+
+
+def test_completion_recovery_keeps_page_capacity_for_each_uncovered_subquestion(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, max_pages=1)
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assert run is not None
+        run.budget = {
+            **run.budget,
+            "max_rounds": 2,
+            "max_queries": 6,
+            "completion_recovery_rounds": 1,
+            "completion_recovery_pages_per_subquestion": 2,
+        }
+        session.commit()
+    parser = UniquePublicSearchParser([])
+
+    execute_research_run(
+        database,
+        run_id,
+        SingleBatchProvider(ProviderSearchResult(sources=[], assets=[])),
+        public_page_parser=parser,
+    )
+
+    assert parser.urls == [
+        "https://studio.example/project-1",
+        "https://studio.example/project-7",
+        "https://studio.example/project-8",
+        "https://studio.example/project-9",
+    ]
 
 
 class ExpandingPublicPageParser:
@@ -840,6 +971,59 @@ def test_firecrawl_expands_one_project_page_and_promotes_exact_image_evidence(
         and event.summary.get("promoted") == 1
         for event in events
     )
+
+
+def test_cached_project_page_evidence_is_reassociated_when_later_questions_find_it(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, max_pages=3)
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assert run is not None
+        run.budget = {**run.budget, "max_queries": 3}
+        session.commit()
+
+    parent_url = "https://magazine.example/tag/adaptive-reuse"
+    child_url = "https://magazine.example/projects/courtyard-archive"
+    image_url = "https://cdn.example/courtyard-floor-plan.png"
+    shared_image = ParsedPageImage(url=image_url, alt="Ground floor plan")
+    parser = ExpandingPublicPageParser(
+        {
+            parent_url: ParsedPublicPage(
+                source_url=parent_url,
+                title="Adaptive reuse roundup",
+                links=[child_url],
+                images=[shared_image],
+            ),
+            child_url: ParsedPublicPage(
+                source_url=child_url,
+                title="Courtyard Archive",
+                images=[shared_image],
+            ),
+        }
+    )
+
+    execute_research_run(
+        database,
+        run_id,
+        SingleBatchProvider(_provider_result(parent_url)),
+        public_page_parser=parser,
+    )
+
+    with database.session_factory() as session:
+        candidate = session.scalar(
+            select(AssetCandidate).where(
+                AssetCandidate.run_id == run_id,
+                AssetCandidate.image_url == image_url,
+            )
+        )
+        run = session.get(ResearchRun, run_id)
+
+    assert parser.urls == [parent_url, child_url]
+    assert candidate is not None
+    assert set(candidate.subquestion_ids) == {"program", "circulation", "section"}
+    assert run is not None
+    assert run.coverage_report["covered_subquestions"] == 3
 
 
 def test_firecrawl_expansion_respects_the_existing_page_budget(tmp_path: Path) -> None:
@@ -1466,6 +1650,8 @@ def test_page_budget_limits_browser_attempts_without_limiting_web_results(tmp_pa
         )
     assert run is not None
     assert run.status == RunStatus.partial.value
+    assert run.stop_reason == "browser_inspection_incomplete"
+    assert run.coverage_report["gaps"] == ["browser_inspection_incomplete"]
     assert len(assets) == 1
 
 
@@ -1689,7 +1875,9 @@ def test_create_app_injects_browser_and_visual_dependencies_into_inline_runs(
 def test_retry_keeps_browser_and_visual_dependencies_for_inline_runs(tmp_path: Path) -> None:
     browser = RecordingBrowser()
     classifier = RecordingClassifier()
-    provider = SingleBatchProvider(_provider_result("https://studio.example/project"))
+    result = _provider_result("https://studio.example/project")
+    result.assets[0] = result.assets[0].model_copy(update={"facts": []})
+    provider = SingleBatchProvider(result)
     settings = Settings(
         database_url=f"sqlite:///{(tmp_path / 'retry-app.db').as_posix()}",
         data_dir=tmp_path / "data",

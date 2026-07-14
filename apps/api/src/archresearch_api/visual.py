@@ -149,7 +149,7 @@ class MockVisualClassifier:
 
 class OpenAIVisualClassifier:
     name = "openai-vision"
-    worst_case_remote_batch_seconds = 30.0
+    worst_case_remote_batch_seconds = 60.0
 
     def __init__(
         self,
@@ -232,31 +232,46 @@ class OpenAIVisualClassifier:
             f"研究问题：{bounded_question}\n"
             f"项目页上下文：{bounded_project_text}"
         )
-        content: list[dict[str, str]] = [{"type": "input_text", "text": prompt}]
-        for candidate in bounded_candidates:
-            content.extend(
-                [
-                    {
-                        "type": "input_text",
-                        "text": f"候选 {candidate.candidate_id}；图注：{candidate.caption}",
-                    },
-                    {
-                        "type": "input_image",
-                        "image_url": candidate.image_url,
-                        "detail": "low",
-                    },
-                ]
+
+        def request_batch(
+            requested_candidates: list[RemoteVisualCandidate],
+        ) -> RemoteVisualClassificationBatch:
+            content: list[dict[str, str]] = [{"type": "input_text", "text": prompt}]
+            for candidate in requested_candidates:
+                content.extend(
+                    [
+                        {
+                            "type": "input_text",
+                            "text": f"候选 {candidate.candidate_id}；图注：{candidate.caption}",
+                        },
+                        {
+                            "type": "input_image",
+                            "image_url": candidate.image_url,
+                            "detail": "low",
+                        },
+                    ]
+                )
+            response = self.client.responses.parse(
+                model=self.model,
+                input=[{"role": "user", "content": content}],
+                text_format=RemoteVisualClassificationBatch,
             )
-        response = self.client.responses.parse(
-            model=self.model,
-            input=[{"role": "user", "content": content}],
-            text_format=RemoteVisualClassificationBatch,
-        )
-        if response.output_parsed is None:
-            raise ValueError("OpenAI response did not contain a structured visual batch")
-        parsed = RemoteVisualClassificationBatch.model_validate(response.output_parsed)
-        allowed_ids = {candidate.candidate_id for candidate in bounded_candidates}
-        returned_ids = [item.candidate_id for item in parsed.classifications]
-        if len(returned_ids) != len(set(returned_ids)) or not set(returned_ids) <= allowed_ids:
-            raise ValueError("OpenAI visual batch returned invalid candidate ids")
-        return parsed
+            if response.output_parsed is None:
+                raise ValueError("OpenAI response did not contain a structured visual batch")
+            parsed = RemoteVisualClassificationBatch.model_validate(response.output_parsed)
+            allowed_ids = {candidate.candidate_id for candidate in requested_candidates}
+            returned_ids = [item.candidate_id for item in parsed.classifications]
+            if len(returned_ids) != len(set(returned_ids)) or not set(returned_ids) <= allowed_ids:
+                raise ValueError("OpenAI visual batch returned invalid candidate ids")
+            return parsed
+
+        try:
+            return request_batch(bounded_candidates)
+        except Exception as exc:
+            status_code = getattr(exc, "status_code", None)
+            server_error = type(exc).__name__ == "InternalServerError" or (
+                isinstance(status_code, int) and status_code >= 500
+            )
+            if len(bounded_candidates) <= 2 or not server_error:
+                raise
+            return request_batch(bounded_candidates[:2])

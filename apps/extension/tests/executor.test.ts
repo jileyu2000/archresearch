@@ -185,6 +185,35 @@ describe("browser command executor", () => {
     );
   });
 
+  it("clips a partially visible media region to the viewport before capture", async () => {
+    const port = makeBrowserPort();
+    port.sendContentCommand.mockResolvedValue({ width: 1200, height: 800 });
+    const cropper = vi
+      .fn()
+      .mockResolvedValue("data:image/png;base64,clipped-region");
+    const executor = new BrowserCommandExecutor(port, undefined, cropper);
+    await executor.execute(
+      command("open_url", { url: "https://example.com/project" }),
+    );
+
+    await expect(
+      executor.execute(
+        command("capture_region", {
+          tab_id: 42,
+          region: { x: 10, y: 700, width: 300, height: 200 },
+        }),
+      ),
+    ).resolves.toEqual({
+      image_data_url: "data:image/png;base64,clipped-region",
+      media_type: "image/png",
+    });
+    expect(cropper).toHaveBeenCalledWith(
+      "data:image/png;base64,full-viewport",
+      { x: 10, y: 700, width: 300, height: 100 },
+      { width: 1200, height: 800 },
+    );
+  });
+
   it("closes and releases a managed tab", async () => {
     const port = makeBrowserPort();
     const executor = new BrowserCommandExecutor(port);

@@ -4,9 +4,11 @@ import hashlib
 import json
 import shutil
 from collections.abc import Iterator
+from html import escape
 from pathlib import Path
-from typing import cast
-from uuid import uuid4
+from typing import Literal, cast
+from urllib.parse import urlparse
+from uuid import UUID, uuid4
 
 import fitz  # type: ignore[import-untyped]
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
@@ -63,6 +65,30 @@ from .visual import VisualClassifier
 from .workflow import ACTIVE_STAGES, execute_research_run
 
 router = APIRouter(prefix="/v1")
+
+SHAREABLE_IMAGE_RIGHTS = {"user_owned", "open_license", "permissioned"}
+EXPORT_ASSET_TYPE_LABELS = {
+    "plan": "平面图",
+    "section": "剖面图",
+    "elevation": "立面图",
+    "site_plan": "总平面图",
+    "axonometric": "轴测图",
+    "circulation": "流线图",
+    "analysis_diagram": "分析图",
+    "render": "效果图",
+    "photograph": "项目照片",
+}
+EXPORT_RIGHTS_STATUS_LABELS = {
+    "user_owned": "用户自有",
+    "open_license": "开放许可",
+    "permissioned": "已获授权",
+    "unknown": "权利未知",
+    "restricted": "受限",
+}
+EXPORT_CONTENT_SECURITY_POLICY = (
+    "default-src 'none'; img-src 'self' http: https:; style-src 'unsafe-inline'; "
+    "base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+)
 
 
 def get_session(request: Request) -> Iterator[Session]:
@@ -605,39 +631,50 @@ def update_board(
 def create_export(
     board_id: str,
     payload: ExportCreate,
+    request: Request,
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> ExportRead:
     board = session.get(ReferenceBoard, board_id)
     if board is None:
         raise HTTPException(status_code=404, detail="Board not found")
-    assets = list(
+    selected_assets = list(
         session.scalars(
             select(AssetCandidate)
             .where(AssetCandidate.id.in_(board.selected_asset_ids))
             .order_by(AssetCandidate.rank_index)
         )
     )
-    allowed_rights = {"user_owned", "open_license", "permissioned"}
-    items = [
-        {
-            "asset_id": asset.id,
-            "project_name": asset.project_name,
-            "asset_type": asset.asset_type,
-            "source_url": asset.source_url,
-            "image_url": asset.image_url,
-            "rights_status": asset.rights_status,
-            "embed_full_image": (
-                payload.mode == "private" or asset.rights_status in allowed_rights
-            ),
-        }
-        for asset in assets
+    assets_by_id = {asset.id: asset for asset in selected_assets}
+    assets = [
+        assets_by_id[asset_id] for asset_id in board.selected_asset_ids if asset_id in assets_by_id
     ]
+    items: list[dict[str, object]] = []
+    renderable_images: dict[str, str] = {}
+    for asset in assets:
+        image_src = _export_image_source(asset)
+        embed_full_image = image_src is not None and (
+            payload.mode == "private" or asset.rights_status in SHAREABLE_IMAGE_RIGHTS
+        )
+        if embed_full_image and image_src is not None:
+            renderable_images[asset.id] = image_src
+        items.append(
+            {
+                "asset_id": asset.id,
+                "project_name": asset.project_name,
+                "asset_type": asset.asset_type,
+                "source_url": asset.source_url,
+                "image_url": asset.image_url,
+                "rights_status": asset.rights_status,
+                "embed_full_image": embed_full_image,
+            }
+        )
     export_id = str(uuid4())
     export_dir = settings.data_dir / "exports" / board_id
     export_dir.mkdir(parents=True, exist_ok=True)
-    target = (export_dir / f"{export_id}-{payload.mode}.json").resolve()
-    target.write_text(
+    html_target = (export_dir / f"{export_id}-{payload.mode}.html").resolve()
+    manifest_target = (export_dir / f"{export_id}-{payload.mode}-sources.json").resolve()
+    manifest_target.write_text(
         json.dumps(
             {
                 "board_id": board_id,
@@ -650,13 +687,201 @@ def create_export(
         ),
         encoding="utf-8",
     )
+    html_target.write_text(
+        _render_export_html(
+            board,
+            payload.mode,
+            assets,
+            renderable_images,
+        ),
+        encoding="utf-8",
+    )
+    browser_url = str(
+        request.url_for(
+            "get_export_html",
+            board_id=board_id,
+            export_id=export_id,
+            mode=payload.mode,
+        )
+    )
     return ExportRead(
         id=export_id,
         board_id=board_id,
         mode=payload.mode,
-        path=str(target),
+        path=str(html_target),
+        browser_url=browser_url,
+        manifest_path=str(manifest_target),
         item_count=len(items),
     )
+
+
+@router.get("/boards/{board_id}/exports/{export_id}/{mode}", name="get_export_html")
+def get_export_html(
+    board_id: str,
+    export_id: UUID,
+    mode: Literal["private", "share"],
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> FileResponse:
+    if session.get(ReferenceBoard, board_id) is None:
+        raise HTTPException(status_code=404, detail="Board not found")
+    export_root = (settings.data_dir / "exports").resolve()
+    target = (export_root / board_id / f"{export_id}-{mode}.html").resolve()
+    if export_root not in target.parents or not target.is_file():
+        raise HTTPException(status_code=404, detail="Export not found")
+    return FileResponse(
+        target,
+        media_type="text/html; charset=utf-8",
+        headers={"Content-Security-Policy": EXPORT_CONTENT_SECURITY_POLICY},
+    )
+
+
+def _export_image_source(asset: AssetCandidate) -> str | None:
+    if _safe_export_http_url(asset.image_url) is not None:
+        assert asset.image_url is not None
+        return asset.image_url
+    if asset.storage_path:
+        return f"/v1/results/{asset.id}/content"
+    return None
+
+
+def _safe_export_http_url(value: str | None) -> str | None:
+    if not value or any(ord(character) < 32 for character in value):
+        return None
+    parsed = urlparse(value)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+    ):
+        return None
+    return value
+
+
+def _render_export_html(
+    board: ReferenceBoard,
+    mode: Literal["private", "share"],
+    assets: list[AssetCandidate],
+    renderable_images: dict[str, str],
+) -> str:
+    cards: list[str] = []
+    for asset in assets:
+        asset_type_label = EXPORT_ASSET_TYPE_LABELS.get(asset.asset_type, asset.asset_type)
+        rights_status_label = EXPORT_RIGHTS_STATUS_LABELS.get(
+            asset.rights_status, asset.rights_status
+        )
+        source_url = _safe_export_http_url(asset.source_url)
+        source_link = (
+            f'<a href="{escape(source_url, quote=True)}" target="_blank" '
+            'rel="noopener noreferrer">打开来源</a>'
+            if source_url is not None
+            else '<span class="muted">无可用来源链接</span>'
+        )
+        image_src = renderable_images.get(asset.id)
+        if image_src is not None:
+            visual = (
+                '<div class="visual">'
+                f'<img src="{escape(image_src, quote=True)}" '
+                f'alt="{escape(asset.project_name, quote=True)}" loading="lazy">'
+                "</div>"
+            )
+        else:
+            reason = (
+                "分享版未嵌入这张图片，请通过来源页面查看。"
+                if mode == "share"
+                else "当前结果没有可显示的图片，请通过来源页面查看。"
+            )
+            visual = f'<div class="source-only"><span>来源卡</span><p>{reason}</p></div>'
+        cards.append(
+            '<article class="card">'
+            f"{visual}"
+            '<div class="card-copy">'
+            f'<p class="eyebrow">{escape(asset_type_label)}</p>'
+            f"<h2>{escape(asset.project_name)}</h2>"
+            f'<p class="rights">权利状态：{escape(rights_status_label)}</p>'
+            f"{source_link}"
+            "</div>"
+            "</article>"
+        )
+    notes = escape(board.notes) if board.notes else "未添加画板备注。"
+    mode_label = "本地私有版" if mode == "private" else "可分享来源版"
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ArchResearch 图纸参考板</title>
+  <style>
+    :root {{
+      color-scheme: light;
+      font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #f3f5f1;
+      color: #171b19;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{ margin: 0; }}
+    main {{ width: min(1400px, calc(100% - 40px)); margin: 0 auto; padding: 56px 0 80px; }}
+    header {{ display: grid; gap: 12px; margin-bottom: 32px; }}
+    .kicker, .eyebrow {{
+      margin: 0;
+      color: #315cf4;
+      font-size: 12px;
+      font-weight: 750;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }}
+    h1 {{
+      margin: 0;
+      font-size: clamp(36px, 6vw, 72px);
+      line-height: .98;
+      letter-spacing: -.055em;
+    }}
+    .notes {{ max-width: 760px; margin: 0; color: #59615d; font-size: 16px; line-height: 1.7; }}
+    .board {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+    }}
+    .card {{
+      overflow: hidden;
+      border: 1px solid #d7dcd7;
+      border-radius: 22px;
+      background: rgba(255,255,255,.86);
+      box-shadow: 0 18px 45px rgba(23,27,25,.07);
+    }}
+    .visual, .source-only {{ aspect-ratio: 4 / 3; background: #e7eae5; }}
+    .visual img {{ display: block; width: 100%; height: 100%; object-fit: contain; }}
+    .source-only {{
+      display: grid;
+      place-content: center;
+      gap: 10px;
+      padding: 32px;
+      text-align: center;
+      color: #59615d;
+    }}
+    .source-only span {{ color: #171b19; font-size: 28px; font-weight: 760; }}
+    .source-only p {{ margin: 0; line-height: 1.6; }}
+    .card-copy {{ display: grid; gap: 10px; padding: 22px; }}
+    h2 {{ margin: 0; font-size: 23px; line-height: 1.2; }}
+    .rights {{ margin: 0; color: #737b77; font-size: 13px; }}
+    a {{ width: fit-content; color: #315cf4; font-weight: 700; text-decoration: none; }}
+    a:hover {{ text-decoration: underline; }}
+    .muted {{ color: #8b928e; }}
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="kicker">{mode_label} · {len(assets)} 项参考</p>
+      <h1>图纸参考板</h1>
+      <p class="notes">{notes}</p>
+    </header>
+    <section class="board" aria-label="图纸参考">{"".join(cards)}</section>
+  </main>
+</body>
+</html>
+"""
 
 
 @router.post(

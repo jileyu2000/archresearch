@@ -316,7 +316,9 @@ def test_balanced_run_stops_after_multiple_batches_satisfy_coverage(tmp_path: Pa
     assert len(set(provider.queries)) == 4
 
 
-def test_quick_run_returns_partial_results_when_budget_is_exhausted(tmp_path: Path) -> None:
+def test_quick_run_completes_every_answer_branch_before_depth_enrichment(
+    tmp_path: Path,
+) -> None:
     database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
     provider = SequencedProvider(
         [_batch(_asset(f"project-{index}", index)) for index in range(1, 5)]
@@ -330,10 +332,41 @@ def test_quick_run_returns_partial_results_when_budget_is_exhausted(tmp_path: Pa
             select(func.count()).select_from(AssetCandidate).where(AssetCandidate.run_id == run_id)
         )
         assert run is not None
-        assert run.status == RunStatus.partial.value
-        assert run.stop_reason == "budget_exhausted"
+        assert run.status == RunStatus.completed.value
+        assert run.stop_reason == "completion_satisfied"
         assert asset_count == 4
+        assert run.coverage_report["covered_subquestions"] == 3
+        assert run.coverage_report["gaps"] == []
+        assert "insufficient_usable_assets" in run.coverage_report["enrichment_gaps"]
+        assert "insufficient_subquestion_assets" in run.coverage_report["enrichment_gaps"]
     assert len(provider.queries) == 6
+
+
+def test_partial_asset_without_a_source_claim_does_not_complete_its_subquestion(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
+    unsupported = _asset("dock", 3).model_copy(update={"facts": []})
+    provider = SequencedProvider(
+        [
+            _batch(_asset("factory", 1)),
+            _batch(_asset("station", 2)),
+            _batch(unsupported),
+            _batch(),
+            _batch(),
+            _batch(),
+        ]
+    )
+
+    execute_research_run(database, run_id, provider)
+
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+
+    assert run is not None
+    assert run.status == RunStatus.partial.value
+    assert run.coverage_report["covered_subquestions"] == 2
+    assert run.coverage_report["gaps"] == ["uncovered_subquestions"]
 
 
 def test_run_deadline_stops_before_starting_another_provider_call(tmp_path: Path) -> None:
@@ -415,8 +448,8 @@ def test_quick_openai_run_reserves_time_for_one_worst_case_call(tmp_path: Path) 
             select(func.count()).select_from(QueryAttempt).where(QueryAttempt.run_id == run_id)
         )
         assert run is not None
-        assert run.status == RunStatus.partial.value
-        assert run.stop_reason == "no_new_assets"
+        assert run.status == RunStatus.completed.value
+        assert run.stop_reason == "completion_satisfied"
         assert query_count == 6
     assert responses.calls == 7
     assert clock.observed == [0.0, 0.0, 31.0, 62.0, 93.0, 124.0, 155.0]
@@ -500,7 +533,7 @@ def test_workspace_url_and_pdf_text_are_included_in_bounded_research_queries(
     assert len(first_query) <= 8_000
 
 
-def test_two_batches_without_new_assets_stop_the_run_without_duplicates(tmp_path: Path) -> None:
+def test_repeated_asset_stops_enrichment_without_creating_duplicates(tmp_path: Path) -> None:
     database, run_id = _database_with_run(tmp_path, BudgetMode.balanced)
     repeated = _batch(_asset("factory", 1))
     provider = SequencedProvider([repeated] * 8)
@@ -513,17 +546,19 @@ def test_two_batches_without_new_assets_stop_the_run_without_duplicates(tmp_path
             select(func.count()).select_from(AssetCandidate).where(AssetCandidate.run_id == run_id)
         )
         assert run is not None
-        assert run.status == RunStatus.partial.value
-        assert run.stop_reason == "no_new_assets"
+        assert run.status == RunStatus.completed.value
+        assert run.stop_reason == "completion_satisfied"
         assert asset_count == 1
-    assert len(provider.queries) == 8
+        assert run.coverage_report["gaps"] == []
+        assert run.coverage_report["enrichment_gaps"]
+    assert len(provider.queries) == 12
 
 
-def test_empty_quick_research_finishes_two_fair_passes_for_every_subquestion(
+def test_empty_quick_research_uses_one_completion_recovery_pass_for_every_subquestion(
     tmp_path: Path,
 ) -> None:
     database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
-    provider = SequencedProvider([_batch()] * 6)
+    provider = SequencedProvider([_batch()] * 9)
 
     execute_research_run(database, run_id, provider)
 
@@ -545,12 +580,46 @@ def test_empty_quick_research_finishes_two_fair_passes_for_every_subquestion(
         "program",
         "circulation",
         "section",
+        "program",
+        "circulation",
+        "section",
     ]
     assert run.coverage_report["subquestion_passes"] == {
-        "program": 2,
-        "circulation": 2,
-        "section": 2,
+        "program": 3,
+        "circulation": 3,
+        "section": 3,
     }
+
+
+def test_quick_completion_recovery_can_fill_branches_missed_by_normal_depth(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
+    provider = SequencedProvider(
+        [
+            _batch(_asset("factory", 1)),
+            _batch(),
+            _batch(),
+            _batch(),
+            _batch(),
+            _batch(),
+            _batch(_asset("station", 2)),
+            _batch(_asset("dock", 3)),
+        ]
+    )
+
+    execute_research_run(database, run_id, provider)
+
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        attempts = list(session.scalars(select(QueryAttempt).where(QueryAttempt.run_id == run_id)))
+
+    assert run is not None
+    assert run.status == RunStatus.completed.value
+    assert run.coverage_report["covered_subquestions"] == 3
+    assert run.coverage_report["gaps"] == []
+    assert len(provider.queries) == 8
+    assert sum(attempt.subquestion_id == "program" for attempt in attempts) == 2
 
 
 def test_web_search_urls_are_not_stored_as_perceptual_hashes(tmp_path: Path) -> None:
@@ -698,7 +767,7 @@ def test_retry_replays_completed_queries_after_a_resumed_run_finishes_partial(
                 return _batch(_asset("factory", 1))
             if "公共与后勤怎样分开" in query:
                 return _batch(_asset("station", 2))
-            return _batch(_asset("dock", 3))
+            return _batch(_asset("dock", 3).model_copy(update={"facts": []}))
 
     provider = PartialAfterResumeProvider()
     execute_research_run(database, run_id, provider)
@@ -715,7 +784,7 @@ def test_retry_replays_completed_queries_after_a_resumed_run_finishes_partial(
 
     assert sum("新功能怎样植入" in query for query in provider.queries) == 4
     assert sum("公共与后勤怎样分开" in query for query in provider.queries) == 4
-    assert sum("剖面怎样形成层次" in query for query in provider.queries) == 5
+    assert sum("剖面怎样形成层次" in query for query in provider.queries) == 7
 
 
 def test_retry_resume_uses_only_the_immediately_previous_failed_execution(
@@ -1297,7 +1366,9 @@ def test_source_lookup_does_not_finish_before_every_planned_subquestion_has_evid
     assert len(provider.queries) >= 3
 
 
-def test_deep_source_lookup_requires_more_assets_than_quick(tmp_path: Path) -> None:
+def test_deep_source_lookup_completes_all_branches_before_asset_enrichment(
+    tmp_path: Path,
+) -> None:
     database, run_id = _database_with_run(
         tmp_path,
         BudgetMode.deep,
@@ -1316,10 +1387,11 @@ def test_deep_source_lookup_requires_more_assets_than_quick(tmp_path: Path) -> N
     with database.session_factory() as session:
         run = session.get(ResearchRun, run_id)
     assert run is not None
-    assert run.status == RunStatus.partial.value
+    assert run.status == RunStatus.completed.value
     assert run.coverage_report["usable_assets"] == 6
     assert run.coverage_report["covered_subquestions"] == 6
-    assert "insufficient_usable_assets" in run.coverage_report["gaps"]
+    assert run.coverage_report["gaps"] == []
+    assert "insufficient_usable_assets" in run.coverage_report["enrichment_gaps"]
 
 
 def test_ranking_diversifies_projects_within_the_same_tier_and_relevance(

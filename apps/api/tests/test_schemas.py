@@ -5,6 +5,7 @@ from archresearch_api.schemas import (
     BUDGETS,
     DEPTH_TARGETS,
     BudgetMode,
+    CoverageReport,
     EvidenceClaimCreate,
     ResearchGoal,
     ResearchPlan,
@@ -19,18 +20,24 @@ def test_research_modes_bound_fair_per_subquestion_passes() -> None:
     assert BUDGETS[BudgetMode.quick].model_dump() == {
         "max_rounds": 2,
         "max_queries": 6,
+        "completion_recovery_rounds": 1,
+        "completion_recovery_pages_per_subquestion": 2,
         "max_pages": 12,
         "max_seconds": 240,
     }
     assert BUDGETS[BudgetMode.balanced].model_dump() == {
         "max_rounds": 3,
         "max_queries": 12,
+        "completion_recovery_rounds": 1,
+        "completion_recovery_pages_per_subquestion": 2,
         "max_pages": 30,
         "max_seconds": 720,
     }
     assert BUDGETS[BudgetMode.deep].model_dump() == {
         "max_rounds": 4,
         "max_queries": 24,
+        "completion_recovery_rounds": 1,
+        "completion_recovery_pages_per_subquestion": 2,
         "max_pages": 60,
         "max_seconds": 1800,
     }
@@ -79,6 +86,13 @@ def test_research_modes_have_distinct_evidence_obligations() -> None:
         "multi_asset_projects": 3,
         "verified_or_partial": 9,
     }
+
+
+def test_coverage_report_keeps_legacy_payloads_compatible_with_enrichment_gaps() -> None:
+    report = CoverageReport(gaps=["uncovered_subquestions"])
+
+    assert report.gaps == ["uncovered_subquestions"]
+    assert report.enrichment_gaps == []
 
 
 def test_research_plan_requires_unique_bounded_subquestions() -> None:

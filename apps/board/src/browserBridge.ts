@@ -6,7 +6,6 @@ export type BrowserBridgeStatus = {
 
 export type BrowserBridgeCommand =
   | { type: 'status' }
-  | { type: 'permissions.request' }
   | { type: 'pair'; endpoint: string; token: string }
 
 export class BrowserBridgeError extends Error {

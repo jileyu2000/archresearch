@@ -18,6 +18,9 @@ MAX_CROP_BYTES = 20 * 1024 * 1024
 MAX_CROP_DIMENSION = 8_192
 MAX_PREVIEW_BYTES = 2 * 1024 * 1024
 MAX_PREVIEW_DIMENSION = 1_600
+MAX_SCROLL_PASSES = 2
+SCROLL_DISTANCE = 1_200
+SCROLL_WAIT_MILLISECONDS = 350
 
 
 class StrictModel(BaseModel):
@@ -169,20 +172,43 @@ def inspect_source_page(
         enumeration = MediaEnumeration.model_validate(
             browser.send_command_sync("enumerate_media", {"tab_id": tab_id})
         )
-        return _capture_candidates(
-            browser,
-            classifier,
-            run_id=run_id,
-            tab_id=tab_id,
-            source_url=source_url,
-            question=question,
-            candidate_root=candidate_root,
-            metadata=metadata,
-            snapshot=snapshot,
-            public_page_text=public_page_text,
-            media=enumeration.media[:MAX_MEDIA_PER_PAGE],
-            budget=active_budget,
-        )
+        seen_media: set[tuple[object, ...]] = set()
+        results: list[InspectedVisual] = []
+        for pass_number in range(MAX_SCROLL_PASSES + 1):
+            results.extend(
+                _capture_candidates(
+                    browser,
+                    classifier,
+                    run_id=run_id,
+                    tab_id=tab_id,
+                    source_url=source_url,
+                    question=question,
+                    candidate_root=candidate_root,
+                    metadata=metadata,
+                    snapshot=snapshot,
+                    public_page_text=public_page_text,
+                    media=_unseen_media(enumeration.media, seen_media),
+                    budget=active_budget,
+                )
+            )
+            if (
+                pass_number == MAX_SCROLL_PASSES
+                or active_budget.exhausted
+                or len(seen_media) >= MAX_MEDIA_PER_PAGE
+            ):
+                break
+            try:
+                browser.send_command_sync(
+                    "scroll",
+                    {"tab_id": tab_id, "direction": "down", "distance": SCROLL_DISTANCE},
+                )
+                browser.send_command_sync("wait", {"milliseconds": SCROLL_WAIT_MILLISECONDS})
+                enumeration = MediaEnumeration.model_validate(
+                    browser.send_command_sync("enumerate_media", {"tab_id": tab_id})
+                )
+            except Exception:
+                break
+        return results
     finally:
         if tab_id is not None:
             browser.send_command_sync("close_tab", {"tab_id": tab_id})
@@ -285,6 +311,37 @@ def _capture_candidates(
         except Exception:
             continue
     return results
+
+
+def _unseen_media(
+    media: list[PageMedia],
+    seen_media: set[tuple[object, ...]],
+) -> list[PageMedia]:
+    unseen: list[PageMedia] = []
+    for item in media:
+        if len(seen_media) >= MAX_MEDIA_PER_PAGE:
+            break
+        identity = _media_identity(item)
+        if identity in seen_media:
+            continue
+        seen_media.add(identity)
+        unseen.append(item)
+    return unseen
+
+
+def _media_identity(item: PageMedia) -> tuple[object, ...]:
+    if item.url:
+        return ("url", item.url)
+    return (
+        item.media_type,
+        item.alt,
+        item.adjacent_text,
+        item.intrinsic_width,
+        item.intrinsic_height,
+        round(item.region.x),
+        round(item.region.width),
+        round(item.region.height),
+    )
 
 
 def _optional_page_snapshot(

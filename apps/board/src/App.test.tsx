@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -297,7 +297,9 @@ function createLiveFetch(options: LiveFetchOptions = {}) {
             id: 'export-live',
             board_id: 'board-live',
             mode: body.mode,
-            path: `C:/exports/board-${body.mode}.json`,
+            path: `C:/exports/board-${body.mode}.html`,
+            browser_url: `http://127.0.0.1:8000/v1/boards/board-live/exports/export-live/${body.mode}`,
+            manifest_path: `C:/exports/board-${body.mode}-sources.json`,
             item_count: 1,
           },
           201,
@@ -827,6 +829,29 @@ describe('research board', () => {
     expect(within(remoteImage.closest('.evidence-image') as HTMLElement).getByText('公开网页图片')).toBeVisible()
   })
 
+  it('replaces a remote preview with its source fallback when the image cannot load', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', createLiveFetch({
+      candidateOverrides: { image_url: 'https://images.example.org/broken-section.jpg' },
+    }))
+    renderBoard()
+
+    await startLiveResearch(user)
+    const remoteImage = await screen.findByRole('img', { name: 'Live Mill Conversion 剖面图' })
+    fireEvent.error(remoteImage)
+
+    expect(screen.queryByRole('img', { name: 'Live Mill Conversion 剖面图' })).not.toBeInTheDocument()
+    const failedPreview = screen.getByText('图纸预览加载失败')
+    expect(failedPreview).toBeVisible()
+    const evidenceSheet = failedPreview.closest('.evidence-sheet') as HTMLElement
+    expect(within(evidenceSheet).queryByText('公开网页图片')).not.toBeInTheDocument()
+    expect(within(evidenceSheet).getByText('来源链接')).toBeVisible()
+    expect(screen.getByRole('link', { name: '打开原始图纸页' })).toHaveAttribute(
+      'href',
+      'https://example.com/live-mill',
+    )
+  })
+
   it('prefers and labels a local Chrome crop when one exists', async () => {
     const user = userEvent.setup()
     vi.stubGlobal('fetch', createLiveFetch({
@@ -842,7 +867,7 @@ describe('research board', () => {
     expect(within(localImage.closest('.evidence-image') as HTMLElement).getByText('Chrome 精确裁图')).toBeVisible()
   })
 
-  it('requests temporary page access from the connected extension before research starts', async () => {
+  it('checks temporary Chrome access before research starts', async () => {
     const user = userEvent.setup()
     const fetchMock = createLiveFetch({ browserConnected: true, initialStatus: 'searching' })
     vi.stubGlobal('fetch', fetchMock)
@@ -850,7 +875,7 @@ describe('research board', () => {
 
     await startLiveResearch(user)
 
-    expect(requestBrowserBridge).toHaveBeenCalledWith({ type: 'permissions.request' })
+    expect(requestBrowserBridge).toHaveBeenCalledWith({ type: 'status' })
     expect(fetchMock).toHaveBeenCalledWith(
       '/v1/workspaces/workspace-live/runs',
       expect.objectContaining({ method: 'POST' }),
@@ -858,6 +883,48 @@ describe('research board', () => {
     expect(await screen.findByRole('heading', { name: liveQuestion })).toBeVisible()
     expect(screen.getByText('正在从公开网页中寻找项目与图纸')).toBeVisible()
     expect(screen.queryByRole('heading', { name: '从一个具体设计问题开始' })).not.toBeInTheDocument()
+  })
+
+  it('explains the required extension confirmation when temporary Chrome access is absent', async () => {
+    const user = userEvent.setup()
+    const fetchMock = createLiveFetch({ browserConnected: true })
+    vi.mocked(requestBrowserBridge).mockResolvedValue({
+      paired: true,
+      connection: 'connected',
+      researchPermission: false,
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    await startLiveResearch(user)
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '请点击浏览器工具栏的 ArchResearch，选择“授予网页读取权限”',
+    )
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/v1/workspaces/workspace-live/runs',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
+  it('continues a new run with public pages when the connected extension belongs to another surface', async () => {
+    const user = userEvent.setup()
+    const fetchMock = createLiveFetch({ browserConnected: true, initialStatus: 'searching' })
+    vi.mocked(requestBrowserBridge).mockRejectedValue(
+      new BrowserBridgeError('unavailable', 'bridge unavailable on this surface'),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    await startLiveResearch(user)
+
+    expect(requestBrowserBridge).toHaveBeenCalledWith({ type: 'status' })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/v1/workspaces/workspace-live/runs',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: liveQuestion })).toBeVisible()
   })
 
   it('starts a new run from an image-less completed result after the extension connects', async () => {
@@ -900,6 +967,7 @@ describe('research board', () => {
     await user.click(await screen.findByRole('button', { name: `打开研究：${liveQuestion}` }))
     expect(await screen.findByText('Live Mill Conversion')).toBeVisible()
     await user.click(screen.getByRole('button', { name: '发起新研究' }))
+    expect(screen.getByRole('textbox', { name: '研究问题' })).toHaveValue('')
     await user.type(screen.getByRole('textbox', { name: '研究问题' }), '开始另一个研究任务')
     await user.click(screen.getByRole('button', { name: '开始研究' }))
 
@@ -1075,12 +1143,39 @@ describe('research board', () => {
     renderBoard()
     await startLiveResearch(user)
 
-    expect(screen.getByRole('status')).toHaveTextContent('已创建')
     expect(await screen.findByText('正在搜索', {}, { timeout: 2_000 })).toBeVisible()
 
     expect(await screen.findByText('Live Mill Conversion', {}, { timeout: 3_000 })).toBeVisible()
-    expect(screen.getByRole('status')).toHaveTextContent('研究已完成')
+    await waitFor(
+      () => expect(screen.getByRole('status')).toHaveTextContent('研究已完成'),
+      { timeout: 3_000 },
+    )
   }, 8_000)
+
+  it('shows provisional results while the run is still active without polling faster', async () => {
+    const user = userEvent.setup()
+    const fetchMock = createLiveFetch({
+      initialStatus: 'searching',
+      pollStatuses: ['searching'],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+    await startLiveResearch(user)
+
+    expect(screen.getByRole('status')).toHaveTextContent('正在搜索')
+    expect(await screen.findByText('Live Mill Conversion', {}, { timeout: 3_000 })).toBeVisible()
+    expect(screen.getByRole('status')).toHaveTextContent('1 张可用参考')
+    expect(screen.getByRole('status')).not.toHaveTextContent('研究已完成')
+
+    const runPollCount = fetchMock.mock.calls.filter(
+      ([path, init]) => path === '/v1/runs/run-live' && (init as RequestInit | undefined)?.method === undefined,
+    ).length
+    const resultPollCount = fetchMock.mock.calls.filter(
+      ([path, init]) => path === '/v1/runs/run-live/results' && (init as RequestInit | undefined)?.method === undefined,
+    ).length
+    expect(resultPollCount).toBeGreaterThan(0)
+    expect(resultPollCount).toBeLessThanOrEqual(runPollCount)
+  }, 6_000)
 
   it('preserves partial results, coverage gaps, and a retry action', async () => {
     const user = userEvent.setup()
@@ -1096,6 +1191,48 @@ describe('research board', () => {
     expect(screen.queryByText('budget_exhausted')).not.toBeInTheDocument()
     expect(screen.queryByText('fewer_than_six_usable_assets')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '重试研究' }))
+    expect(screen.getByRole('status')).toHaveTextContent('已创建')
+  })
+
+  it('requests fresh temporary page access before retrying a partial run', async () => {
+    const user = userEvent.setup()
+    const fetchMock = createLiveFetch({
+      browserConnected: true,
+      existingRunStatus: 'partial',
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    await user.click(await screen.findByRole('button', { name: `打开研究：${liveQuestion}` }))
+    await user.click(screen.getByRole('button', { name: '重试研究' }))
+
+    expect(requestBrowserBridge).toHaveBeenCalledWith({ type: 'status' })
+    const retryCallIndex = fetchMock.mock.calls.findIndex(
+      ([path, init]) => path === '/v1/runs/run-live/retry' && (init as RequestInit | undefined)?.method === 'POST',
+    )
+    expect(retryCallIndex).toBeGreaterThanOrEqual(0)
+    expect(vi.mocked(requestBrowserBridge).mock.invocationCallOrder[0]).toBeLessThan(
+      fetchMock.mock.invocationCallOrder[retryCallIndex],
+    )
+  })
+
+  it('retries with public pages when the connected extension belongs to another surface', async () => {
+    const user = userEvent.setup()
+    const fetchMock = createLiveFetch({
+      browserConnected: true,
+      existingRunStatus: 'partial',
+    })
+    vi.mocked(requestBrowserBridge).mockRejectedValue(
+      new BrowserBridgeError('unavailable', 'bridge unavailable on this surface'),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    await user.click(await screen.findByRole('button', { name: `打开研究：${liveQuestion}` }))
+    await user.click(screen.getByRole('button', { name: '重试研究' }))
+
+    expect(fetchMock).toHaveBeenCalledWith('/v1/runs/run-live/retry', { method: 'POST' })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('已创建')
   })
 
@@ -1203,6 +1340,50 @@ describe('research board', () => {
     expect(screen.getAllByText('已调研 2 轮 · 0 个项目 · 0 张图纸')).toHaveLength(2)
   })
 
+  it('keeps every promised subquestion visible when a partial run has no evidence for a branch', async () => {
+    const user = userEvent.setup()
+    const subquestions = [
+      { id: 'program', question: '新功能怎样进入旧结构？', rationale: '研究植入方式' },
+      { id: 'circulation', question: '访客与后勤怎样分开？', rationale: '研究流线组织' },
+      { id: 'section', question: '剖面怎样形成层次？', rationale: '研究竖向空间' },
+    ]
+    vi.stubGlobal('fetch', createLiveFetch({
+      existingRunStatus: 'partial',
+      subquestions,
+      coverageReport: {
+        subquestion_passes: { program: 2, circulation: 2, section: 2 },
+      },
+    }))
+    renderBoard()
+
+    await user.click(await screen.findByRole('button', { name: `打开研究：${liveQuestion}` }))
+
+    expect(screen.getByRole('region', { name: '访客与后勤怎样分开？' })).toHaveTextContent(
+      '已经完成检索，但还没有找到可用且有来源证据的图纸',
+    )
+    expect(screen.getByRole('region', { name: '剖面怎样形成层次？' })).toHaveTextContent(
+      '已经完成检索，但还没有找到可用且有来源证据的图纸',
+    )
+  })
+
+  it('does not pretend an unassigned drawing answers the first subquestion', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', createLiveFetch({
+      existingRunStatus: 'partial',
+      candidateOverrides: { subquestion_ids: [], subquestion_analysis: {} },
+    }))
+    renderBoard()
+
+    await user.click(await screen.findByRole('button', { name: `打开研究：${liveQuestion}` }))
+
+    expect(screen.getByRole('region', { name: liveSubquestions[0].question })).toHaveTextContent(
+      '已经完成检索，但还没有找到可用且有来源证据的图纸',
+    )
+    expect(screen.getByRole('region', { name: '待归组的图纸线索' })).toHaveTextContent(
+      '尚未确认它具体回答哪个子问题',
+    )
+  })
+
   it('keeps save and reject mutually exclusive and persists undo actions', async () => {
     const user = userEvent.setup()
     const fetchMock = createLiveFetch()
@@ -1210,6 +1391,8 @@ describe('research board', () => {
     renderBoard()
     await startLiveResearch(user)
     await screen.findByText('Live Mill Conversion')
+    await user.click(screen.getByRole('button', { name: '加入方法对照 Live Mill Conversion 剖面图' }))
+    expect(screen.getByRole('button', { name: '导出个人研究板' })).toBeEnabled()
     await user.click(screen.getByRole('button', { name: '查看 Live Mill Conversion 剖面图证据' }))
 
     await user.click(screen.getByRole('button', { name: '收藏参考' }))
@@ -1217,6 +1400,7 @@ describe('research board', () => {
     await user.click(screen.getByRole('button', { name: '拒绝参考' }))
     expect(screen.getByRole('button', { name: '撤销拒绝' })).toBePressed()
     expect(screen.getByRole('button', { name: '收藏参考' })).not.toBePressed()
+    expect(screen.getByRole('button', { name: '导出个人研究板' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: '撤销拒绝' }))
 
     const actionCalls = fetchMock.mock.calls
@@ -1227,6 +1411,13 @@ describe('research board', () => {
       ['/v1/results/asset-live/save', 'DELETE'],
       ['/v1/results/asset-live/reject', 'POST'],
       ['/v1/results/asset-live/reject', 'DELETE'],
+    ])
+    const boardSelections = fetchMock.mock.calls
+      .filter(([path, init]) => path === '/v1/runs/run-live/board' && (init as RequestInit | undefined)?.method === 'PATCH')
+      .map(([, init]) => JSON.parse(String((init as RequestInit).body)))
+    expect(boardSelections).toEqual([
+      { selected_asset_ids: ['asset-live'] },
+      { selected_asset_ids: [] },
     ])
   })
 
@@ -1258,7 +1449,10 @@ describe('research board', () => {
     await user.click(screen.getByRole('button', { name: '加入方法对照 Live Mill Conversion 剖面图' }))
     await user.click(screen.getByRole('button', { name: '导出个人研究板' }))
 
-    expect(await screen.findByRole('status')).toHaveTextContent('C:/exports/board-private.json')
+    expect(await screen.findByRole('link', { name: '打开个人研究板' })).toHaveAttribute(
+      'href',
+      'http://127.0.0.1:8000/v1/boards/board-live/exports/export-live/private',
+    )
     const boardPatch = fetchMock.mock.calls.find(
       ([path, init]) =>
         path === '/v1/runs/run-live/board' && (init as RequestInit | undefined)?.method === 'PATCH',
@@ -1282,7 +1476,7 @@ describe('research board', () => {
     expect(screen.queryByRole('button', { name: '整理与导出：对照、规范与导出' })).not.toBeInTheDocument()
 
     expect(within(resultWorkbench).getByText('已选 0 张，还需选择 2 张图纸')).toBeVisible()
-    expect(within(resultWorkbench).getByText('从本次图纸整理配色、线型与版式')).toBeVisible()
+    expect(within(resultWorkbench).getByText('手动设定配色、线型与字体，保存到本研究板')).toBeVisible()
     expect(within(resultWorkbench).getByText('选择图纸后，可导出包含完整图片的个人研究板')).toBeVisible()
     expect(within(resultWorkbench).getByText('受限图片只保留署名、来源与链接')).toBeVisible()
     expect(within(resultWorkbench).getByText('查看搜索、网页读取、图纸识别与来源核验记录')).toBeVisible()
@@ -1308,7 +1502,10 @@ describe('research board', () => {
       fetchMock.mock.calls.filter(([path]) => path === '/v1/boards/board-live/exports'),
     ).toHaveLength(0)
     await user.click(screen.getByRole('button', { name: '确认生成分享版' }))
-    expect(await screen.findByRole('status')).toHaveTextContent('C:/exports/board-share.json')
+    expect(await screen.findByRole('link', { name: '打开分享来源板' })).toHaveAttribute(
+      'href',
+      'http://127.0.0.1:8000/v1/boards/board-live/exports/export-live/share',
+    )
   })
 
   it('loads and explicitly saves an editable style profile', async () => {
@@ -1329,7 +1526,7 @@ describe('research board', () => {
     await startLiveResearch(user)
     await screen.findByText('Live Mill Conversion')
 
-    await user.click(screen.getByRole('button', { name: '整理图纸表达规范' }))
+    await user.click(screen.getByRole('button', { name: '编辑图纸表达规范' }))
     const stylePanel = screen.getByRole('dialog', { name: '表达规范' })
     expect(within(stylePanel).getByLabelText('主色')).toHaveValue('#2d846b')
     expect(within(stylePanel).getByRole('combobox', { name: '字体类别' })).toHaveValue('serif')

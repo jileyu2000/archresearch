@@ -11,7 +11,7 @@ type BoardRequest = {
   channel: typeof BOARD_CHANNEL;
   protocol_version: 1;
   id: string;
-  action: "pair" | "status" | "permissions.request";
+  action: "pair" | "status";
   payload: Record<string, unknown>;
 };
 
@@ -71,13 +71,11 @@ function parseBoardRequest(value: unknown, origin: string): ParsedRequest | null
     return null;
   }
   const request = value as BoardRequest;
-  if (request.action === "status" || request.action === "permissions.request") {
+  if (request.action === "status") {
     if (!hasExactKeys(request.payload, [])) return null;
     return {
       id: request.id,
-      command: {
-        type: request.action === "status" ? "ui.status" : "ui.permissions.request",
-      },
+      command: { type: "ui.status" },
     };
   }
   if (request.action !== "pair" || !hasExactKeys(request.payload, ["endpoint", "token"])) {

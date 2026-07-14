@@ -59,6 +59,7 @@ export interface CoverageReport {
   multi_asset_projects?: number
   subquestion_passes?: Record<string, number>
   gaps?: string[]
+  enrichment_gaps?: string[]
 }
 
 export interface ResearchSubquestion {
@@ -204,6 +205,8 @@ export interface BoardExport {
   board_id: string
   mode: 'private' | 'share'
   path: string
+  browser_url: string
+  manifest_path: string
   item_count: number
 }
 

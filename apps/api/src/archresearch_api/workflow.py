@@ -110,9 +110,11 @@ class CoverageData(TypedDict):
     verified_or_partial: int
     subquestion_count: int
     covered_subquestions: int
+    covered_subquestion_ids: list[str]
     multi_asset_projects: int
     subquestion_passes: dict[str, int]
     gaps: list[str]
+    enrichment_gaps: list[str]
 
 
 def execute_research_run(
@@ -171,12 +173,21 @@ def execute_research_run(
             planning_summary["planner_error_type"] = planning_error
         _checkpoint(db, run_id, RunStatus.planning, planning_summary)
         subquestion_text = {item.id: item.question for item in plan.subquestions}
+        normal_rounds = int(budget["max_rounds"])
+        recovery_rounds = (
+            int(budget.get("completion_recovery_rounds", 1))
+            if goal is ResearchGoal.precedent_research
+            else 0
+        )
+        recovery_pages_per_subquestion = int(
+            budget.get("completion_recovery_pages_per_subquestion", 2)
+        )
         queries = _queries_for(
             question,
             goal,
             subquestions=plan.subquestions,
-            max_rounds=budget["max_rounds"],
-            max_queries=budget["max_queries"],
+            max_rounds=normal_rounds + recovery_rounds,
+            max_queries=(int(budget["max_queries"]) + len(plan.subquestions) * recovery_rounds),
             analysis_requirements=DEPTH_TARGETS[budget_mode].analysis_requirements,
             research_context=research_context,
         )
@@ -221,7 +232,9 @@ def execute_research_run(
         inspected_urls: set[str] = set()
         parsed_pages: dict[str, ParsedPublicPage | None] = {}
         public_page_attempts = 0
+        public_recovery_page_attempts: dict[str, int] = {}
         browser_page_attempts = browser_pages_attempted
+        browser_recovery_page_attempts: dict[str, int] = {}
         visual_call_limit, visual_byte_limit = VISUAL_INSPECTION_LIMITS[budget_mode]
         inspection_budget = InspectionBudget(
             max_calls=visual_call_limit,
@@ -246,9 +259,14 @@ def execute_research_run(
         )
         stop_reason = "budget_exhausted"
         model_search_timed_out = False
+        browser_inspection_failed = False
         for query_index, (round_number, language, subquestion_id, query) in enumerate(
             queries, start=1
         ):
+            if round_number > normal_rounds:
+                current_coverage = _coverage(db, run_id)
+                if subquestion_id in current_coverage["covered_subquestion_ids"]:
+                    continue
             query_key = (round_number, language, subquestion_id)
             if query_key in completed_query_keys:
                 continue
@@ -357,15 +375,32 @@ def execute_research_run(
                 {"page_count": len(provider_result.sources)},
             )
             browser_added = 0
-            for source in provider_result.sources:
+            inspection_sources = sorted(
+                provider_result.sources,
+                key=lambda source: PUBLICATION_TIER_STRENGTH[source.publication_tier.value],
+                reverse=True,
+            )
+            for source in inspection_sources:
                 parsed_page = parsed_pages.get(source.url)
                 parsed_now = False
                 if (
                     public_page_parser is not None
                     and source.url not in parsed_pages
-                    and public_page_attempts < max_pages
+                    and _page_budget_available(
+                        round_number=round_number,
+                        normal_rounds=normal_rounds,
+                        normal_attempts=public_page_attempts,
+                        normal_limit=max_pages,
+                        subquestion_id=subquestion_id,
+                        recovery_attempts=public_recovery_page_attempts,
+                        recovery_limit=recovery_pages_per_subquestion,
+                    )
                 ):
                     public_page_attempts += 1
+                    if round_number > normal_rounds:
+                        public_recovery_page_attempts[subquestion_id] = (
+                            public_recovery_page_attempts.get(subquestion_id, 0) + 1
+                        )
                     parsed_page = _try_parse_public_page(
                         db,
                         run_id,
@@ -379,8 +414,17 @@ def execute_research_run(
                     browser_client is not None
                     and visual_classifier is not None
                     and candidate_root is not None
+                    and bool(getattr(browser_client, "connected", True))
                     and source.url not in inspected_urls
-                    and browser_page_attempts < max_pages
+                    and _page_budget_available(
+                        round_number=round_number,
+                        normal_rounds=normal_rounds,
+                        normal_attempts=browser_page_attempts,
+                        normal_limit=max_pages,
+                        subquestion_id=subquestion_id,
+                        recovery_attempts=browser_recovery_page_attempts,
+                        recovery_limit=recovery_pages_per_subquestion,
+                    )
                     and not inspection_budget.exhausted
                 )
                 if can_inspect:
@@ -389,6 +433,10 @@ def execute_research_run(
                     assert candidate_root is not None
                     inspected_urls.add(source.url)
                     browser_page_attempts += 1
+                    if round_number > normal_rounds:
+                        browser_recovery_page_attempts[subquestion_id] = (
+                            browser_recovery_page_attempts.get(subquestion_id, 0) + 1
+                        )
                     _persist_browser_page_attempts(db, run_id, browser_page_attempts)
                     try:
                         inspected = inspect_source_page(
@@ -424,6 +472,7 @@ def execute_research_run(
                             tool="browser",
                         )
                     except Exception as exc:
+                        browser_inspection_failed = True
                         _checkpoint(
                             db,
                             run_id,
@@ -476,11 +525,23 @@ def execute_research_run(
                         )
                         if (
                             project_url in parsed_pages
-                            or public_page_attempts >= max_pages
+                            or not _page_budget_available(
+                                round_number=round_number,
+                                normal_rounds=normal_rounds,
+                                normal_attempts=public_page_attempts,
+                                normal_limit=max_pages,
+                                subquestion_id=subquestion_id,
+                                recovery_attempts=public_recovery_page_attempts,
+                                recovery_limit=recovery_pages_per_subquestion,
+                            )
                             or deadline - clock() < parser_reserve
                         ):
                             continue
                         public_page_attempts += 1
+                        if round_number > normal_rounds:
+                            public_recovery_page_attempts[subquestion_id] = (
+                                public_recovery_page_attempts.get(subquestion_id, 0) + 1
+                            )
                         project_source = ProviderSource(
                             url=project_url,
                             publisher=urlparse(project_url).hostname or "",
@@ -522,6 +583,38 @@ def execute_research_run(
                             },
                             tool=f"{public_page_parser.name}_expand",
                         )
+                elif parsed_page is not None and public_page_parser is not None:
+                    reassociated = 0
+                    for project_url in select_project_page_links(parsed_page):
+                        project_page = parsed_pages.get(project_url)
+                        if project_page is None:
+                            continue
+                        project_source = ProviderSource(
+                            url=project_url,
+                            title=project_page.title,
+                            publisher=urlparse(project_url).hostname or "",
+                            publication_tier=source.publication_tier,
+                        )
+                        reassociated += _persist_expanded_project_page(
+                            db,
+                            run_id,
+                            project_source,
+                            project_page,
+                            subquestion_id=subquestion_id,
+                        )
+                    browser_added += reassociated
+                    if reassociated:
+                        _checkpoint(
+                            db,
+                            run_id,
+                            RunStatus.inspecting,
+                            {
+                                "source_url": source.url,
+                                "status": "reused",
+                                "reassociated": reassociated,
+                            },
+                            tool=f"{public_page_parser.name}_expand",
+                        )
             _checkpoint(
                 db,
                 run_id,
@@ -535,13 +628,16 @@ def execute_research_run(
             _checkpoint(db, run_id, RunStatus.verifying, {"method": "source_binding"})
             coverage = _coverage(db, run_id)
             _checkpoint(db, run_id, RunStatus.gap_check, dict(coverage))
-            if _coverage_satisfied(coverage):
+            if _enrichment_satisfied(coverage):
                 stop_reason = "coverage_satisfied"
                 break
             round_finished = query_index == len(queries) or queries[query_index][0] != round_number
+            if round_finished and round_number >= normal_rounds and _completion_satisfied(coverage):
+                stop_reason = "completion_satisfied"
+                break
             if (
                 round_finished
-                and round_number >= 2
+                and round_number >= normal_rounds + recovery_rounds
                 and round_added_usable_assets == 0
                 and round_number not in resumed_rounds
             ):
@@ -552,6 +648,9 @@ def execute_research_run(
 
         _raise_if_cancelled(db, run_id)
         coverage = _coverage(db, run_id)
+        if browser_inspection_failed and "browser_inspection_incomplete" not in coverage["gaps"]:
+            coverage["gaps"].append("browser_inspection_incomplete")
+            stop_reason = "browser_inspection_incomplete"
         _checkpoint(db, run_id, RunStatus.composing, {"coverage": coverage})
         with db.session_factory() as session:
             run = _get_run(session, run_id)
@@ -564,9 +663,11 @@ def execute_research_run(
             if source_lookup_error is not None:
                 run.status = RunStatus.partial.value
                 run.stop_reason = f"source_lookup_error:{type(source_lookup_error).__name__}"
-            elif _coverage_satisfied(coverage):
+            elif _completion_satisfied(coverage):
                 run.status = RunStatus.completed.value
-                run.stop_reason = "coverage_satisfied"
+                run.stop_reason = (
+                    "coverage_satisfied" if _enrichment_satisfied(coverage) else stop_reason
+                )
             elif coverage["usable_assets"]:
                 run.status = RunStatus.partial.value
                 run.stop_reason = stop_reason
@@ -601,6 +702,21 @@ def _is_timeout_error(error: Exception) -> bool:
         "ReadTimeout",
         "TimeoutException",
     }
+
+
+def _page_budget_available(
+    *,
+    round_number: int,
+    normal_rounds: int,
+    normal_attempts: int,
+    normal_limit: int,
+    subquestion_id: str,
+    recovery_attempts: dict[str, int],
+    recovery_limit: int,
+) -> bool:
+    if round_number <= normal_rounds:
+        return normal_attempts < normal_limit
+    return recovery_attempts.get(subquestion_id, 0) < recovery_limit
 
 
 def _latest_uploaded_image(db: Database, workspace_id: str) -> Path | None:
@@ -1502,6 +1618,7 @@ def _persist_expanded_project_page(
             assert asset_type is not None
             statement = f"{project_name} 项目页直接列出了这张{_asset_type_label(asset_type)}图。"
             candidate = existing_by_image.get(image.url)
+            changed = candidate is None
             if candidate is None:
                 candidate = AssetCandidate(
                     run_id=run_id,
@@ -1535,6 +1652,7 @@ def _persist_expanded_project_page(
                 session.flush()
                 existing_by_image[image.url] = candidate
             else:
+                changed = changed or candidate.result_tier == ResultTier.visual_lead.value
                 candidate.source_page_id = source_page_id
                 candidate.project_name = project_name
                 candidate.asset_type = asset_type.value
@@ -1550,6 +1668,7 @@ def _persist_expanded_project_page(
                 associations = list(candidate.subquestion_ids or [])
                 if subquestion_id is not None and subquestion_id not in associations:
                     candidate.subquestion_ids = [*associations, subquestion_id]
+                    changed = True
 
             existing_claim = session.scalar(
                 select(EvidenceClaim.id).where(
@@ -1570,7 +1689,8 @@ def _persist_expanded_project_page(
                         expires_at=datetime.now(UTC) + timedelta(days=30),
                     )
                 )
-            promoted += 1
+                changed = True
+            promoted += int(changed)
         if promoted:
             _rerank_assets(session, run_id)
         session.commit()
@@ -1636,22 +1756,31 @@ def _persist_assets(
             page.url: page.id
             for page in session.scalars(select(SourcePage).where(SourcePage.run_id == run_id))
         }
+        existing_assets = list(
+            session.scalars(select(AssetCandidate).where(AssetCandidate.run_id == run_id))
+        )
         existing = {
-            (candidate.source_url, candidate.image_url): candidate
-            for candidate in session.scalars(
-                select(AssetCandidate).where(AssetCandidate.run_id == run_id)
-            )
+            (candidate.source_url, candidate.image_url): candidate for candidate in existing_assets
         }
+        assets_by_image_url: dict[str, list[AssetCandidate]] = {}
+        for candidate in existing_assets:
+            if candidate.image_url is not None:
+                assets_by_image_url.setdefault(candidate.image_url, []).append(candidate)
         added_usable = 0
         for item in result.assets:
             identity = (item.source_url, item.image_url)
             existing_candidate = existing.get(identity)
+            if existing_candidate is None and item.image_url is not None:
+                same_image_url = assets_by_image_url.get(item.image_url, [])
+                if len(same_image_url) == 1:
+                    existing_candidate = same_image_url[0]
             if existing_candidate is not None:
                 if PUBLICATION_TIER_STRENGTH[item.publication_tier.value] > (
                     PUBLICATION_TIER_STRENGTH.get(existing_candidate.publication_tier, 0)
                 ):
                     existing_candidate.publication_tier = item.publication_tier.value
                     existing_candidate.source_page_id = pages.get(item.source_url)
+                    existing_candidate.source_url = item.source_url
                 associations = list(existing_candidate.subquestion_ids or [])
                 if subquestion_id is not None and subquestion_id not in associations:
                     existing_candidate.subquestion_ids = [*associations, subquestion_id]
@@ -1754,6 +1883,8 @@ def _persist_assets(
             session.add(candidate)
             session.flush()
             existing[identity] = candidate
+            if item.image_url is not None:
+                assets_by_image_url.setdefault(item.image_url, []).append(candidate)
             if item.relevance >= 2:
                 added_usable += 1
             for statement in item.facts:
@@ -1795,6 +1926,10 @@ def _persist_inspected_assets(
             for candidate in existing_assets
             if candidate.image_url is not None
         }
+        assets_by_image_url: dict[str, list[AssetCandidate]] = {}
+        for candidate in existing_assets:
+            if candidate.image_url is not None:
+                assets_by_image_url.setdefault(candidate.image_url, []).append(candidate)
         existing_hashes = {
             candidate.perceptual_hash: candidate
             for candidate in existing_assets
@@ -1816,6 +1951,10 @@ def _persist_inspected_assets(
             duplicate = existing_hashes.get(item.perceptual_hash)
             if duplicate is None and item.image_url is not None:
                 duplicate = existing_image_urls.get(image_identity)
+            if duplicate is None and item.image_url is not None:
+                same_image_url = assets_by_image_url.get(item.image_url, [])
+                if len(same_image_url) == 1:
+                    duplicate = same_image_url[0]
             unresolved_key = (item.source_url, item.asset_type.value)
             if duplicate is None:
                 unresolved = unresolved_by_source_and_type.get(unresolved_key, [])
@@ -2024,6 +2163,16 @@ def _coverage(db: Database, run_id: str) -> CoverageData:
                 )
             )
         )
+        evidence_bindings = set(
+            session.execute(
+                select(EvidenceClaim.asset_candidate_id, EvidenceClaim.source_url)
+                .join(
+                    AssetCandidate,
+                    EvidenceClaim.asset_candidate_id == AssetCandidate.id,
+                )
+                .where(AssetCandidate.run_id == run_id)
+            ).all()
+        )
     usable = [
         asset
         for asset in assets
@@ -2034,6 +2183,9 @@ def _coverage(db: Database, run_id: str) -> CoverageData:
         for asset in usable
         if asset.result_tier in {ResultTier.verified.value, ResultTier.partial.value}
     ]
+    evidence_backed = [
+        asset for asset in verified_or_partial if (asset.id, asset.source_url) in evidence_bindings
+    ]
     is_precedent = ResearchGoal(run.goal) is ResearchGoal.precedent_research
     coverage_assets = verified_or_partial if is_precedent else usable
     projects = {asset.project_name for asset in coverage_assets}
@@ -2043,6 +2195,7 @@ def _coverage(db: Database, run_id: str) -> CoverageData:
     for asset in coverage_assets:
         project_asset_ids.setdefault(asset.project_name, set()).add(asset.id)
         project_asset_types.setdefault(asset.project_name, set()).add(asset.asset_type)
+    for asset in evidence_backed:
         for subquestion_id in asset.subquestion_ids or []:
             subquestion_asset_ids.setdefault(subquestion_id, set()).add(asset.id)
     subquestions = list(run.subquestions or [])
@@ -2054,6 +2207,10 @@ def _coverage(db: Database, run_id: str) -> CoverageData:
         depth_target.assets_per_subquestion if depth_target is not None else 1
     )
     covered_subquestions = sum(
+        bool(subquestion_asset_ids.get(subquestion_id))
+        for subquestion_id in planned_subquestion_ids
+    )
+    enriched_subquestions = sum(
         len(subquestion_asset_ids.get(subquestion_id, set())) >= minimum_assets_per_subquestion
         for subquestion_id in planned_subquestion_ids
     )
@@ -2077,40 +2234,53 @@ def _coverage(db: Database, run_id: str) -> CoverageData:
         target_assets = target.assets
         target_projects = target.projects
         target_verified = target.verified_or_partial
-        target_subquestions = target.subquestions
         target_multi_asset_projects = target.multi_asset_projects
     else:
         target_assets, target_projects, target_verified = NON_PRECEDENT_COVERAGE_TARGETS[
             BudgetMode(run.budget_mode)
         ]
-        target_subquestions = len(planned_subquestion_ids)
         target_multi_asset_projects = 0
 
+    target_subquestions = len(planned_subquestion_ids)
     gaps: list[str] = []
-    if len(usable) < target_assets:
-        gaps.append("insufficient_usable_assets")
-    if len(projects) < target_projects:
-        gaps.append("insufficient_project_diversity")
-    if len(verified_or_partial) < target_verified:
-        gaps.append("insufficient_verified_or_partial")
     if covered_subquestions < target_subquestions:
         gaps.append("uncovered_subquestions")
+
+    enrichment_gaps: list[str] = []
+    if len(usable) < target_assets:
+        enrichment_gaps.append("insufficient_usable_assets")
+    if len(projects) < target_projects:
+        enrichment_gaps.append("insufficient_project_diversity")
+    if len(verified_or_partial) < target_verified:
+        enrichment_gaps.append("insufficient_verified_or_partial")
+    if enriched_subquestions < target_subquestions:
+        enrichment_gaps.append("insufficient_subquestion_assets")
     if multi_asset_projects < target_multi_asset_projects:
-        gaps.append("insufficient_multi_asset_projects")
+        enrichment_gaps.append("insufficient_multi_asset_projects")
     return {
         "usable_assets": len(usable),
         "project_count": len(projects),
         "verified_or_partial": len(verified_or_partial),
         "subquestion_count": len(subquestions),
         "covered_subquestions": covered_subquestions,
+        "covered_subquestion_ids": sorted(
+            subquestion_id
+            for subquestion_id in planned_subquestion_ids
+            if subquestion_asset_ids.get(subquestion_id)
+        ),
         "multi_asset_projects": multi_asset_projects,
         "subquestion_passes": subquestion_passes,
         "gaps": gaps,
+        "enrichment_gaps": enrichment_gaps,
     }
 
 
-def _coverage_satisfied(coverage: CoverageData) -> bool:
+def _completion_satisfied(coverage: CoverageData) -> bool:
     return not coverage["gaps"]
+
+
+def _enrichment_satisfied(coverage: CoverageData) -> bool:
+    return _completion_satisfied(coverage) and not coverage["enrichment_gaps"]
 
 
 def _preserve_failure(db: Database, run_id: str, exc: Exception) -> str:

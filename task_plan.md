@@ -51,6 +51,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | 31. M30 Self-explanatory result tools | complete | “结果工具” groups compare/organize, export and process review; every action states its outcome and disabled prerequisite, user-facing Trace jargon is removed, and the full 170/53/122/6 gate passes |
 | 32. M31 Promote result-use entry | complete | The result header now makes “整理与导出” the filled primary action, previews 对照/规范/导出 before opening, keeps new research secondary, collapses cleanly on mobile, and passes the full 170/53/122/6 gate |
 | 33. M32 Persistent result workbench | complete | The top-right menu is replaced by a full-width in-page workbench exposing compare, style, private/share export and process review directly; 1440/390 acceptance, disabled guidance, zero detector findings and the full 170/53/122/6 gate pass |
+| 34. M33 Completion-first research and final user-flow audit | complete | Completion and enrichment are separate; uncovered branches receive a dedicated recovery pass and per-branch page capacity; honest partial delivery, 739px browser acceptance, 186/62/124/6 verification and three real Quick limitations are recorded |
 
 ## M6 completion summary
 
@@ -67,6 +68,16 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 4. The Board presents case chapters and multi-image dossiers, and keeps the evidence drawer aligned with the subquestion the user opened. Provider, browser and follow-up passes merge analysis monotonically instead of clearing supported context, mechanism or earlier observations.
 5. Candidate retention resolves the default `.archresearch/...` storage form consistently, so the lifecycle sweep removes only genuine orphan crops. Desktop 1440px and mobile 390px visual acceptance covers home, result chapters, project dossiers and evidence drawers with no document-level horizontal overflow.
 6. The final `scripts/verify.ps1` gate exits 0: 137 API tests, 41 Board tests, 111 Extension tests, 6 packaged-Chrome E2E cases, PowerShell contracts, type/lint/build checks and all 30/108 evaluation fixtures pass without live provider calls.
+
+## M33 completion summary
+
+1. A run is complete only when every planned subquestion has at least one displayable, relevant partial/verified asset with a current source-evidence binding. Additional drawings, project diversity and deeper analysis remain enrichment targets rather than false completeness blockers.
+2. Quick/Balanced/Deep keep their normal depth passes. Precedent research alone receives one bounded completion recovery pass; already covered branches are skipped and each uncovered branch retains two dedicated public/browser page attempts after the normal page budget is exhausted.
+3. Disconnected Chrome remains an optional enhancement and cannot downgrade public research. Once a Chrome inspection is actually attempted, an execution failure is preserved as `browser_inspection_incomplete` and the run stays partial.
+4. Exact unique image URLs and perceptual hashes deduplicate across provider and browser sources. Stronger primary/trusted sources can promote a candidate; later aggregator results cannot recreate or downgrade it.
+5. The Board distinguishes usable output from unverified leads (`3 张可用 · 18 条待核验线索` in the accepted live result) and keeps every unsupported subquestion visible.
+6. The final repository gate exits 0: 186 API tests, 62 Board tests, 124 Extension tests, 6 packaged-Chrome E2E cases, all lint/type/build/security contracts and the 30/108 evaluation fixtures pass. Impeccable reports zero design-detector findings.
+7. Three comparable live Quick runs remained honest partials at 3 usable drawings, one concrete project and 1/3 covered branches after the relay model search timed out and Firecrawl returned weak recovery sources. This is a measured provider/recall limitation, not relabeled as completion.
 
 ## External acceptance gates
 

@@ -82,6 +82,8 @@ class ArtifactKind(StrEnum):
 class Budget(BaseModel):
     max_rounds: int
     max_queries: int
+    completion_recovery_rounds: int = 1
+    completion_recovery_pages_per_subquestion: int = 2
     max_pages: int
     max_seconds: int
 
@@ -240,6 +242,7 @@ class CoverageReport(BaseModel):
     covered_subquestions: int = 0
     multi_asset_projects: int = 0
     gaps: list[str] = Field(default_factory=list)
+    enrichment_gaps: list[str] = Field(default_factory=list)
 
 
 class ResearchRunRead(BaseModel):
@@ -442,6 +445,8 @@ class ExportRead(BaseModel):
     board_id: str
     mode: Literal["private", "share"]
     path: str
+    browser_url: str
+    manifest_path: str
     item_count: int
 
 

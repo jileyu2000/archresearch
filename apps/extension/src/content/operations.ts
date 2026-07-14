@@ -225,7 +225,16 @@ function isVisible(element: Element): boolean {
     return false;
   }
   const rect = element.getBoundingClientRect();
-  return rect.width > 0 && rect.height > 0;
+  const view = element.ownerDocument.defaultView;
+  return (
+    view !== null &&
+    rect.width > 0 &&
+    rect.height > 0 &&
+    rect.x < view.innerWidth &&
+    rect.y < view.innerHeight &&
+    rect.x + rect.width > 0 &&
+    rect.y + rect.height > 0
+  );
 }
 
 function isSensitive(element: Element): boolean {

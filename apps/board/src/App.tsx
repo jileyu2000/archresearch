@@ -30,6 +30,7 @@ import {
   type ApiAssetCandidate,
   type ApiEvidenceClaim,
   type ArchitectureAssetType,
+  type BoardExport,
   type ResearchGoal,
   type ResearchMode,
   type ResearchRun,
@@ -267,6 +268,7 @@ function partialReasonTitle(stopReason?: string | null) {
   if (stopReason === 'time_budget_exhausted') return '本轮研究达到时间上限'
   if (stopReason === 'no_new_assets') return '连续检索没有找到新的有效图纸'
   if (stopReason === 'unverified_visual_leads') return '已找到图纸，但来源证据还不够'
+  if (stopReason === 'browser_inspection_incomplete') return 'Chrome 图纸检查未完成'
   if (stopReason === 'no_usable_assets') return '暂未找到能直接使用的图纸'
   if (stopReason?.startsWith('provider_error:')) return '部分网页研究服务暂时不可用'
   if (stopReason?.startsWith('source_lookup_error:')) return '图片来源反查暂时未完成'
@@ -284,6 +286,7 @@ function partialDiagnosis(run: ResearchRun) {
     insufficient_project_diversity: '具体项目数量还不足，案例覆盖不够多样',
     insufficient_verified_or_partial: '达到部分核验或以上的图纸还不够',
     uncovered_subquestions: '仍有子问题没有足够图纸支撑',
+    browser_inspection_incomplete: 'Chrome 未能完成候选页面的图纸检查，现有网页结果已保留',
     insufficient_multi_asset_projects: '部分项目还缺少平面、剖面等互补图纸',
   }
   const gaps = [...new Set((coverage?.gaps ?? []).map(
@@ -463,9 +466,7 @@ function supportsSubquestion(
   const knownAssociations = result.subquestionIds.filter((id) =>
     subquestions.some((item) => item.id === id),
   )
-  return knownAssociations.length > 0
-    ? knownAssociations.includes(subquestionId)
-    : subquestionId === subquestions[0]?.id
+  return knownAssociations.includes(subquestionId)
 }
 
 function analysisFor(result: WorkResult, subquestionId: string) {
@@ -481,6 +482,11 @@ function analysisFor(result: WorkResult, subquestionId: string) {
 
 function traceSummary(summary: unknown) {
   return typeof summary === 'string' ? summary : JSON.stringify(summary)
+}
+
+function availablePreviewUrl(result: WorkResult, failedPreviewUrls: Record<string, string>) {
+  if (!result.previewUrl || failedPreviewUrls[result.id] === result.previewUrl) return null
+  return result.previewUrl
 }
 
 function browserWasUnavailableForSource(events: TraceEvent[], sourceUrl: string) {
@@ -510,6 +516,7 @@ export default function App() {
   const [selectedSubquestionId, setSelectedSubquestionId] = useState(
     demoMode ? (demoSubquestions[0]?.id ?? '') : '',
   )
+  const [failedPreviewUrls, setFailedPreviewUrls] = useState<Record<string, string>>({})
   const [question, setQuestion] = useState('')
   const [referenceUrl, setReferenceUrl] = useState('')
   const [files, setFiles] = useState<File[]>([])
@@ -519,6 +526,7 @@ export default function App() {
   const [recentRuns, setRecentRuns] = useState<ResearchRun[]>([])
   const [pollingRunId, setPollingRunId] = useState('')
   const [announcement, setAnnouncement] = useState('')
+  const [lastExport, setLastExport] = useState<BoardExport | null>(null)
   const [actionError, setActionError] = useState('')
   const [loading, setLoading] = useState(!demoMode)
   const [assetFilter, setAssetFilter] = useState<'all' | AssetType>('all')
@@ -564,6 +572,15 @@ export default function App() {
     trigger?.focus()
   }, [])
 
+  const markPreviewFailed = useCallback((resultId: string, previewUrl: string | null) => {
+    if (!previewUrl) return
+    setFailedPreviewUrls((current) => (
+      current[resultId] === previewUrl
+        ? current
+        : { ...current, [resultId]: previewUrl }
+    ))
+  }, [])
+
   useEffect(() => {
     if (!overlayOpen) return
     const previousOverflow = document.body.style.overflow
@@ -602,9 +619,11 @@ export default function App() {
     setActiveRun(null)
     setRecentRuns([])
     setAnnouncement('')
+    setLastExport(null)
     setResults([])
     setSelectedResultId('')
     setSelectedSubquestionId('')
+    setFailedPreviewUrls({})
     setBoardId('')
     setComparisonIds([])
     setSavedIds([])
@@ -628,12 +647,14 @@ export default function App() {
     setResults([])
     setSelectedResultId('')
     setSelectedSubquestionId('')
+    setFailedPreviewUrls({})
     setBoardId('')
     setComparisonIds([])
     setSavedIds([])
     setRejectedIds([])
     setNotes({})
     setTraceEvents([])
+    setLastExport(null)
     setStyleProfile(defaultStyle)
     setInspectorOpen(false)
   }, [])
@@ -726,6 +747,27 @@ export default function App() {
     }
   }, [])
 
+  const syncProvisionalResults = useCallback(async (runId: string, shouldApply: () => boolean) => {
+    try {
+      const apiResults = await apiClient.getResults(runId)
+      if (!shouldApply()) return
+      const nextResults = apiResults.map(toWorkResult)
+      setResults(nextResults)
+      setSelectedResultId((current) => (
+        current && nextResults.some((result) => result.id === current)
+          ? current
+          : nextResults[0]?.id ?? ''
+      ))
+      setSelectedSubquestionId((current) => (
+        current && nextResults.some((result) => result.subquestionIds.includes(current))
+          ? current
+          : nextResults[0]?.subquestionIds[0] ?? ''
+      ))
+    } catch {
+      // A provisional read must not stop the run-status poll; terminal hydration retries it.
+    }
+  }, [])
+
   const openRun = useCallback(async (run: ResearchRun) => {
     const requestId = hydrateRequestRef.current + 1
     hydrateRequestRef.current = requestId
@@ -794,6 +836,11 @@ export default function App() {
               nextRun.id,
               () => hydrateRequestRef.current === requestId,
             )
+          } else {
+            await syncProvisionalResults(
+              nextRun.id,
+              () => hydrateRequestRef.current === requestId,
+            )
           }
         })
         .catch((error) => {
@@ -806,7 +853,7 @@ export default function App() {
         })
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [demoMode, hydrateRun, pollingRunId, updateRecentRun])
+  }, [demoMode, hydrateRun, pollingRunId, syncProvisionalResults, updateRecentRun])
 
   async function handleCreateWorkspace(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -895,6 +942,8 @@ export default function App() {
 
   async function handleRetry() {
     if (!activeRun) return
+    setActionError('')
+    if (!(await ensureBrowserResearchAccess())) return
     const requestId = hydrateRequestRef.current
     try {
       const run = await apiClient.retryRun(activeRun.id)
@@ -994,12 +1043,21 @@ export default function App() {
   async function ensureBrowserResearchAccess() {
     if (browserConnected !== true) return true
     try {
-      const status = await requestBrowserBridge({ type: 'permissions.request' })
-      if (status.researchPermission) return true
-      setActionError('Chrome 未授予本次网页读取权限，研究尚未开始。')
-    } catch {
-      setActionError('无法向扩展请求网页读取权限。请在已安装扩展的 Chrome 中打开本页。')
+      const status = await requestBrowserBridge({ type: 'status' })
+      if (status.researchPermission) {
+        setBrowserPairingStatus('')
+        return true
+      }
+    } catch (error) {
+      if (error instanceof BrowserBridgeError && error.code === 'unavailable') {
+        setBrowserConnected(false)
+        setBrowserPairingStatus('当前页面未检测到 Chrome 扩展；本次将继续研究公开网页，并跳过登录页面与精确裁图。')
+        return true
+      }
+      setActionError('无法向扩展确认网页读取权限。请在已安装扩展的 Chrome 中打开本页。')
+      return false
     }
+    setActionError('Chrome 为保护全站读取权限，需要在扩展中确认本次研究。请点击浏览器工具栏的 ArchResearch，选择“授予网页读取权限”，再回来开始研究。')
     return false
   }
 
@@ -1059,6 +1117,9 @@ export default function App() {
 
   async function toggleRejected(resultId: string) {
     const isRejected = rejectedIds.includes(resultId)
+    const previousComparison = comparisonIds
+    const nextComparison = comparisonIds.filter((id) => id !== resultId)
+    let boardSelectionUpdated = false
     setActionError('')
     try {
       if (isRejected) {
@@ -1070,9 +1131,19 @@ export default function App() {
         await apiClient.unsaveResult(resultId)
         setSavedIds((current) => current.filter((id) => id !== resultId))
       }
+      if (nextComparison.length !== previousComparison.length && activeRun && !demoMode) {
+        await apiClient.updateBoard(activeRun.id, nextComparison)
+        boardSelectionUpdated = true
+        setComparisonIds(nextComparison)
+        setLastExport(null)
+      }
       await apiClient.rejectResult(resultId, 'not_useful_for_current_problem')
       setRejectedIds((current) => [...new Set([...current, resultId])])
     } catch (error) {
+      if (boardSelectionUpdated && activeRun) {
+        await apiClient.updateBoard(activeRun.id, previousComparison).catch(() => undefined)
+        setComparisonIds(previousComparison)
+      }
       setActionError(`拒绝状态未保存：${apiMessage(error)}`)
     }
   }
@@ -1096,6 +1167,7 @@ export default function App() {
     if (next === comparisonIds) return
     const previous = comparisonIds
     setComparisonIds(next)
+    setLastExport(null)
     if (demoMode || !activeRun) return
     try {
       await apiClient.updateBoard(activeRun.id, next)
@@ -1109,7 +1181,8 @@ export default function App() {
     if (!boardId || comparisonIds.length === 0) return
     try {
       const exported = await apiClient.exportBoard(boardId, exportMode)
-      setAnnouncement(`导出已生成：${exported.path}`)
+      setLastExport(exported)
+      setAnnouncement(exportMode === 'private' ? '个人研究板已生成' : '分享来源板已生成')
       setShareSummaryOpen(false)
     } catch (error) {
       setActionError(`导出失败：${apiMessage(error)}`)
@@ -1149,6 +1222,10 @@ export default function App() {
     setPollingRunId('')
     setActiveRun(null)
     setAnnouncement('')
+    setLastExport(null)
+    setQuestion('')
+    setReferenceUrl('')
+    setFiles([])
     setComposerOpen(true)
     setResearchOptionsOpen(false)
   }
@@ -1179,10 +1256,28 @@ export default function App() {
       passCount: activeRun?.coverageReport?.subquestion_passes?.[subquestion.id],
     }
   })
-  const caseGroups = researchSubquestions.map((subquestion, index) => {
-    const assets = visibleResults.filter(
-      (result) => supportsSubquestion(result, subquestion.id, researchSubquestions),
-    )
+  const unassignedResults = visibleResults.filter((result) => (
+    !researchSubquestions.some((subquestion) => (
+      supportsSubquestion(result, subquestion.id, researchSubquestions)
+    ))
+  ))
+  const groupingSubquestions = [
+    ...researchSubquestions,
+    ...(unassignedResults.length > 0
+      ? [{
+          id: 'unassigned',
+          question: '待归组的图纸线索',
+          rationale: '这些图纸已有来源线索，但尚未确认它具体回答哪个子问题。',
+        }]
+      : []),
+  ]
+  const caseGroups = groupingSubquestions.map((subquestion, index) => {
+    const unassigned = subquestion.id === 'unassigned'
+    const assets = unassigned
+      ? unassignedResults
+      : visibleResults.filter(
+          (result) => supportsSubquestion(result, subquestion.id, researchSubquestions),
+        )
     const dossiers = [...assets.reduce((projects, result) => {
       const current = projects.get(result.project) ?? []
       current.push(result)
@@ -1198,8 +1293,8 @@ export default function App() {
         analysis: analysisFor(primary, subquestion.id),
       }
     })
-    return { index, subquestion, assets, dossiers }
-  }).filter((group) => group.assets.length > 0)
+    return { index, subquestion, assets, dossiers, unassigned }
+  })
   const selectedComparisonResults = results.filter((result) => comparisonIds.includes(result.id))
   const selectedAnalysis = selectedResult
     ? analysisFor(
@@ -1221,10 +1316,22 @@ export default function App() {
   const activePartialDiagnosis = activeRun?.status === 'partial'
     ? partialDiagnosis(activeRun)
     : null
-  const allResultsMissingPreviews = results.length > 0 && results.every((result) => !result.previewUrl)
+  const allResultsMissingPreviews = results.length > 0 && results.every(
+    (result) => !availablePreviewUrl(result, failedPreviewUrls),
+  )
+  const anyPreviewLoadFailed = results.some(
+    (result) => Boolean(result.previewUrl && failedPreviewUrls[result.id] === result.previewUrl),
+  )
   const runHadBrowserUnavailable = results.some((result) => (
     browserWasUnavailableForSource(traceEvents, result.sourceUrl)
   ))
+  const usableResultCount = activeRun?.coverageReport?.usable_assets ?? results.filter(
+    (result) => result.relevance >= 2 && result.tier !== 'visual_lead',
+  ).length
+  const pendingLeadCount = Math.max(0, results.length - usableResultCount)
+  const resultCountLabel = pendingLeadCount > 0
+    ? `${usableResultCount} 张可用 · ${pendingLeadCount} 条待核验线索`
+    : `${usableResultCount} 张可用参考`
   const workspaceItems = demoMode ? demoWorkspaces : workspaces
   const currentWorkspaceId = demoMode ? (demoWorkspaces[0]?.id ?? '') : activeWorkspaceId
 
@@ -1493,7 +1600,7 @@ export default function App() {
             <div>
               <span className="status-dot" data-active={isRunActive || undefined} aria-hidden="true" />
               <strong>{announcement || '研究已准备就绪'}</strong>
-              <small>{results.length} 项参考</small>
+              <small>{resultCountLabel}</small>
             </div>
             <div className="run-status-actions">
               {isRunActive && <button className="research-cancel" type="button" onClick={() => void handleCancel()}>取消研究</button>}
@@ -1534,9 +1641,11 @@ export default function App() {
           <section className="drawing-recovery" aria-labelledby="drawing-recovery-title">
             <MonitorUp aria-hidden="true" />
             <div className="drawing-recovery-copy">
-              <h2 id="drawing-recovery-title">这次研究没有提取到图纸</h2>
+              <h2 id="drawing-recovery-title">这次研究暂时没有可显示的图纸</h2>
               <p>
-                {runHadBrowserUnavailable
+                {anyPreviewLoadFailed
+                  ? '来源图片链接无法加载；可打开原始页面查看，或重新研究获取新的预览。'
+                  : runHadBrowserUnavailable
                   ? browserConnected === true
                     ? '扩展现已连接，重新研究后可提取网页中的图纸。'
                     : '研究时浏览器扩展未连接，因此只保留了网页文字和来源。'
@@ -1623,9 +1732,9 @@ export default function App() {
                 <Columns3 aria-hidden="true" />
                 <span><strong>对照设计方法</strong><small id="tool-compare-help">{comparisonIds.length < 2 ? `已选 ${comparisonIds.length} 张，还需选择 ${2 - comparisonIds.length} 张图纸` : `已选 ${comparisonIds.length} 张，按方法、观察与边界逐项比较`}</small></span>
               </button>
-              <button aria-label="整理图纸表达规范" aria-describedby="tool-style-help" type="button" onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setStyleProfileOpen(true) }}>
+              <button aria-label="编辑图纸表达规范" aria-describedby="tool-style-help" type="button" onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setStyleProfileOpen(true) }}>
                 <Palette aria-hidden="true" />
-                <span><strong>整理图纸表达规范</strong><small id="tool-style-help">从本次图纸整理配色、线型与版式</small></span>
+                <span><strong>编辑图纸表达规范</strong><small id="tool-style-help">手动设定配色、线型与字体，保存到本研究板</small></span>
               </button>
               <button aria-label="导出个人研究板" aria-describedby="tool-private-export-help" type="button" disabled={comparisonIds.length === 0} onClick={() => void handleExport('private')}>
                 <Download aria-hidden="true" />
@@ -1636,6 +1745,16 @@ export default function App() {
                 <span><strong>生成可分享来源板</strong><small id="tool-share-export-help">受限图片只保留署名、来源与链接</small></span>
               </button>
             </div>
+            {lastExport && (
+              <div className="result-export-ready">
+                <Check aria-hidden="true" />
+                <span>{lastExport.mode === 'private' ? '个人研究板已生成' : '分享来源板已生成'}</span>
+                <a href={lastExport.browser_url} target="_blank" rel="noreferrer">
+                  {lastExport.mode === 'private' ? '打开个人研究板' : '打开分享来源板'}
+                  <ExternalLink aria-hidden="true" />
+                </a>
+              </div>
+            )}
           </section>
         )}
 
@@ -1652,7 +1771,9 @@ export default function App() {
               <header className="section-heading">
                 <div>
                   <h2>问题拆解</h2>
-                  <p>每个子问题都有自己的项目和图纸证据；先判断哪一项最接近你当前卡住的地方。</p>
+                  <p>{subquestionSummaries.every((item) => item.assetCount > 0)
+                    ? '每个子问题都有自己的项目和图纸证据；先判断哪一项最接近你当前卡住的地方。'
+                    : '完整结果会覆盖每个子问题；当前没有证据的分支会明确保留，方便继续补研。'}</p>
                 </div>
                 <span>{researchSubquestions.length} 个子问题</span>
               </header>
@@ -1694,14 +1815,21 @@ export default function App() {
                 {caseGroups.map((group) => (
                   <section className="case-chapter" key={group.subquestion.id} aria-labelledby={`case-chapter-${group.subquestion.id}`}>
                     <header className="case-chapter-heading">
-                      <span aria-hidden="true">{group.index + 1}</span>
+                      <span aria-hidden="true">{group.unassigned ? '?' : group.index + 1}</span>
                       <div>
                         <h3 id={`case-chapter-${group.subquestion.id}`}>{group.subquestion.question}</h3>
-                        <p>{group.dossiers.length} 个项目 · {group.assets.length} 张支撑图纸</p>
+                        <p>{group.unassigned
+                          ? group.subquestion.rationale
+                          : `${group.dossiers.length} 个项目 · ${group.assets.length} 张支撑图纸`}</p>
                       </div>
                     </header>
 
-                    <div className="dossier-list">
+                    {group.assets.length === 0 ? (
+                      <div className="case-chapter-empty">
+                        <strong>这一分支还没有完整证据</strong>
+                        <p>已经完成检索，但还没有找到可用且有来源证据的图纸。</p>
+                      </div>
+                    ) : <div className="dossier-list">
                       {group.dossiers.map((dossier) => (
                         <article className="project-dossier" aria-label={`案例分析 ${dossier.project}`} key={dossier.project}>
                           <header className="dossier-heading">
@@ -1749,6 +1877,10 @@ export default function App() {
                                 const resultIndex = results.findIndex((item) => item.id === result.id)
                                 const compared = comparisonIds.includes(result.id)
                                 const resultAnalysis = analysisFor(result, group.subquestion.id)
+                                const previewUrl = availablePreviewUrl(result, failedPreviewUrls)
+                                const previewLoadFailed = Boolean(
+                                  result.previewUrl && failedPreviewUrls[result.id] === result.previewUrl,
+                                )
                                 const browserWasUnavailable = browserWasUnavailableForSource(
                                   traceEvents,
                                   result.sourceUrl,
@@ -1779,19 +1911,22 @@ export default function App() {
                                     >
                                       <figure>
                                         <div className="evidence-image" data-drawing={result.drawing}>
-                                          {result.previewUrl ? (
+                                          {previewUrl ? (
                                             <img
-                                              src={result.previewUrl}
+                                              src={previewUrl}
                                               alt={`${result.project} ${assetLabels[result.assetType]}`}
                                               loading={resultIndex < 6 ? 'eager' : 'lazy'}
                                               decoding="async"
                                               fetchPriority={resultIndex < 3 ? 'high' : 'auto'}
+                                              onError={() => markPreviewFailed(result.id, previewUrl)}
                                             />
                                           ) : (
                                             <div className="preview-unavailable">
                                               <ImageOff aria-hidden="true" />
                                               <strong>
-                                                {browserWasUnavailable
+                                                {previewLoadFailed
+                                                  ? '图纸预览加载失败'
+                                                  : browserWasUnavailable
                                                   ? '此次未连接浏览器扩展，未能提取图纸'
                                                   : '未提取到图纸'}
                                               </strong>
@@ -1800,9 +1935,10 @@ export default function App() {
                                           )}
                                           <div className="evidence-image-labels">
                                             <span>{assetLabels[result.assetType]}</span>
-                                            {result.previewSource && (
+                                            {previewUrl && result.previewSource && (
                                               <span>{result.previewSource === 'chrome' ? 'Chrome 精确裁图' : '公开网页图片'}</span>
                                             )}
+                                            {previewLoadFailed && <span>来源链接</span>}
                                           </div>
                                         </div>
                                         <figcaption>
@@ -1813,7 +1949,7 @@ export default function App() {
                                     </button>
                                     <footer className="evidence-sheet-actions">
                                       <span>问题匹配 {result.relevance} / 4</span>
-                                      {!result.previewUrl && (
+                                      {!previewUrl && (
                                         <a
                                           className="evidence-source-action"
                                           href={result.sourceUrl}
@@ -1849,7 +1985,7 @@ export default function App() {
                           </footer>
                         </article>
                       ))}
-                    </div>
+                    </div>}
                   </section>
                 ))}
               </div>
@@ -1912,18 +2048,21 @@ export default function App() {
                 <thead>
                   <tr>
                     <th scope="col">对照维度</th>
-                    {selectedComparisonResults.map((result) => (
-                      <th scope="col" key={result.id}>
-                        <div className="comparison-thumb">
-                          {result.previewUrl
-                            ? <img src={result.previewUrl} alt="" />
-                            : <span>预览不可用</span>}
-                        </div>
-                        <span className="comparison-column-meta">{assetLabels[result.assetType]} · {tierLabels[result.tier]}</span>
-                        <strong>{result.title}</strong>
-                        <small>{result.project} · 问题匹配 {result.relevance} / 4</small>
-                      </th>
-                    ))}
+                    {selectedComparisonResults.map((result) => {
+                      const previewUrl = availablePreviewUrl(result, failedPreviewUrls)
+                      return (
+                        <th scope="col" key={result.id}>
+                          <div className="comparison-thumb">
+                            {previewUrl
+                              ? <img src={previewUrl} alt="" onError={() => markPreviewFailed(result.id, previewUrl)} />
+                              : <span>预览不可用</span>}
+                          </div>
+                          <span className="comparison-column-meta">{assetLabels[result.assetType]} · {tierLabels[result.tier]}</span>
+                          <strong>{result.title}</strong>
+                          <small>{result.project} · 问题匹配 {result.relevance} / 4</small>
+                        </th>
+                      )
+                    })}
                   </tr>
                 </thead>
                 <tbody>

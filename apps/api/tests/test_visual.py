@@ -202,3 +202,63 @@ def test_openai_remote_visual_batch_is_bounded_low_detail_and_structured() -> No
     assert "Q" * 1_001 not in prompt
     assert "P" * 1_200 in prompt
     assert "P" * 1_201 not in prompt
+
+
+def test_openai_remote_visual_batch_retries_two_images_when_relay_rejects_four() -> None:
+    calls: list[dict[str, Any]] = []
+
+    class InternalServerError(Exception):
+        status_code = 500
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            if len(calls) == 1:
+                raise InternalServerError("relay rejected the four-image request")
+            return SimpleNamespace(
+                output_parsed=RemoteVisualClassificationBatch(
+                    classifications=[
+                        RemoteVisualClassification(
+                            candidate_id="image_1",
+                            asset_type=ArchitectureAssetType.plan,
+                            relevance=4,
+                            observations=["可见墙体、房间与交通核。"],
+                        ),
+                        RemoteVisualClassification(
+                            candidate_id="image_2",
+                            asset_type=ArchitectureAssetType.section,
+                            relevance=4,
+                            observations=["可见楼板高差与竖向联系。"],
+                        ),
+                    ]
+                )
+            )
+
+    classifier = OpenAIVisualClassifier(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+    candidates = [
+        RemoteVisualCandidate(
+            candidate_id=f"image_{index}",
+            image_url=f"https://images.example/{index}.jpg",
+        )
+        for index in range(1, 5)
+    ]
+
+    result = classifier.classify_remote_batch(
+        candidates,
+        question="比较平面与剖面的空间关系。",
+        project_text="",
+    )
+
+    assert len(result.classifications) == 2
+    assert len(calls) == 2
+    retried_images = [
+        part for part in calls[1]["input"][0]["content"] if part["type"] == "input_image"
+    ]
+    assert [image["image_url"] for image in retried_images] == [
+        "https://images.example/1.jpg",
+        "https://images.example/2.jpg",
+    ]

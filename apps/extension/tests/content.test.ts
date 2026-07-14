@@ -59,6 +59,39 @@ describe("content operations", () => {
     ]);
   });
 
+  it("excludes drawing media outside the visible viewport", () => {
+    document.body.innerHTML = `
+      <img id="visible" src="https://images.example/visible.jpg" alt="Visible plan">
+      <img id="below" src="https://images.example/below.jpg" alt="Plan below fold">
+    `;
+    const [visible, below] = Array.from(document.querySelectorAll("img"));
+    makeVisible(visible!);
+    Object.defineProperty(below, "getBoundingClientRect", {
+      value: () => ({
+        x: 10,
+        y: window.innerHeight + 100,
+        top: window.innerHeight + 100,
+        left: 10,
+        right: 650,
+        bottom: window.innerHeight + 580,
+        width: 640,
+        height: 480,
+        toJSON: () => ({}),
+      }),
+    });
+    for (const image of [visible!, below!]) {
+      Object.defineProperties(image, {
+        naturalWidth: { value: 1_600 },
+        naturalHeight: { value: 900 },
+        currentSrc: { value: image.getAttribute("src") },
+      });
+    }
+
+    expect(collectMedia(document).map((item) => item.alt)).toEqual([
+      "Visible plan",
+    ]);
+  });
+
   it("excludes media inside credential, chat, and hidden regions", () => {
     document.body.innerHTML = `
       <form aria-label="Sign in"><img id="login" src="https://images.example/login.jpg"></form>
