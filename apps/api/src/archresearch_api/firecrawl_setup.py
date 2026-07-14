@@ -23,7 +23,7 @@ def main(
     stderr: TextIO | None = None,
     keyring_backend: KeyringBackend | None = None,
 ) -> int:
-    parser = argparse.ArgumentParser(description="Configure the Firecrawl fallback parser")
+    parser = argparse.ArgumentParser(description="Configure Firecrawl public-page enrichment")
     parser.add_argument("--data-dir", type=Path, default=Path(".archresearch"))
     parser.add_argument("--base-url", default="https://api.firecrawl.dev/v2")
     arguments = parser.parse_args(argv)
@@ -45,7 +45,7 @@ def main(
         return 1
 
     print(
-        "Firecrawl 配置已保存到 Windows 凭据管理器；首次公开网页兜底解析可能消耗额度。",
+        "Firecrawl 配置已保存到 Windows 凭据管理器；正常研究中的公开网页解析可能消耗额度。",
         file=output_stream,
     )
     return 0

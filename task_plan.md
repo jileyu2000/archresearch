@@ -37,6 +37,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | 17. M16 Chinese research results and reliable previews | complete | Chinese provider contracts, browser readiness/pairing, conservative crop enrichment and truthful legacy recovery pass 141 API tests, 45 Board tests, 111 Extension tests, 6 packaged-Chrome E2E cases and 1440/390 Chromium acceptance |
 | 18. M17 Local runtime and extension onboarding reliability | complete | Loopback-only one-click pairing, authenticated connection state, Chinese fallback controls and research-time permission requests pass 141 API tests, 48 Board tests, 118 Extension tests and 6 packaged-Chrome E2E cases |
 | 19. M18 Open-source browser research integration | complete | Audited eight current GitHub projects; integrated an optional Firecrawl public-page fallback and bounded semantic page snapshot; full gate passes 157 API, 48 Board, 121 Extension and 6 packaged-Chrome tests without live provider traffic |
+| 20. M19 Direct browser-research enrichment | complete | Configured public sources are parsed once in the normal path; bounded Markdown improves visual classification and typed image leads improve recall; full gate passes 159 API, 48 Board, 121 Extension and 6 packaged-Chrome tests without live provider traffic |
 
 ## M6 completion summary
 
@@ -151,3 +152,6 @@ The code delivery is complete. These product claims require user-owned credentia
 | Ruff format check found three M18 Python files requiring canonical layout | 1 | Apply Ruff format only to those files, then rerun check/type/tests |
 | M18 Mypy found five narrowings/reused-loop-variable type errors | 1 | Add explicit metadata/dict narrowing and distinct type-name variables; no runtime behavior changed |
 | The first M18 credential scan treated runtime `api_key` variable assignments as literal secrets | 1 | Inspect only file/line locations, confirm all ten hits are variable flow or credential reads, and narrow the final scan to quoted secret literals |
+| The first M19 static gate found one 101-character test assertion | 1 | Wrap only the failing generator expression, then restart the focused gate from Ruff |
+| M19 Ruff format check requested canonical layout in two touched files | 1 | Apply Ruff formatting only to the workflow and its focused test, then rerun lint/type/tests |
+| The post-ordering M19 full gate found three Mypy optional-client narrowings | 1 | Add explicit non-null assertions under the already computed `can_inspect` guard, then rerun the authoritative gate from the start |

@@ -11,7 +11,7 @@ flowchart LR
     B["React 图纸参考板"] -->|HTTP / SSE| A["FastAPI 本地研究执行器"]
     A -->|Responses API| O["OpenAI 网页搜索与视觉分类"]
     A -->|反向图片搜索| T["TinEye API"]
-    A -->|公开页失败兜底| F["Firecrawl API（可选）"]
+    A -->|公开页结构化解析| F["Firecrawl API（可选）"]
     A <-->|白名单 WebSocket 动作| E["Chrome MV3 扩展"]
     E -->|用户现有登录态| W["实时项目网页"]
     A --> S["SQLite + 本地工作区"]
@@ -63,7 +63,7 @@ Chrome 的 `captureVisibleTab` 只接受用户手势产生的 `activeTab` 或 `<
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/configure-provider.ps1
 ```
 
-Firecrawl 是可选的公开页面失败兜底：只有 Chrome 检视某个公网来源失败时才调用，获取最新 Markdown、链接和图片线索；它不读取 Chrome 登录态，也不会替代视觉分类或来源核验。Key 同样通过隐藏输入保存到 Windows 凭据管理器：
+Firecrawl 是可选的公开页面增强器：配置后，每次研究都会在页面预算内解析候选公网来源，把最新 Markdown 加入图纸视觉分类上下文，并补充网页中明确标注类型的图片线索。Chrome 扩展同时负责登录态、动态交互和精确裁图；Firecrawl 线索在完成视觉分类和来源绑定前始终标为未核验，不会自动升级事实、归属或版权。Key 通过隐藏输入保存到 Windows 凭据管理器：
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/configure-firecrawl.ps1

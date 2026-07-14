@@ -20,8 +20,8 @@ ArchResearch 的基本原则是：后续阶段失败时不丢弃已经取得的�
 | 总时间预算耗尽 | 每次供应商调用之间比较运行截止时间 | 有资产时 `partial`，`stop_reason=time_budget_exhausted` | 使用已有结果，或新建更聚焦问题 | 预算与工作流单测 |
 | 连续两批无新增资产 | 每批持久化后的新增数量为 0 | 有资产时 `partial`，`stop_reason=no_new_assets`；无资产为 `blocked` | 收窄问题、补充中英文术语或限定可信域名 | 30 条任务的 `expected_coverage.expected_gaps` |
 | Chrome 扩展未连接或中途断线 | WebSocket 命令超时或连接关闭 | 单页标为跳过，搜索供应商已有结果继续；终态后权限撤销 | 打开扩展确认“已连接”，重新授权后重试 | 持久 Chromium 断线用例、浏览器协议单测 |
-| Chrome 检视失败且 Firecrawl 已配置 | 浏览器动作异常后触发单页公开解析 | 只回填同来源、同图纸类型且唯一的图片线索；不升级事实、归属、版权或结果等级 | 使用线索或重连 Chrome 后新建研究获取真实裁图 | Firecrawl MockTransport、歧义回填和 Trace 测试 |
-| Firecrawl 未配置、限流或解析失败 | 解析器缺失或请求抛错 | 页面兜底标为跳过，已有搜索/浏览器结果全部保留；Key 和正文不进入 Trace | 可运行 `scripts/configure-firecrawl.ps1`，也可继续接受部分结果 | 可选构造、错误降级和密钥安全测试 |
+| Chrome 检视失败且 Firecrawl 已配置 | 正常公网解析已先于 Chrome 检视完成 | 保留结构化图片线索；明确类型但未分类的图片只作为低置信视觉线索，不升级事实、归属、版权或结果等级 | 使用线索，或重连 Chrome 后新建研究获取真实裁图 | Firecrawl MockTransport、正常增强、歧义线索和 Trace 测试 |
+| Firecrawl 未配置、限流或解析失败 | 解析器缺失或正常增强请求抛错 | 该页面的结构化增强标为跳过，已有模型搜索/浏览器结果全部保留；Key 和正文不进入 Trace | 可运行 `scripts/configure-firecrawl.ps1`，也可继续使用 Chrome 主流程 | 可选构造、错误降级和密钥安全测试 |
 | 用户拒绝临时站点权限 | 扩展报告 `permission_required` | 不读取网页；已有搜索资产不丢失 | 必须在扩展 UI 中由用户手势重新授权可选 `<all_urls>`；导航仍只允许公网 HTTP/HTTPS | 权限服务与控制器测试 |
 | 页面需要登录、验证码或反自动化挑战 | 页面内容不可访问、媒体为空或动作超时 | 页面跳过；其他来源继续；不能绕过验证码 | 用户可自行完成允许的登录/验证后重试，或接受部分结果 | replay 动态页和错误路径 |
 | 恶意页面提示注入 | 页面含“忽略指令”、隐藏表单或敏感区域 | 内容仅作不可信数据；不改变动作、预算或系统指令 | 无需用户处理；继续研究或拒绝该来源 | `fixtures/pages/malicious-page.html` |

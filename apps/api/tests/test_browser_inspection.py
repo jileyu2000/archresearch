@@ -406,8 +406,14 @@ def test_snapshot_failure_falls_back_to_metadata_and_keeps_visual_results(tmp_pa
 class RecordingPublicPageParser:
     name = "firecrawl"
 
-    def __init__(self, images: list[ParsedPageImage]) -> None:
+    def __init__(
+        self,
+        images: list[ParsedPageImage],
+        *,
+        markdown: str = "# Courtyard Archive",
+    ) -> None:
         self.images = images
+        self.markdown = markdown
         self.urls: list[str] = []
 
     def parse(self, url: str) -> ParsedPublicPage:
@@ -415,9 +421,96 @@ class RecordingPublicPageParser:
         return ParsedPublicPage(
             source_url=url,
             title="Courtyard Archive",
-            markdown="# Courtyard Archive",
+            markdown=self.markdown,
             images=self.images,
         )
+
+
+def test_firecrawl_enriches_normal_browser_research_context_and_image_recall(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path)
+    result = _provider_result("https://studio.example/project")
+    result.assets[0].asset_type = ArchitectureAssetType.section
+    result.assets[0].image_url = None
+    classifier = RecordingClassifier()
+    parser = RecordingPublicPageParser(
+        [
+            ParsedPageImage(
+                url="https://cdn.example/firecrawl-section.png",
+                alt="Longitudinal section",
+            )
+        ],
+        markdown="# Courtyard Archive\nThe retained steel truss frames a stepped section.",
+    )
+
+    execute_research_run(
+        database,
+        run_id,
+        SingleBatchProvider(result),
+        browser_client=RecordingBrowser(),
+        visual_classifier=classifier,
+        candidate_root=tmp_path / "candidates",
+        public_page_parser=parser,
+    )
+
+    with database.session_factory() as session:
+        assets = list(
+            session.scalars(select(AssetCandidate).where(AssetCandidate.run_id == run_id))
+        )
+    firecrawl_lead = next(
+        asset for asset in assets if asset.image_url == "https://cdn.example/firecrawl-section.png"
+    )
+    provider_asset = next(
+        asset for asset in assets if asset.result_tier == ResultTier.partial.value
+    )
+    assert parser.urls == ["https://studio.example/project"]
+    assert classifier.calls
+    assert all("retained steel truss" in call["project_text"] for call in classifier.calls)
+    assert firecrawl_lead.asset_type == ArchitectureAssetType.section.value
+    assert firecrawl_lead.result_tier == ResultTier.visual_lead.value
+    assert firecrawl_lead.relevance == 1
+    assert firecrawl_lead.project_identity == AssociationStatus.unknown.value
+    assert firecrawl_lead.asset_association == AssociationStatus.unknown.value
+    assert firecrawl_lead.rights_status == RightsStatus.unknown.value
+    assert firecrawl_lead.facts == []
+    assert firecrawl_lead.observations == []
+    assert provider_asset.storage_path is not None
+    assert provider_asset.perceptual_hash is not None
+
+
+def test_firecrawl_adds_typed_public_image_leads_without_a_browser_connection(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path)
+    parser = RecordingPublicPageParser(
+        [
+            ParsedPageImage(
+                url="https://cdn.example/public-floor-plan.png",
+                alt="Ground floor plan",
+            )
+        ]
+    )
+
+    execute_research_run(
+        database,
+        run_id,
+        SingleBatchProvider(_provider_result("https://studio.example/project")),
+        public_page_parser=parser,
+    )
+
+    with database.session_factory() as session:
+        lead = session.scalar(
+            select(AssetCandidate).where(
+                AssetCandidate.run_id == run_id,
+                AssetCandidate.image_url == "https://cdn.example/public-floor-plan.png",
+            )
+        )
+    assert parser.urls == ["https://studio.example/project"]
+    assert lead is not None
+    assert lead.asset_type == ArchitectureAssetType.plan.value
+    assert lead.result_tier == ResultTier.visual_lead.value
+    assert lead.storage_path is None
 
 
 def test_browser_failure_uses_firecrawl_to_enrich_one_unambiguous_drawing_lead(
@@ -466,7 +559,7 @@ def test_browser_failure_uses_firecrawl_to_enrich_one_unambiguous_drawing_lead(
     }
 
 
-def test_firecrawl_keeps_ambiguous_same_type_images_as_unattached_leads(
+def test_firecrawl_persists_ambiguous_same_type_images_as_unverified_visual_leads(
     tmp_path: Path,
 ) -> None:
     database, run_id = _database_with_run(tmp_path)
@@ -491,9 +584,20 @@ def test_firecrawl_keeps_ambiguous_same_type_images_as_unattached_leads(
     )
 
     with database.session_factory() as session:
-        asset = session.scalar(select(AssetCandidate).where(AssetCandidate.run_id == run_id))
-    assert asset is not None
-    assert asset.image_url is None
+        assets = list(
+            session.scalars(select(AssetCandidate).where(AssetCandidate.run_id == run_id))
+        )
+    provider_asset = next(
+        asset for asset in assets if asset.result_tier == ResultTier.partial.value
+    )
+    public_leads = [asset for asset in assets if asset.result_tier == ResultTier.visual_lead.value]
+    assert provider_asset.image_url is None
+    assert {asset.image_url for asset in public_leads} == {
+        "https://cdn.example/section-a.png",
+        "https://cdn.example/section-b.png",
+    }
+    assert all(asset.relevance == 1 for asset in public_leads)
+    assert all(asset.project_identity == AssociationStatus.unknown.value for asset in public_leads)
 
 
 def test_undecodable_browser_crops_are_not_sent_to_the_visual_classifier(tmp_path: Path) -> None:

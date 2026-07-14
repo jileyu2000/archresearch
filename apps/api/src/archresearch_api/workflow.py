@@ -205,6 +205,8 @@ def execute_research_run(
 
         consecutive_empty_batches = 0
         inspected_urls: set[str] = set()
+        parsed_pages: dict[str, ParsedPublicPage | None] = {}
+        public_page_attempts = 0
         browser_page_attempts = browser_pages_attempted
         visual_call_limit, visual_byte_limit = VISUAL_INSPECTION_LIMITS[budget_mode]
         inspection_budget = InspectionBudget(
@@ -270,18 +272,36 @@ def execute_research_run(
                 {"page_count": len(provider_result.sources)},
             )
             browser_added = 0
-            if (
-                browser_client is not None
-                and visual_classifier is not None
-                and candidate_root is not None
-            ):
-                for source in provider_result.sources:
-                    if browser_page_attempts >= max_pages:
-                        break
-                    if inspection_budget.exhausted:
-                        break
-                    if source.url in inspected_urls:
-                        continue
+            for source in provider_result.sources:
+                parsed_page = parsed_pages.get(source.url)
+                parsed_now = False
+                if (
+                    public_page_parser is not None
+                    and source.url not in parsed_pages
+                    and public_page_attempts < max_pages
+                ):
+                    public_page_attempts += 1
+                    parsed_page = _try_parse_public_page(
+                        db,
+                        run_id,
+                        source,
+                        public_page_parser,
+                    )
+                    parsed_pages[source.url] = parsed_page
+                    parsed_now = True
+
+                can_inspect = (
+                    browser_client is not None
+                    and visual_classifier is not None
+                    and candidate_root is not None
+                    and source.url not in inspected_urls
+                    and browser_page_attempts < max_pages
+                    and not inspection_budget.exhausted
+                )
+                if can_inspect:
+                    assert browser_client is not None
+                    assert visual_classifier is not None
+                    assert candidate_root is not None
                     inspected_urls.add(source.url)
                     browser_page_attempts += 1
                     _persist_browser_page_attempts(db, run_id, browser_page_attempts)
@@ -294,6 +314,7 @@ def execute_research_run(
                             question=subquestion_text[subquestion_id],
                             candidate_root=candidate_root,
                             budget=inspection_budget,
+                            public_page_text=_public_page_context(parsed_page),
                         )
                         added = _persist_inspected_assets(
                             db,
@@ -329,14 +350,30 @@ def execute_research_run(
                             },
                             tool="browser",
                         )
-                        if public_page_parser is not None:
-                            parser_added = _try_public_page_fallback(
-                                db,
-                                run_id,
-                                source,
-                                public_page_parser,
-                            )
-                            browser_added += parser_added
+
+                if parsed_now and parsed_page is not None and public_page_parser is not None:
+                    parser_added = _persist_public_page_leads(
+                        db,
+                        run_id,
+                        source,
+                        parsed_page,
+                        subquestion_id=subquestion_id,
+                    )
+                    browser_added += parser_added
+                    _checkpoint(
+                        db,
+                        run_id,
+                        RunStatus.inspecting,
+                        {
+                            "source_url": source.url,
+                            "status": "completed",
+                            "markdown_chars": len(parsed_page.markdown),
+                            "image_leads": len(parsed_page.images),
+                            "link_leads": len(parsed_page.links),
+                            "enriched": parser_added,
+                        },
+                        tool=public_page_parser.name,
+                    )
             _checkpoint(
                 db,
                 run_id,
@@ -830,30 +867,14 @@ def _persist_browser_page_attempts(db: Database, run_id: str, attempted: int) ->
         session.commit()
 
 
-def _try_public_page_fallback(
+def _try_parse_public_page(
     db: Database,
     run_id: str,
     source: ProviderSource,
     parser: PublicPageParser,
-) -> int:
+) -> ParsedPublicPage | None:
     try:
-        page = parser.parse(source.url)
-        enriched = _persist_public_page_leads(db, run_id, source.url, page)
-        _checkpoint(
-            db,
-            run_id,
-            RunStatus.inspecting,
-            {
-                "source_url": source.url,
-                "status": "completed",
-                "markdown_chars": len(page.markdown),
-                "image_leads": len(page.images),
-                "link_leads": len(page.links),
-                "enriched": enriched,
-            },
-            tool=parser.name,
-        )
-        return enriched
+        return parser.parse(source.url)
     except Exception as exc:
         _checkpoint(
             db,
@@ -866,14 +887,16 @@ def _try_public_page_fallback(
             },
             tool=parser.name,
         )
-        return 0
+        return None
 
 
 def _persist_public_page_leads(
     db: Database,
     run_id: str,
-    source_url: str,
+    source: ProviderSource,
     page: ParsedPublicPage,
+    *,
+    subquestion_id: str | None,
 ) -> int:
     images_by_type: dict[str, list[str]] = {}
     for image in page.images:
@@ -886,7 +909,7 @@ def _persist_public_page_leads(
             session.scalars(
                 select(AssetCandidate).where(
                     AssetCandidate.run_id == run_id,
-                    AssetCandidate.source_url == source_url,
+                    AssetCandidate.source_url == source.url,
                     AssetCandidate.image_url.is_(None),
                     AssetCandidate.storage_path.is_(None),
                 )
@@ -897,6 +920,7 @@ def _persist_public_page_leads(
             candidates_by_type.setdefault(candidate.asset_type, []).append(candidate)
 
         enriched = 0
+        consumed_urls: set[str] = set()
         for type_name, image_urls in images_by_type.items():
             matching_candidates = candidates_by_type.get(type_name, [])
             unique_urls = list(dict.fromkeys(image_urls))
@@ -905,18 +929,91 @@ def _persist_public_page_leads(
             existing = session.scalar(
                 select(AssetCandidate.id).where(
                     AssetCandidate.run_id == run_id,
-                    AssetCandidate.source_url == source_url,
+                    AssetCandidate.source_url == source.url,
                     AssetCandidate.image_url == unique_urls[0],
                 )
             )
             if existing is not None:
                 continue
             matching_candidates[0].image_url = unique_urls[0]
+            consumed_urls.add(unique_urls[0])
             enriched += 1
+
+        existing_image_urls = {
+            value
+            for value in session.scalars(
+                select(AssetCandidate.image_url).where(
+                    AssetCandidate.run_id == run_id,
+                    AssetCandidate.source_url == source.url,
+                )
+            )
+            if value is not None
+        }
+        source_page_id = session.scalar(
+            select(SourcePage.id).where(
+                SourcePage.run_id == run_id,
+                SourcePage.url == source.url,
+            )
+        )
+        expires_at = datetime.now(UTC) + timedelta(days=7)
+        project_name = page.title.strip() or source.title.strip() or "待核验项目"
+        for type_name, image_urls in images_by_type.items():
+            for image_url in dict.fromkeys(image_urls):
+                if image_url in consumed_urls or image_url in existing_image_urls:
+                    continue
+                session.add(
+                    AssetCandidate(
+                        run_id=run_id,
+                        source_page_id=source_page_id,
+                        project_name=project_name,
+                        asset_type=type_name,
+                        source_url=source.url,
+                        image_url=image_url,
+                        storage_path=None,
+                        perceptual_hash=None,
+                        publication_tier=PublicationTier.unknown.value,
+                        project_identity=AssociationStatus.unknown.value,
+                        asset_association=AssociationStatus.unknown.value,
+                        primary_source=PrimarySourceStatus.unknown.value,
+                        rights_status=RightsStatus.unknown.value,
+                        result_tier=ResultTier.visual_lead.value,
+                        relevance=1,
+                        subquestion_ids=[subquestion_id] if subquestion_id is not None else [],
+                        project_context="",
+                        design_mechanism="",
+                        transfer_strategy=[],
+                        subquestion_analysis={},
+                        facts=[],
+                        observations=[],
+                        inferences=[],
+                        limitations=[
+                            "该图片来自公共网页结构化解析，尚未完成本地视觉分类和图片—项目归属核验。"
+                        ],
+                        rank_index=0,
+                        expires_at=expires_at,
+                    )
+                )
+                existing_image_urls.add(image_url)
+                enriched += 1
         if enriched:
+            session.flush()
             _rerank_assets(session, run_id)
         session.commit()
         return enriched
+
+
+def _public_page_context(page: ParsedPublicPage | None) -> str:
+    if page is None:
+        return ""
+    return " ".join(
+        value
+        for value in (
+            page.title.strip(),
+            page.description.strip(),
+            page.markdown.strip(),
+        )
+        if value
+    )[:1_200]
 
 
 def _persist_sources(db: Database, run_id: str, result: ProviderSearchResult) -> None:

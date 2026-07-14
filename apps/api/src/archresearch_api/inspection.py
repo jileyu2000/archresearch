@@ -152,6 +152,7 @@ def inspect_source_page(
     question: str,
     candidate_root: Path,
     budget: InspectionBudget | None = None,
+    public_page_text: str = "",
 ) -> list[InspectedVisual]:
     tab_id: int | None = None
     active_budget = budget if budget is not None else InspectionBudget()
@@ -178,6 +179,7 @@ def inspect_source_page(
             candidate_root=candidate_root,
             metadata=metadata,
             snapshot=snapshot,
+            public_page_text=public_page_text,
             media=enumeration.media[:MAX_MEDIA_PER_PAGE],
             budget=active_budget,
         )
@@ -197,6 +199,7 @@ def _capture_candidates(
     candidate_root: Path,
     metadata: PageMetadata,
     snapshot: PageSnapshot,
+    public_page_text: str,
     media: list[PageMedia],
     budget: InspectionBudget,
 ) -> list[InspectedVisual]:
@@ -209,6 +212,7 @@ def _capture_candidates(
                 _bounded_text(metadata.title, 300),
                 _bounded_text(metadata.publisher or "", 150),
                 _bounded_text(snapshot_text, 600),
+                _bounded_text(public_page_text, 600),
                 _bounded_text(metadata.description or "", 300),
             )
             if item
