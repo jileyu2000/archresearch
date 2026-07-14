@@ -79,6 +79,7 @@ interface LiveFetchOptions {
   browserConnected?: boolean
   browserStatuses?: boolean[]
   pairingCode?: string
+  coverageReport?: Record<string, unknown>
 }
 
 const liveQuestion = '旧厂房如何植入新的公共功能？'
@@ -125,7 +126,7 @@ function createLiveFetch(options: LiveFetchOptions = {}) {
             goal: 'precedent_research',
             status: initialStatus,
             budget_mode: 'balanced',
-            coverage_report:
+            coverage_report: options.coverageReport ?? (
               initialStatus === 'partial'
                 ? {
                     usable_assets: 1,
@@ -133,7 +134,7 @@ function createLiveFetch(options: LiveFetchOptions = {}) {
                     verified_or_partial: 1,
                     gaps: ['fewer_than_six_usable_assets'],
                   }
-                : {},
+                : {}),
             stop_reason: initialStatus === 'partial' ? 'budget_exhausted' : null,
           },
           201,
@@ -149,11 +150,12 @@ function createLiveFetch(options: LiveFetchOptions = {}) {
                   id: 'run-live',
                   workspace_id: 'workspace-live',
                   question: liveQuestion,
+                  subquestions: options.subquestions ?? liveSubquestions,
                   goal: 'precedent_research',
                   status: options.existingRunStatus,
                   budget_mode: 'balanced',
                   checkpoint_stage: options.existingRunStatus,
-                  coverage_report: {},
+                  coverage_report: options.coverageReport ?? {},
                   created_at: '2026-07-13T08:30:00Z',
                 },
               ]
@@ -174,7 +176,7 @@ function createLiveFetch(options: LiveFetchOptions = {}) {
           goal: 'precedent_research',
           status,
           budget_mode: 'balanced',
-          coverage_report:
+          coverage_report: options.coverageReport ?? (
             status === 'partial'
               ? {
                   usable_assets: 1,
@@ -182,7 +184,7 @@ function createLiveFetch(options: LiveFetchOptions = {}) {
                   verified_or_partial: 1,
                   gaps: ['fewer_than_six_usable_assets'],
                 }
-              : {},
+              : {}),
           stop_reason: status === 'partial' ? 'budget_exhausted' : null,
         }),
       )
@@ -631,6 +633,10 @@ describe('research board', () => {
     expect(screen.queryByRole('textbox', { name: '参考网页' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '添加资料和研究设置' }))
     expect(screen.getByRole('textbox', { name: '参考网页' })).toBeVisible()
+    expect(screen.getByRole('radio', { name: /概览.*3 个子问题.*每题 2 轮/ })).toBeVisible()
+    expect(screen.getByRole('radio', { name: /标准.*4 个子问题.*每题 3 轮/ })).toBeChecked()
+    expect(screen.getByRole('radio', { name: /深入.*6 个子问题.*每题 4 轮/ })).toBeVisible()
+    expect(screen.getByText('目标：每题 3 张证据图 · 方法、转译与边界')).toBeVisible()
     expect(screen.queryByRole('group', { name: '研究目标' })).not.toBeInTheDocument()
     expect(screen.queryByText('Kamala Narayana Temple Survey')).not.toBeInTheDocument()
   })
@@ -1150,6 +1156,28 @@ describe('research board', () => {
     expect(within(inspector).getByText('公共路径与后勤路径各自连续，只在门厅的受控节点交叉。')).toBeVisible()
     await user.click(within(inspector).getByText('适用边界'))
     expect(within(inspector).getByText('单一门厅需要复核高峰期容量。')).toBeVisible()
+  })
+
+  it('shows completed research passes when a subquestion returned no usable drawings', async () => {
+    const user = userEvent.setup()
+    const subquestions = [
+      { id: 'program', question: '新功能怎样进入旧结构？', rationale: '研究植入方式' },
+      { id: 'circulation', question: '访客与后勤怎样分开？', rationale: '研究流线组织' },
+      { id: 'section', question: '剖面怎样形成层次？', rationale: '研究竖向空间' },
+    ]
+    vi.stubGlobal('fetch', createLiveFetch({
+      existingRunStatus: 'completed',
+      subquestions,
+      coverageReport: {
+        subquestion_passes: { program: 2, circulation: 2, section: 2 },
+      },
+    }))
+    renderBoard()
+
+    await user.click(await screen.findByRole('button', { name: `打开研究：${liveQuestion}` }))
+
+    expect(screen.getByText('已调研 2 轮 · 1 个项目 · 1 张图纸')).toBeVisible()
+    expect(screen.getAllByText('已调研 2 轮 · 0 个项目 · 0 张图纸')).toHaveLength(2)
   })
 
   it('keeps save and reject mutually exclusive and persists undo actions', async () => {

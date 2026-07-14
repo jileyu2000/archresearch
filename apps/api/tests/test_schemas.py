@@ -15,22 +15,22 @@ from archresearch_api.schemas import (
 )
 
 
-def test_research_modes_have_the_approved_fixed_budgets() -> None:
+def test_research_modes_bound_fair_per_subquestion_passes() -> None:
     assert BUDGETS[BudgetMode.quick].model_dump() == {
         "max_rounds": 2,
-        "max_queries": 4,
+        "max_queries": 6,
         "max_pages": 12,
         "max_seconds": 240,
     }
     assert BUDGETS[BudgetMode.balanced].model_dump() == {
         "max_rounds": 3,
-        "max_queries": 8,
+        "max_queries": 12,
         "max_pages": 30,
         "max_seconds": 720,
     }
     assert BUDGETS[BudgetMode.deep].model_dump() == {
-        "max_rounds": 5,
-        "max_queries": 16,
+        "max_rounds": 4,
+        "max_queries": 24,
         "max_pages": 60,
         "max_seconds": 1800,
     }
@@ -39,6 +39,9 @@ def test_research_modes_have_the_approved_fixed_budgets() -> None:
 def test_research_modes_have_distinct_evidence_obligations() -> None:
     assert DEPTH_TARGETS[BudgetMode.quick].model_dump() == {
         "subquestions": 3,
+        "research_passes": 2,
+        "assets_per_subquestion": 2,
+        "analysis_requirements": ["visible_observation", "design_mechanism"],
         "projects": 2,
         "assets": 6,
         "multi_asset_projects": 1,
@@ -46,6 +49,14 @@ def test_research_modes_have_distinct_evidence_obligations() -> None:
     }
     assert DEPTH_TARGETS[BudgetMode.balanced].model_dump() == {
         "subquestions": 4,
+        "research_passes": 3,
+        "assets_per_subquestion": 3,
+        "analysis_requirements": [
+            "visible_observation",
+            "design_mechanism",
+            "transfer_strategy",
+            "applicability_boundary",
+        ],
         "projects": 4,
         "assets": 12,
         "multi_asset_projects": 2,
@@ -53,6 +64,16 @@ def test_research_modes_have_distinct_evidence_obligations() -> None:
     }
     assert DEPTH_TARGETS[BudgetMode.deep].model_dump() == {
         "subquestions": 6,
+        "research_passes": 4,
+        "assets_per_subquestion": 3,
+        "analysis_requirements": [
+            "visible_observation",
+            "design_mechanism",
+            "transfer_strategy",
+            "applicability_boundary",
+            "source_verification",
+            "cross_case_comparison",
+        ],
         "projects": 6,
         "assets": 18,
         "multi_asset_projects": 3,

@@ -47,6 +47,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | 27. M26 Quick-path performance and timeout isolation | complete | OpenAI worst-case search wait fell from 120s to 30s with a per-run timeout circuit; Firecrawl page waits are capped at 20s; the comparable live Quick run fell from about 194s to 143s before the final Firecrawl cap, and the full repository gate passes |
 | 28. M27 Project-page expansion and evidence promotion | pending | Follow bounded links from roundup/tag pages to concrete project or architect pages, bind image/project/source claims conservatively, and promote only evidence-backed items from visual lead to partial/verified |
 | 29. M28 Result diagnosis and release-quality acceptance | pending | Explain partial reasons in the run list and result header, then repeat the representative task and require at least 4 useful drawings across 2 concrete projects with 2 partial/verified items before closing live acceptance |
+| 30. M29 Semantic research depth and fair subquestion coverage | complete | Depth is defined by 3×2 / 4×3 / 6×4 decomposition and pass contracts, per-question drawing targets and progressive analysis obligations; complete-round stopping, persisted pass counts, Chinese UI choices and the full 170/52/122/6 repository gate pass |
 
 ## M6 completion summary
 
@@ -85,6 +86,7 @@ The code delivery is complete. These product claims require user-owned credentia
 - TinEye is required for reverse-image lookup when a key is present; mock/fallback behavior remains runnable without keys.
 - All browser commands are enumerated JSON messages; no arbitrary selectors, JavaScript, credentials, social actions, or general form submission.
 - Temporary candidates expire after 7 days; run metadata/trace after 30 days; explicit saves persist until deletion.
+- Research depth is a semantic contract: problem decomposition, per-subquestion source/project/drawing coverage and analysis/evidence obligations. Query/page/time values are bounded execution ceilings, not the user-facing definition of depth.
 
 ## Errors Encountered
 
@@ -99,6 +101,10 @@ The code delivery is complete. These product claims require user-owned credentia
 | Windows PowerShell 5.1 misparsed UTF-8 Chinese strings in the provider script | 1 | Make the executable script ASCII-safe and add parser tests for Windows PowerShell 5.1 and PowerShell 7 |
 | Provider setup incorrectly required pnpm through the full workspace runtime resolver | 1 | Split out Python-only runtime resolution and cover it independently; provider setup now depends only on the API Python environment |
 | First live Quick run remained inside one provider search with no local timeout | 1 | Add an SDK request timeout, enforce the run deadline between calls, and preserve cancellation/partial checkpoints before repeating the live smoke |
+| M29 full verification first requested canonical Ruff formatting for the touched workflow | 1 | Format only the touched workflow file and rerun the authoritative gate |
+| M29 Mypy rejected nullable legacy `QueryAttempt.subquestion_id` while counting passes | 1 | Ignore legacy attempts without a subquestion id; planned current attempts remain fully counted |
+| M29 analysis-depth contract was initially data-only | 1 | Add a red query-planning test and carry the selected observation/mechanism/transfer/boundary/verification obligations into every model research query |
+| M29 in-app visual acceptance hit the recorded `Cannot redefine property: process` host error | 1 | Do not repeat the known failing preview-control path; use the complete Board/build/packaged-Chrome gates plus the zero-finding local design detector, while keeping the live app available for user inspection |
 | One-click stop tracked launcher PIDs while Python/Vite child processes owned the ports | 1 | Harden shutdown to resolve and verify workspace-owned listener processes before stopping the process tree |
 | Bundled Playwright package referenced browser files that were not installed | 2 | Use the system Chrome executable for deterministic local screenshot and extension E2E runs; do not download browsers at runtime |
 | Initial M6 Board screenshot showed all Demo cards without visual assets | 1 | Treat usable local drawing previews and bounded desktop preview height as Board acceptance requirements |

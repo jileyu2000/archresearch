@@ -57,6 +57,7 @@ export interface CoverageReport {
   subquestion_count?: number
   covered_subquestions?: number
   multi_asset_projects?: number
+  subquestion_passes?: Record<string, number>
   gaps?: string[]
 }
 

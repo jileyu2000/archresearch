@@ -26,6 +26,7 @@ from archresearch_api.providers import (
 )
 from archresearch_api.schemas import (
     BUDGETS,
+    DEPTH_TARGETS,
     AssociationStatus,
     BudgetMode,
     PrimarySourceStatus,
@@ -42,6 +43,7 @@ from archresearch_api.workflow import (
     _persist_assets,
     _persist_inspected_assets,
     _persist_sources,
+    _queries_for,
     execute_research_run,
 )
 
@@ -61,7 +63,11 @@ class SequencedProvider:
     ) -> ProviderSearchResult:
         del goal, allowed_domains
         self.queries.append(query)
-        batch = self.batches[len(self.queries) - 1]
+        batch = (
+            self.batches[len(self.queries) - 1]
+            if len(self.queries) <= len(self.batches)
+            else _batch()
+        )
         if isinstance(batch, Exception):
             raise batch
         return batch
@@ -188,6 +194,23 @@ def _advance_retry_attempt(database: Database, run_id: str) -> None:
         session.commit()
 
 
+def test_query_plan_carries_the_selected_analysis_depth() -> None:
+    target = DEPTH_TARGETS[BudgetMode.balanced]
+
+    queries = _queries_for(
+        "旧厂房怎样更新？",
+        ResearchGoal.precedent_research,
+        _quick_research_plan().subquestions,
+        max_rounds=target.research_passes,
+        max_queries=target.research_passes * 3,
+        analysis_requirements=target.analysis_requirements,
+    )
+
+    assert "转译步骤" in queries[0][3]
+    assert "适用边界" in queries[0][3]
+    assert "多来源核验" not in queries[0][3]
+
+
 def test_run_persists_subquestions_and_binds_queries_and_assets_to_them(tmp_path: Path) -> None:
     database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
 
@@ -310,7 +333,7 @@ def test_quick_run_returns_partial_results_when_budget_is_exhausted(tmp_path: Pa
         assert run.status == RunStatus.partial.value
         assert run.stop_reason == "budget_exhausted"
         assert asset_count == 4
-    assert len(provider.queries) == 4
+    assert len(provider.queries) == 6
 
 
 def test_run_deadline_stops_before_starting_another_provider_call(tmp_path: Path) -> None:
@@ -368,7 +391,7 @@ def test_quick_openai_run_reserves_time_for_one_worst_case_call(tmp_path: Path) 
 
     class FakeClock:
         def __init__(self) -> None:
-            self._values = iter([0.0, 0.0, 31.0, 62.0, 93.0])
+            self._values = iter([0.0, 0.0, 31.0, 62.0, 93.0, 124.0, 155.0])
             self.observed: list[float] = []
 
         def __call__(self) -> float:
@@ -393,10 +416,10 @@ def test_quick_openai_run_reserves_time_for_one_worst_case_call(tmp_path: Path) 
         )
         assert run is not None
         assert run.status == RunStatus.partial.value
-        assert run.stop_reason == "budget_exhausted"
-        assert query_count == 4
-    assert responses.calls == 5
-    assert clock.observed == [0.0, 0.0, 31.0, 62.0, 93.0]
+        assert run.stop_reason == "no_new_assets"
+        assert query_count == 6
+    assert responses.calls == 7
+    assert clock.observed == [0.0, 0.0, 31.0, 62.0, 93.0, 124.0, 155.0]
 
 
 def test_cancellation_during_provider_call_is_not_overwritten(tmp_path: Path) -> None:
@@ -493,7 +516,41 @@ def test_two_batches_without_new_assets_stop_the_run_without_duplicates(tmp_path
         assert run.status == RunStatus.partial.value
         assert run.stop_reason == "no_new_assets"
         assert asset_count == 1
-    assert len(provider.queries) == 6
+    assert len(provider.queries) == 8
+
+
+def test_empty_quick_research_finishes_two_fair_passes_for_every_subquestion(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
+    provider = SequencedProvider([_batch()] * 6)
+
+    execute_research_run(database, run_id, provider)
+
+    with database.session_factory() as session:
+        attempts = list(
+            session.scalars(
+                select(QueryAttempt)
+                .where(QueryAttempt.run_id == run_id)
+                .order_by(QueryAttempt.created_at, QueryAttempt.id)
+            )
+        )
+        run = session.get(ResearchRun, run_id)
+
+    assert run is not None
+    assert [attempt.subquestion_id for attempt in attempts] == [
+        "program",
+        "circulation",
+        "section",
+        "program",
+        "circulation",
+        "section",
+    ]
+    assert run.coverage_report["subquestion_passes"] == {
+        "program": 2,
+        "circulation": 2,
+        "section": 2,
+    }
 
 
 def test_web_search_urls_are_not_stored_as_perceptual_hashes(tmp_path: Path) -> None:
@@ -656,9 +713,9 @@ def test_retry_replays_completed_queries_after_a_resumed_run_finishes_partial(
     _advance_retry_attempt(database, run_id)
     execute_research_run(database, run_id, provider)
 
-    assert sum("新功能怎样植入" in query for query in provider.queries) == 3
-    assert sum("公共与后勤怎样分开" in query for query in provider.queries) == 2
-    assert sum("剖面怎样形成层次" in query for query in provider.queries) == 2
+    assert sum("新功能怎样植入" in query for query in provider.queries) == 4
+    assert sum("公共与后勤怎样分开" in query for query in provider.queries) == 4
+    assert sum("剖面怎样形成层次" in query for query in provider.queries) == 5
 
 
 def test_retry_resume_uses_only_the_immediately_previous_failed_execution(
@@ -709,8 +766,8 @@ def test_retry_resume_uses_only_the_immediately_previous_failed_execution(
     execute_research_run(database, run_id, provider)
 
     assert provider.counts["program"] == 4
-    assert provider.counts["circulation"] == 2
-    assert provider.counts["section"] == 3
+    assert provider.counts["circulation"] == 4
+    assert provider.counts["section"] == 5
 
 
 def test_service_resume_keeps_completed_keys_inherited_by_the_current_retry(
@@ -758,7 +815,7 @@ def test_service_resume_keeps_completed_keys_inherited_by_the_current_retry(
     execute_research_run(database, run_id, provider)
     execute_research_run(database, run_id, provider)
 
-    assert provider.counts == {"program": 2, "circulation": 1, "section": 3}
+    assert provider.counts == {"program": 2, "circulation": 2, "section": 4}
 
     _advance_retry_attempt(database, run_id)
     execute_research_run(database, run_id, provider)
@@ -1389,4 +1446,4 @@ def test_source_lookup_preserves_web_results_and_returns_partial_when_tineye_fai
         assert run.status == RunStatus.partial.value
         assert run.stop_reason == "source_lookup_error:RuntimeError"
         assert asset_count == 6
-    assert len(web_provider.queries) == 3
+    assert len(web_provider.queries) == 6

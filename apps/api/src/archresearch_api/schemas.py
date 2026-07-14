@@ -88,6 +88,9 @@ class Budget(BaseModel):
 
 class DepthTarget(BaseModel):
     subquestions: int
+    research_passes: int
+    assets_per_subquestion: int
+    analysis_requirements: list[str]
     projects: int
     assets: int
     multi_asset_projects: int
@@ -95,15 +98,18 @@ class DepthTarget(BaseModel):
 
 
 BUDGETS: dict[BudgetMode, Budget] = {
-    BudgetMode.quick: Budget(max_rounds=2, max_queries=4, max_pages=12, max_seconds=240),
-    BudgetMode.balanced: Budget(max_rounds=3, max_queries=8, max_pages=30, max_seconds=720),
-    BudgetMode.deep: Budget(max_rounds=5, max_queries=16, max_pages=60, max_seconds=1800),
+    BudgetMode.quick: Budget(max_rounds=2, max_queries=6, max_pages=12, max_seconds=240),
+    BudgetMode.balanced: Budget(max_rounds=3, max_queries=12, max_pages=30, max_seconds=720),
+    BudgetMode.deep: Budget(max_rounds=4, max_queries=24, max_pages=60, max_seconds=1800),
 }
 
 
 DEPTH_TARGETS: dict[BudgetMode, DepthTarget] = {
     BudgetMode.quick: DepthTarget(
         subquestions=3,
+        research_passes=2,
+        assets_per_subquestion=2,
+        analysis_requirements=["visible_observation", "design_mechanism"],
         projects=2,
         assets=6,
         multi_asset_projects=1,
@@ -111,6 +117,14 @@ DEPTH_TARGETS: dict[BudgetMode, DepthTarget] = {
     ),
     BudgetMode.balanced: DepthTarget(
         subquestions=4,
+        research_passes=3,
+        assets_per_subquestion=3,
+        analysis_requirements=[
+            "visible_observation",
+            "design_mechanism",
+            "transfer_strategy",
+            "applicability_boundary",
+        ],
         projects=4,
         assets=12,
         multi_asset_projects=2,
@@ -118,6 +132,16 @@ DEPTH_TARGETS: dict[BudgetMode, DepthTarget] = {
     ),
     BudgetMode.deep: DepthTarget(
         subquestions=6,
+        research_passes=4,
+        assets_per_subquestion=3,
+        analysis_requirements=[
+            "visible_observation",
+            "design_mechanism",
+            "transfer_strategy",
+            "applicability_boundary",
+            "source_verification",
+            "cross_case_comparison",
+        ],
         projects=6,
         assets=18,
         multi_asset_projects=3,

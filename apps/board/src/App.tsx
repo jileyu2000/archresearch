@@ -120,9 +120,24 @@ function chineseItems(values: string[] | undefined) {
 }
 
 const modeLabels: Record<ResearchMode, string> = {
-  quick: 'Quick',
-  balanced: 'Balanced',
-  deep: 'Deep',
+  quick: '概览',
+  balanced: '标准',
+  deep: '深入',
+}
+
+const researchDepthOptions: Record<ResearchMode, { coverage: string; target: string }> = {
+  quick: {
+    coverage: '3 个子问题 · 每题 2 轮',
+    target: '目标：每题 2 张证据图 · 观察与方法',
+  },
+  balanced: {
+    coverage: '4 个子问题 · 每题 3 轮',
+    target: '目标：每题 3 张证据图 · 方法、转译与边界',
+  },
+  deep: {
+    coverage: '6 个子问题 · 每题 4 轮',
+    target: '目标：每题 3 张证据图 · 多来源核验与跨案例比较',
+  },
 }
 
 const goalLabels: Record<ResearchGoal, string> = {
@@ -1120,6 +1135,7 @@ export default function App() {
       ...subquestion,
       assetCount: assets.length,
       projectCount: new Set(assets.map((result) => result.project)).size,
+      passCount: activeRun?.coverageReport?.subquestion_passes?.[subquestion.id],
     }
   })
   const caseGroups = researchSubquestions.map((subquestion, index) => {
@@ -1330,12 +1346,14 @@ export default function App() {
                       </ul>
                     )}
                   </div>
-                  <fieldset className="segmented-control">
+                  <fieldset className="segmented-control research-depth-options">
                     <legend>研究深度</legend>
                     {(Object.keys(modeLabels) as ResearchMode[]).map((value) => (
                       <label key={value}>
                         <input type="radio" name="mode" value={value} checked={mode === value} onChange={() => setMode(value)} />
-                        {modeLabels[value]}
+                        <strong>{modeLabels[value]}</strong>
+                        <span>{researchDepthOptions[value].coverage}</span>
+                        <small>{researchDepthOptions[value].target}</small>
                       </label>
                     ))}
                   </fieldset>
@@ -1583,6 +1601,7 @@ export default function App() {
                       <p>{subquestion.rationale}</p>
                     </div>
                     <span className="subquestion-coverage">
+                      {subquestion.passCount !== undefined && `已调研 ${subquestion.passCount} 轮 · `}
                       {subquestion.projectCount} 个项目 · {subquestion.assetCount} 张图纸
                     </span>
                   </li>
