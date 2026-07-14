@@ -48,6 +48,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | 28. M27 Project-page expansion and evidence promotion | pending | Follow bounded links from roundup/tag pages to concrete project or architect pages, bind image/project/source claims conservatively, and promote only evidence-backed items from visual lead to partial/verified |
 | 29. M28 Result diagnosis and release-quality acceptance | pending | Explain partial reasons in the run list and result header, then repeat the representative task and require at least 4 useful drawings across 2 concrete projects with 2 partial/verified items before closing live acceptance |
 | 30. M29 Semantic research depth and fair subquestion coverage | complete | Depth is defined by 3×2 / 4×3 / 6×4 decomposition and pass contracts, per-question drawing targets and progressive analysis obligations; complete-round stopping, persisted pass counts, Chinese UI choices and the full 170/52/122/6 repository gate pass |
+| 31. M30 Self-explanatory result tools | complete | “结果工具” groups compare/organize, export and process review; every action states its outcome and disabled prerequisite, user-facing Trace jargon is removed, and the full 170/53/122/6 gate passes |
 
 ## M6 completion summary
 

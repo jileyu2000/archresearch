@@ -377,7 +377,7 @@ export function createApiClient(baseUrl = '/v1') {
       try {
         response = await fetch(`${baseUrl}/runs/${runId}/events`)
       } catch (error) {
-        throw new ApiError('无法读取研究 Trace。', null, { cause: error })
+        throw new ApiError('无法读取研究过程记录。', null, { cause: error })
       }
       if (!response.ok) throw await errorFromResponse(response)
       const text = await response.text()

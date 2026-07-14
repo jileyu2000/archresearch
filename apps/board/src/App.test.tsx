@@ -1231,10 +1231,10 @@ describe('research board', () => {
     await startLiveResearch(user)
     await screen.findByText('Live Mill Conversion')
 
-    await user.click(screen.getByText('工具'))
-    expect(screen.getByRole('button', { name: '导出私有研究板' })).toBeDisabled()
+    await user.click(screen.getByText('结果工具'))
+    expect(screen.getByRole('button', { name: '导出个人研究板' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: '加入方法对照 Live Mill Conversion 剖面图' }))
-    await user.click(screen.getByRole('button', { name: '导出私有研究板' }))
+    await user.click(screen.getByRole('button', { name: '导出个人研究板' }))
 
     expect(await screen.findByRole('status')).toHaveTextContent('C:/exports/board-private.json')
     const boardPatch = fetchMock.mock.calls.find(
@@ -1246,6 +1246,30 @@ describe('research board', () => {
     })
   })
 
+  it('explains result tools, outcomes, and disabled prerequisites in plain language', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', createLiveFetch())
+    renderBoard()
+    await startLiveResearch(user)
+    await screen.findByText('Live Mill Conversion')
+
+    await user.click(screen.getByText('结果工具'))
+
+    expect(screen.getByText('整理与对照')).toBeVisible()
+    expect(screen.getByText('已选 0 张，还需选择 2 张图纸')).toBeVisible()
+    expect(screen.getByText('从本次图纸整理配色、线型与版式')).toBeVisible()
+    expect(screen.getByText('导出')).toBeVisible()
+    expect(screen.getByText('选择图纸后，可导出包含完整图片的个人研究板')).toBeVisible()
+    expect(screen.getByText('受限图片只保留署名、来源与链接')).toBeVisible()
+    expect(screen.getByText('研究过程')).toBeVisible()
+    expect(screen.getByText('查看搜索、网页读取、图纸识别与来源核验记录')).toBeVisible()
+    expect(screen.queryByText(/Trace/)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '查看研究过程' }))
+    expect(screen.getByRole('dialog', { name: '研究过程记录' })).toBeVisible()
+    expect(screen.queryByText(/Trace/)).not.toBeInTheDocument()
+  })
+
   it('previews share rights for selected items before creating the export', async () => {
     const user = userEvent.setup()
     const fetchMock = createLiveFetch()
@@ -1255,8 +1279,8 @@ describe('research board', () => {
     await screen.findByText('Live Mill Conversion')
 
     await user.click(screen.getByRole('button', { name: '加入方法对照 Live Mill Conversion 剖面图' }))
-    await user.click(screen.getByText('工具'))
-    await user.click(screen.getByRole('button', { name: '生成分享版' }))
+    await user.click(screen.getByText('结果工具'))
+    await user.click(screen.getByRole('button', { name: '生成可分享来源板' }))
     expect(screen.getByText('1 张图片可嵌入')).toBeVisible()
     expect(
       fetchMock.mock.calls.filter(([path]) => path === '/v1/boards/board-live/exports'),
@@ -1283,8 +1307,8 @@ describe('research board', () => {
     await startLiveResearch(user)
     await screen.findByText('Live Mill Conversion')
 
-    await user.click(screen.getByText('工具'))
-    await user.click(screen.getByRole('button', { name: '打开表达规范' }))
+    await user.click(screen.getByText('结果工具'))
+    await user.click(screen.getByRole('button', { name: '整理图纸表达规范' }))
     const stylePanel = screen.getByRole('dialog', { name: '表达规范' })
     expect(within(stylePanel).getByLabelText('主色')).toHaveValue('#2d846b')
     expect(within(stylePanel).getByRole('combobox', { name: '字体类别' })).toHaveValue('serif')

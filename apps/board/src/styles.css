@@ -538,24 +538,47 @@ h3 {
   background: var(--color-surface-subtle);
 }
 
-.tools-menu > div {
+.tools-menu-panel {
   position: absolute;
   z-index: var(--z-dropdown);
   top: calc(100% + var(--space-2));
   right: 0;
   display: grid;
-  width: 232px;
-  gap: 2px;
-  padding: var(--space-2);
+  width: min(344px, calc(100vw - var(--space-6)));
+  max-height: calc(100vh - 88px);
+  overflow-y: auto;
+  padding: var(--space-3);
   border: 1px solid var(--color-line);
   border-radius: var(--radius-md);
   background: var(--color-surface);
   box-shadow: var(--shadow-overlay);
 }
 
+.tools-menu-group {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.tools-menu-group + .tools-menu-group {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-line);
+}
+
+.tools-menu-group h2 {
+  padding: var(--space-1) var(--space-2);
+  color: var(--color-ink-secondary);
+  font-size: var(--font-xs);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-compact);
+}
+
 .tools-menu button {
+  min-height: 58px;
+  align-items: flex-start;
   justify-content: start;
-  padding: 9px 10px;
+  gap: var(--space-3);
+  padding: var(--space-2);
   border-color: transparent;
   background: transparent;
   text-align: left;
@@ -564,6 +587,38 @@ h3 {
 .tools-menu button svg {
   width: var(--icon-sm);
   height: var(--icon-sm);
+  margin-top: 2px;
+  color: var(--color-ink-tertiary);
+}
+
+.tools-menu button > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.tools-menu button strong {
+  color: var(--color-ink);
+  font-size: var(--font-sm);
+  line-height: var(--leading-compact);
+}
+
+.tools-menu button small {
+  color: var(--color-ink-secondary);
+  font-size: var(--font-xs);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-compact);
+  text-wrap: pretty;
+}
+
+.tools-menu button:disabled {
+  background: var(--color-surface-subtle);
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.tools-menu button:disabled strong,
+.tools-menu button:disabled svg {
   color: var(--color-ink-tertiary);
 }
 
