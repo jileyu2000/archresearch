@@ -1231,7 +1231,7 @@ describe('research board', () => {
     await startLiveResearch(user)
     await screen.findByText('Live Mill Conversion')
 
-    await user.click(screen.getByText('结果工具'))
+    await user.click(screen.getByRole('button', { name: '整理与导出：对照、规范与导出' }))
     expect(screen.getByRole('button', { name: '导出个人研究板' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: '加入方法对照 Live Mill Conversion 剖面图' }))
     await user.click(screen.getByRole('button', { name: '导出个人研究板' }))
@@ -1253,7 +1253,10 @@ describe('research board', () => {
     await startLiveResearch(user)
     await screen.findByText('Live Mill Conversion')
 
-    await user.click(screen.getByText('结果工具'))
+    const resultToolsTrigger = screen.getByRole('button', { name: '整理与导出：对照、规范与导出' })
+    expect(resultToolsTrigger).toHaveClass('result-tools-trigger')
+    expect(screen.getByRole('button', { name: '发起新研究' })).toHaveClass('result-new-research')
+    await user.click(resultToolsTrigger)
 
     expect(screen.getByText('整理与对照')).toBeVisible()
     expect(screen.getByText('已选 0 张，还需选择 2 张图纸')).toBeVisible()
@@ -1279,7 +1282,7 @@ describe('research board', () => {
     await screen.findByText('Live Mill Conversion')
 
     await user.click(screen.getByRole('button', { name: '加入方法对照 Live Mill Conversion 剖面图' }))
-    await user.click(screen.getByText('结果工具'))
+    await user.click(screen.getByRole('button', { name: '整理与导出：对照、规范与导出' }))
     await user.click(screen.getByRole('button', { name: '生成可分享来源板' }))
     expect(screen.getByText('1 张图片可嵌入')).toBeVisible()
     expect(
@@ -1307,7 +1310,7 @@ describe('research board', () => {
     await startLiveResearch(user)
     await screen.findByText('Live Mill Conversion')
 
-    await user.click(screen.getByText('结果工具'))
+    await user.click(screen.getByRole('button', { name: '整理与导出：对照、规范与导出' }))
     await user.click(screen.getByRole('button', { name: '整理图纸表达规范' }))
     const stylePanel = screen.getByRole('dialog', { name: '表达规范' })
     expect(within(stylePanel).getByLabelText('主色')).toHaveValue('#2d846b')

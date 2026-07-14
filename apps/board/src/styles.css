@@ -516,26 +516,69 @@ h3 {
 
 .tools-menu > summary {
   display: inline-flex;
-  min-height: var(--control-height);
+  min-height: 44px;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-line);
+  padding: 6px 10px 6px 14px;
+  border: 1px solid var(--color-action);
   border-radius: var(--radius-sm);
-  background: var(--color-surface);
+  background: var(--color-action);
+  color: #fff;
   cursor: pointer;
   font-size: var(--font-sm);
   font-weight: var(--weight-semibold);
   list-style: none;
+  box-shadow: 0 4px 12px rgb(47 91 255 / 18%);
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
 }
 
 .tools-menu > summary::-webkit-details-marker {
   display: none;
 }
 
+.tools-menu > summary:hover,
 .tools-menu[open] > summary {
-  border-color: var(--color-ink);
-  background: var(--color-surface-subtle);
+  border-color: var(--color-action-hover);
+  background: var(--color-action-hover);
+  box-shadow: 0 6px 18px rgb(47 91 255 / 24%);
+}
+
+.result-tools-trigger > span {
+  display: grid;
+  gap: 1px;
+  text-align: left;
+}
+
+.result-tools-trigger strong {
+  font-size: var(--font-compact);
+  line-height: 1.15;
+}
+
+.result-tools-trigger small {
+  color: rgb(255 255 255 / 78%);
+  font-size: var(--font-xs);
+  font-weight: var(--weight-regular);
+  line-height: 1.15;
+}
+
+.tools-menu-chevron {
+  width: 14px;
+  height: 14px;
+  margin-left: 2px;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.tools-menu[open] .tools-menu-chevron {
+  transform: rotate(180deg);
+}
+
+.result-new-research {
+  border-color: var(--color-line-strong);
+  background: var(--color-surface);
 }
 
 .tools-menu-panel {
@@ -2841,12 +2884,24 @@ h3 {
     height: 32px;
   }
 
-  .header-actions .button-primary {
+  .header-actions .button-primary,
+  .result-new-research {
     padding-right: 10px;
     padding-left: 10px;
   }
 
-  .header-actions .button-primary svg {
+  .header-actions .button-primary svg,
+  .result-new-research svg {
+    display: none;
+  }
+
+  .result-tools-trigger {
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+
+  .result-tools-trigger small,
+  .tools-menu-chevron {
     display: none;
   }
 

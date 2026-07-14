@@ -4,6 +4,7 @@ import {
   ArrowRight,
   ArrowUp,
   Check,
+  ChevronDown,
   CircleDashed,
   Columns3,
   Download,
@@ -1242,12 +1243,16 @@ export default function App() {
             </button>
           )}
           {!composerOpen && !isRunActive && (
-            <button className="button-primary" type="button" onClick={showNewResearch}>
+            <button className="result-new-research" type="button" onClick={showNewResearch}>
               <Plus aria-hidden="true" />发起新研究
             </button>
           )}
           {resultViewOpen && <details className="tools-menu">
-            <summary><SlidersHorizontal aria-hidden="true" /><span>结果工具</span></summary>
+            <summary className="result-tools-trigger" role="button" aria-label="整理与导出：对照、规范与导出">
+              <SlidersHorizontal aria-hidden="true" />
+              <span><strong>整理与导出</strong><small>对照 · 规范 · 导出</small></span>
+              <ChevronDown className="tools-menu-chevron" aria-hidden="true" />
+            </summary>
             <div className="tools-menu-panel">
               <section className="tools-menu-group" aria-labelledby="tools-organize-title">
                 <h2 id="tools-organize-title">整理与对照</h2>
