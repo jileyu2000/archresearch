@@ -28,6 +28,7 @@ from archresearch_api.models import (
     Workspace,
 )
 from archresearch_api.providers import ProviderAsset, ProviderSearchResult, ProviderSource
+from archresearch_api.public_pages import ParsedPageImage, ParsedPublicPage
 from archresearch_api.schemas import (
     AssociationStatus,
     BudgetMode,
@@ -121,6 +122,14 @@ class RecordingBrowser:
                 "title": "Project title " + "P" * 2_000,
                 "description": "Description " + "D" * 4_000,
                 "publisher": "Studio",
+            }
+        if action == "page_snapshot":
+            return {
+                "blocks": [
+                    {"kind": "heading", "text": "Retained hall and inserted stair"},
+                    {"kind": "caption", "text": "Section through the public route"},
+                ],
+                "truncated": False,
             }
         if action == "enumerate_media":
             return {
@@ -296,6 +305,7 @@ def test_workflow_inspects_pages_with_read_only_actions_and_persists_six_visual_
         "open_url",
         "wait",
         "page_metadata",
+        "page_snapshot",
         "enumerate_media",
         "capture_region",
         "capture_region",
@@ -309,6 +319,7 @@ def test_workflow_inspects_pages_with_read_only_actions_and_persists_six_visual_
     assert len(classifier.calls) == 6
     assert all(len(call["caption"]) <= 500 for call in classifier.calls)
     assert all(len(call["project_text"]) <= 1_200 for call in classifier.calls)
+    assert all("Retained hall" in call["project_text"] for call in classifier.calls)
     assert all(len(call["question"]) <= 1_000 for call in classifier.calls)
 
     with database.session_factory() as session:
@@ -371,6 +382,118 @@ def test_browser_failure_closes_the_tab_and_preserves_web_results(tmp_path: Path
     assert run.status == RunStatus.partial.value
     assert len(assets) == 1
     assert assets[0].project_name == "已检索项目"
+
+
+def test_snapshot_failure_falls_back_to_metadata_and_keeps_visual_results(tmp_path: Path) -> None:
+    database, run_id = _database_with_run(tmp_path)
+    browser = RecordingBrowser(fail_action="page_snapshot")
+    classifier = RecordingClassifier()
+
+    execute_research_run(
+        database,
+        run_id,
+        SingleBatchProvider(_provider_result("https://studio.example/project")),
+        browser_client=browser,
+        visual_classifier=classifier,
+        candidate_root=tmp_path / "candidates",
+    )
+
+    assert len(classifier.calls) == 6
+    assert all("Project title" in call["project_text"] for call in classifier.calls)
+    assert [action for action, _ in browser.calls][-1] == "close_tab"
+
+
+class RecordingPublicPageParser:
+    name = "firecrawl"
+
+    def __init__(self, images: list[ParsedPageImage]) -> None:
+        self.images = images
+        self.urls: list[str] = []
+
+    def parse(self, url: str) -> ParsedPublicPage:
+        self.urls.append(url)
+        return ParsedPublicPage(
+            source_url=url,
+            title="Courtyard Archive",
+            markdown="# Courtyard Archive",
+            images=self.images,
+        )
+
+
+def test_browser_failure_uses_firecrawl_to_enrich_one_unambiguous_drawing_lead(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path)
+    result = _provider_result("https://studio.example/project")
+    result.assets[0].asset_type = ArchitectureAssetType.section
+    result.assets[0].image_url = None
+    parser = RecordingPublicPageParser(
+        [
+            ParsedPageImage(
+                url="https://cdn.example/longitudinal-section.png",
+                alt="Longitudinal section",
+            )
+        ]
+    )
+
+    execute_research_run(
+        database,
+        run_id,
+        SingleBatchProvider(result),
+        browser_client=RecordingBrowser(fail_action="enumerate_media"),
+        visual_classifier=RecordingClassifier(),
+        candidate_root=tmp_path / "candidates",
+        public_page_parser=parser,
+    )
+
+    with database.session_factory() as session:
+        asset = session.scalar(select(AssetCandidate).where(AssetCandidate.run_id == run_id))
+        events = list(session.scalars(select(TraceEvent).where(TraceEvent.run_id == run_id)))
+    assert asset is not None
+    assert asset.image_url == "https://cdn.example/longitudinal-section.png"
+    assert asset.result_tier == ResultTier.partial.value
+    assert asset.rights_status == RightsStatus.unknown.value
+    assert parser.urls == ["https://studio.example/project"]
+    firecrawl_events = [event for event in events if event.tool == "firecrawl"]
+    assert firecrawl_events
+    assert firecrawl_events[-1].summary == {
+        "source_url": "https://studio.example/project",
+        "status": "completed",
+        "markdown_chars": len("# Courtyard Archive"),
+        "image_leads": 1,
+        "link_leads": 0,
+        "enriched": 1,
+    }
+
+
+def test_firecrawl_keeps_ambiguous_same_type_images_as_unattached_leads(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path)
+    result = _provider_result("https://studio.example/project")
+    result.assets[0].asset_type = ArchitectureAssetType.section
+    result.assets[0].image_url = None
+    parser = RecordingPublicPageParser(
+        [
+            ParsedPageImage(url="https://cdn.example/section-a.png", alt="Section A"),
+            ParsedPageImage(url="https://cdn.example/section-b.png", alt="Section B"),
+        ]
+    )
+
+    execute_research_run(
+        database,
+        run_id,
+        SingleBatchProvider(result),
+        browser_client=RecordingBrowser(fail_action="enumerate_media"),
+        visual_classifier=RecordingClassifier(),
+        candidate_root=tmp_path / "candidates",
+        public_page_parser=parser,
+    )
+
+    with database.session_factory() as session:
+        asset = session.scalar(select(AssetCandidate).where(AssetCandidate.run_id == run_id))
+    assert asset is not None
+    assert asset.image_url is None
 
 
 def test_undecodable_browser_crops_are_not_sent_to_the_visual_classifier(tmp_path: Path) -> None:

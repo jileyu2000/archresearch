@@ -38,6 +38,16 @@ class PageMetadata(StrictModel):
     publisher: str | None = None
 
 
+class SemanticBlock(StrictModel):
+    kind: Literal["heading", "paragraph", "caption"]
+    text: str = Field(min_length=1, max_length=500)
+
+
+class PageSnapshot(StrictModel):
+    blocks: list[SemanticBlock] = Field(default_factory=list, max_length=40)
+    truncated: bool = False
+
+
 class MediaRegion(StrictModel):
     x: float = Field(ge=0)
     y: float = Field(ge=0)
@@ -154,6 +164,7 @@ def inspect_source_page(
         metadata = PageMetadata.model_validate(
             browser.send_command_sync("page_metadata", {"tab_id": tab_id})
         )
+        snapshot = _optional_page_snapshot(browser, tab_id)
         enumeration = MediaEnumeration.model_validate(
             browser.send_command_sync("enumerate_media", {"tab_id": tab_id})
         )
@@ -166,6 +177,7 @@ def inspect_source_page(
             question=question,
             candidate_root=candidate_root,
             metadata=metadata,
+            snapshot=snapshot,
             media=enumeration.media[:MAX_MEDIA_PER_PAGE],
             budget=active_budget,
         )
@@ -184,14 +196,21 @@ def _capture_candidates(
     question: str,
     candidate_root: Path,
     metadata: PageMetadata,
+    snapshot: PageSnapshot,
     media: list[PageMedia],
     budget: InspectionBudget,
 ) -> list[InspectedVisual]:
     results: list[InspectedVisual] = []
+    snapshot_text = " ".join(block.text for block in snapshot.blocks)
     project_text = _bounded_text(
         " ".join(
             item
-            for item in (metadata.title, metadata.publisher or "", metadata.description or "")
+            for item in (
+                _bounded_text(metadata.title, 300),
+                _bounded_text(metadata.publisher or "", 150),
+                _bounded_text(snapshot_text, 600),
+                _bounded_text(metadata.description or "", 300),
+            )
             if item
         ),
         1_200,
@@ -262,6 +281,18 @@ def _capture_candidates(
         except Exception:
             continue
     return results
+
+
+def _optional_page_snapshot(
+    browser: BrowserCommandClient,
+    tab_id: int,
+) -> PageSnapshot:
+    try:
+        return PageSnapshot.model_validate(
+            browser.send_command_sync("page_snapshot", {"tab_id": tab_id})
+        )
+    except Exception:
+        return PageSnapshot()
 
 
 def difference_hash(image_bytes: bytes) -> str:

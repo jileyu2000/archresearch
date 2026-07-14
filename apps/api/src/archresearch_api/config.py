@@ -45,6 +45,14 @@ class Settings(BaseSettings):
         default="https://api.tineye.com/rest/",
         validation_alias=AliasChoices("TINEYE_API_URL", "ARCHRESEARCH_TINEYE_API_URL"),
     )
+    firecrawl_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("FIRECRAWL_API_KEY", "ARCHRESEARCH_FIRECRAWL_API_KEY"),
+    )
+    firecrawl_api_url: str = Field(
+        default="https://api.firecrawl.dev/v2",
+        validation_alias=AliasChoices("FIRECRAWL_API_URL", "ARCHRESEARCH_FIRECRAWL_API_URL"),
+    )
     max_upload_bytes: int = 30 * 1024 * 1024
     temp_asset_ttl_days: int = 7
     run_metadata_ttl_days: int = 30

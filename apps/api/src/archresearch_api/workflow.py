@@ -39,6 +39,11 @@ from .providers import (
     ReverseImageProvider,
     TinEyeMatch,
 )
+from .public_pages import (
+    ParsedPublicPage,
+    PublicPageParser,
+    infer_architecture_asset_type,
+)
 from .schemas import (
     DEPTH_TARGETS,
     AssociationStatus,
@@ -108,6 +113,7 @@ def execute_research_run(
     browser_client: BrowserCommandClient | None = None,
     visual_classifier: VisualClassifier | None = None,
     candidate_root: Path | None = None,
+    public_page_parser: PublicPageParser | None = None,
     clock: Callable[[], float] = monotonic,
 ) -> None:
     terminal_state: str | None = None
@@ -323,6 +329,14 @@ def execute_research_run(
                             },
                             tool="browser",
                         )
+                        if public_page_parser is not None:
+                            parser_added = _try_public_page_fallback(
+                                db,
+                                run_id,
+                                source,
+                                public_page_parser,
+                            )
+                            browser_added += parser_added
             _checkpoint(
                 db,
                 run_id,
@@ -814,6 +828,95 @@ def _persist_browser_page_attempts(db: Database, run_id: str, attempted: int) ->
         run = _get_run(session, run_id)
         run.browser_pages_attempted = max(run.browser_pages_attempted, attempted)
         session.commit()
+
+
+def _try_public_page_fallback(
+    db: Database,
+    run_id: str,
+    source: ProviderSource,
+    parser: PublicPageParser,
+) -> int:
+    try:
+        page = parser.parse(source.url)
+        enriched = _persist_public_page_leads(db, run_id, source.url, page)
+        _checkpoint(
+            db,
+            run_id,
+            RunStatus.inspecting,
+            {
+                "source_url": source.url,
+                "status": "completed",
+                "markdown_chars": len(page.markdown),
+                "image_leads": len(page.images),
+                "link_leads": len(page.links),
+                "enriched": enriched,
+            },
+            tool=parser.name,
+        )
+        return enriched
+    except Exception as exc:
+        _checkpoint(
+            db,
+            run_id,
+            RunStatus.inspecting,
+            {
+                "source_url": source.url,
+                "status": "skipped",
+                "error_type": type(exc).__name__,
+            },
+            tool=parser.name,
+        )
+        return 0
+
+
+def _persist_public_page_leads(
+    db: Database,
+    run_id: str,
+    source_url: str,
+    page: ParsedPublicPage,
+) -> int:
+    images_by_type: dict[str, list[str]] = {}
+    for image in page.images:
+        asset_type = infer_architecture_asset_type(image)
+        if asset_type is not None:
+            images_by_type.setdefault(asset_type.value, []).append(image.url)
+
+    with db.session_factory() as session:
+        candidates = list(
+            session.scalars(
+                select(AssetCandidate).where(
+                    AssetCandidate.run_id == run_id,
+                    AssetCandidate.source_url == source_url,
+                    AssetCandidate.image_url.is_(None),
+                    AssetCandidate.storage_path.is_(None),
+                )
+            )
+        )
+        candidates_by_type: dict[str, list[AssetCandidate]] = {}
+        for candidate in candidates:
+            candidates_by_type.setdefault(candidate.asset_type, []).append(candidate)
+
+        enriched = 0
+        for type_name, image_urls in images_by_type.items():
+            matching_candidates = candidates_by_type.get(type_name, [])
+            unique_urls = list(dict.fromkeys(image_urls))
+            if len(matching_candidates) != 1 or len(unique_urls) != 1:
+                continue
+            existing = session.scalar(
+                select(AssetCandidate.id).where(
+                    AssetCandidate.run_id == run_id,
+                    AssetCandidate.source_url == source_url,
+                    AssetCandidate.image_url == unique_urls[0],
+                )
+            )
+            if existing is not None:
+                continue
+            matching_candidates[0].image_url = unique_urls[0]
+            enriched += 1
+        if enriched:
+            _rerank_assets(session, run_id)
+        session.commit()
+        return enriched
 
 
 def _persist_sources(db: Database, run_id: str, result: ProviderSearchResult) -> None:

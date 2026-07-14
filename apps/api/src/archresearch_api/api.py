@@ -31,6 +31,7 @@ from .models import (
     Workspace,
 )
 from .providers import ResearchProvider, ReverseImageProvider
+from .public_pages import PublicPageParser
 from .schemas import (
     BUDGETS,
     ArtifactKind,
@@ -222,6 +223,7 @@ def create_run(
     tineye_provider: ReverseImageProvider | None = request.app.state.tineye_provider
     browser_broker: BrowserBroker = request.app.state.browser_broker
     visual_classifier: VisualClassifier = request.app.state.visual_classifier
+    public_page_parser: PublicPageParser | None = request.app.state.public_page_parser
     if settings.run_inline:
         execute_research_run(
             database,
@@ -232,6 +234,7 @@ def create_run(
             browser_client=browser_broker,
             visual_classifier=visual_classifier,
             candidate_root=settings.data_dir / "runs",
+            public_page_parser=public_page_parser,
         )
     else:
         background_tasks.add_task(
@@ -244,6 +247,7 @@ def create_run(
             browser_client=browser_broker,
             visual_classifier=visual_classifier,
             candidate_root=settings.data_dir / "runs",
+            public_page_parser=public_page_parser,
         )
     session.expire(run)
     session.refresh(run)
@@ -344,6 +348,7 @@ def retry_run(
     tineye_provider: ReverseImageProvider | None = request.app.state.tineye_provider
     browser_broker: BrowserBroker = request.app.state.browser_broker
     visual_classifier: VisualClassifier = request.app.state.visual_classifier
+    public_page_parser: PublicPageParser | None = request.app.state.public_page_parser
     if settings.run_inline:
         execute_research_run(
             database,
@@ -354,6 +359,7 @@ def retry_run(
             browser_client=browser_broker,
             visual_classifier=visual_classifier,
             candidate_root=settings.data_dir / "runs",
+            public_page_parser=public_page_parser,
         )
     else:
         background_tasks.add_task(
@@ -366,6 +372,7 @@ def retry_run(
             browser_client=browser_broker,
             visual_classifier=visual_classifier,
             candidate_root=settings.data_dir / "runs",
+            public_page_parser=public_page_parser,
         )
     session.expire(run)
     session.refresh(run)

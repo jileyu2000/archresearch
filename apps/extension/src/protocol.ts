@@ -2,6 +2,7 @@ export const APPROVED_BROWSER_ACTIONS = [
   "open_url",
   "wait",
   "page_metadata",
+  "page_snapshot",
   "enumerate_media",
   "scroll",
   "safe_click",
@@ -21,6 +22,7 @@ export type BrowserCommand =
   | Command<"open_url", { url: string }>
   | Command<"wait", { milliseconds: number }>
   | Command<"page_metadata", { tab_id: number }>
+  | Command<"page_snapshot", { tab_id: number }>
   | Command<"enumerate_media", { tab_id: number }>
   | Command<
       "scroll",
@@ -98,6 +100,12 @@ export function parseBrowserCommand(value: unknown): BrowserCommand {
     case "page_metadata": {
       requireExactKeys(payload, TAB_KEYS);
       return buildCommand(message, "page_metadata", {
+        tab_id: requireTabId(payload.tab_id),
+      });
+    }
+    case "page_snapshot": {
+      requireExactKeys(payload, ["tab_id"]);
+      return buildCommand(message, "page_snapshot", {
         tab_id: requireTabId(payload.tab_id),
       });
     }

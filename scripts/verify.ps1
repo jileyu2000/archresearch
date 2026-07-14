@@ -10,6 +10,7 @@ Set-Location -LiteralPath $workspace
 
 & $pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/tests/dev-common.tests.ps1
 & $pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/tests/configure-provider.tests.ps1
+& $pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/tests/configure-firecrawl.tests.ps1
 & $pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/tests/process-lifecycle.tests.ps1
 & $pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/validate-evaluation-fixtures.ps1
 & $runtime.Python -m pytest apps/api/tests

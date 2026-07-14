@@ -4,6 +4,12 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from './App'
+import { BrowserBridgeError, requestBrowserBridge } from './browserBridge'
+
+vi.mock('./browserBridge', async (importOriginal) => ({
+  ...await importOriginal<typeof import('./browserBridge')>(),
+  requestBrowserBridge: vi.fn(),
+}))
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -71,6 +77,7 @@ interface LiveFetchOptions {
   eventSummary?: unknown
   eventTool?: string
   browserConnected?: boolean
+  browserStatuses?: boolean[]
   pairingCode?: string
 }
 
@@ -81,13 +88,18 @@ const liveSubquestions = [
 
 function createLiveFetch(options: LiveFetchOptions = {}) {
   let pollIndex = 0
+  let browserStatusIndex = 0
   const initialStatus = options.initialStatus ?? 'completed'
   const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input)
     const method = init?.method ?? 'GET'
 
     if (path === '/v1/browser/status' && method === 'GET') {
-      return Promise.resolve(jsonResponse({ connected: options.browserConnected ?? false }))
+      const statuses = options.browserStatuses
+      const connected = statuses && statuses.length > 0
+        ? statuses[Math.min(browserStatusIndex++, statuses.length - 1)]
+        : options.browserConnected ?? false
+      return Promise.resolve(jsonResponse({ connected }))
     }
     if (path === '/v1/browser/pairing-code' && method === 'POST') {
       return Promise.resolve(jsonResponse({
@@ -513,6 +525,11 @@ async function startLiveResearch(user: ReturnType<typeof userEvent.setup>) {
 describe('research board', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('offline')))
+    vi.mocked(requestBrowserBridge).mockReset().mockResolvedValue({
+      paired: true,
+      connection: 'connected',
+      researchPermission: true,
+    })
   })
 
   afterEach(() => {
@@ -698,16 +715,63 @@ describe('research board', () => {
     expect(screen.getByRole('button', { name: '重新研究' })).toBeDisabled()
   })
 
-  it('shows a pairing code before research when drawing extraction is disconnected', async () => {
+  it('pairs the installed extension without asking the user to copy a code', async () => {
     const user = userEvent.setup()
-    vi.stubGlobal('fetch', createLiveFetch({ browserConnected: false, pairingCode: '731904' }))
+    vi.mocked(requestBrowserBridge).mockResolvedValue({
+      paired: true,
+      connection: 'connecting',
+      researchPermission: false,
+    })
+    vi.stubGlobal('fetch', createLiveFetch({
+      browserStatuses: [false, true],
+      pairingCode: '731904',
+    }))
     renderBoard()
 
     expect(await screen.findByText('图纸提取未连接')).toBeVisible()
     expect(screen.getByText('仍可开始研究，但只能返回文字线索。')).toBeVisible()
-    await user.click(screen.getByRole('button', { name: '生成配对码' }))
-    expect(await screen.findByText('731904')).toBeVisible()
-    expect(screen.getByText('在 ArchResearch Chrome 扩展中输入配对码，并授予本次网页读取权限。')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '一键连接浏览器' }))
+
+    expect(requestBrowserBridge).toHaveBeenCalledWith({
+      type: 'pair',
+      endpoint: 'ws://127.0.0.1:8000/v1/browser',
+      token: '731904',
+    })
+    expect(within(await screen.findByRole('region', { name: '图纸提取连接' })).getByText(
+      '图纸提取扩展已连接',
+      { selector: 'strong' },
+    )).toBeVisible()
+    expect(screen.queryByText('731904')).not.toBeInTheDocument()
+  })
+
+  it('explains that one-click pairing must run in the Chrome profile with the extension', async () => {
+    const user = userEvent.setup()
+    vi.mocked(requestBrowserBridge).mockRejectedValue(
+      new BrowserBridgeError('unavailable', 'bridge unavailable'),
+    )
+    vi.stubGlobal('fetch', createLiveFetch({ browserConnected: false }))
+    renderBoard()
+
+    await user.click(await screen.findByRole('button', { name: '一键连接浏览器' }))
+
+    expect(await screen.findByText(
+      '未检测到 ArchResearch 扩展。请在已安装扩展的 Chrome 中打开本页后重试。',
+    )).toBeVisible()
+  })
+
+  it('requests temporary page access from the connected extension before research starts', async () => {
+    const user = userEvent.setup()
+    const fetchMock = createLiveFetch({ browserConnected: true, initialStatus: 'searching' })
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    await startLiveResearch(user)
+
+    expect(requestBrowserBridge).toHaveBeenCalledWith({ type: 'permissions.request' })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/v1/workspaces/workspace-live/runs',
+      expect.objectContaining({ method: 'POST' }),
+    )
   })
 
   it('starts a new run from an image-less completed result after the extension connects', async () => {

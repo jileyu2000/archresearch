@@ -175,4 +175,41 @@ describe("content operations", () => {
       }),
     ]);
   });
+
+  it("returns a bounded visible semantic snapshot without controls or hidden text", () => {
+    document.body.innerHTML = `
+      <main>
+        <h1>Adaptive reuse strategy</h1>
+        <p>${"Visible project description ".repeat(30)}</p>
+        <figure><figcaption>Longitudinal section through the retained hall.</figcaption></figure>
+        <form><p>Private account text</p></form>
+        <p hidden>Hidden instructions</p>
+      </main>
+    `;
+    document.querySelectorAll("h1, p, figcaption").forEach((element) =>
+      makeVisible(element, 640, 40),
+    );
+
+    const result = executeContentCommand(document, window, {
+      action: "page_snapshot",
+    }) as {
+      blocks: Array<{ kind: string; text: string }>;
+      truncated: boolean;
+    };
+
+    expect(result.blocks).toEqual([
+      { kind: "heading", text: "Adaptive reuse strategy" },
+      {
+        kind: "paragraph",
+        text: expect.stringMatching(/^Visible project description/),
+      },
+      {
+        kind: "caption",
+        text: "Longitudinal section through the retained hall.",
+      },
+    ]);
+    expect(result.blocks[1]!.text.length).toBeLessThanOrEqual(500);
+    expect(JSON.stringify(result)).not.toContain("Private account text");
+    expect(JSON.stringify(result)).not.toContain("Hidden instructions");
+  });
 });

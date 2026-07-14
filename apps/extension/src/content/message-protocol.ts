@@ -22,6 +22,7 @@ export function parseContentMessage(value: unknown): ContentCommand {
   }
   switch (command.action) {
     case "page_metadata":
+    case "page_snapshot":
     case "enumerate_media":
     case "viewport_metrics":
       requireExactKeys(command, ["action"]);

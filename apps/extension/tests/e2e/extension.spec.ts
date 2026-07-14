@@ -81,18 +81,22 @@ test.describe.serial("packaged MV3 browser bridge", () => {
     }
   });
 
-  test("pairs and restores optional host access from the extension UI", async () => {
-    await popup.locator('[data-role="endpoint"]').fill(coordinator.endpoint);
-    await popup.locator('[data-role="token"]').fill("e2e-pairing-code");
-    await popup.getByRole("button", { name: "Pair with local service" }).click();
+  test("pairs from the local board and restores optional host access", async () => {
+    const board = await context.newPage();
+    await board.goto(fixtures.loopbackUrl("/board"));
+    const paired = await requestBoardBridge(board, "pair", {
+      endpoint: coordinator.endpoint,
+      token: "e2e-pairing-code",
+    });
+    expect(paired).toMatchObject({ ok: true, result: { paired: true } });
     await coordinator.waitForAuthenticationCount(1);
 
     await popup.reload();
-    await expect(popup.locator('[data-role="connection"]')).toHaveText("Connected");
+    await expect(popup.locator('[data-role="connection"]')).toHaveText("已连接");
     await expect.poll(() => hasHostAccess(serviceWorker)).toBe(true);
-    await popup.getByRole("button", { name: "Grant site access" }).click();
+    await popup.getByRole("button", { name: "授予网页读取权限" }).click();
     await expect(popup.locator('[data-role="permission"]')).toHaveText(
-      "Site access on",
+      "网页读取已授权",
     );
     await expect
       .poll(() => hasHostAccess(serviceWorker))
@@ -117,6 +121,27 @@ test.describe.serial("packaged MV3 browser bridge", () => {
         title: "Courtyard Archive",
         publisher: "Fixture Architecture Review",
         canonical_url: "https://fixture.example/projects/courtyard-archive",
+      },
+    });
+
+    const snapshot = await coordinator.command("page_snapshot", {
+      tab_id: tabId,
+    });
+    expect(snapshot).toMatchObject({
+      ok: true,
+      result: {
+        blocks: [
+          { kind: "heading", text: "Courtyard Archive reuse strategy" },
+          {
+            kind: "paragraph",
+            text: "The public stair is inserted without erasing the retained shell.",
+          },
+          {
+            kind: "caption",
+            text: "Section through the retained shell and new public stair.",
+          },
+        ],
+        truncated: false,
       },
     });
 
@@ -257,7 +282,7 @@ test.describe.serial("packaged MV3 browser bridge", () => {
     await expect.poll(() => hasHostAccess(serviceWorker)).toBe(false);
     await popup.reload();
     await expect(popup.locator('[data-role="permission"]')).toHaveText(
-      "Site access off",
+      "网页读取未授权",
     );
 
     const locked = await coordinator.command("wait", { milliseconds: 0 });
@@ -269,9 +294,9 @@ test.describe.serial("packaged MV3 browser bridge", () => {
     coordinator.dropActiveConnection();
     await coordinator.waitForAuthenticationCount(2);
     await popup.reload();
-    await expect(popup.locator('[data-role="connection"]')).toHaveText("Connected");
+    await expect(popup.locator('[data-role="connection"]')).toHaveText("已连接");
     await expect(popup.locator('[data-role="permission"]')).toHaveText(
-      "Site access off",
+      "网页读取未授权",
     );
     await expect.poll(() => hasHostAccess(serviceWorker)).toBe(false);
 
@@ -323,16 +348,16 @@ test.describe.serial("FastAPI browser workflow", () => {
       );
       await popup.locator('[data-role="endpoint"]').fill(api.websocketEndpoint);
       await popup.locator('[data-role="token"]').fill(pairing.code);
-      await popup.getByRole("button", { name: "Pair with local service" }).click();
+      await popup.getByRole("button", { name: "手动配对" }).click();
       await expect
         .poll(() => storedPairingToken(serviceWorker))
         .not.toBe(pairing.code);
       await popup.reload();
       await expect(popup.locator('[data-role="connection"]')).toHaveText(
-        "Connected",
+        "已连接",
       );
       await expect(popup.locator('[data-role="permission"]')).toHaveText(
-        "Site access on",
+        "网页读取已授权",
       );
 
       const workspace = await requestJson<{ id: string }>(
@@ -391,7 +416,7 @@ test.describe.serial("FastAPI browser workflow", () => {
       await expect.poll(() => hasHostAccess(serviceWorker)).toBe(false);
       await popup.reload();
       await expect(popup.locator('[data-role="permission"]')).toHaveText(
-        "Site access off",
+        "网页读取未授权",
       );
     } finally {
       await api.close();
@@ -499,6 +524,7 @@ class FixtureServer {
     const server = createServer(async (request, response) => {
       const pathname = new URL(request.url ?? "/", "http://fixture").pathname;
       const pages: Record<string, string> = {
+        "/board": "board.html",
         "/static": "static.html",
         "/dynamic": "dynamic.html",
         "/malicious": "malicious.html",
@@ -526,6 +552,10 @@ class FixtureServer {
     return `http://${FIXTURE_HOST}:${this.port}${pathname}`;
   }
 
+  loopbackUrl(pathname: string): string {
+    return `http://127.0.0.1:${this.port}${pathname}`;
+  }
+
   async close(): Promise<void> {
     await new Promise<void>((resolveClose, rejectClose) => {
       this.server.close((error) => {
@@ -537,6 +567,48 @@ class FixtureServer {
       });
     });
   }
+}
+
+async function requestBoardBridge(
+  page: Page,
+  action: "pair" | "status" | "permissions.request",
+  payload: Record<string, unknown> = {},
+): Promise<Record<string, unknown>> {
+  return page.evaluate(
+    ({ bridgeAction, bridgePayload }) =>
+      new Promise<Record<string, unknown>>((resolveResponse, rejectResponse) => {
+        const id = crypto.randomUUID();
+        const timeout = window.setTimeout(
+          () => rejectResponse(new Error("Board bridge timed out")),
+          3_000,
+        );
+        window.addEventListener("message", function receive(event) {
+          const response = event.data as Record<string, unknown> | null;
+          if (
+            event.source !== window ||
+            event.origin !== window.location.origin ||
+            response?.channel !== "archresearch.extension" ||
+            response.id !== id
+          ) {
+            return;
+          }
+          window.removeEventListener("message", receive);
+          window.clearTimeout(timeout);
+          resolveResponse(response);
+        });
+        window.postMessage(
+          {
+            channel: "archresearch.board",
+            protocol_version: 1,
+            id,
+            action: bridgeAction,
+            payload: bridgePayload,
+          },
+          window.location.origin,
+        );
+      }),
+    { bridgeAction: action, bridgePayload: payload },
+  );
 }
 
 class ResearchCoordinator {

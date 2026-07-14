@@ -14,6 +14,9 @@ describe.each([
     expect(html).toContain('data-command="permissions.request"');
     expect(html).toContain('data-command="permissions.revoke"');
     expect(html).toContain('data-command="disconnect"');
+    expect(html).toContain('lang="zh-CN"');
+    expect(html).toContain("手动配对");
+    expect(html).toContain("临时网页读取权限");
     expect(html).not.toMatch(/cookie|password|execute_script|submit_form/iu);
   });
 });

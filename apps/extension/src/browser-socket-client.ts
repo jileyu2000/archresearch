@@ -12,7 +12,7 @@ export type SocketLike = {
   readyState: number;
   onopen: (() => void) | null;
   onmessage: ((event: { data: string }) => void) | null;
-  onclose: (() => void) | null;
+  onclose: ((event?: { code?: number; reason?: string }) => void) | null;
   onerror: (() => void) | null;
   send(data: string): void;
   close(): void;
@@ -67,7 +67,6 @@ export class BrowserSocketClient {
     const socket = this.socketFactory(this.pairing.endpoint);
     this.socket = socket;
     socket.onopen = () => {
-      this.setStatus("connected");
       this.send({
         type: "browser.authenticate",
         protocol_version: 1,
@@ -78,9 +77,10 @@ export class BrowserSocketClient {
       void this.handleMessage(event.data);
     };
     socket.onerror = () => this.setStatus("error");
-    socket.onclose = () => {
+    socket.onclose = (event) => {
+      const authenticationRejected = event?.code === 1008;
       this.socket = null;
-      this.setStatus("disconnected");
+      this.setStatus(authenticationRejected ? "error" : "disconnected");
       this.researchPermissionGranted = false;
       void this.endResearchSession()
         .catch(() => undefined)
@@ -88,6 +88,7 @@ export class BrowserSocketClient {
           if (this.connectionGeneration !== generation) {
             return;
           }
+          if (authenticationRejected) return;
           this.scheduleReconnect(() => {
             if (
               this.connectionGeneration === generation &&
@@ -146,9 +147,11 @@ export class BrowserSocketClient {
     }
     if (isPairedMessage(message)) {
       await this.onPairingToken(message.token);
+      this.setStatus("connected");
       return;
     }
     if (isAuthenticationAcknowledgement(message)) {
+      this.setStatus("connected");
       return;
     }
 

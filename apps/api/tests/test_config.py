@@ -11,6 +11,8 @@ def test_live_provider_settings_accept_standard_secret_environment_names(
     monkeypatch.setenv("OPENAI_VISION_MODEL", "gpt-5.5")
     monkeypatch.setenv("TINEYE_API_KEY", "tineye-test-key")
     monkeypatch.setenv("TINEYE_API_URL", "https://api.tineye.com/rest/")
+    monkeypatch.setenv("FIRECRAWL_API_KEY", "firecrawl-test-key")
+    monkeypatch.setenv("FIRECRAWL_API_URL", "https://api.firecrawl.dev/v2")
 
     settings = Settings(_env_file=None)
 
@@ -19,6 +21,8 @@ def test_live_provider_settings_accept_standard_secret_environment_names(
     assert settings.vision_model == "gpt-5.5"
     assert settings.tineye_api_key == "tineye-test-key"
     assert settings.tineye_api_url == "https://api.tineye.com/rest/"
+    assert settings.firecrawl_api_key == "firecrawl-test-key"
+    assert settings.firecrawl_api_url == "https://api.firecrawl.dev/v2"
 
 
 def test_default_models_and_local_retention_match_the_v2_1_plan() -> None:

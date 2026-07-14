@@ -16,18 +16,20 @@ export function mountBridgeUi(root: Document, runtime: UiRuntime): void {
   const permission = requireElement<HTMLElement>(root, '[data-role="permission"]');
   const error = requireElement<HTMLElement>(root, '[data-role="error"]');
 
-  const run = async (command: unknown): Promise<void> => {
+  const run = async (command: unknown): Promise<boolean> => {
     error.textContent = "";
     try {
       const status = readStatus(await runtime.sendMessage(command));
       connection.textContent = connectionLabel(status.connection);
       permission.textContent = status.research_permission
-        ? "Site access on"
-        : "Site access off";
+        ? "网页读取已授权"
+        : "网页读取未授权";
       root.documentElement.dataset.connection = status.connection;
       root.documentElement.dataset.permission = String(status.research_permission);
+      return true;
     } catch {
-      error.textContent = "Local bridge command failed.";
+      error.textContent = "连接失败。请回到 ArchResearch 重新一键连接。";
+      return false;
     }
   };
 
@@ -35,15 +37,17 @@ export function mountBridgeUi(root: Document, runtime: UiRuntime): void {
     event.preventDefault();
     const code = token.value.trim();
     if (code === "") {
-      error.textContent = "Enter the one-time pairing code.";
+      error.textContent = "请输入一次性配对码。";
       return;
     }
     void run({
       type: "ui.pair",
       endpoint: endpoint.value.trim(),
       token: code,
-    }).then(() => {
-      token.value = "";
+    }).then((succeeded) => {
+      if (succeeded) {
+        token.value = "";
+      }
     });
   });
 
@@ -104,13 +108,13 @@ function isConnectionStatus(
 function connectionLabel(status: BridgeStatus["connection"]): string {
   switch (status) {
     case "connected":
-      return "Connected";
+      return "已连接";
     case "connecting":
-      return "Connecting";
+      return "正在连接";
     case "error":
-      return "Connection error";
+      return "连接错误";
     case "disconnected":
-      return "Disconnected";
+      return "未连接";
   }
 }
 

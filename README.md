@@ -11,6 +11,7 @@ flowchart LR
     B["React 图纸参考板"] -->|HTTP / SSE| A["FastAPI 本地研究执行器"]
     A -->|Responses API| O["OpenAI 网页搜索与视觉分类"]
     A -->|反向图片搜索| T["TinEye API"]
+    A -->|公开页失败兜底| F["Firecrawl API（可选）"]
     A <-->|白名单 WebSocket 动作| E["Chrome MV3 扩展"]
     E -->|用户现有登录态| W["实时项目网页"]
     A --> S["SQLite + 本地工作区"]
@@ -47,15 +48,8 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/stop.ps1
 
 1. 打开 `chrome://extensions`，启用开发者模式。
 2. 选择“加载已解压的扩展程序”，使用 `apps/extension/dist`。
-3. 生成一次性配对码：
-
-```powershell
-$pairing = Invoke-RestMethod -Method Post http://127.0.0.1:8000/v1/browser/pairing-code
-$pairing.code
-```
-
-4. 在扩展中填写 `ws://127.0.0.1:8000/v1/browser` 和配对码。
-5. 每次研究开始前，由用户在扩展中明确授予临时网页读取权限；终止、失败或断线后自动撤销。
+3. 在参考板点击“一键连接浏览器”；手动地址和配对码只作为故障恢复入口。
+4. 开始研究时由 Chrome 确认临时网页读取权限；终止、失败或断线后自动撤销。
 
 Chrome 的 `captureVisibleTab` 只接受用户手势产生的 `activeTab` 或 `<all_urls>` host permission。连续研究无法要求用户逐页点击，因此扩展只在任务期间请求可选的 `<all_urls>`，并在终态立即撤销；实际导航、脚本注入和最终 URL 复核仍严格限制为公网 HTTP/HTTPS，不接受 `file:`、扩展页、回环或私网地址。
 
@@ -69,6 +63,12 @@ Chrome 的 `captureVisibleTab` 只接受用户手势产生的 `activeTab` 或 `<
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/configure-provider.ps1
 ```
 
+Firecrawl 是可选的公开页面失败兜底：只有 Chrome 检视某个公网来源失败时才调用，获取最新 Markdown、链接和图片线索；它不读取 Chrome 登录态，也不会替代视觉分类或来源核验。Key 同样通过隐藏输入保存到 Windows 凭据管理器：
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/configure-firecrawl.ps1
+```
+
 也可以通过本地 `.env` 启用其他 OpenAI 兼容配置。研究规划、网页研究和视觉分类默认统一使用 `gpt-5.5`，模型名仍可分别覆盖。不要把 `.env` 或任何 Key 提交到 Git。
 
 ```dotenv
@@ -77,6 +77,8 @@ OPENAI_API_KEY=
 OPENAI_RESEARCH_MODEL=gpt-5.5
 OPENAI_VISION_MODEL=gpt-5.5
 TINEYE_API_KEY=
+FIRECRAWL_API_KEY=
+FIRECRAWL_API_URL=https://api.firecrawl.dev/v2
 ```
 
 ## 研究行为
@@ -110,7 +112,7 @@ Quick、Balanced、Deep 使用固定轮数、查询数、页面数和时间预�
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1
 ```
 
-该命令运行 PowerShell 安全与进程生命周期测试、评测夹具验证、Python 单元/集成测试、Ruff、Mypy、两个 TypeScript 应用的 lint/类型检查/测试/生产构建，以及打包后 Chrome 扩展 E2E。所有默认测试均使用 Mock，不调用真实 OpenAI 或 TinEye。
+该命令运行 PowerShell 安全与进程生命周期测试、评测夹具验证、Python 单元/集成测试、Ruff、Mypy、两个 TypeScript 应用的 lint/类型检查/测试/生产构建，以及打包后 Chrome 扩展 E2E。所有默认测试均使用 Mock，不调用真实 OpenAI、TinEye 或 Firecrawl。
 
 只验证版本化评测集：
 

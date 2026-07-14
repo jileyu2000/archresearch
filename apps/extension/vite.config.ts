@@ -6,6 +6,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         background: resolve(import.meta.dirname, "src/background.ts"),
+        boardBridge: resolve(import.meta.dirname, "src/board-bridge.ts"),
         content: resolve(import.meta.dirname, "src/content/index.ts"),
         popup: resolve(import.meta.dirname, "popup.html"),
         sidepanel: resolve(import.meta.dirname, "sidepanel.html"),

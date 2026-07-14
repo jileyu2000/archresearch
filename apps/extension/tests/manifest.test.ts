@@ -11,7 +11,13 @@ describe("Manifest V3 security boundary", () => {
     expect(manifest.manifest_version).toBe(3);
     expect(manifest.optional_host_permissions).toEqual(["<all_urls>"]);
     expect(manifest).not.toHaveProperty("host_permissions");
-    expect(manifest).not.toHaveProperty("content_scripts");
+    expect(manifest.content_scripts).toEqual([
+      {
+        matches: ["http://127.0.0.1/*", "http://localhost/*"],
+        js: ["assets/boardBridge.js"],
+        run_at: "document_start",
+      },
+    ]);
   });
 
   it("uses only bundled service-worker code", () => {

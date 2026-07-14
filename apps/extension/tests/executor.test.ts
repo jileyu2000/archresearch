@@ -69,6 +69,18 @@ describe("browser command executor", () => {
     });
   });
 
+  it("forwards the fixed semantic snapshot command without selectors", async () => {
+    const port = makeBrowserPort();
+    const executor = new BrowserCommandExecutor(port);
+    await executor.execute(command("open_url", { url: "https://example.com/project" }));
+
+    await executor.execute(command("page_snapshot", { tab_id: 42 }));
+
+    expect(port.sendContentCommand).toHaveBeenCalledWith(42, {
+      action: "page_snapshot",
+    });
+  });
+
   it("rejects a managed tab that redirects to a private network URL", async () => {
     const port = makeBrowserPort();
     const executor = new BrowserCommandExecutor(port);

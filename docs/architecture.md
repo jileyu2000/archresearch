@@ -17,13 +17,15 @@ flowchart LR
     E -->|"临时站点权限<br/>用户现有登录态"| W["实时项目网页"]
     A -->|"Responses API<br/>web_search + 结构化输出"| O["OpenAI 兼容服务"]
     A -->|"反向图片检索"| T["TinEye API"]
+    A -->|"公网页面失败兜底<br/>最新 Markdown / links / images"| F["Firecrawl API<br/>可选"]
 ```
 
 | 组件 | 职责 | 不负责 |
 |---|---|---|
 | 参考板 | 工作区输入、运行状态、筛选、证据详情、收藏/拒绝、2–6 项比较、StyleProfile 与导出 | 自行抓网页、决定来源可信度 |
 | 本地 API | 状态机、预算、供应商调用、来源与资产持久化、排序、检查点、版权门禁、TTL 清理 | 使用浏览器 Cookie、运行远程脚本 |
-| Chrome 扩展 | 在用户动作授权后打开页面、读取必要元数据、枚举媒体、滚动、裁取候选区域 | 读取 Cookie/LocalStorage/密码/私信，发布、点赞、购买或提交普通表单 |
+| Chrome 扩展 | 在用户动作授权后打开页面、读取受限语义快照与元数据、枚举媒体、滚动、裁取候选区域 | 读取 Cookie/LocalStorage/密码/私信，发布、点赞、购买或提交普通表单 |
+| Firecrawl（可选） | Chrome 检视失败后解析公开页面的最新 Markdown、链接和图片线索 | 登录态页面、页面交互、来源/版权升级、批量站点爬取 |
 | SQLite/工作区 | 保存业务对象、检查点、临时裁图和导出 | 跨 Workspace 或跨用户召回 |
 
 API 只监听 `127.0.0.1`。扩展首次用一次性配对码连接，随后把轮换后的令牌放在 `chrome.storage.local`；API 落盘保存令牌摘要。
@@ -91,7 +93,7 @@ erDiagram
 
 ## 浏览器协议与不可信网页
 
-扩展只接受版本化、字段严格的动作：`open_url`、`wait`、`page_metadata`、`enumerate_media`、`scroll`、`safe_click`、`capture_region`、`type_search_query`、`close_tab`。协议拒绝额外字段、任意选择器、JavaScript、凭据和私网 URL。
+扩展只接受版本化、字段严格的动作：`open_url`、`wait`、`page_metadata`、`page_snapshot`、`enumerate_media`、`scroll`、`safe_click`、`capture_region`、`type_search_query`、`close_tab`。`page_snapshot` 最多返回 40 个可见标题、正文段落和图注，总计不超过 6000 字符，并沿用敏感页面禁读规则。协议拒绝额外字段、任意选择器、JavaScript、凭据和私网 URL。
 
 网页标题、正文、图注和隐藏文字全部是数据，不能修改工具权限、系统指令、预算或停止条件。API 和扩展都检查导航 URL；API 还解析 DNS，阻止回环、私网、链路本地、保留地址和 IPv4 映射地址。云端模型只接收候选裁图、相邻图注和必要项目文字，不接收完整登录页面。
 
@@ -109,7 +111,7 @@ Chrome 的 `captureVisibleTab` 要求 `activeTab` 或 `<all_urls>`；Agent 的�
 
 ## 供应商与离线模式
 
-默认 `mock` 模式不需要 Key，也不会调用真实 OpenAI 或 TinEye。真实研究必须由用户主动运行 `scripts/configure-provider.ps1`，在隐藏输入中提供自己的 Key；脚本先执行可能产生费用的能力探测，成功后才把 Key 存入 Windows 凭据管理器。项目文件只保存不含密钥的服务地址与 `gpt-5.5` 模型配置。
+默认 `mock` 模式不需要 Key，也不会调用真实 OpenAI、TinEye 或 Firecrawl。真实研究必须由用户主动运行 `scripts/configure-provider.ps1`，在隐藏输入中提供自己的模型 Key；脚本先执行可能产生费用的能力探测，成功后才把 Key 存入 Windows 凭据管理器。可选 Firecrawl 使用 `scripts/configure-firecrawl.ps1` 单独保存，项目文件只记录不含密钥的服务地址。未配置时浏览器失败仍按原逻辑保留已有结果。
 
 版本化评测夹具位于：
 
@@ -128,3 +130,8 @@ Chrome 的 `captureVisibleTab` 要求 `activeTab` 或 `<all_urls>`；Agent 的�
 | [Zotero](https://github.com/zotero/zotero) | 资产、注释与来源定位保持绑定 | 通用文献管理功能 |
 | [Excalidraw](https://github.com/excalidraw/excalidraw) | 持久画板状态与临时选择分离 | 无限画布依赖 |
 | [Browsertrix Crawler](https://github.com/webrecorder/browsertrix-crawler) | 浏览器任务可恢复、失败显式 | 云端爬虫和批量抓取基础设施 |
+| [Firecrawl](https://github.com/firecrawl/firecrawl) | 公开页 Markdown/链接/图片失败兜底 | AGPL 服务代码、自托管 Docker/PostgreSQL/Redis、登录态浏览器 |
+| [Playwright MCP](https://github.com/microsoft/playwright-mcp) | 有界语义快照、确定性工具 | 第二个 MCP 浏览器服务 |
+| [Stagehand](https://github.com/browserbase/stagehand) | observe-before-act、动作可预览 | 第二套 AI 浏览器与自愈执行器 |
+| [Browser Use](https://github.com/browser-use/browser-use)、[Crawl4AI](https://github.com/unclecode/crawl4ai) | 会话恢复、结构化输出、内容过滤 | 自主 Agent 循环、额外 Playwright 浏览器、Cookie/脚本通用面 |
+| [Steel Browser](https://github.com/steel-dev/steel-browser)、[Lightpanda](https://github.com/lightpanda-io/browser) | 会话隔离、生命周期清理 | Docker/云浏览器、WSL/Linux 浏览器、另一套 CDP 所有权 |

@@ -5,6 +5,13 @@
   "description": "Local browser bridge for evidence-based architecture research.",
   "permissions": ["storage", "tabs", "scripting", "activeTab", "sidePanel"],
   "optional_host_permissions": ["<all_urls>"],
+  "content_scripts": [
+    {
+      "matches": ["http://127.0.0.1/*", "http://localhost/*"],
+      "js": ["assets/boardBridge.js"],
+      "run_at": "document_start"
+    }
+  ],
   "background": {
     "service_worker": "assets/background.js",
     "type": "module"

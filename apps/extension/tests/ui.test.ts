@@ -41,11 +41,35 @@ describe("extension popup and side-panel UI", () => {
       expect(sendMessage).toHaveBeenCalledWith({ type: "ui.status" }),
     );
     expect(document.querySelector('[data-role="connection"]')?.textContent).toBe(
-      "Connected",
+      "已连接",
     );
     expect(document.querySelector('[data-role="permission"]')?.textContent).toBe(
-      "Site access off",
+      "网页读取未授权",
     );
+  });
+
+  it("keeps the pairing code visible when pairing fails", async () => {
+    const sendMessage = vi
+      .fn()
+      .mockResolvedValueOnce(statusResponse)
+      .mockRejectedValueOnce(new Error("expired"));
+    mountBridgeUi(document, { sendMessage });
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+    const token = document.querySelector(
+      '[data-role="token"]',
+    ) as HTMLInputElement;
+    token.value = "246810";
+
+    document
+      .querySelector('[data-role="pair-form"]')!
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+
+    await vi.waitFor(() =>
+      expect(document.querySelector('[data-role="error"]')?.textContent).toBe(
+        "连接失败。请回到 ArchResearch 重新一键连接。",
+      ),
+    );
+    expect(token.value).toBe("246810");
   });
 
   it("sends the loopback endpoint and one-time code for pairing", async () => {

@@ -11,6 +11,7 @@ const message = (command: Record<string, unknown>) => ({
 describe("packaged content-script protocol", () => {
   it.each([
     { action: "page_metadata" },
+    { action: "page_snapshot" },
     { action: "enumerate_media" },
     { action: "viewport_metrics" },
     { action: "scroll", direction: "down", distance: 600 },

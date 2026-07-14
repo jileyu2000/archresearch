@@ -14,6 +14,9 @@ from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, field_validator
 SERVICE = "ArchResearch/suoxie"
 ACCOUNT = "api-key"
 CONFIG_FILENAME = "provider.json"
+FIRECRAWL_SERVICE = "ArchResearch/firecrawl"
+FIRECRAWL_ACCOUNT = "api-key"
+FIRECRAWL_CONFIG_FILENAME = "firecrawl.json"
 
 
 class ProviderConfigurationError(RuntimeError):
@@ -62,7 +65,35 @@ class ProviderRuntime:
     api_key: str
 
 
+class FirecrawlProviderConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid", validate_default=True)
+
+    provider: Literal["firecrawl"] = "firecrawl"
+    base_url: AnyHttpUrl = AnyHttpUrl("https://api.firecrawl.dev/v2")
+
+    @field_validator("base_url")
+    @classmethod
+    def require_public_https(cls, value: AnyHttpUrl) -> AnyHttpUrl:
+        parsed = urlparse(str(value))
+        if parsed.scheme != "https" or parsed.username or parsed.password or not parsed.hostname:
+            raise ValueError("Firecrawl base URL must be public HTTPS without credentials")
+        try:
+            address = ipaddress.ip_address(parsed.hostname)
+        except ValueError:
+            return value
+        if not address.is_global:
+            raise ValueError("Firecrawl base URL must not target a private address")
+        return value
+
+
+@dataclass(frozen=True)
+class FirecrawlRuntime:
+    config: FirecrawlProviderConfig
+    api_key: str
+
+
 ConfigWriter = Callable[[Path, SuoxieProviderConfig], None]
+FirecrawlConfigWriter = Callable[[Path, FirecrawlProviderConfig], None]
 
 
 def write_provider_config(data_dir: Path, config: SuoxieProviderConfig) -> None:
@@ -81,6 +112,28 @@ def load_provider_config(data_dir: Path) -> SuoxieProviderConfig | None:
     try:
         payload: Any = json.loads((data_dir / CONFIG_FILENAME).read_text(encoding="utf-8"))
         return SuoxieProviderConfig.model_validate(payload)
+    except (FileNotFoundError, OSError, ValueError):
+        return None
+
+
+def write_firecrawl_config(data_dir: Path, config: FirecrawlProviderConfig) -> None:
+    data_dir.mkdir(parents=True, exist_ok=True)
+    target = data_dir / FIRECRAWL_CONFIG_FILENAME
+    temporary = target.with_suffix(".tmp")
+    temporary.write_text(
+        json.dumps(config.model_dump(mode="json"), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    os.chmod(temporary, 0o600)
+    temporary.replace(target)
+
+
+def load_firecrawl_config(data_dir: Path) -> FirecrawlProviderConfig | None:
+    try:
+        payload: Any = json.loads(
+            (data_dir / FIRECRAWL_CONFIG_FILENAME).read_text(encoding="utf-8")
+        )
+        return FirecrawlProviderConfig.model_validate(payload)
     except (FileNotFoundError, OSError, ValueError):
         return None
 
@@ -125,6 +178,56 @@ def load_provider_runtime(
     if not api_key:
         return None
     return ProviderRuntime(config=config, api_key=api_key)
+
+
+def commit_firecrawl_config(
+    data_dir: Path,
+    config: FirecrawlProviderConfig,
+    api_key: str,
+    keyring_backend: KeyringBackend,
+    *,
+    config_writer: FirecrawlConfigWriter = write_firecrawl_config,
+) -> None:
+    normalized_key = api_key.strip()
+    if not normalized_key:
+        raise ProviderConfigurationError("API key is required")
+    previous = keyring_backend.get_password(FIRECRAWL_SERVICE, FIRECRAWL_ACCOUNT)
+    try:
+        keyring_backend.set_password(
+            FIRECRAWL_SERVICE,
+            FIRECRAWL_ACCOUNT,
+            normalized_key,
+        )
+        config_writer(data_dir, config)
+    except Exception as exc:
+        try:
+            if previous is None:
+                keyring_backend.delete_password(FIRECRAWL_SERVICE, FIRECRAWL_ACCOUNT)
+            else:
+                keyring_backend.set_password(
+                    FIRECRAWL_SERVICE,
+                    FIRECRAWL_ACCOUNT,
+                    previous,
+                )
+        except Exception:
+            pass
+        raise ProviderConfigurationError("Firecrawl configuration was not saved") from exc
+
+
+def load_firecrawl_runtime(
+    data_dir: Path,
+    keyring_backend: KeyringBackend,
+) -> FirecrawlRuntime | None:
+    config = load_firecrawl_config(data_dir)
+    if config is None:
+        return None
+    try:
+        api_key = keyring_backend.get_password(FIRECRAWL_SERVICE, FIRECRAWL_ACCOUNT)
+    except Exception:
+        return None
+    if not api_key:
+        return None
+    return FirecrawlRuntime(config=config, api_key=api_key)
 
 
 def get_windows_keyring() -> KeyringBackend:

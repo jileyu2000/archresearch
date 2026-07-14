@@ -15,9 +15,12 @@ from .config import Settings
 from .database import Database
 from .lifecycle import cleanup_expired_data, incomplete_run_ids
 from .provider_credentials import (
+    FirecrawlRuntime,
     KeyringBackend,
     ProviderRuntime,
     get_windows_keyring,
+    load_firecrawl_config,
+    load_firecrawl_runtime,
     load_provider_config,
     load_provider_runtime,
 )
@@ -30,6 +33,7 @@ from .providers import (
     ReverseImageProvider,
     TinEyeProvider,
 )
+from .public_pages import FirecrawlPageParser, PublicPageParser
 from .visual import MockVisualClassifier, OpenAIVisualClassifier, VisualClassifier
 from .workflow import execute_research_run
 
@@ -41,6 +45,7 @@ def create_app(
     tineye_provider: ReverseImageProvider | None = None,
     browser_broker: BrowserBroker | None = None,
     visual_classifier: VisualClassifier | None = None,
+    public_page_parser: PublicPageParser | None = None,
     keyring_backend: KeyringBackend | None = None,
     openai_client_factory: Callable[..., Any] | None = None,
 ) -> FastAPI:
@@ -50,15 +55,24 @@ def create_app(
     resolved_browser_broker = browser_broker or BrowserBroker()
     browser_router = create_browser_router(browser_authority, resolved_browser_broker)
     stored_runtime: ProviderRuntime | None = None
-    if load_provider_config(resolved_settings.data_dir) is not None:
+    stored_firecrawl_runtime: FirecrawlRuntime | None = None
+    if (
+        load_provider_config(resolved_settings.data_dir) is not None
+        or load_firecrawl_config(resolved_settings.data_dir) is not None
+    ):
         try:
             credential_backend = keyring_backend or get_windows_keyring()
             stored_runtime = load_provider_runtime(
                 resolved_settings.data_dir,
                 credential_backend,
             )
+            stored_firecrawl_runtime = load_firecrawl_runtime(
+                resolved_settings.data_dir,
+                credential_backend,
+            )
         except Exception:
             stored_runtime = None
+            stored_firecrawl_runtime = None
     shared_client: Any | None = None
     if stored_runtime is not None:
         if openai_client_factory is None:
@@ -111,6 +125,17 @@ def create_app(
             api_key=resolved_settings.tineye_api_key,
             base_url=resolved_settings.tineye_api_url,
         )
+    resolved_public_page_parser = public_page_parser
+    if resolved_public_page_parser is None and stored_firecrawl_runtime is not None:
+        resolved_public_page_parser = FirecrawlPageParser(
+            api_key=stored_firecrawl_runtime.api_key,
+            base_url=str(stored_firecrawl_runtime.config.base_url),
+        )
+    elif resolved_public_page_parser is None and resolved_settings.firecrawl_api_key:
+        resolved_public_page_parser = FirecrawlPageParser(
+            api_key=resolved_settings.firecrawl_api_key,
+            base_url=resolved_settings.firecrawl_api_url,
+        )
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -134,6 +159,7 @@ def create_app(
                 browser_client=resolved_browser_broker,
                 visual_classifier=resolved_visual_classifier,
                 candidate_root=resolved_settings.data_dir / "runs",
+                public_page_parser=resolved_public_page_parser,
             )
 
         run_ids = incomplete_run_ids(database)
@@ -162,6 +188,7 @@ def create_app(
     app.state.tineye_provider = resolved_tineye_provider
     app.state.browser_broker = resolved_browser_broker
     app.state.visual_classifier = resolved_visual_classifier
+    app.state.public_page_parser = resolved_public_page_parser
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],

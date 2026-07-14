@@ -20,6 +20,14 @@ class FakeSocket {
   receive(message: unknown): void {
     this.onmessage?.({ data: JSON.stringify(message) });
   }
+
+  closeFromServer(event: { code: number; reason: string }): void {
+    (
+      this.onclose as unknown as
+        | ((closeEvent: { code: number; reason: string }) => void)
+        | null
+    )?.(event);
+  }
 }
 
 const validCommand = {
@@ -39,6 +47,50 @@ function makeExecutor() {
 }
 
 describe("local browser WebSocket client", () => {
+  it("reports connected only after the server authenticates the saved token", () => {
+    const socket = new FakeSocket();
+    const onStatus = vi.fn();
+    const client = new BrowserSocketClient(
+      { endpoint: "ws://127.0.0.1:8000/v1/browser", token: "pairing-token" },
+      vi.fn(() => socket),
+      makeExecutor(),
+      { revokeAfterResearch: vi.fn() },
+      onStatus,
+    );
+
+    client.connect();
+    socket.open();
+    expect(client.getStatus()).toBe("connecting");
+
+    socket.receive({ type: "browser.authenticated", protocol_version: 1 });
+    expect(client.getStatus()).toBe("connected");
+    expect(onStatus).toHaveBeenLastCalledWith("connected");
+  });
+
+  it("stops retrying when the local service rejects an expired pairing code", async () => {
+    const socket = new FakeSocket();
+    const onStatus = vi.fn();
+    const scheduleReconnect = vi.fn();
+    const client = new BrowserSocketClient(
+      { endpoint: "ws://127.0.0.1:8000/v1/browser", token: "expired-code" },
+      vi.fn(() => socket),
+      makeExecutor(),
+      { revokeAfterResearch: vi.fn().mockResolvedValue(true) },
+      onStatus,
+      undefined,
+      scheduleReconnect,
+    );
+
+    client.connect();
+    socket.open();
+    socket.closeFromServer({ code: 1008, reason: "Authentication failed" });
+    await Promise.resolve();
+
+    expect(client.getStatus()).toBe("error");
+    expect(onStatus).toHaveBeenLastCalledWith("error");
+    expect(scheduleReconnect).not.toHaveBeenCalled();
+  });
+
   it("authenticates with the locally stored token after connecting", () => {
     const socket = new FakeSocket();
     const client = new BrowserSocketClient(

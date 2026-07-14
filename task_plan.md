@@ -35,6 +35,8 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | 15. M14 Research answer and method comparison | complete | Result task provenance, evidence-backed method summary and five-row comparison matrix pass 1440/390 browser acceptance and 40 Board tests |
 | 16. M15 Decomposed deep research dossiers | complete | Post-audit depth, evidence, retry, durable traffic and retention boundaries pass 137 API tests, 41 Board tests, 111 Extension tests, 6 packaged-Chrome E2E cases and the full repository gate |
 | 17. M16 Chinese research results and reliable previews | complete | Chinese provider contracts, browser readiness/pairing, conservative crop enrichment and truthful legacy recovery pass 141 API tests, 45 Board tests, 111 Extension tests, 6 packaged-Chrome E2E cases and 1440/390 Chromium acceptance |
+| 18. M17 Local runtime and extension onboarding reliability | complete | Loopback-only one-click pairing, authenticated connection state, Chinese fallback controls and research-time permission requests pass 141 API tests, 48 Board tests, 118 Extension tests and 6 packaged-Chrome E2E cases |
+| 19. M18 Open-source browser research integration | complete | Audited eight current GitHub projects; integrated an optional Firecrawl public-page fallback and bounded semantic page snapshot; full gate passes 157 API, 48 Board, 121 Extension and 6 packaged-Chrome tests without live provider traffic |
 
 ## M6 completion summary
 
@@ -139,3 +141,13 @@ The code delivery is complete. These product claims require user-owned credentia
 | The first responsive CSS patch assumed the media query began with `.app-header` | 1 | Inspect the exact `@media` opening and insert the rules after its existing `:root` block |
 | The new-run UI test expected a non-existent “正在检索网页” status phrase | 1 | Reuse the product's established “正在搜索” state vocabulary and keep the implementation unchanged |
 | The ChatGPT Chrome control extension was unavailable after the documented retry | 1 | Keep browser-profile state untouched and use isolated system-Chrome Playwright only for local ArchResearch visual acceptance |
+| The first M17 multi-endpoint PowerShell probe placed a pipeline directly after `foreach` | 1 | Assign the loop output to a variable before piping to `ConvertTo-Json`; no project state changed |
+| Chrome control initialization failed twice with `Cannot redefine property: process` | 2 | Stop retrying the same browser runtime path and move to the documented Windows-control fallback for extension onboarding |
+| M18 recovery first invoked the disabled Windows Store `python` alias | 1 | Use the project-owned API virtual environment for session recovery instead of relying on global Python |
+| The advertised Karpathy skill path was absent from the local skill directory | 1 | Follow the repository's equivalent simplicity/TDD rules directly; do not block M18 on an unavailable optional skill |
+| The M18 web-search backend timed out and then returned empty GitHub payloads | 2 | Stop repeating the same search path; use bounded reads from official GitHub API/raw repository endpoints and retain primary-source URLs |
+| The first M18 documentation patch assumed README used the architecture document's Mermaid labels | 1 | Re-read the exact README block and apply smaller file-specific patches; no documentation changed in the failed attempt |
+| The first M18 Ruff gate found one 103-character test fixture line | 1 | Wrap the fixture list without changing behavior, then restart the gate from Ruff |
+| Ruff format check found three M18 Python files requiring canonical layout | 1 | Apply Ruff format only to those files, then rerun check/type/tests |
+| M18 Mypy found five narrowings/reused-loop-variable type errors | 1 | Add explicit metadata/dict narrowing and distinct type-name variables; no runtime behavior changed |
+| The first M18 credential scan treated runtime `api_key` variable assignments as literal secrets | 1 | Inspect only file/line locations, confirm all ten hits are variable flow or credential reads, and narrow the final scan to quoted secret literals |

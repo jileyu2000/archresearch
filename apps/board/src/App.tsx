@@ -11,7 +11,6 @@ import {
   ExternalLink,
   FolderPlus,
   ImageOff,
-  KeyRound,
   LayoutGrid,
   MonitorUp,
   Palette,
@@ -39,6 +38,7 @@ import {
   type TraceEvent,
   type Workspace,
 } from './api/client'
+import { BrowserBridgeError, requestBrowserBridge } from './browserBridge'
 import {
   demoSubquestions,
   evidenceResults,
@@ -461,8 +461,8 @@ export default function App() {
   const [styleStatus, setStyleStatus] = useState('')
   const [traceEvents, setTraceEvents] = useState<TraceEvent[]>([])
   const [browserConnected, setBrowserConnected] = useState<boolean | null>(null)
-  const [browserPairingCode, setBrowserPairingCode] = useState('')
   const [browserPairingStatus, setBrowserPairingStatus] = useState('')
+  const [browserConnecting, setBrowserConnecting] = useState(false)
   const [rerunStarting, setRerunStarting] = useState(false)
   const [composerOpen, setComposerOpen] = useState(!demoMode)
   const [researchOptionsOpen, setResearchOptionsOpen] = useState(false)
@@ -761,6 +761,7 @@ export default function App() {
       setComposerOpen(false)
       return
     }
+    if (!(await ensureBrowserResearchAccess())) return
     const requestId = hydrateRequestRef.current + 1
     hydrateRequestRef.current = requestId
     try {
@@ -841,19 +842,54 @@ export default function App() {
     }
   }
 
-  async function handleCreatePairingCode() {
-    setBrowserPairingStatus('正在生成配对码…')
+  async function handleConnectBrowser() {
+    setBrowserConnecting(true)
+    setBrowserPairingStatus('正在连接本机 Chrome 扩展…')
     try {
       const pairing = await apiClient.createBrowserPairingCode()
-      setBrowserPairingCode(pairing.code)
-      setBrowserPairingStatus('配对码已生成')
+      await requestBrowserBridge({
+        type: 'pair',
+        endpoint: 'ws://127.0.0.1:8000/v1/browser',
+        token: pairing.code,
+      })
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        const status = await apiClient.getBrowserStatus()
+        if (status.connected) {
+          setBrowserConnected(true)
+          setBrowserPairingStatus('图纸提取扩展已连接')
+          setAnnouncement('图纸提取扩展已连接')
+          return
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 250))
+      }
+      throw new BrowserBridgeError('rejected', 'Pairing authentication timed out')
     } catch (error) {
-      setBrowserPairingStatus(apiMessage(error))
+      setBrowserConnected(false)
+      setBrowserPairingStatus(
+        error instanceof BrowserBridgeError && error.code === 'unavailable'
+          ? '未检测到 ArchResearch 扩展。请在已安装扩展的 Chrome 中打开本页后重试。'
+          : '浏览器配对未完成，可能是配对码已过期。请重新连接。',
+      )
+    } finally {
+      setBrowserConnecting(false)
     }
+  }
+
+  async function ensureBrowserResearchAccess() {
+    if (browserConnected !== true) return true
+    try {
+      const status = await requestBrowserBridge({ type: 'permissions.request' })
+      if (status.researchPermission) return true
+      setActionError('Chrome 未授予本次网页读取权限，研究尚未开始。')
+    } catch {
+      setActionError('无法向扩展请求网页读取权限。请在已安装扩展的 Chrome 中打开本页。')
+    }
+    return false
   }
 
   async function handleRerunWithBrowser() {
     if (!activeRun || !activeWorkspaceId || browserConnected !== true) return
+    if (!(await ensureBrowserResearchAccess())) return
     const requestId = hydrateRequestRef.current + 1
     hydrateRequestRef.current = requestId
     setRerunStarting(true)
@@ -1242,29 +1278,32 @@ export default function App() {
                   </fieldset>
                 </div>
               )}
-              {!demoMode && browserConnected !== true && (
+              {!demoMode && (browserConnected !== true || browserPairingStatus) && (
                 <section className="browser-readiness" aria-label="图纸提取连接">
                   <MonitorUp aria-hidden="true" />
                   <div className="browser-readiness-copy">
-                    <strong>{browserConnected === false ? '图纸提取未连接' : '正在检查图纸提取连接'}</strong>
+                    <strong>
+                      {browserConnected === true
+                        ? '图纸提取扩展已连接'
+                        : browserConnected === false
+                          ? '图纸提取未连接'
+                          : '正在检查图纸提取连接'}
+                    </strong>
                     <p>
-                      {browserConnected === false
-                        ? '仍可开始研究，但只能返回文字线索。'
-                        : '连接状态确认后，系统才能从项目网页中提取平面、剖面和分析图。'}
+                      {browserConnected === true
+                        ? '开始研究时，Chrome 会确认本次临时网页读取权限。'
+                        : browserConnected === false
+                          ? '仍可开始研究，但只能返回文字线索。'
+                          : '连接状态确认后，系统才能从项目网页中提取平面、剖面和分析图。'}
                     </p>
-                    {browserPairingCode && (
-                      <div className="browser-pairing-code">
-                        <span>配对码</span>
-                        <strong>{browserPairingCode}</strong>
-                        <small>在 ArchResearch Chrome 扩展中输入配对码，并授予本次网页读取权限。</small>
-                      </div>
-                    )}
                     {browserPairingStatus && <small className="browser-pairing-status" aria-live="polite">{browserPairingStatus}</small>}
                   </div>
                   <div className="browser-readiness-actions">
-                    <button type="button" onClick={() => void handleCreatePairingCode()}>
-                      <KeyRound aria-hidden="true" />生成配对码
-                    </button>
+                    {browserConnected !== true && (
+                      <button type="button" disabled={browserConnecting} onClick={() => void handleConnectBrowser()}>
+                        <MonitorUp aria-hidden="true" />{browserConnecting ? '正在连接…' : '一键连接浏览器'}
+                      </button>
+                    )}
                     <button type="button" onClick={() => void refreshBrowserConnection()}>
                       <RefreshCw aria-hidden="true" />检查连接
                     </button>
@@ -1393,19 +1432,12 @@ export default function App() {
                     : '研究时浏览器扩展未连接，因此只保留了网页文字和来源。'
                   : '来源页没有返回可展示图片；可先打开原始页面核对，再重新研究。'}
               </p>
-              {browserPairingCode && (
-                <div className="browser-pairing-code">
-                  <span>配对码</span>
-                  <strong>{browserPairingCode}</strong>
-                  <small>在 ArchResearch Chrome 扩展中输入配对码，并授予本次网页读取权限。</small>
-                </div>
-              )}
               {browserPairingStatus && <small className="browser-pairing-status" aria-live="polite">{browserPairingStatus}</small>}
             </div>
             <div className="drawing-recovery-actions">
               {browserConnected !== true && (
-                <button type="button" onClick={() => void handleCreatePairingCode()}>
-                  <KeyRound aria-hidden="true" />生成配对码
+                <button type="button" disabled={browserConnecting} onClick={() => void handleConnectBrowser()}>
+                  <MonitorUp aria-hidden="true" />{browserConnecting ? '正在连接…' : '一键连接浏览器'}
                 </button>
               )}
               <button type="button" onClick={() => void refreshBrowserConnection()}>

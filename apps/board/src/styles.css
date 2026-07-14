@@ -936,31 +936,9 @@ h3 {
   gap: var(--space-2);
 }
 
-.browser-pairing-code {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-1) var(--space-2);
-  margin-top: var(--space-2);
-}
-
-.browser-pairing-code > span,
-.browser-pairing-code > small,
 .browser-pairing-status {
   color: var(--color-ink-secondary);
   font-size: var(--font-xs);
-}
-
-.browser-pairing-code > strong {
-  color: var(--color-action-hover);
-  font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: var(--font-md);
-  letter-spacing: 0.08em;
-}
-
-.browser-pairing-code > small {
-  flex-basis: 100%;
-  line-height: var(--leading-body);
 }
 
 .browser-pairing-status {

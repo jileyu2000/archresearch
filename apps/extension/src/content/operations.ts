@@ -12,6 +12,7 @@ export type MediaCandidate = {
 
 export type ContentCommand =
   | { action: "page_metadata" }
+  | { action: "page_snapshot" }
   | { action: "enumerate_media" }
   | { action: "viewport_metrics" }
   | { action: "scroll"; direction: "up" | "down"; distance: number }
@@ -86,6 +87,8 @@ export function executeContentCommand(
   switch (command.action) {
     case "page_metadata":
       return readPageMetadata(root, view);
+    case "page_snapshot":
+      return readPageSnapshot(root);
     case "enumerate_media":
       return { media: collectMedia(root) };
     case "viewport_metrics":
@@ -101,6 +104,40 @@ export function executeContentCommand(
     case "type_search_query":
       return typeSearchQuery(root, view, command.query);
   }
+}
+
+function readPageSnapshot(root: Document): {
+  blocks: Array<{ kind: "heading" | "paragraph" | "caption"; text: string }>;
+  truncated: boolean;
+} {
+  if (isSensitivePage(root)) {
+    throw new Error("Sensitive page context cannot be extracted");
+  }
+  const blocks: Array<{
+    kind: "heading" | "paragraph" | "caption";
+    text: string;
+  }> = [];
+  const seen = new Set<string>();
+  let characters = 0;
+  let truncated = false;
+  for (const element of root.querySelectorAll("h1, h2, h3, p, figcaption")) {
+    if (isSensitive(element) || !isVisible(element)) continue;
+    const text = normalizeText(element.textContent ?? "", 500);
+    if (!text || seen.has(text)) continue;
+    if (blocks.length >= 40 || characters + text.length > 6_000) {
+      truncated = true;
+      break;
+    }
+    const kind = element.matches("h1, h2, h3")
+      ? "heading"
+      : element.matches("figcaption")
+        ? "caption"
+        : "paragraph";
+    blocks.push({ kind, text });
+    seen.add(text);
+    characters += text.length;
+  }
+  return { blocks, truncated };
 }
 
 function readPageMetadata(

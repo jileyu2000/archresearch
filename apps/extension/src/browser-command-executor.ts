@@ -53,6 +53,10 @@ export class BrowserCommandExecutor {
         return this.executeInManagedTab(command.payload.tab_id, {
           action: "page_metadata",
         });
+      case "page_snapshot":
+        return this.executeInManagedTab(command.payload.tab_id, {
+          action: "page_snapshot",
+        });
       case "enumerate_media":
         return this.executeInManagedTab(command.payload.tab_id, {
           action: "enumerate_media",
