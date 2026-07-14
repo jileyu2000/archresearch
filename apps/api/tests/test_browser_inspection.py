@@ -489,6 +489,26 @@ class ReservedSearchProvider(TimeoutSearchProvider):
         raise AssertionError("model search should be skipped when only public-search time remains")
 
 
+class TimeoutCircuitProvider(TimeoutSearchProvider):
+    worst_case_call_seconds = 30.0
+
+    def __init__(self) -> None:
+        super().__init__(ProviderSearchResult(sources=[], assets=[]))
+        self.calls = 0
+
+    def search(
+        self,
+        query: str,
+        goal: ResearchGoal,
+        allowed_domains: list[str] | None = None,
+    ) -> ProviderSearchResult:
+        del query, goal, allowed_domains
+        self.calls += 1
+        if self.calls == 1:
+            raise TimeoutError("relay web search timed out")
+        raise AssertionError("model search circuit should remain open for this run")
+
+
 def test_firecrawl_search_preserves_visual_leads_when_model_search_times_out(
     tmp_path: Path,
 ) -> None:
@@ -525,6 +545,44 @@ def test_firecrawl_search_preserves_visual_leads_when_model_search_times_out(
         event.tool == "firecrawl_search" and event.summary["result_count"] == 1 for event in events
     )
     assert any(event.tool == "single" and event.summary["status"] == "degraded" for event in events)
+
+
+def test_model_timeout_opens_run_circuit_while_public_search_keeps_progressing(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, max_pages=3)
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assert run is not None
+        run.budget = {**run.budget, "max_queries": 3}
+        session.commit()
+    provider = TimeoutCircuitProvider()
+    parser = RecordingPublicSearchParser(
+        [
+            ParsedPageImage(
+                url="https://cdn.example/firecrawl-section.png",
+                alt="Longitudinal section",
+            )
+        ]
+    )
+
+    execute_research_run(
+        database,
+        run_id,
+        provider,
+        public_page_parser=parser,
+    )
+
+    with database.session_factory() as session:
+        events = list(session.scalars(select(TraceEvent).where(TraceEvent.run_id == run_id)))
+    assert provider.calls == 1
+    assert len(parser.queries) > 1
+    assert any(
+        event.tool == provider.name
+        and event.summary.get("status") == "skipped"
+        and event.summary.get("reason") == "previous_timeout"
+        for event in events
+    )
 
 
 def test_firecrawl_search_continues_when_model_call_no_longer_fits_deadline(

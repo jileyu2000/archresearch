@@ -44,6 +44,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | 24. M23 Bounded remote visual classification | pending | Batch-classify a small, deadline-admitted sample of untyped Firecrawl images with gpt-5.5, persist only visible observations as unverified leads, and prove retries cannot multiply visual cost |
 | 25. M24 Stable active-research UI and honest browser onboarding | complete | Active zero-result runs retain the submitted question, current stage and evidence questions; public research remains available without Chrome; status-first pairing and packaged-Chrome E2E distinguish unsupported surfaces from a working extension bridge |
 | 26. M25 Public-image mode and Chrome enhancement clarity | complete | Public previews and Chrome crops are labeled separately; fixed loopback handoff auto-pairs; a strict 20-second MV3 heartbeat kept the real user-profile connection active across ten samples over 45 seconds |
+| 27. M26 Quick-path performance and timeout isolation | complete | OpenAI worst-case search wait fell from 120s to 30s with a per-run timeout circuit; Firecrawl page waits are capped at 20s; the comparable live Quick run fell from about 194s to 143s before the final Firecrawl cap, and the full repository gate passes |
 
 ## M6 completion summary
 

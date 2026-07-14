@@ -13,7 +13,7 @@ from .visual import ArchitectureAssetType
 MAX_MARKDOWN_CHARS = 12_000
 MAX_LINKS = 40
 MAX_IMAGES = 40
-FIRECRAWL_REQUEST_TIMEOUT_SECONDS = 30.0
+FIRECRAWL_REQUEST_TIMEOUT_SECONDS = 20.0
 IMAGE_DELIVERY_VARIANTS = {
     "thumb_jpg": 0,
     "small_jpg": 1,
@@ -122,7 +122,7 @@ class FirecrawlPageParser:
             "limit": limit,
             "sources": ["web"],
             "ignoreInvalidURLs": True,
-            "timeout": 30_000,
+            "timeout": int(FIRECRAWL_REQUEST_TIMEOUT_SECONDS * 1_000),
         }
         if domains:
             request_body["includeDomains"] = domains
@@ -173,6 +173,7 @@ class FirecrawlPageParser:
                 "formats": ["markdown", "links", "images"],
                 "onlyMainContent": True,
                 "maxAge": 0,
+                "timeout": int(FIRECRAWL_REQUEST_TIMEOUT_SECONDS * 1_000),
             },
         )
         response.raise_for_status()

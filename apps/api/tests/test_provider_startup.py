@@ -63,8 +63,8 @@ def test_startup_uses_stored_suoxie_config_for_both_model_clients(tmp_path: Path
         {
             "api_key": "sk-stored",
             "base_url": "https://suoxie.codes/v1",
-            "timeout": 60.0,
-            "max_retries": 1,
+            "timeout": 30.0,
+            "max_retries": 0,
         }
     ]
     with TestClient(app) as test_client:

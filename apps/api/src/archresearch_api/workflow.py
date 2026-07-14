@@ -232,6 +232,7 @@ def execute_research_run(
             else 0.0
         )
         stop_reason = "budget_exhausted"
+        model_search_timed_out = False
         for query_index, (round_number, language, subquestion_id, query) in enumerate(
             queries, start=1
         ):
@@ -243,7 +244,9 @@ def execute_research_run(
             can_search_publicly = (
                 public_search_provider is not None and remaining_seconds >= public_search_reserve
             )
-            can_search_with_model = remaining_seconds >= provider_call_reserve
+            can_search_with_model = (
+                not model_search_timed_out and remaining_seconds >= provider_call_reserve
+            )
             if remaining_seconds <= 0 or not (can_search_publicly or can_search_with_model):
                 stop_reason = "time_budget_exhausted"
                 break
@@ -295,7 +298,11 @@ def execute_research_run(
                     RunStatus.searching,
                     {
                         "status": "skipped",
-                        "reason": "insufficient_time_reserve",
+                        "reason": (
+                            "previous_timeout"
+                            if model_search_timed_out
+                            else "insufficient_time_reserve"
+                        ),
                         "retained_source_count": len(public_sources),
                     },
                     tool=provider.name,
@@ -306,6 +313,7 @@ def execute_research_run(
                 except Exception as exc:
                     if not public_sources:
                         raise
+                    model_search_timed_out = _is_timeout_error(exc)
                     provider_result = ProviderSearchResult(sources=public_sources, assets=[])
                     _checkpoint(
                         db,
@@ -502,6 +510,15 @@ def _raise_if_cancelled(db: Database, run_id: str) -> None:
         run = _get_run(session, run_id)
         if run.status == RunStatus.cancelled.value:
             raise _ResearchCancelled
+
+
+def _is_timeout_error(error: Exception) -> bool:
+    return isinstance(error, TimeoutError) or type(error).__name__ in {
+        "APITimeoutError",
+        "ConnectTimeout",
+        "ReadTimeout",
+        "TimeoutException",
+    }
 
 
 def _latest_uploaded_image(db: Database, workspace_id: str) -> Path | None:

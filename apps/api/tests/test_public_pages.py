@@ -55,6 +55,7 @@ def test_firecrawl_parser_requests_fresh_bounded_formats_and_maps_image_alts() -
         "formats": ["markdown", "links", "images"],
         "onlyMainContent": True,
         "maxAge": 0,
+        "timeout": 20_000,
     }
 
 
@@ -172,8 +173,9 @@ def test_firecrawl_search_returns_bounded_public_source_leads() -> None:
         "sources": ["web"],
         "includeDomains": ["archdaily.com", "dezeen.com"],
         "ignoreInvalidURLs": True,
-        "timeout": 30_000,
+        "timeout": 20_000,
     }
+    assert parser.worst_case_call_seconds == 20.0
 
 
 def test_firecrawl_parser_collapses_image_delivery_variants_and_rejects_broken_urls() -> None:

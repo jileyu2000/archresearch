@@ -368,7 +368,7 @@ def test_quick_openai_run_reserves_time_for_one_worst_case_call(tmp_path: Path) 
 
     class FakeClock:
         def __init__(self) -> None:
-            self._values = iter([0.0, 0.0, 121.0, 241.0])
+            self._values = iter([0.0, 0.0, 31.0, 62.0, 93.0])
             self.observed: list[float] = []
 
         def __call__(self) -> float:
@@ -393,10 +393,10 @@ def test_quick_openai_run_reserves_time_for_one_worst_case_call(tmp_path: Path) 
         )
         assert run is not None
         assert run.status == RunStatus.partial.value
-        assert run.stop_reason == "time_budget_exhausted"
-        assert query_count == 1
-    assert responses.calls == 2
-    assert clock.observed == [0.0, 0.0, 121.0]
+        assert run.stop_reason == "budget_exhausted"
+        assert query_count == 4
+    assert responses.calls == 5
+    assert clock.observed == [0.0, 0.0, 31.0, 62.0, 93.0]
 
 
 def test_cancellation_during_provider_call_is_not_overwritten(tmp_path: Path) -> None:

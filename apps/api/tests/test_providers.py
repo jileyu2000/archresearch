@@ -101,11 +101,11 @@ def test_openai_provider_constructs_a_bounded_retry_client(
         {
             "api_key": "sk-test",
             "base_url": "https://relay.example/v1",
-            "timeout": 60.0,
-            "max_retries": 1,
+            "timeout": 30.0,
+            "max_retries": 0,
         }
     ]
-    assert provider.worst_case_call_seconds == 120.0
+    assert provider.worst_case_call_seconds == 30.0
 
 
 def test_openai_provider_uses_relay_compatible_web_search_and_domain_fields() -> None:
