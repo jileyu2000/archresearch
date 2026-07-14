@@ -1,5 +1,6 @@
 {
   "manifest_version": 3,
+  "minimum_chrome_version": "116",
   "name": "ArchResearch Browser Bridge",
   "version": "0.1.0",
   "description": "Local browser bridge for evidence-based architecture research.",

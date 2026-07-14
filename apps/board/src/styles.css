@@ -888,9 +888,9 @@ h3 {
   align-items: start;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-action-line);
+  border: 1px solid var(--color-line);
   border-radius: var(--radius-sm);
-  background: var(--color-action-soft);
+  background: var(--color-surface-subtle);
 }
 
 .browser-readiness {
@@ -902,7 +902,12 @@ h3 {
   width: var(--icon-lg);
   height: var(--icon-lg);
   margin-top: 2px;
-  color: var(--color-action-hover);
+  color: var(--color-verified);
+}
+
+.browser-readiness[data-chrome="connected"] {
+  border-color: var(--color-action-line);
+  background: var(--color-action-soft);
 }
 
 .browser-readiness-copy,
@@ -1915,10 +1920,16 @@ h3 {
   text-wrap: pretty;
 }
 
-.evidence-image > span {
+.evidence-image-labels {
   position: absolute;
   top: var(--space-2);
   left: var(--space-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.evidence-image-labels > span {
   min-height: 24px;
   padding: 4px 7px;
   border: 1px solid rgb(217 222 219 / 88%);

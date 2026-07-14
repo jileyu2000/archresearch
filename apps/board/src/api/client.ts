@@ -215,6 +215,10 @@ export interface BrowserPairingCode {
   expires_in_seconds: number
 }
 
+export interface ChromeLaunchResult {
+  opened: boolean
+}
+
 export class ApiError extends Error {
   readonly status: number | null
 
@@ -275,6 +279,12 @@ export function createApiClient(baseUrl = '/v1') {
 
     createBrowserPairingCode() {
       return request<BrowserPairingCode>(`${baseUrl}/browser/pairing-code`, {
+        method: 'POST',
+      })
+    },
+
+    openChromeBoard() {
+      return request<ChromeLaunchResult>(`${baseUrl}/browser/open-chrome`, {
         method: 'POST',
       })
     },

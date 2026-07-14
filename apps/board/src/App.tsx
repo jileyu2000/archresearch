@@ -54,6 +54,7 @@ import { StudioBackdrop } from './components/StudioBackdrop'
 type WorkResult = EvidenceResult & {
   evidenceClaims: ApiEvidenceClaim[]
   previewUrl: string | null
+  previewSource: 'public' | 'chrome' | null
   subquestionAnalysis: Record<string, ResultAnalysis>
 }
 
@@ -332,9 +333,14 @@ function toWorkResult(candidate: ApiAssetCandidate): WorkResult {
         : inferences.length
           ? inferences
           : ['连接扩展并重新研究，生成中文转译步骤。'],
-    previewUrl:
-      candidate.image_url ??
-      (candidate.has_local_content ? `/v1/assets/${candidate.id}/content` : null),
+    previewUrl: candidate.has_local_content
+      ? `/v1/assets/${candidate.id}/content`
+      : candidate.image_url,
+    previewSource: candidate.has_local_content
+      ? 'chrome'
+      : candidate.image_url
+        ? 'public'
+        : null,
     fact: facts[0] ?? '此历史结果的来源事实为外文，请打开原始页面核对。',
     observation: observations[0] ?? '尚未生成中文视觉观察。',
     inference: inferences[0] ?? '尚未生成中文设计方法推断。',
@@ -357,6 +363,7 @@ function demoResults(): WorkResult[] {
   return evidenceResults.map((result) => ({
     ...result,
     previewUrl: result.imageUrl ?? null,
+    previewSource: null,
     evidenceClaims: [],
     subquestionAnalysis: {},
   }))
@@ -482,6 +489,11 @@ export default function App() {
   const overlayTriggerRef = useRef<HTMLElement | null>(null)
   const questionInputRef = useRef<HTMLTextAreaElement | null>(null)
   const hydrateRequestRef = useRef(0)
+  const chromeConnectRequested = useMemo(
+    () => new URLSearchParams(window.location.search).get('connect') === 'chrome',
+    [],
+  )
+  const chromeConnectAttemptedRef = useRef(false)
 
   const selectedResult = results.find((result) => result.id === selectedResultId)
   const overlayOpen = inspectorOpen || traceOpen || comparisonOpen || shareSummaryOpen || styleProfileOpen
@@ -853,7 +865,7 @@ export default function App() {
     }
   }
 
-  async function handleConnectBrowser() {
+  const handleConnectBrowser = useCallback(async (launchChromeOnUnavailable = true) => {
     setBrowserConnecting(true)
     setBrowserPairingStatus('正在检查当前页面的 Chrome 扩展…')
     try {
@@ -885,15 +897,43 @@ export default function App() {
       throw new BrowserBridgeError('rejected', 'Pairing authentication timed out')
     } catch (error) {
       setBrowserConnected(false)
-      setBrowserPairingStatus(
-        error instanceof BrowserBridgeError && error.code === 'unavailable'
-          ? '当前页面无法访问 Chrome 扩展。公开网页研究不受影响；如需读取登录页面，请在已安装扩展的 Chrome 中打开本页。'
-          : '浏览器配对未完成，可能是配对码已过期。请重新连接。',
-      )
+      if (
+        error instanceof BrowserBridgeError
+        && error.code === 'unavailable'
+        && launchChromeOnUnavailable
+      ) {
+        try {
+          await apiClient.openChromeBoard()
+          setBrowserPairingStatus('已在 Chrome 打开本页；新页面会自动连接扩展。当前公开网页研究不受影响。')
+        } catch (launchError) {
+          setBrowserPairingStatus(`无法自动打开 Chrome：${apiMessage(launchError)}`)
+        }
+      } else {
+        setBrowserPairingStatus(
+          error instanceof BrowserBridgeError && error.code === 'unavailable'
+            ? '当前 Chrome 页面没有检测到 ArchResearch 扩展；公开网页研究仍可继续。'
+            : '浏览器配对未完成，可能是配对码已过期。请重新连接。',
+        )
+      }
     } finally {
       setBrowserConnecting(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (
+      demoMode
+      || !chromeConnectRequested
+      || browserConnected !== false
+      || browserConnecting
+      || chromeConnectAttemptedRef.current
+    ) return
+    chromeConnectAttemptedRef.current = true
+    const url = new URL(window.location.href)
+    url.searchParams.delete('connect')
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+    void handleConnectBrowser(false)
+  }, [browserConnected, browserConnecting, chromeConnectRequested, demoMode, handleConnectBrowser])
 
   async function ensureBrowserResearchAccess() {
     if (browserConnected !== true) return true
@@ -1302,34 +1342,33 @@ export default function App() {
                 </div>
               )}
               {!demoMode && (browserConnected !== true || browserPairingStatus) && (
-                <section className="browser-readiness" aria-label="图纸提取连接">
-                  <MonitorUp aria-hidden="true" />
+                <section
+                  className="browser-readiness"
+                  aria-label="研究图片来源与 Chrome 增强"
+                  data-chrome={browserConnected === true ? 'connected' : 'optional'}
+                >
+                  <Eye aria-hidden="true" />
                   <div className="browser-readiness-copy">
                     <strong>
                       {browserConnected === true
-                        ? '图纸提取扩展已连接'
-                        : browserConnected === false
-                          ? '图纸提取未连接'
-                          : '正在检查图纸提取连接'}
+                        ? '公开网页图片 + Chrome 精确提取'
+                        : '公开网页图片可用'}
                     </strong>
                     <p>
                       {browserConnected === true
-                        ? '开始研究时，Chrome 会确认本次临时网页读取权限。'
+                        ? '公开网页图片可直接显示；开始研究时，Chrome 会确认登录页面、动态页面和精确裁图的临时权限。'
                         : browserConnected === false
-                          ? '公开网页研究可直接运行；连接后还能读取登录页面并精确裁图。'
-                          : '连接状态确认后，系统才能从项目网页中提取平面、剖面和分析图。'}
+                          ? '你现在看到的是公开网页返回的远程图片。Chrome 未启用只影响登录页面、动态页面和精确裁图。'
+                          : '公开网页研究可直接运行；正在检查 Chrome 精确提取是否可用。'}
                     </p>
                     {browserPairingStatus && <small className="browser-pairing-status" aria-live="polite">{browserPairingStatus}</small>}
                   </div>
                   <div className="browser-readiness-actions">
                     {browserConnected !== true && (
                       <button type="button" disabled={browserConnecting} onClick={() => void handleConnectBrowser()}>
-                        <MonitorUp aria-hidden="true" />{browserConnecting ? '正在连接…' : '连接 Chrome 扩展'}
+                        <MonitorUp aria-hidden="true" />{browserConnecting ? '正在打开 Chrome…' : '在 Chrome 中启用精确提取'}
                       </button>
                     )}
-                    <button type="button" onClick={() => void refreshBrowserConnection()}>
-                      <RefreshCw aria-hidden="true" />检查连接
-                    </button>
                   </div>
                 </section>
               )}
@@ -1460,7 +1499,7 @@ export default function App() {
             <div className="drawing-recovery-actions">
               {browserConnected !== true && (
                 <button type="button" disabled={browserConnecting} onClick={() => void handleConnectBrowser()}>
-                  <MonitorUp aria-hidden="true" />{browserConnecting ? '正在连接…' : '连接 Chrome 扩展'}
+                  <MonitorUp aria-hidden="true" />{browserConnecting ? '正在打开 Chrome…' : '在 Chrome 中启用精确提取'}
                 </button>
               )}
               <button type="button" onClick={() => void refreshBrowserConnection()}>
@@ -1676,7 +1715,12 @@ export default function App() {
                                               <p>打开原始页面查看图纸，并核对图纸与项目的对应关系。</p>
                                             </div>
                                           )}
-                                          <span>{assetLabels[result.assetType]}</span>
+                                          <div className="evidence-image-labels">
+                                            <span>{assetLabels[result.assetType]}</span>
+                                            {result.previewSource && (
+                                              <span>{result.previewSource === 'chrome' ? 'Chrome 精确裁图' : '公开网页图片'}</span>
+                                            )}
+                                          </div>
                                         </div>
                                         <figcaption>
                                           <strong>{result.title}</strong>

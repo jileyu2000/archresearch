@@ -107,6 +107,9 @@ function createLiveFetch(options: LiveFetchOptions = {}) {
         expires_in_seconds: 300,
       }, 201))
     }
+    if (path === '/v1/browser/open-chrome' && method === 'POST') {
+      return Promise.resolve(jsonResponse({ opened: true }))
+    }
     if (path === '/v1/workspaces' && method === 'GET') return Promise.resolve(jsonResponse([workspace]))
     if (path === '/v1/workspaces' && method === 'POST') {
       return Promise.resolve(jsonResponse({ ...workspace, id: 'workspace-new', name: '新工作区' }, 201))
@@ -728,9 +731,10 @@ describe('research board', () => {
     }))
     renderBoard()
 
-    expect(await screen.findByText('图纸提取未连接')).toBeVisible()
-    expect(screen.getByText('公开网页研究可直接运行；连接后还能读取登录页面并精确裁图。')).toBeVisible()
-    await user.click(screen.getByRole('button', { name: '连接 Chrome 扩展' }))
+    expect(await screen.findByText('公开网页图片可用')).toBeVisible()
+    expect(screen.getByText('你现在看到的是公开网页返回的远程图片。Chrome 未启用只影响登录页面、动态页面和精确裁图。')).toBeVisible()
+    expect(screen.queryByText('图纸提取未连接')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '在 Chrome 中启用精确提取' }))
 
     expect(requestBrowserBridge).toHaveBeenNthCalledWith(1, { type: 'status' })
     expect(requestBrowserBridge).toHaveBeenNthCalledWith(2, {
@@ -738,14 +742,14 @@ describe('research board', () => {
       endpoint: 'ws://127.0.0.1:8000/v1/browser',
       token: '731904',
     })
-    expect(within(await screen.findByRole('region', { name: '图纸提取连接' })).getByText(
-      '图纸提取扩展已连接',
+    expect(within(await screen.findByRole('region', { name: '研究图片来源与 Chrome 增强' })).getByText(
+      '公开网页图片 + Chrome 精确提取',
       { selector: 'strong' },
     )).toBeVisible()
     expect(screen.queryByText('731904')).not.toBeInTheDocument()
   })
 
-  it('explains that one-click pairing must run in the Chrome profile with the extension', async () => {
+  it('opens the fixed board URL in Chrome when the current page cannot host the extension', async () => {
     const user = userEvent.setup()
     vi.mocked(requestBrowserBridge).mockRejectedValue(
       new BrowserBridgeError('unavailable', 'bridge unavailable'),
@@ -754,16 +758,63 @@ describe('research board', () => {
     vi.stubGlobal('fetch', fetchMock)
     renderBoard()
 
-    await user.click(await screen.findByRole('button', { name: '连接 Chrome 扩展' }))
+    await user.click(await screen.findByRole('button', { name: '在 Chrome 中启用精确提取' }))
 
     expect(await screen.findByText(
-      '当前页面无法访问 Chrome 扩展。公开网页研究不受影响；如需读取登录页面，请在已安装扩展的 Chrome 中打开本页。',
+      '已在 Chrome 打开本页；新页面会自动连接扩展。当前公开网页研究不受影响。',
     )).toBeVisible()
     expect(requestBrowserBridge).toHaveBeenCalledWith({ type: 'status' })
+    expect(fetchMock).toHaveBeenCalledWith('/v1/browser/open-chrome', { method: 'POST' })
     expect(fetchMock).not.toHaveBeenCalledWith(
       '/v1/browser/pairing-code',
       expect.objectContaining({ method: 'POST' }),
     )
+  })
+
+  it('automatically pairs after the local service opens the board in Chrome', async () => {
+    vi.mocked(requestBrowserBridge)
+      .mockResolvedValueOnce({ paired: false, connection: 'disconnected', researchPermission: false })
+      .mockResolvedValue({ paired: true, connection: 'connecting', researchPermission: false })
+    vi.stubGlobal('fetch', createLiveFetch({ browserStatuses: [false, true], pairingCode: '731904' }))
+    renderBoard('?connect=chrome')
+
+    await waitFor(() => {
+      expect(requestBrowserBridge).toHaveBeenCalledWith({
+        type: 'pair',
+        endpoint: 'ws://127.0.0.1:8000/v1/browser',
+        token: '731904',
+      })
+    })
+    expect(await screen.findByText('图纸提取扩展已连接')).toBeVisible()
+    expect(window.location.search).toBe('')
+  })
+
+  it('labels remote page images separately from Chrome crops', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', createLiveFetch({
+      existingRunStatus: 'completed',
+      candidateOverrides: { image_url: 'https://images.example.org/section.jpg' },
+    }))
+    renderBoard()
+
+    await user.click(await screen.findByRole('button', { name: `打开研究：${liveQuestion}` }))
+    const remoteImage = await screen.findByRole('img', { name: 'Live Mill Conversion 剖面图' })
+    expect(within(remoteImage.closest('.evidence-image') as HTMLElement).getByText('公开网页图片')).toBeVisible()
+  })
+
+  it('prefers and labels a local Chrome crop when one exists', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', createLiveFetch({
+      existingRunStatus: 'completed',
+      hasLocalContent: true,
+      candidateOverrides: { image_url: 'https://images.example.org/section.jpg' },
+    }))
+    renderBoard()
+
+    await user.click(await screen.findByRole('button', { name: `打开研究：${liveQuestion}` }))
+    const localImage = await screen.findByRole('img', { name: 'Live Mill Conversion 剖面图' })
+    expect(localImage).toHaveAttribute('src', '/v1/assets/asset-live/content')
+    expect(within(localImage.closest('.evidence-image') as HTMLElement).getByText('Chrome 精确裁图')).toBeVisible()
   })
 
   it('requests temporary page access from the connected extension before research starts', async () => {

@@ -46,6 +46,7 @@ def create_app(
     browser_broker: BrowserBroker | None = None,
     visual_classifier: VisualClassifier | None = None,
     public_page_parser: PublicPageParser | None = None,
+    chrome_launcher: Callable[[str], bool] | None = None,
     keyring_backend: KeyringBackend | None = None,
     openai_client_factory: Callable[..., Any] | None = None,
 ) -> FastAPI:
@@ -53,7 +54,11 @@ def create_app(
     database = Database(resolved_settings.database_url)
     browser_authority = PairingAuthority(resolved_settings.data_dir)
     resolved_browser_broker = browser_broker or BrowserBroker()
-    browser_router = create_browser_router(browser_authority, resolved_browser_broker)
+    browser_router = create_browser_router(
+        browser_authority,
+        resolved_browser_broker,
+        chrome_launcher=chrome_launcher,
+    )
     stored_runtime: ProviderRuntime | None = None
     stored_firecrawl_runtime: FirecrawlRuntime | None = None
     if (

@@ -6,6 +6,7 @@ import ipaddress
 import os
 import secrets
 import socket
+import subprocess
 import time
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
@@ -13,11 +14,12 @@ from typing import Any, Literal, Protocol, cast
 from urllib.parse import urlparse
 from uuid import uuid4
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, model_validator
 
 PROTOCOL_VERSION: Literal[1] = 1
 PAIRING_CODE_TTL_SECONDS = 300
+CHROME_BOARD_URL = "http://127.0.0.1:5173/?connect=chrome"
 
 BrowserAction = Literal[
     "open_url",
@@ -45,6 +47,10 @@ class PairingCodeRead(StrictModel):
 
 class BrowserStatusRead(StrictModel):
     connected: bool
+
+
+class ChromeLaunchRead(StrictModel):
+    opened: bool
 
 
 class BrowserAuthenticate(StrictModel):
@@ -176,6 +182,11 @@ class BrowserResult(StrictModel):
         if not self.ok and (not has_error or has_result or self.error is None):
             raise ValueError("Failed browser results require only error")
         return self
+
+
+class BrowserHeartbeat(StrictModel):
+    type: Literal["browser.heartbeat"]
+    protocol_version: Literal[1]
 
 
 class ResearchSessionMessage(StrictModel):
@@ -409,11 +420,30 @@ class BrowserBroker:
                 )
 
 
+def open_board_in_chrome(url: str) -> bool:
+    if os.name != "nt" or url != CHROME_BOARD_URL:
+        return False
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    candidates = [
+        Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
+        Path(r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"),
+    ]
+    if local_app_data:
+        candidates.append(Path(local_app_data) / "Google/Chrome/Application/chrome.exe")
+    chrome = next((candidate for candidate in candidates if candidate.is_file()), None)
+    if chrome is None:
+        return False
+    subprocess.Popen([str(chrome), "--new-tab", url], close_fds=True)
+    return True
+
+
 def create_browser_router(
     authority: PairingAuthority,
     broker: BrowserBroker,
+    chrome_launcher: Callable[[str], bool] | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/v1")
+    resolved_chrome_launcher = chrome_launcher or open_board_in_chrome
 
     @router.post(
         "/browser/pairing-code",
@@ -426,6 +456,22 @@ def create_browser_router(
     @router.get("/browser/status", response_model=BrowserStatusRead)
     def browser_status() -> BrowserStatusRead:
         return BrowserStatusRead(connected=broker.connected)
+
+    @router.post("/browser/open-chrome", response_model=ChromeLaunchRead)
+    def open_chrome() -> ChromeLaunchRead:
+        try:
+            opened = resolved_chrome_launcher(CHROME_BOARD_URL)
+        except OSError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Google Chrome could not be opened",
+            ) from exc
+        if not opened:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Google Chrome is not installed",
+            )
+        return ChromeLaunchRead(opened=True)
 
     @router.websocket("/browser")
     async def browser_socket(websocket: WebSocket) -> None:
@@ -458,7 +504,17 @@ def create_browser_router(
             attached = True
             while True:
                 try:
-                    result = BrowserResult.model_validate(await websocket.receive_json())
+                    message = await websocket.receive_json()
+                    if isinstance(message, dict) and message.get("type") == "browser.heartbeat":
+                        BrowserHeartbeat.model_validate(message)
+                        await websocket.send_json(
+                            {
+                                "type": "browser.heartbeat_ack",
+                                "protocol_version": PROTOCOL_VERSION,
+                            }
+                        )
+                        continue
+                    result = BrowserResult.model_validate(message)
                 except (ValidationError, ValueError):
                     await websocket.close(code=1003, reason="Invalid browser message")
                     return

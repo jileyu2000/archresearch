@@ -43,6 +43,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | 23. M22 Search-quality refinement | complete | Concise subquestion queries raise a clean live run from 2 to 8 assets, 1 to 2 source pages and add a section; shared media paths remove the observed cross-CDN duplicate; 164 API tests and the full repository gate pass |
 | 24. M23 Bounded remote visual classification | pending | Batch-classify a small, deadline-admitted sample of untyped Firecrawl images with gpt-5.5, persist only visible observations as unverified leads, and prove retries cannot multiply visual cost |
 | 25. M24 Stable active-research UI and honest browser onboarding | complete | Active zero-result runs retain the submitted question, current stage and evidence questions; public research remains available without Chrome; status-first pairing and packaged-Chrome E2E distinguish unsupported surfaces from a working extension bridge |
+| 26. M25 Public-image mode and Chrome enhancement clarity | complete | Public previews and Chrome crops are labeled separately; fixed loopback handoff auto-pairs; a strict 20-second MV3 heartbeat kept the real user-profile connection active across ten samples over 45 seconds |
 
 ## M6 completion summary
 
@@ -170,3 +171,6 @@ The code delivery is complete. These product claims require user-owned credentia
 | The first M21 API gate found two files outside canonical Ruff layout | 1 | Format only the touched workflow and focused test, then restart the API gate from lint rather than treating the passing tests as authoritative |
 | The first read-only live SQLite probe broke on nested PowerShell/Python quote escaping | 1 | Avoid another inline multi-query expression; use PowerShell's SQLite-capable project models through a short existing-package invocation or separate simpler queries |
 | M24 in-app browser runtime again failed during setup with `Cannot redefine property: process` | 3 | Stop retrying this known host-plugin failure; validate the Board with its tests/system Chromium and the extension bridge with packaged-Chrome E2E, while making non-Chrome degradation explicit in the product UI |
+| Planning session catch-up could not invoke the `python` alias on Windows | 1 | Existing planning files and clean committed M24 state provide recovery context; use the project Python launcher/runtime for later helper scripts instead of repeating the missing Store alias |
+| API inspection referenced non-existent `archresearch_api/app.py` | 1 | The application factory is `archresearch_api/main.py`; continue from that existing file and do not repeat the stale path |
+| Extension inspection referenced non-existent `apps/extension/manifest.json` | 1 | Use the packaged source manifest at `apps/extension/public/manifest.json`; do not repeat the stale root path |

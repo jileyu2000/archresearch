@@ -84,6 +84,30 @@ def test_pairing_code_rotates_once_and_persistent_token_survives_restart(tmp_pat
 
 def test_browser_status_tracks_authenticated_extension_connection(client: TestClient) -> None:
     assert client.get("/v1/browser/status").json() == {"connected": False}
+
+
+def test_authenticated_extension_heartbeat_keeps_connection_active(
+    client: TestClient,
+) -> None:
+    pairing_code = client.post("/v1/browser/pairing-code").json()["code"]
+
+    with client.websocket_connect("/v1/browser") as websocket:
+        websocket.send_json(
+            {
+                "type": "browser.authenticate",
+                "protocol_version": 1,
+                "token": pairing_code,
+            }
+        )
+        assert websocket.receive_json()["type"] == "browser.paired"
+
+        websocket.send_json({"type": "browser.heartbeat", "protocol_version": 1})
+
+        assert websocket.receive_json() == {
+            "type": "browser.heartbeat_ack",
+            "protocol_version": 1,
+        }
+        assert client.get("/v1/browser/status").json() == {"connected": True}
     pairing_code = client.post("/v1/browser/pairing-code").json()["code"]
 
     with client.websocket_connect("/v1/browser") as websocket:
@@ -98,6 +122,40 @@ def test_browser_status_tracks_authenticated_extension_connection(client: TestCl
         assert client.get("/v1/browser/status").json() == {"connected": True}
 
     assert client.get("/v1/browser/status").json() == {"connected": False}
+
+
+def test_open_chrome_board_uses_only_the_fixed_local_connection_url(tmp_path: Path) -> None:
+    opened_urls: list[str] = []
+    settings = Settings(
+        database_url=f"sqlite:///{(tmp_path / 'test.db').as_posix()}",
+        data_dir=tmp_path / "data",
+        provider_mode="mock",
+        run_inline=True,
+    )
+
+    with TestClient(
+        create_app(settings, chrome_launcher=lambda url: opened_urls.append(url) or True)
+    ) as test_client:
+        response = test_client.post("/v1/browser/open-chrome")
+
+    assert response.status_code == 200
+    assert response.json() == {"opened": True}
+    assert opened_urls == ["http://127.0.0.1:5173/?connect=chrome"]
+
+
+def test_open_chrome_board_reports_when_chrome_is_unavailable(tmp_path: Path) -> None:
+    settings = Settings(
+        database_url=f"sqlite:///{(tmp_path / 'test.db').as_posix()}",
+        data_dir=tmp_path / "data",
+        provider_mode="mock",
+        run_inline=True,
+    )
+
+    with TestClient(create_app(settings, chrome_launcher=lambda _url: False)) as test_client:
+        response = test_client.post("/v1/browser/open-chrome")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Google Chrome is not installed"}
 
 
 def test_invalid_authentication_is_rejected_without_echoing_secret(client: TestClient) -> None:

@@ -47,6 +47,37 @@ function makeExecutor() {
 }
 
 describe("local browser WebSocket client", () => {
+  it("keeps the authenticated MV3 service worker active every 20 seconds", () => {
+    vi.useFakeTimers();
+    try {
+      const socket = new FakeSocket();
+      const client = new BrowserSocketClient(
+        { endpoint: "ws://127.0.0.1:8000/v1/browser", token: "pairing-token" },
+        vi.fn(() => socket),
+        makeExecutor(),
+        { revokeAfterResearch: vi.fn() },
+      );
+      client.connect();
+      socket.open();
+      socket.receive({ type: "browser.authenticated", protocol_version: 1 });
+      socket.send.mockClear();
+
+      vi.advanceTimersByTime(20_000);
+
+      expect(socket.send).toHaveBeenCalledOnce();
+      expect(JSON.parse(socket.send.mock.calls[0]![0])).toEqual({
+        type: "browser.heartbeat",
+        protocol_version: 1,
+      });
+
+      client.disconnect(false);
+      vi.advanceTimersByTime(20_000);
+      expect(socket.send).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("reports connected only after the server authenticates the saved token", () => {
     const socket = new FakeSocket();
     const onStatus = vi.fn();

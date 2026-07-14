@@ -39,6 +39,7 @@ const TERMINAL_STATES = [
   "cancelled",
   "failed",
 ] as const;
+const HEARTBEAT_INTERVAL_MS = 20_000;
 
 export class BrowserSocketClient {
   private socket: SocketLike | null = null;
@@ -47,6 +48,7 @@ export class BrowserSocketClient {
   private revocationInFlight: Promise<boolean> | null = null;
   private status: ConnectionStatus = "disconnected";
   private connectionGeneration = 0;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private readonly pairing: Pairing,
@@ -78,6 +80,7 @@ export class BrowserSocketClient {
     };
     socket.onerror = () => this.setStatus("error");
     socket.onclose = (event) => {
+      this.stopHeartbeat();
       const authenticationRejected = event?.code === 1008;
       this.socket = null;
       this.setStatus(authenticationRejected ? "error" : "disconnected");
@@ -103,6 +106,7 @@ export class BrowserSocketClient {
 
   disconnect(revokePermissions = true): void {
     this.connectionGeneration += 1;
+    this.stopHeartbeat();
     const hadSocket = this.socket !== null;
     if (this.socket) {
       const socket = this.socket;
@@ -148,10 +152,15 @@ export class BrowserSocketClient {
     if (isPairedMessage(message)) {
       await this.onPairingToken(message.token);
       this.setStatus("connected");
+      this.startHeartbeat();
       return;
     }
     if (isAuthenticationAcknowledgement(message)) {
       this.setStatus("connected");
+      this.startHeartbeat();
+      return;
+    }
+    if (isHeartbeatAcknowledgement(message)) {
       return;
     }
 
@@ -211,6 +220,20 @@ export class BrowserSocketClient {
     const socket = this.socket;
     if (socket && socket.readyState === socket.OPEN) {
       socket.send(JSON.stringify(message));
+    }
+  }
+
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => {
+      this.send({ type: "browser.heartbeat", protocol_version: 1 });
+    }, HEARTBEAT_INTERVAL_MS);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer !== null) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
     }
   }
 
@@ -278,6 +301,18 @@ function isAuthenticationAcknowledgement(message: unknown): boolean {
   return (
     Object.keys(candidate).length === 2 &&
     candidate.type === "browser.authenticated" &&
+    candidate.protocol_version === 1
+  );
+}
+
+function isHeartbeatAcknowledgement(message: unknown): boolean {
+  if (message === null || typeof message !== "object" || Array.isArray(message)) {
+    return false;
+  }
+  const candidate = message as Record<string, unknown>;
+  return (
+    Object.keys(candidate).length === 2 &&
+    candidate.type === "browser.heartbeat_ack" &&
     candidate.protocol_version === 1
   );
 }
