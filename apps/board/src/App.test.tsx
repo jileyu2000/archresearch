@@ -729,10 +729,11 @@ describe('research board', () => {
     renderBoard()
 
     expect(await screen.findByText('图纸提取未连接')).toBeVisible()
-    expect(screen.getByText('仍可开始研究，但只能返回文字线索。')).toBeVisible()
-    await user.click(screen.getByRole('button', { name: '一键连接浏览器' }))
+    expect(screen.getByText('公开网页研究可直接运行；连接后还能读取登录页面并精确裁图。')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '连接 Chrome 扩展' }))
 
-    expect(requestBrowserBridge).toHaveBeenCalledWith({
+    expect(requestBrowserBridge).toHaveBeenNthCalledWith(1, { type: 'status' })
+    expect(requestBrowserBridge).toHaveBeenNthCalledWith(2, {
       type: 'pair',
       endpoint: 'ws://127.0.0.1:8000/v1/browser',
       token: '731904',
@@ -749,14 +750,20 @@ describe('research board', () => {
     vi.mocked(requestBrowserBridge).mockRejectedValue(
       new BrowserBridgeError('unavailable', 'bridge unavailable'),
     )
-    vi.stubGlobal('fetch', createLiveFetch({ browserConnected: false }))
+    const fetchMock = createLiveFetch({ browserConnected: false })
+    vi.stubGlobal('fetch', fetchMock)
     renderBoard()
 
-    await user.click(await screen.findByRole('button', { name: '一键连接浏览器' }))
+    await user.click(await screen.findByRole('button', { name: '连接 Chrome 扩展' }))
 
     expect(await screen.findByText(
-      '未检测到 ArchResearch 扩展。请在已安装扩展的 Chrome 中打开本页后重试。',
+      '当前页面无法访问 Chrome 扩展。公开网页研究不受影响；如需读取登录页面，请在已安装扩展的 Chrome 中打开本页。',
     )).toBeVisible()
+    expect(requestBrowserBridge).toHaveBeenCalledWith({ type: 'status' })
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/v1/browser/pairing-code',
+      expect.objectContaining({ method: 'POST' }),
+    )
   })
 
   it('requests temporary page access from the connected extension before research starts', async () => {
@@ -772,6 +779,9 @@ describe('research board', () => {
       '/v1/workspaces/workspace-live/runs',
       expect.objectContaining({ method: 'POST' }),
     )
+    expect(await screen.findByRole('heading', { name: liveQuestion })).toBeVisible()
+    expect(screen.getByText('正在从公开网页中寻找项目与图纸')).toBeVisible()
+    expect(screen.queryByRole('heading', { name: '从一个具体设计问题开始' })).not.toBeInTheDocument()
   })
 
   it('starts a new run from an image-less completed result after the extension connects', async () => {

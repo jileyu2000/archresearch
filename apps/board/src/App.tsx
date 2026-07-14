@@ -206,6 +206,17 @@ const stageLabels: Array<{ status: RunStatus; label: string }> = [
   { status: 'completed', label: '完成' },
 ]
 
+const activeStageDescriptions: Partial<Record<RunStatus, string>> = {
+  created: '任务已经进入队列，正在准备研究计划',
+  planning: '正在拆解问题并生成可检索的证据方向',
+  searching: '正在从公开网页中寻找项目与图纸',
+  inspecting: '正在读取候选项目页面并定位图纸',
+  analyzing: '正在区分平面、剖面、分析图与效果图',
+  verifying: '正在核对图片、项目与发布来源的关系',
+  gap_check: '正在检查案例、图纸类型和证据缺口',
+  composing: '正在去重、排序并编排图纸参考板',
+}
+
 const defaultStyle: StyleDraft = {
   primaryColor: '#315cf4',
   lineHierarchy: 'relative',
@@ -844,8 +855,17 @@ export default function App() {
 
   async function handleConnectBrowser() {
     setBrowserConnecting(true)
-    setBrowserPairingStatus('正在连接本机 Chrome 扩展…')
+    setBrowserPairingStatus('正在检查当前页面的 Chrome 扩展…')
     try {
+      const bridgeStatus = await requestBrowserBridge({ type: 'status' })
+      if (bridgeStatus.connection === 'connected') {
+        const status = await apiClient.getBrowserStatus()
+        if (status.connected) {
+          setBrowserConnected(true)
+          setBrowserPairingStatus('图纸提取扩展已连接')
+          return
+        }
+      }
       const pairing = await apiClient.createBrowserPairingCode()
       await requestBrowserBridge({
         type: 'pair',
@@ -867,7 +887,7 @@ export default function App() {
       setBrowserConnected(false)
       setBrowserPairingStatus(
         error instanceof BrowserBridgeError && error.code === 'unavailable'
-          ? '未检测到 ArchResearch 扩展。请在已安装扩展的 Chrome 中打开本页后重试。'
+          ? '当前页面无法访问 Chrome 扩展。公开网页研究不受影响；如需读取登录页面，请在已安装扩展的 Chrome 中打开本页。'
           : '浏览器配对未完成，可能是配对码已过期。请重新连接。',
       )
     } finally {
@@ -1097,6 +1117,9 @@ export default function App() {
   const recommendedComparisonResult = selectedComparisonResults[0]
   const activeStatus = activeRun?.status
   const isRunActive = activeStatus ? !terminalStatuses.has(activeStatus) : false
+  const activeStageIndex = activeStatus
+    ? stageLabels.findIndex((stage) => stage.status === activeStatus)
+    : -1
   const resultViewOpen = !composerOpen
   const allResultsMissingPreviews = results.length > 0 && results.every((result) => !result.previewUrl)
   const runHadBrowserUnavailable = results.some((result) => (
@@ -1293,7 +1316,7 @@ export default function App() {
                       {browserConnected === true
                         ? '开始研究时，Chrome 会确认本次临时网页读取权限。'
                         : browserConnected === false
-                          ? '仍可开始研究，但只能返回文字线索。'
+                          ? '公开网页研究可直接运行；连接后还能读取登录页面并精确裁图。'
                           : '连接状态确认后，系统才能从项目网页中提取平面、剖面和分析图。'}
                     </p>
                     {browserPairingStatus && <small className="browser-pairing-status" aria-live="polite">{browserPairingStatus}</small>}
@@ -1301,7 +1324,7 @@ export default function App() {
                   <div className="browser-readiness-actions">
                     {browserConnected !== true && (
                       <button type="button" disabled={browserConnecting} onClick={() => void handleConnectBrowser()}>
-                        <MonitorUp aria-hidden="true" />{browserConnecting ? '正在连接…' : '一键连接浏览器'}
+                        <MonitorUp aria-hidden="true" />{browserConnecting ? '正在连接…' : '连接 Chrome 扩展'}
                       </button>
                     )}
                     <button type="button" onClick={() => void refreshBrowserConnection()}>
@@ -1437,7 +1460,7 @@ export default function App() {
             <div className="drawing-recovery-actions">
               {browserConnected !== true && (
                 <button type="button" disabled={browserConnecting} onClick={() => void handleConnectBrowser()}>
-                  <MonitorUp aria-hidden="true" />{browserConnecting ? '正在连接…' : '一键连接浏览器'}
+                  <MonitorUp aria-hidden="true" />{browserConnecting ? '正在连接…' : '连接 Chrome 扩展'}
                 </button>
               )}
               <button type="button" onClick={() => void refreshBrowserConnection()}>
@@ -1457,10 +1480,42 @@ export default function App() {
 
         {loading && <section className="board-loading" aria-label="正在加载工作区"><p>正在读取本地工作区…</p></section>}
         {!loading && resultViewOpen && !demoMode && results.length === 0 && !actionError && (
-          <section className="board-empty" aria-label="尚无研究结果">
-            <h2>从一个具体设计问题开始</h2>
-            <p>描述需要解决的空间、流线、更新或图纸表达问题，研究结果会按证据等级进入这里。</p>
-          </section>
+          activeRun && isRunActive ? (
+            <section className="active-research-canvas" aria-label="研究正在进行">
+              <header>
+                <span>正在研究这个问题</span>
+                <h1>{activeRun.question}</h1>
+                <p>{activeStatus ? activeStageDescriptions[activeStatus] : '正在准备研究任务'}</p>
+              </header>
+              <ol className="active-stage-track" aria-label="研究阶段">
+                {stageLabels.slice(0, -1).map((stage, index) => (
+                  <li
+                    key={stage.status}
+                    data-state={index < activeStageIndex ? 'complete' : index === activeStageIndex ? 'active' : 'upcoming'}
+                    aria-current={index === activeStageIndex ? 'step' : undefined}
+                  >
+                    <span aria-hidden="true">{index + 1}</span>
+                    {stage.label}
+                  </li>
+                ))}
+              </ol>
+              {activeRun.subquestions.length > 0 && (
+                <section className="active-subquestions" aria-labelledby="active-subquestions-title">
+                  <h2 id="active-subquestions-title">已经拆成 {activeRun.subquestions.length} 个证据问题</h2>
+                  <ol>
+                    {activeRun.subquestions.map((subquestion) => (
+                      <li key={subquestion.id}>{subquestion.question}</li>
+                    ))}
+                  </ol>
+                </section>
+              )}
+            </section>
+          ) : (
+            <section className="board-empty" aria-label="尚无研究结果">
+              <h2>从一个具体设计问题开始</h2>
+              <p>描述需要解决的空间、流线、更新或图纸表达问题，研究结果会按证据等级进入这里。</p>
+            </section>
+          )
         )}
 
         {resultViewOpen && results.length > 0 && (
