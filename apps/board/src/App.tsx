@@ -4,7 +4,6 @@ import {
   ArrowRight,
   ArrowUp,
   Check,
-  ChevronDown,
   CircleDashed,
   Columns3,
   Download,
@@ -1247,44 +1246,6 @@ export default function App() {
               <Plus aria-hidden="true" />发起新研究
             </button>
           )}
-          {resultViewOpen && <details className="tools-menu">
-            <summary className="result-tools-trigger" role="button" aria-label="整理与导出：对照、规范与导出">
-              <SlidersHorizontal aria-hidden="true" />
-              <span><strong>整理与导出</strong><small>对照 · 规范 · 导出</small></span>
-              <ChevronDown className="tools-menu-chevron" aria-hidden="true" />
-            </summary>
-            <div className="tools-menu-panel">
-              <section className="tools-menu-group" aria-labelledby="tools-organize-title">
-                <h2 id="tools-organize-title">整理与对照</h2>
-                <button aria-label="对照设计方法" aria-describedby="tool-compare-help" type="button" disabled={comparisonIds.length < 2} onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setComparisonOpen(true) }}>
-                  <Columns3 aria-hidden="true" />
-                  <span><strong>对照设计方法</strong><small id="tool-compare-help">{comparisonIds.length < 2 ? `已选 ${comparisonIds.length} 张，还需选择 ${2 - comparisonIds.length} 张图纸` : `已选 ${comparisonIds.length} 张，按方法、观察与边界逐项比较`}</small></span>
-                </button>
-                <button aria-label="整理图纸表达规范" aria-describedby="tool-style-help" type="button" disabled={results.length === 0} onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setStyleProfileOpen(true) }}>
-                  <Palette aria-hidden="true" />
-                  <span><strong>整理图纸表达规范</strong><small id="tool-style-help">从本次图纸整理配色、线型与版式</small></span>
-                </button>
-              </section>
-              <section className="tools-menu-group" aria-labelledby="tools-export-title">
-                <h2 id="tools-export-title">导出</h2>
-                <button aria-label="导出个人研究板" aria-describedby="tool-private-export-help" type="button" disabled={comparisonIds.length === 0} onClick={() => void handleExport('private')}>
-                  <Download aria-hidden="true" />
-                  <span><strong>导出个人研究板</strong><small id="tool-private-export-help">{comparisonIds.length === 0 ? '选择图纸后，可导出包含完整图片的个人研究板' : `导出已选 ${comparisonIds.length} 张图纸，包含完整图片`}</small></span>
-                </button>
-                <button aria-label="生成可分享来源板" aria-describedby="tool-share-export-help" type="button" disabled={comparisonIds.length === 0} onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setShareSummaryOpen(true) }}>
-                  <Share2 aria-hidden="true" />
-                  <span><strong>生成可分享来源板</strong><small id="tool-share-export-help">受限图片只保留署名、来源与链接</small></span>
-                </button>
-              </section>
-              <section className="tools-menu-group" aria-labelledby="tools-process-title">
-                <h2 id="tools-process-title">研究过程</h2>
-                <button aria-label={traceOpen ? '关闭研究过程' : '查看研究过程'} aria-describedby="tool-trace-help" type="button" onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setTraceOpen((current) => !current) }}>
-                  <Activity aria-hidden="true" />
-                  <span><strong>{traceOpen ? '关闭研究过程' : '查看研究过程'}</strong><small id="tool-trace-help">查看搜索、网页读取、图纸识别与来源核验记录</small></span>
-                </button>
-              </section>
-            </div>
-          </details>}
         </div>
       </header>
 
@@ -1592,6 +1553,40 @@ export default function App() {
               <p>描述需要解决的空间、流线、更新或图纸表达问题，研究结果会按证据等级进入这里。</p>
             </section>
           )
+        )}
+
+        {resultViewOpen && results.length > 0 && (
+          <section className="result-workbench" aria-label="结果工作台">
+            <div className="result-workbench-intro">
+              <SlidersHorizontal aria-hidden="true" />
+              <div>
+                <h2 id="result-workbench-title">把研究结果继续变成设计材料</h2>
+                <p>选中图纸后，对照设计方法、整理表达规范，或导出继续使用。</p>
+              </div>
+              <button aria-label={traceOpen ? '关闭研究过程' : '查看研究过程'} aria-describedby="tool-trace-help" type="button" onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setTraceOpen((current) => !current) }}>
+                <Activity aria-hidden="true" />
+                <span><strong>{traceOpen ? '关闭研究过程' : '查看研究过程'}</strong><small id="tool-trace-help">查看搜索、网页读取、图纸识别与来源核验记录</small></span>
+              </button>
+            </div>
+            <div className="result-workbench-actions">
+              <button aria-label="对照设计方法" aria-describedby="tool-compare-help" type="button" disabled={comparisonIds.length < 2} onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setComparisonOpen(true) }}>
+                <Columns3 aria-hidden="true" />
+                <span><strong>对照设计方法</strong><small id="tool-compare-help">{comparisonIds.length < 2 ? `已选 ${comparisonIds.length} 张，还需选择 ${2 - comparisonIds.length} 张图纸` : `已选 ${comparisonIds.length} 张，按方法、观察与边界逐项比较`}</small></span>
+              </button>
+              <button aria-label="整理图纸表达规范" aria-describedby="tool-style-help" type="button" onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setStyleProfileOpen(true) }}>
+                <Palette aria-hidden="true" />
+                <span><strong>整理图纸表达规范</strong><small id="tool-style-help">从本次图纸整理配色、线型与版式</small></span>
+              </button>
+              <button aria-label="导出个人研究板" aria-describedby="tool-private-export-help" type="button" disabled={comparisonIds.length === 0} onClick={() => void handleExport('private')}>
+                <Download aria-hidden="true" />
+                <span><strong>导出个人研究板</strong><small id="tool-private-export-help">{comparisonIds.length === 0 ? '选择图纸后，可导出包含完整图片的个人研究板' : `导出已选 ${comparisonIds.length} 张图纸，包含完整图片`}</small></span>
+              </button>
+              <button aria-label="生成可分享来源板" aria-describedby="tool-share-export-help" type="button" disabled={comparisonIds.length === 0} onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setShareSummaryOpen(true) }}>
+                <Share2 aria-hidden="true" />
+                <span><strong>生成可分享来源板</strong><small id="tool-share-export-help">受限图片只保留署名、来源与链接</small></span>
+              </button>
+            </div>
+          </section>
         )}
 
         {resultViewOpen && results.length > 0 && (

@@ -50,6 +50,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | 30. M29 Semantic research depth and fair subquestion coverage | complete | Depth is defined by 3×2 / 4×3 / 6×4 decomposition and pass contracts, per-question drawing targets and progressive analysis obligations; complete-round stopping, persisted pass counts, Chinese UI choices and the full 170/52/122/6 repository gate pass |
 | 31. M30 Self-explanatory result tools | complete | “结果工具” groups compare/organize, export and process review; every action states its outcome and disabled prerequisite, user-facing Trace jargon is removed, and the full 170/53/122/6 gate passes |
 | 32. M31 Promote result-use entry | complete | The result header now makes “整理与导出” the filled primary action, previews 对照/规范/导出 before opening, keeps new research secondary, collapses cleanly on mobile, and passes the full 170/53/122/6 gate |
+| 33. M32 Persistent result workbench | complete | The top-right menu is replaced by a full-width in-page workbench exposing compare, style, private/share export and process review directly; 1440/390 acceptance, disabled guidance, zero detector findings and the full 170/53/122/6 gate pass |
 
 ## M6 completion summary
 

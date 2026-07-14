@@ -1231,7 +1231,6 @@ describe('research board', () => {
     await startLiveResearch(user)
     await screen.findByText('Live Mill Conversion')
 
-    await user.click(screen.getByRole('button', { name: '整理与导出：对照、规范与导出' }))
     expect(screen.getByRole('button', { name: '导出个人研究板' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: '加入方法对照 Live Mill Conversion 剖面图' }))
     await user.click(screen.getByRole('button', { name: '导出个人研究板' }))
@@ -1253,22 +1252,20 @@ describe('research board', () => {
     await startLiveResearch(user)
     await screen.findByText('Live Mill Conversion')
 
-    const resultToolsTrigger = screen.getByRole('button', { name: '整理与导出：对照、规范与导出' })
-    expect(resultToolsTrigger).toHaveClass('result-tools-trigger')
+    const resultWorkbench = screen.getByRole('region', { name: '结果工作台' })
+    expect(resultWorkbench).toBeVisible()
+    expect(within(resultWorkbench).getByRole('heading', { name: '把研究结果继续变成设计材料' })).toBeVisible()
     expect(screen.getByRole('button', { name: '发起新研究' })).toHaveClass('result-new-research')
-    await user.click(resultToolsTrigger)
+    expect(screen.queryByRole('button', { name: '整理与导出：对照、规范与导出' })).not.toBeInTheDocument()
 
-    expect(screen.getByText('整理与对照')).toBeVisible()
-    expect(screen.getByText('已选 0 张，还需选择 2 张图纸')).toBeVisible()
-    expect(screen.getByText('从本次图纸整理配色、线型与版式')).toBeVisible()
-    expect(screen.getByText('导出')).toBeVisible()
-    expect(screen.getByText('选择图纸后，可导出包含完整图片的个人研究板')).toBeVisible()
-    expect(screen.getByText('受限图片只保留署名、来源与链接')).toBeVisible()
-    expect(screen.getByText('研究过程')).toBeVisible()
-    expect(screen.getByText('查看搜索、网页读取、图纸识别与来源核验记录')).toBeVisible()
+    expect(within(resultWorkbench).getByText('已选 0 张，还需选择 2 张图纸')).toBeVisible()
+    expect(within(resultWorkbench).getByText('从本次图纸整理配色、线型与版式')).toBeVisible()
+    expect(within(resultWorkbench).getByText('选择图纸后，可导出包含完整图片的个人研究板')).toBeVisible()
+    expect(within(resultWorkbench).getByText('受限图片只保留署名、来源与链接')).toBeVisible()
+    expect(within(resultWorkbench).getByText('查看搜索、网页读取、图纸识别与来源核验记录')).toBeVisible()
     expect(screen.queryByText(/Trace/)).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '查看研究过程' }))
+    await user.click(within(resultWorkbench).getByRole('button', { name: '查看研究过程' }))
     expect(screen.getByRole('dialog', { name: '研究过程记录' })).toBeVisible()
     expect(screen.queryByText(/Trace/)).not.toBeInTheDocument()
   })
@@ -1282,7 +1279,6 @@ describe('research board', () => {
     await screen.findByText('Live Mill Conversion')
 
     await user.click(screen.getByRole('button', { name: '加入方法对照 Live Mill Conversion 剖面图' }))
-    await user.click(screen.getByRole('button', { name: '整理与导出：对照、规范与导出' }))
     await user.click(screen.getByRole('button', { name: '生成可分享来源板' }))
     expect(screen.getByText('1 张图片可嵌入')).toBeVisible()
     expect(
@@ -1310,7 +1306,6 @@ describe('research board', () => {
     await startLiveResearch(user)
     await screen.findByText('Live Mill Conversion')
 
-    await user.click(screen.getByRole('button', { name: '整理与导出：对照、规范与导出' }))
     await user.click(screen.getByRole('button', { name: '整理图纸表达规范' }))
     const stylePanel = screen.getByRole('dialog', { name: '表达规范' })
     expect(within(stylePanel).getByLabelText('主色')).toHaveValue('#2d846b')
