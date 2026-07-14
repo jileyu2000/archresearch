@@ -8,6 +8,9 @@ from archresearch_api.visual import (
     ArchitectureAssetType,
     MockVisualClassifier,
     OpenAIVisualClassifier,
+    RemoteVisualCandidate,
+    RemoteVisualClassification,
+    RemoteVisualClassificationBatch,
     VisualClassification,
 )
 
@@ -136,3 +139,66 @@ def test_openai_visual_classifier_requires_a_structured_result() -> None:
             caption="",
             project_text="",
         )
+
+
+def test_openai_remote_visual_batch_is_bounded_low_detail_and_structured() -> None:
+    calls: list[dict[str, Any]] = []
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(
+                output_parsed=RemoteVisualClassificationBatch(
+                    classifications=[
+                        RemoteVisualClassification(
+                            candidate_id="image_1",
+                            asset_type=ArchitectureAssetType.section,
+                            relevance=4,
+                            observations=["可见贯穿多层的剖切空间与楼梯。"],
+                        ),
+                        RemoteVisualClassification(
+                            candidate_id="image_2",
+                            asset_type=None,
+                            relevance=0,
+                            observations=[],
+                        ),
+                    ]
+                )
+            )
+
+    classifier = OpenAIVisualClassifier(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+    candidates = [
+        RemoteVisualCandidate(
+            candidate_id=f"image_{index}",
+            image_url=f"https://images.example/{index}.jpg",
+            caption="A" * 500,
+        )
+        for index in range(1, 6)
+    ]
+
+    result = classifier.classify_remote_batch(
+        candidates,
+        question="Q" * 2_000,
+        project_text="P" * 2_000,
+    )
+
+    assert len(result.classifications) == 2
+    request = calls[0]
+    assert request["model"] == "gpt-5.5"
+    assert request["text_format"] is RemoteVisualClassificationBatch
+    content = request["input"][0]["content"]
+    images = [part for part in content if part["type"] == "input_image"]
+    assert len(images) == 4
+    assert all(image["detail"] == "low" for image in images)
+    assert [image["image_url"] for image in images] == [
+        f"https://images.example/{index}.jpg" for index in range(1, 5)
+    ]
+    prompt = content[0]["text"]
+    assert "Q" * 1_000 in prompt
+    assert "Q" * 1_001 not in prompt
+    assert "P" * 1_200 in prompt
+    assert "P" * 1_201 not in prompt

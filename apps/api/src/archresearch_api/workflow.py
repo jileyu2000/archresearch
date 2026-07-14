@@ -58,7 +58,13 @@ from .schemas import (
     RightsStatus,
     RunStatus,
 )
-from .visual import ArchitectureAssetType, VisualClassifier
+from .visual import (
+    ArchitectureAssetType,
+    RemoteVisualCandidate,
+    RemoteVisualClassification,
+    RemoteVisualClassifier,
+    VisualClassifier,
+)
 
 ACTIVE_STAGES = (
     RunStatus.planning,
@@ -75,6 +81,9 @@ VISUAL_INSPECTION_LIMITS: dict[BudgetMode, tuple[int, int]] = {
     BudgetMode.balanced: (36, 72 * 1024 * 1024),
     BudgetMode.deep: (72, 144 * 1024 * 1024),
 }
+
+REMOTE_VISUAL_BATCH_LIMIT = 4
+REMOTE_VISUAL_MIN_RELEVANCE = 2
 
 NON_PRECEDENT_COVERAGE_TARGETS: dict[BudgetMode, tuple[int, int, int]] = {
     BudgetMode.quick: (4, 2, 2),
@@ -434,6 +443,17 @@ def execute_research_run(
                         parsed_page,
                         subquestion_id=subquestion_id,
                     )
+                    if isinstance(visual_classifier, RemoteVisualClassifier):
+                        parser_added += _classify_remote_public_images(
+                            db,
+                            run_id,
+                            source,
+                            parsed_page,
+                            visual_classifier,
+                            question=subquestion_text[subquestion_id],
+                            subquestion_id=subquestion_id,
+                            remaining_seconds=deadline - clock(),
+                        )
                     browser_added += parser_added
                     _checkpoint(
                         db,
@@ -1190,6 +1210,188 @@ def _persist_public_page_leads(
             _rerank_assets(session, run_id)
         session.commit()
         return enriched
+
+
+def _classify_remote_public_images(
+    db: Database,
+    run_id: str,
+    source: ProviderSource,
+    page: ParsedPublicPage,
+    classifier: RemoteVisualClassifier,
+    *,
+    question: str,
+    subquestion_id: str | None,
+    remaining_seconds: float,
+) -> int:
+    untyped_images = [
+        image for image in page.images if infer_architecture_asset_type(image) is None
+    ][:REMOTE_VISUAL_BATCH_LIMIT]
+    if (
+        not untyped_images
+        or remaining_seconds < classifier.worst_case_remote_batch_seconds
+        or _remote_visual_batch_started(db, run_id)
+    ):
+        return 0
+
+    candidates = [
+        RemoteVisualCandidate(
+            candidate_id=f"image_{index}",
+            image_url=image.url,
+            caption=image.alt,
+        )
+        for index, image in enumerate(untyped_images, start=1)
+    ]
+    batch_fingerprint = hashlib.sha256(
+        "\n".join(candidate.image_url for candidate in candidates).encode("utf-8")
+    ).hexdigest()
+    _checkpoint(
+        db,
+        run_id,
+        RunStatus.inspecting,
+        {
+            "status": "started",
+            "batch_fingerprint": batch_fingerprint,
+            "candidate_count": len(candidates),
+        },
+        tool="remote_visual_batch",
+    )
+    try:
+        result = classifier.classify_remote_batch(
+            candidates,
+            question=question,
+            project_text=_public_page_context(page),
+        )
+    except Exception as exc:
+        _checkpoint(
+            db,
+            run_id,
+            RunStatus.inspecting,
+            {
+                "status": "failed",
+                "batch_fingerprint": batch_fingerprint,
+                "error_type": type(exc).__name__,
+            },
+            tool="remote_visual_batch",
+        )
+        return 0
+
+    added = _persist_remote_visual_leads(
+        db,
+        run_id,
+        source,
+        page,
+        candidates,
+        result.classifications,
+        subquestion_id=subquestion_id,
+    )
+    _checkpoint(
+        db,
+        run_id,
+        RunStatus.inspecting,
+        {
+            "status": "completed",
+            "batch_fingerprint": batch_fingerprint,
+            "classified_count": len(result.classifications),
+            "added": added,
+        },
+        tool="remote_visual_batch",
+    )
+    return added
+
+
+def _remote_visual_batch_started(db: Database, run_id: str) -> bool:
+    with db.session_factory() as session:
+        events = session.scalars(
+            select(TraceEvent).where(
+                TraceEvent.run_id == run_id,
+                TraceEvent.tool == "remote_visual_batch",
+            )
+        )
+        return any(event.summary.get("status") == "started" for event in events)
+
+
+def _persist_remote_visual_leads(
+    db: Database,
+    run_id: str,
+    source: ProviderSource,
+    page: ParsedPublicPage,
+    candidates: list[RemoteVisualCandidate],
+    classifications: list[RemoteVisualClassification],
+    *,
+    subquestion_id: str | None,
+) -> int:
+    candidate_by_id = {candidate.candidate_id: candidate for candidate in candidates}
+    accepted = [
+        classification
+        for classification in classifications
+        if classification.asset_type is not None
+        and classification.relevance >= REMOTE_VISUAL_MIN_RELEVANCE
+        and classification.observations
+    ]
+    if not accepted:
+        return 0
+
+    with db.session_factory() as session:
+        existing_urls = {
+            value
+            for value in session.scalars(
+                select(AssetCandidate.image_url).where(AssetCandidate.run_id == run_id)
+            )
+            if value is not None
+        }
+        source_page_id = session.scalar(
+            select(SourcePage.id).where(
+                SourcePage.run_id == run_id,
+                SourcePage.url == source.url,
+            )
+        )
+        expires_at = datetime.now(UTC) + timedelta(days=7)
+        project_name = page.title.strip() or source.title.strip() or "待核验项目"
+        added = 0
+        for classification in accepted:
+            candidate = candidate_by_id.get(classification.candidate_id)
+            asset_type = classification.asset_type
+            if candidate is None or asset_type is None or candidate.image_url in existing_urls:
+                continue
+            session.add(
+                AssetCandidate(
+                    run_id=run_id,
+                    source_page_id=source_page_id,
+                    project_name=project_name,
+                    asset_type=asset_type.value,
+                    source_url=source.url,
+                    image_url=candidate.image_url,
+                    storage_path=None,
+                    perceptual_hash=None,
+                    publication_tier=PublicationTier.unknown.value,
+                    project_identity=AssociationStatus.unknown.value,
+                    asset_association=AssociationStatus.unknown.value,
+                    primary_source=PrimarySourceStatus.unknown.value,
+                    rights_status=RightsStatus.unknown.value,
+                    result_tier=ResultTier.visual_lead.value,
+                    relevance=classification.relevance,
+                    subquestion_ids=[subquestion_id] if subquestion_id is not None else [],
+                    project_context="",
+                    design_mechanism="",
+                    transfer_strategy=[],
+                    subquestion_analysis={},
+                    facts=[],
+                    observations=classification.observations,
+                    inferences=[],
+                    limitations=[
+                        "该类型与观察来自低细节远程视觉分类；图片—项目归属和来源仍待核验。"
+                    ],
+                    rank_index=0,
+                    expires_at=expires_at,
+                )
+            )
+            existing_urls.add(candidate.image_url)
+            added += 1
+        if added:
+            session.flush()
+            _rerank_assets(session, run_id)
+        session.commit()
+        return added
 
 
 def _public_page_context(page: ParsedPublicPage | None) -> str:

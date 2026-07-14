@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from archresearch_api.browser import BrowserBroker
 from archresearch_api.config import Settings
@@ -23,6 +23,7 @@ from archresearch_api.main import create_app
 from archresearch_api.models import (
     AssetCandidate,
     EvidenceClaim,
+    QueryAttempt,
     ResearchRun,
     TraceEvent,
     Workspace,
@@ -39,7 +40,13 @@ from archresearch_api.schemas import (
     RightsStatus,
     RunStatus,
 )
-from archresearch_api.visual import ArchitectureAssetType, VisualClassification
+from archresearch_api.visual import (
+    ArchitectureAssetType,
+    RemoteVisualCandidate,
+    RemoteVisualClassification,
+    RemoteVisualClassificationBatch,
+    VisualClassification,
+)
 from archresearch_api.workflow import execute_research_run
 
 
@@ -186,6 +193,40 @@ class RecordingClassifier:
             asset_type=ArchitectureAssetType.section,
             relevance=4,
             observations=["可见剖切构件与多层空间关系。"],
+        )
+
+
+class RecordingRemoteClassifier(RecordingClassifier):
+    worst_case_remote_batch_seconds = 30.0
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.remote_calls: list[list[RemoteVisualCandidate]] = []
+
+    def classify_remote_batch(
+        self,
+        candidates: list[RemoteVisualCandidate],
+        *,
+        question: str,
+        project_text: str,
+    ) -> RemoteVisualClassificationBatch:
+        del question, project_text
+        self.remote_calls.append(candidates)
+        return RemoteVisualClassificationBatch(
+            classifications=[
+                RemoteVisualClassification(
+                    candidate_id=candidates[0].candidate_id,
+                    asset_type=ArchitectureAssetType.section,
+                    relevance=4,
+                    observations=["可见错层楼板、贯通楼梯和挑空空间。"],
+                ),
+                RemoteVisualClassification(
+                    candidate_id=candidates[1].candidate_id,
+                    asset_type=None,
+                    relevance=0,
+                    observations=[],
+                ),
+            ]
         )
 
 
@@ -703,6 +744,92 @@ def test_firecrawl_adds_typed_public_image_leads_without_a_browser_connection(
     assert lead.asset_type == ArchitectureAssetType.plan.value
     assert lead.result_tier == ResultTier.visual_lead.value
     assert lead.storage_path is None
+
+
+def test_firecrawl_remote_visual_batch_classifies_untyped_images_once_per_run(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path)
+    parser = RecordingPublicPageParser(
+        [
+            ParsedPageImage(url=f"https://cdn.example/asset-{index}.jpg", alt="")
+            for index in range(1, 6)
+        ]
+    )
+    classifier = RecordingRemoteClassifier()
+    provider = SingleBatchProvider(_provider_result("https://studio.example/project"))
+
+    execute_research_run(
+        database,
+        run_id,
+        provider,
+        visual_classifier=classifier,
+        public_page_parser=parser,
+    )
+
+    with database.session_factory() as session:
+        leads = list(
+            session.scalars(
+                select(AssetCandidate).where(
+                    AssetCandidate.run_id == run_id,
+                    AssetCandidate.result_tier == ResultTier.visual_lead.value,
+                )
+            )
+        )
+        events = list(session.scalars(select(TraceEvent).where(TraceEvent.run_id == run_id)))
+        session.execute(delete(QueryAttempt).where(QueryAttempt.run_id == run_id))
+        run = session.get(ResearchRun, run_id)
+        assert run is not None
+        run.attempt += 1
+        run.status = RunStatus.created.value
+        run.stop_reason = None
+        session.commit()
+
+    execute_research_run(
+        database,
+        run_id,
+        provider,
+        visual_classifier=classifier,
+        public_page_parser=parser,
+    )
+
+    assert len(classifier.remote_calls) == 1
+    assert len(classifier.remote_calls[0]) == 4
+    assert [lead.image_url for lead in leads] == ["https://cdn.example/asset-1.jpg"]
+    lead = leads[0]
+    assert lead.asset_type == ArchitectureAssetType.section.value
+    assert lead.relevance == 4
+    assert lead.observations == ["可见错层楼板、贯通楼梯和挑空空间。"]
+    assert lead.facts == []
+    assert lead.inferences == []
+    assert lead.project_identity == AssociationStatus.unknown.value
+    assert lead.asset_association == AssociationStatus.unknown.value
+    assert lead.primary_source == PrimarySourceStatus.unknown.value
+    assert lead.rights_status == RightsStatus.unknown.value
+    assert sum(event.tool == "remote_visual_batch" for event in events) == 2
+
+
+def test_firecrawl_remote_visual_batch_is_skipped_without_deadline_reserve(
+    tmp_path: Path,
+) -> None:
+    class SlowRemoteClassifier(RecordingRemoteClassifier):
+        worst_case_remote_batch_seconds = 300.0
+
+    database, run_id = _database_with_run(tmp_path)
+    parser = RecordingPublicPageParser(
+        [ParsedPageImage(url="https://cdn.example/asset-1.jpg", alt="")]
+    )
+    classifier = SlowRemoteClassifier()
+
+    execute_research_run(
+        database,
+        run_id,
+        SingleBatchProvider(_provider_result("https://studio.example/project")),
+        visual_classifier=classifier,
+        public_page_parser=parser,
+    )
+
+    assert classifier.remote_calls == []
 
 
 def test_browser_failure_uses_firecrawl_to_enrich_one_unambiguous_drawing_lead(
