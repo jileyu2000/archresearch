@@ -44,6 +44,7 @@ from .public_pages import (
     PublicPageParser,
     PublicSearchProvider,
     infer_architecture_asset_type,
+    select_project_page_links,
 )
 from .schemas import (
     DEPTH_TARGETS,
@@ -469,6 +470,58 @@ def execute_research_run(
                         },
                         tool=public_page_parser.name,
                     )
+                    for project_url in select_project_page_links(parsed_page):
+                        parser_reserve = float(
+                            getattr(public_page_parser, "worst_case_call_seconds", 0.0)
+                        )
+                        if (
+                            project_url in parsed_pages
+                            or public_page_attempts >= max_pages
+                            or deadline - clock() < parser_reserve
+                        ):
+                            continue
+                        public_page_attempts += 1
+                        project_source = ProviderSource(
+                            url=project_url,
+                            publisher=urlparse(project_url).hostname or "",
+                            publication_tier=source.publication_tier,
+                        )
+                        project_page = _try_parse_public_page(
+                            db,
+                            run_id,
+                            project_source,
+                            public_page_parser,
+                        )
+                        parsed_pages[project_url] = project_page
+                        if project_page is None:
+                            continue
+                        project_source = project_source.model_copy(
+                            update={"title": project_page.title}
+                        )
+                        _persist_sources(
+                            db,
+                            run_id,
+                            ProviderSearchResult(sources=[project_source], assets=[]),
+                        )
+                        promoted = _persist_expanded_project_page(
+                            db,
+                            run_id,
+                            project_source,
+                            project_page,
+                            subquestion_id=subquestion_id,
+                        )
+                        browser_added += promoted
+                        _checkpoint(
+                            db,
+                            run_id,
+                            RunStatus.inspecting,
+                            {
+                                "source_url": project_url,
+                                "status": "completed",
+                                "promoted": promoted,
+                            },
+                            tool=f"{public_page_parser.name}_expand",
+                        )
             _checkpoint(
                 db,
                 run_id,
@@ -1406,6 +1459,136 @@ def _public_page_context(page: ParsedPublicPage | None) -> str:
         )
         if value
     )[:1_200]
+
+
+def _persist_expanded_project_page(
+    db: Database,
+    run_id: str,
+    source: ProviderSource,
+    page: ParsedPublicPage,
+    *,
+    subquestion_id: str | None,
+) -> int:
+    project_name = page.title.strip()
+    typed_images = [(image, infer_architecture_asset_type(image)) for image in page.images]
+    typed_images = [(image, asset_type) for image, asset_type in typed_images if asset_type]
+    if not project_name or not typed_images:
+        return 0
+
+    with db.session_factory() as session:
+        source_page_id = session.scalar(
+            select(SourcePage.id).where(
+                SourcePage.run_id == run_id,
+                SourcePage.url == source.url,
+            )
+        )
+        existing_assets = list(
+            session.scalars(select(AssetCandidate).where(AssetCandidate.run_id == run_id))
+        )
+        existing_by_image: dict[str, AssetCandidate] = {}
+        for existing_candidate in existing_assets:
+            if existing_candidate.image_url is None:
+                continue
+            current = existing_by_image.get(existing_candidate.image_url)
+            if current is None or (
+                current.result_tier != ResultTier.visual_lead.value
+                and existing_candidate.result_tier == ResultTier.visual_lead.value
+            ):
+                existing_by_image[existing_candidate.image_url] = existing_candidate
+
+        expires_at = datetime.now(UTC) + timedelta(days=7)
+        promoted = 0
+        for image, asset_type in typed_images:
+            assert asset_type is not None
+            statement = f"{project_name} 项目页直接列出了这张{_asset_type_label(asset_type)}图。"
+            candidate = existing_by_image.get(image.url)
+            if candidate is None:
+                candidate = AssetCandidate(
+                    run_id=run_id,
+                    source_page_id=source_page_id,
+                    project_name=project_name,
+                    asset_type=asset_type.value,
+                    source_url=source.url,
+                    image_url=image.url,
+                    storage_path=None,
+                    perceptual_hash=None,
+                    publication_tier=source.publication_tier.value,
+                    project_identity=AssociationStatus.probable.value,
+                    asset_association=AssociationStatus.confirmed.value,
+                    primary_source=PrimarySourceStatus.unknown.value,
+                    rights_status=RightsStatus.unknown.value,
+                    result_tier=ResultTier.partial.value,
+                    relevance=2,
+                    subquestion_ids=([subquestion_id] if subquestion_id is not None else []),
+                    project_context="",
+                    design_mechanism="",
+                    transfer_strategy=[],
+                    subquestion_analysis={},
+                    facts=[statement],
+                    observations=[],
+                    inferences=[],
+                    limitations=["项目页支持图片归属，但首发来源与使用权仍待核验。"],
+                    rank_index=0,
+                    expires_at=expires_at,
+                )
+                session.add(candidate)
+                session.flush()
+                existing_by_image[image.url] = candidate
+            else:
+                candidate.source_page_id = source_page_id
+                candidate.project_name = project_name
+                candidate.asset_type = asset_type.value
+                candidate.source_url = source.url
+                candidate.publication_tier = source.publication_tier.value
+                candidate.project_identity = AssociationStatus.probable.value
+                candidate.asset_association = AssociationStatus.confirmed.value
+                candidate.primary_source = PrimarySourceStatus.unknown.value
+                candidate.result_tier = ResultTier.partial.value
+                candidate.relevance = max(candidate.relevance, 2)
+                candidate.facts = list(dict.fromkeys([*candidate.facts, statement]))
+                candidate.limitations = ["项目页支持图片归属，但首发来源与使用权仍待核验。"]
+                associations = list(candidate.subquestion_ids or [])
+                if subquestion_id is not None and subquestion_id not in associations:
+                    candidate.subquestion_ids = [*associations, subquestion_id]
+
+            existing_claim = session.scalar(
+                select(EvidenceClaim.id).where(
+                    EvidenceClaim.asset_candidate_id == candidate.id,
+                    EvidenceClaim.claim_type == "fact",
+                    EvidenceClaim.statement == statement,
+                    EvidenceClaim.source_url == source.url,
+                )
+            )
+            if existing_claim is None:
+                session.add(
+                    EvidenceClaim(
+                        asset_candidate_id=candidate.id,
+                        claim_type="fact",
+                        statement=statement,
+                        source_url=source.url,
+                        text_excerpt=image.alt or None,
+                        expires_at=datetime.now(UTC) + timedelta(days=30),
+                    )
+                )
+            promoted += 1
+        if promoted:
+            _rerank_assets(session, run_id)
+        session.commit()
+        return promoted
+
+
+def _asset_type_label(asset_type: ArchitectureAssetType) -> str:
+    return {
+        ArchitectureAssetType.plan: "平面",
+        ArchitectureAssetType.section: "剖面",
+        ArchitectureAssetType.elevation: "立面",
+        ArchitectureAssetType.site_plan: "总平面",
+        ArchitectureAssetType.axonometric: "轴测",
+        ArchitectureAssetType.circulation: "流线",
+        ArchitectureAssetType.analysis_diagram: "分析",
+        ArchitectureAssetType.render: "效果",
+        ArchitectureAssetType.photograph: "建筑照片",
+    }[asset_type]
 
 
 def _persist_sources(db: Database, run_id: str, result: ProviderSearchResult) -> None:

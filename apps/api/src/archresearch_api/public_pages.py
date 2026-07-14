@@ -22,6 +22,18 @@ IMAGE_DELIVERY_VARIANTS = {
     "medium_jpg": 3,
     "large_jpg": 4,
 }
+PROJECT_PATH_MARKERS = {"architecture", "portfolio", "project", "projects", "work", "works"}
+NON_PROJECT_PATH_MARKERS = {
+    "about",
+    "author",
+    "authors",
+    "categories",
+    "category",
+    "contact",
+    "search",
+    "tag",
+    "tags",
+}
 
 
 class StrictModel(BaseModel):
@@ -215,6 +227,34 @@ def infer_architecture_asset_type(image: ParsedPageImage) -> ArchitectureAssetTy
         if any(keyword in text for keyword in keywords):
             return asset_type
     return None
+
+
+def select_project_page_links(page: ParsedPublicPage, *, limit: int = 2) -> list[str]:
+    source_host = _normalized_host(page.source_url)
+    selected: list[str] = []
+    for link in page.links:
+        if len(selected) >= limit:
+            break
+        parsed = urlparse(link)
+        segments = [unquote(segment).casefold() for segment in parsed.path.split("/") if segment]
+        if (
+            _normalized_host(link) != source_host
+            or link == page.source_url
+            or any(segment in NON_PROJECT_PATH_MARKERS for segment in segments)
+            or not (
+                any(segment in PROJECT_PATH_MARKERS for segment in segments)
+                or any(re.fullmatch(r"[0-9]{4,}", segment) for segment in segments)
+            )
+        ):
+            continue
+        if link not in selected:
+            selected.append(link)
+    return selected
+
+
+def _normalized_host(url: str) -> str:
+    host = (urlparse(url).hostname or "").casefold().rstrip(".")
+    return host[4:] if host.startswith("www.") else host
 
 
 def _page_images(value: Any, markdown: str) -> list[ParsedPageImage]:

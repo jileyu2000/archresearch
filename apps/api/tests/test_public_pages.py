@@ -5,7 +5,30 @@ import json
 import httpx
 import pytest
 
-from archresearch_api.public_pages import FirecrawlPageParser
+from archresearch_api.public_pages import (
+    FirecrawlPageParser,
+    ParsedPublicPage,
+    select_project_page_links,
+)
+
+
+def test_project_page_link_selection_is_same_host_bounded_and_excludes_navigation() -> None:
+    page = ParsedPublicPage(
+        source_url="https://magazine.example/tag/adaptive-reuse",
+        links=[
+            "https://magazine.example/about",
+            "https://magazine.example/projects/courtyard-archive",
+            "https://magazine.example/12345/foundry-renovation",
+            "https://magazine.example/category/renovation",
+            "https://studio.example/projects/courtyard-archive",
+            "https://magazine.example/works/third-project",
+        ],
+    )
+
+    assert select_project_page_links(page, limit=2) == [
+        "https://magazine.example/projects/courtyard-archive",
+        "https://magazine.example/12345/foundry-renovation",
+    ]
 
 
 def test_firecrawl_parser_requests_fresh_bounded_formats_and_maps_image_alts() -> None:

@@ -25,6 +25,7 @@ from archresearch_api.models import (
     EvidenceClaim,
     QueryAttempt,
     ResearchRun,
+    SourcePage,
     TraceEvent,
     Workspace,
 )
@@ -501,6 +502,19 @@ class RecordingPublicSearchParser(RecordingPublicPageParser):
         )
 
 
+class ExpandingPublicPageParser:
+    name = "firecrawl"
+    worst_case_call_seconds = 20.0
+
+    def __init__(self, pages: dict[str, ParsedPublicPage]) -> None:
+        self.pages = pages
+        self.urls: list[str] = []
+
+    def parse(self, url: str) -> ParsedPublicPage:
+        self.urls.append(url)
+        return self.pages[url]
+
+
 class TimeoutSearchProvider(SingleBatchProvider):
     def search(
         self,
@@ -744,6 +758,134 @@ def test_firecrawl_adds_typed_public_image_leads_without_a_browser_connection(
     assert lead.asset_type == ArchitectureAssetType.plan.value
     assert lead.result_tier == ResultTier.visual_lead.value
     assert lead.storage_path is None
+
+
+def test_firecrawl_expands_one_project_page_and_promotes_exact_image_evidence(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, max_pages=3)
+    parent_url = "https://magazine.example/tag/adaptive-reuse"
+    child_url = "https://magazine.example/projects/courtyard-archive"
+    image_url = "https://cdn.example/courtyard-floor-plan.png"
+    shared_image = ParsedPageImage(url=image_url, alt="Ground floor plan")
+    parser = ExpandingPublicPageParser(
+        {
+            parent_url: ParsedPublicPage(
+                source_url=parent_url,
+                title="Adaptive reuse roundup",
+                links=[child_url, "https://magazine.example/about"],
+                images=[shared_image],
+            ),
+            child_url: ParsedPublicPage(
+                source_url=child_url,
+                title="Courtyard Archive",
+                description="Adaptive reuse project page",
+                images=[shared_image],
+            ),
+        }
+    )
+    result = _provider_result(parent_url)
+    result.sources[0].publication_tier = PublicationTier.trusted_secondary
+
+    execute_research_run(
+        database,
+        run_id,
+        SingleBatchProvider(result),
+        public_page_parser=parser,
+    )
+
+    with database.session_factory() as session:
+        promoted = list(
+            session.scalars(
+                select(AssetCandidate).where(
+                    AssetCandidate.run_id == run_id,
+                    AssetCandidate.image_url == image_url,
+                )
+            )
+        )
+        child_source = session.scalar(
+            select(SourcePage).where(
+                SourcePage.run_id == run_id,
+                SourcePage.url == child_url,
+            )
+        )
+        claims = list(
+            session.scalars(
+                select(EvidenceClaim).where(
+                    EvidenceClaim.asset_candidate_id == promoted[0].id,
+                    EvidenceClaim.claim_type == "fact",
+                )
+            )
+        )
+        events = list(session.scalars(select(TraceEvent).where(TraceEvent.run_id == run_id)))
+
+    assert parser.urls == [parent_url, child_url]
+    assert child_source is not None
+    assert child_source.publication_tier == PublicationTier.trusted_secondary.value
+    assert len(promoted) == 1
+    candidate = promoted[0]
+    assert candidate.source_url == child_url
+    assert candidate.project_name == "Courtyard Archive"
+    assert candidate.result_tier == ResultTier.partial.value
+    assert candidate.project_identity == AssociationStatus.probable.value
+    assert candidate.asset_association == AssociationStatus.confirmed.value
+    assert candidate.primary_source == PrimarySourceStatus.unknown.value
+    assert candidate.rights_status == RightsStatus.unknown.value
+    assert candidate.facts == ["Courtyard Archive 项目页直接列出了这张平面图。"]
+    assert [claim.source_url for claim in claims] == [child_url]
+    assert claims[0].text_excerpt == "Ground floor plan"
+    assert any(
+        event.tool == "firecrawl_expand"
+        and event.summary.get("status") == "completed"
+        and event.summary.get("promoted") == 1
+        for event in events
+    )
+
+
+def test_firecrawl_expansion_respects_the_existing_page_budget(tmp_path: Path) -> None:
+    database, run_id = _database_with_run(tmp_path, max_pages=1)
+    parent_url = "https://magazine.example/tag/adaptive-reuse"
+    child_url = "https://magazine.example/projects/courtyard-archive"
+    parser = ExpandingPublicPageParser(
+        {
+            parent_url: ParsedPublicPage(source_url=parent_url, links=[child_url]),
+            child_url: ParsedPublicPage(source_url=child_url, title="Courtyard Archive"),
+        }
+    )
+
+    execute_research_run(
+        database,
+        run_id,
+        SingleBatchProvider(_provider_result(parent_url)),
+        public_page_parser=parser,
+    )
+
+    assert parser.urls == [parent_url]
+
+
+def test_firecrawl_expansion_is_skipped_without_parser_deadline_reserve(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, max_pages=3)
+    parent_url = "https://magazine.example/tag/adaptive-reuse"
+    child_url = "https://magazine.example/projects/courtyard-archive"
+    parser = ExpandingPublicPageParser(
+        {
+            parent_url: ParsedPublicPage(source_url=parent_url, links=[child_url]),
+            child_url: ParsedPublicPage(source_url=child_url, title="Courtyard Archive"),
+        }
+    )
+    times = iter([0.0, 0.0, 230.0])
+
+    execute_research_run(
+        database,
+        run_id,
+        SingleBatchProvider(_provider_result(parent_url)),
+        public_page_parser=parser,
+        clock=lambda: next(times),
+    )
+
+    assert parser.urls == [parent_url]
 
 
 def test_firecrawl_remote_visual_batch_classifies_untyped_images_once_per_run(
