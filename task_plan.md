@@ -54,6 +54,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | 34. M33 Completion-first research and final user-flow audit | complete | Completion and enrichment are separate; uncovered branches receive a dedicated recovery pass and per-branch page capacity; honest partial delivery, 739px browser acceptance, 186/62/124/6 verification and three real Quick limitations are recorded |
 | 35. M34 Complete-answer delivery and portfolio demos | complete | All depth modes share one evidence-complete delivery floor and 30-minute safety ceiling; uncovered branches get three recovery rounds and resumable continuation; Firecrawl retains a 100-credit default reserve; three no-cost replay demos and the full 189/66/124/6 gate pass |
 | 36. M35 intent-aware inspiration sources and real portfolio acceptance | implementation_complete | XHS is a default, account-authorized visual source beside authoritative architecture research; Pinterest remains opt-in link evidence; provider credits remain reserved for signed-in XHS acceptance and three final real-result screenshots |
+| 37. M36 release preflight and real portfolio capture | pending | Add a zero-cost readiness check; accept one bounded signed-in XHS search without provider calls; lock three showcase tasks; then capture real Quick/Balanced/Deep result pages without crossing the Firecrawl reserve |
 
 ## M6 completion summary
 
@@ -100,6 +101,15 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 5. Source preferences persist on every run and through retry/resume. A new research request restores XHS as the default even after the user disabled it for the preceding request.
 6. Development and verification use deterministic mocks only. No OpenAI, Firecrawl, TinEye, XHS or Pinterest quota is consumed; the three final Quick/Balanced/Deep portfolio runs remain a separate live acceptance gate.
 7. The authoritative repository gate exits 0 with 195 API tests, 69 Board tests, 126 Extension tests and 6 packaged-Chrome E2E cases, plus lint, format, type, build, security and the 30/108 evaluation fixtures.
+
+## M36 execution plan
+
+1. **Zero-cost release preflight.** Add one non-technical readiness surface for local API/model configuration, Chrome bridge, temporary page permission, signed-in XHS availability and Firecrawl remaining-credit versus protected reserve. The check must not start a research run or consume provider search credits.
+2. **Bounded XHS acceptance.** With the user signed in through their own Chrome, exercise one visible XHS query, one fixed scroll and at most four note links through the shipped extension protocol. Verify that no credentials, cookies, storage, private content or social actions enter Trace. Do not call OpenAI, Firecrawl or TinEye in this source-only acceptance.
+3. **Portfolio task lock.** Choose and freeze one Quick, one Balanced and one Deep task before any paid run. Each acceptance rubric requires every planned subquestion to have displayable, source-bound partial/verified architecture evidence; XHS visual leads enrich presentation but cannot close case-evidence gaps. Chinese analysis, loaded images, working source links and duplicate control are mandatory.
+4. **One candidate at a time.** Run Quick first. If it fails the rubric, stop, reproduce with fixtures and fix before spending again. Then run Balanced and Deep with the same gate. The successful Balanced run also closes the outstanding Board-started M20 Chrome acceptance.
+5. **Portfolio evidence package.** For each accepted real run retain the run id, date, model, depth contract, source manifest, redacted Trace summary, credit usage and clean result-page captures. The current `?demo=quick|balanced|deep` pages remain rehearsal fixtures and must not be presented as final real evidence.
+6. **Post-capture backlog.** After the three real pages are secured, separately address real TinEye-key acceptance, automatic StyleProfile extraction, visible workspace deletion and the six-student usability study; none of these should delay or consume the protected portfolio run budget.
 
 ## External acceptance gates
 
