@@ -711,6 +711,163 @@ def test_provider_asset_type_is_persisted_as_a_plain_string(tmp_path: Path) -> N
     assert asset_type == ArchitectureAssetType.section.value
 
 
+def test_sparse_visual_platform_asset_cannot_become_verified_case_evidence(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
+    source = ProviderSource(
+        url="https://www.pinterest.com/pin/123456789/",
+        publisher="Pinterest",
+        title="Adaptive reuse section drawing",
+        publication_tier=PublicationTier.primary,
+    )
+    result = ProviderSearchResult(
+        sources=[source],
+        assets=[
+            ProviderAsset(
+                project_name="Unverified Pin project",
+                asset_type=ArchitectureAssetType.section,
+                source_url=source.url,
+                image_url="https://images.example/pin-section.jpg",
+                publication_tier=PublicationTier.primary,
+                project_identity=AssociationStatus.confirmed,
+                asset_association=AssociationStatus.confirmed,
+                primary_source=PrimarySourceStatus.confirmed,
+                rights_status=RightsStatus.open_license,
+                result_tier=ResultTier.verified,
+                relevance=4,
+                facts=["该项目采用了插入式公共步道。"],
+                observations=["图中可见一条抬高的红色路径。"],
+            )
+        ],
+    )
+
+    _persist_sources(database, run_id, result)
+    _persist_assets(database, run_id, result, subquestion_id="program")
+
+    with database.session_factory() as session:
+        asset = session.scalar(select(AssetCandidate).where(AssetCandidate.run_id == run_id))
+        page = session.scalar(select(SourcePage).where(SourcePage.run_id == run_id))
+    assert asset is not None
+    assert page is not None
+    assert page.publication_tier == PublicationTier.aggregator.value
+    assert asset.publication_tier == PublicationTier.aggregator.value
+    assert asset.project_identity == AssociationStatus.unknown.value
+    assert asset.asset_association == AssociationStatus.unknown.value
+    assert asset.primary_source == PrimarySourceStatus.unknown.value
+    assert asset.rights_status == RightsStatus.unknown.value
+    assert asset.result_tier == ResultTier.visual_lead.value
+    assert asset.facts == []
+    assert asset.observations == ["图中可见一条抬高的红色路径。"]
+
+
+def test_selected_xiaohongshu_source_continues_after_model_search_times_out(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assert run is not None
+        run.research_sources = ["xiaohongshu"]
+        session.commit()
+
+    class TimeoutProvider(SequencedProvider):
+        def plan(
+            self,
+            question: str,
+            goal: ResearchGoal,
+            budget_mode: BudgetMode,
+            research_context: str,
+        ) -> ResearchPlan:
+            del question, goal, budget_mode, research_context
+            return _quick_research_plan()
+
+        def search(
+            self,
+            query: str,
+            goal: ResearchGoal,
+            allowed_domains: list[str] | None = None,
+        ) -> ProviderSearchResult:
+            del goal, allowed_domains
+            self.queries.append(query)
+            raise TimeoutError("model web search timed out")
+
+    class XiaohongshuBrowser:
+        connected = True
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, Any]]] = []
+            self.tab_id = 20
+
+        def send_command_sync(
+            self,
+            action: str,
+            payload: dict[str, Any],
+            *,
+            timeout_seconds: float = 30,
+        ) -> Any:
+            del timeout_seconds
+            self.calls.append((action, payload))
+            if action == "open_url":
+                self.tab_id += 1
+                return {"tab_id": self.tab_id, "url": payload["url"]}
+            if action == "wait":
+                return {"waited_ms": payload["milliseconds"]}
+            if action == "scroll":
+                return {"scrolled": True}
+            if action == "enumerate_media":
+                return {
+                    "media": [
+                        {
+                            "media_type": "image",
+                            "url": f"https://sns-img.example/{self.tab_id}.jpg",
+                            "link_url": (f"https://www.xiaohongshu.com/explore/note-{self.tab_id}"),
+                            "alt": "建筑分析图",
+                            "adjacent_text": "建筑形体生成与分析图表达",
+                            "intrinsic_width": 1200,
+                            "intrinsic_height": 900,
+                            "region": {
+                                "x": 0,
+                                "y": 0,
+                                "width": 600,
+                                "height": 450,
+                            },
+                        }
+                    ]
+                }
+            if action == "close_tab":
+                return {"closed": True}
+            raise AssertionError(f"unexpected browser action: {action}")
+
+    provider = TimeoutProvider([])
+    browser = XiaohongshuBrowser()
+
+    execute_research_run(database, run_id, provider, browser_client=browser)
+
+    search_opens = [
+        payload["url"]
+        for action, payload in browser.calls
+        if action == "open_url" and "/search_result?" in payload["url"]
+    ]
+    assert len(search_opens) == 3
+    with database.session_factory() as session:
+        xiaohongshu_pages = list(
+            session.scalars(
+                select(SourcePage).where(
+                    SourcePage.run_id == run_id,
+                    SourcePage.publisher == "小红书",
+                )
+            )
+        )
+        run = session.get(ResearchRun, run_id)
+    assert len(xiaohongshu_pages) == 3
+    assert all(
+        page.publication_tier == PublicationTier.aggregator.value for page in xiaohongshu_pages
+    )
+    assert run is not None
+    assert run.browser_pages_attempted == 3
+
+
 def test_provider_failure_preserves_assets_from_completed_batches(tmp_path: Path) -> None:
     database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
     provider = SequencedProvider([_batch(_asset("factory", 1)), RuntimeError("rate limited")])

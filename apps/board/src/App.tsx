@@ -34,6 +34,7 @@ import {
   type ResearchGoal,
   type ResearchMode,
   type ResearchRun,
+  type ResearchSource,
   type ResearchSubquestion,
   type RunStatus,
   type TraceEvent,
@@ -580,6 +581,7 @@ export default function App() {
   const [files, setFiles] = useState<File[]>([])
   const [goal, setGoal] = useState<ResearchGoal>('precedent_research')
   const [mode, setMode] = useState<ResearchMode>(demoDepth ?? 'balanced')
+  const [researchSources, setResearchSources] = useState<ResearchSource[]>(['xiaohongshu'])
   const [activeRun, setActiveRun] = useState<ResearchRun | null>(null)
   const [recentRuns, setRecentRuns] = useState<ResearchRun[]>([])
   const [pollingRunId, setPollingRunId] = useState('')
@@ -689,6 +691,7 @@ export default function App() {
     setNotes({})
     setTraceEvents([])
     setStyleProfile(defaultStyle)
+    setResearchSources(['xiaohongshu'])
     setComposerOpen(true)
     setResearchOptionsOpen(false)
     setInspectorOpen(false)
@@ -945,7 +948,7 @@ export default function App() {
       setComposerOpen(false)
       return
     }
-    if (!(await ensureBrowserResearchAccess())) return
+    if (!(await ensureBrowserResearchAccess(researchSources.includes('xiaohongshu')))) return
     const requestId = hydrateRequestRef.current + 1
     hydrateRequestRef.current = requestId
     try {
@@ -956,6 +959,7 @@ export default function App() {
         files,
         goal,
         mode,
+        researchSources,
       })
       if (hydrateRequestRef.current !== requestId) return
       updateRecentRun(run)
@@ -1001,7 +1005,9 @@ export default function App() {
   async function handleRetry() {
     if (!activeRun) return
     setActionError('')
-    if (!(await ensureBrowserResearchAccess())) return
+    if (!(await ensureBrowserResearchAccess(
+      activeRun.researchSources?.includes('xiaohongshu') ?? false,
+    ))) return
     const requestId = hydrateRequestRef.current
     try {
       const run = await apiClient.retryRun(activeRun.id)
@@ -1098,8 +1104,14 @@ export default function App() {
     void handleConnectBrowser(false)
   }, [browserConnected, browserConnecting, chromeConnectRequested, demoMode, handleConnectBrowser])
 
-  async function ensureBrowserResearchAccess() {
-    if (browserConnected !== true) return true
+  async function ensureBrowserResearchAccess(requireConnected = false) {
+    if (browserConnected !== true) {
+      if (requireConnected) {
+        setActionError('小红书研究需要登录页面。请先在 Chrome 登录小红书并连接 ArchResearch，再开始研究。')
+        return false
+      }
+      return true
+    }
     try {
       const status = await requestBrowserBridge({ type: 'status' })
       if (status.researchPermission) {
@@ -1109,6 +1121,10 @@ export default function App() {
     } catch (error) {
       if (error instanceof BrowserBridgeError && error.code === 'unavailable') {
         setBrowserConnected(false)
+        if (requireConnected) {
+          setActionError('小红书研究需要登录页面。请先在 Chrome 登录小红书并连接 ArchResearch，再开始研究。')
+          return false
+        }
         setBrowserPairingStatus('当前页面未检测到 Chrome 扩展；本次将继续研究公开网页，并跳过登录页面与精确裁图。')
         return true
       }
@@ -1121,7 +1137,9 @@ export default function App() {
 
   async function handleRerunWithBrowser() {
     if (!activeRun || !activeWorkspaceId || browserConnected !== true) return
-    if (!(await ensureBrowserResearchAccess())) return
+    if (!(await ensureBrowserResearchAccess(
+      activeRun.researchSources?.includes('xiaohongshu') ?? false,
+    ))) return
     const requestId = hydrateRequestRef.current + 1
     hydrateRequestRef.current = requestId
     setRerunStarting(true)
@@ -1132,6 +1150,7 @@ export default function App() {
         question: activeRun.question,
         goal: activeRun.goal,
         mode: activeRun.mode,
+        researchSources: activeRun.researchSources,
       })
       if (hydrateRequestRef.current !== requestId) return
       updateRecentRun(run)
@@ -1284,6 +1303,7 @@ export default function App() {
     setQuestion('')
     setReferenceUrl('')
     setFiles([])
+    setResearchSources(['xiaohongshu'])
     setComposerOpen(true)
     setResearchOptionsOpen(false)
   }
@@ -1535,6 +1555,39 @@ export default function App() {
                       </ul>
                     )}
                   </div>
+                  <fieldset className="research-source-options">
+                    <legend>灵感来源（可选）</legend>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={researchSources.includes('xiaohongshu')}
+                        onChange={(event) => setResearchSources((current) => (
+                          event.target.checked
+                            ? [...current, 'xiaohongshu']
+                            : current.filter((source) => source !== 'xiaohongshu')
+                        ))}
+                      />
+                      <span>
+                        <strong>小红书灵感</strong>
+                        <small>图纸风格、形体与分析图；需在 Chrome 登录</small>
+                      </span>
+                    </label>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={researchSources.includes('pinterest')}
+                        onChange={(event) => setResearchSources((current) => (
+                          event.target.checked
+                            ? [...current, 'pinterest']
+                            : current.filter((source) => source !== 'pinterest')
+                        ))}
+                      />
+                      <span>
+                        <strong>Pinterest 图像线索</strong>
+                        <small>通过网页搜索保留原 Pin 链接，不直接抓取</small>
+                      </span>
+                    </label>
+                  </fieldset>
                   <fieldset className="segmented-control research-depth-options">
                     <legend>研究深度</legend>
                     {(Object.keys(modeLabels) as ResearchMode[]).map((value) => (
@@ -1552,18 +1605,28 @@ export default function App() {
                 <section
                   className="browser-readiness"
                   aria-label="研究图片来源与 Chrome 增强"
-                  data-chrome={browserConnected === true ? 'connected' : 'optional'}
+                  data-chrome={
+                    browserConnected === true
+                      ? 'connected'
+                      : researchSources.includes('xiaohongshu')
+                        ? 'required'
+                        : 'optional'
+                  }
                 >
                   <Eye aria-hidden="true" />
                   <div className="browser-readiness-copy">
                     <strong>
                       {browserConnected === true
                         ? '公开网页图片 + Chrome 精确提取'
+                        : researchSources.includes('xiaohongshu')
+                          ? '小红书灵感需要 Chrome'
                         : '公开网页图片可用'}
                     </strong>
                     <p>
                       {browserConnected === true
                         ? '公开网页图片可直接显示；开始研究时，Chrome 会确认登录页面、动态页面和精确裁图的临时权限。'
+                        : researchSources.includes('xiaohongshu')
+                          ? '请先在 Chrome 登录你自己的小红书账号并连接扩展。ArchResearch 不读取或保存账号密码与 Cookie。'
                         : browserConnected === false
                           ? '你现在看到的是公开网页返回的远程图片。Chrome 未启用只影响登录页面、动态页面和精确裁图。'
                           : '公开网页研究可直接运行；正在检查 Chrome 精确提取是否可用。'}

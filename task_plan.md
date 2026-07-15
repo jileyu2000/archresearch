@@ -53,6 +53,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | 33. M32 Persistent result workbench | complete | The top-right menu is replaced by a full-width in-page workbench exposing compare, style, private/share export and process review directly; 1440/390 acceptance, disabled guidance, zero detector findings and the full 170/53/122/6 gate pass |
 | 34. M33 Completion-first research and final user-flow audit | complete | Completion and enrichment are separate; uncovered branches receive a dedicated recovery pass and per-branch page capacity; honest partial delivery, 739px browser acceptance, 186/62/124/6 verification and three real Quick limitations are recorded |
 | 35. M34 Complete-answer delivery and portfolio demos | complete | All depth modes share one evidence-complete delivery floor and 30-minute safety ceiling; uncovered branches get three recovery rounds and resumable continuation; Firecrawl retains a 100-credit default reserve; three no-cost replay demos and the full 189/66/124/6 gate pass |
+| 36. M35 intent-aware inspiration sources and real portfolio acceptance | implementation_complete | XHS is a default, account-authorized visual source beside authoritative architecture research; Pinterest remains opt-in link evidence; provider credits remain reserved for signed-in XHS acceptance and three final real-result screenshots |
 
 ## M6 completion summary
 
@@ -90,6 +91,16 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 6. The final repository gate exits 0: 189 API tests, 66 Board tests, 124 Extension tests, 6 packaged-Chrome E2E cases, lint/format/type/build/security contracts and the 30/108 evaluation fixtures all pass without live provider traffic.
 7. Remaining product limits are explicit: provider/source outages can still block completeness; Firecrawl balance is protected but not displayed in the Board; real TinEye, signed-in Chrome permission/crop, automatic StyleProfile extraction and workspace deletion UI still require follow-up acceptance or implementation.
 
+## M35 implementation summary
+
+1. Every new Board research request defaults to Xiaohongshu alongside the normal architecture-source search. Starting requires the user's already signed-in, temporarily authorized Chrome session; the application never asks for or stores account credentials, cookies or browser storage.
+2. XHS is bounded to one visible search visit per planned subquestion, one fixed scroll and at most four note links. It shares the existing page and vision budgets, and remains available to uncovered branches even when the relay model-search circuit times out.
+3. XHS, Pinterest and `pin.it` results are deterministically restricted to visual leads with direct visible observations. They cannot establish project identity, asset association, formal facts or complete-case evidence; those obligations remain with project sites and trusted architecture publications.
+4. Pinterest is opt-in and link-only. No direct Chrome or Firecrawl extraction is performed without an officially permitted API path.
+5. Source preferences persist on every run and through retry/resume. A new research request restores XHS as the default even after the user disabled it for the preceding request.
+6. Development and verification use deterministic mocks only. No OpenAI, Firecrawl, TinEye, XHS or Pinterest quota is consumed; the three final Quick/Balanced/Deep portfolio runs remain a separate live acceptance gate.
+7. The authoritative repository gate exits 0 with 195 API tests, 69 Board tests, 126 Extension tests and 6 packaged-Chrome E2E cases, plus lint, format, type, build, security and the 30/108 evaluation fixtures.
+
 ## External acceptance gates
 
 The code delivery is complete. These product claims require user-owned credentials, paid/live execution, rights-cleared data or human participants and are intentionally not fabricated by the implementation:
@@ -99,6 +110,8 @@ The code delivery is complete. These product claims require user-owned credentia
 - Collect 100+ independently sourced, rights-cleared real drawing samples before claiming real-image classification accuracy; the delivered 108 samples are deterministic synthetic fixtures.
 - Conduct the planned six-student usability study and record collection behavior.
 - Load the packaged ArchResearch extension in the user's normal Chrome profile for a final logged-in-site acceptance run.
+- Complete one bounded signed-in Xiaohongshu acceptance run after the user grants temporary Chrome permission; do not request or store the user's password.
+- Capture the final Quick, Balanced and Deep portfolio result pages from three real provider-backed runs only after checking the protected Firecrawl reserve.
 
 ## Decisions
 
@@ -113,7 +126,10 @@ The code delivery is complete. These product claims require user-owned credentia
 - Temporary candidates expire after 7 days; run metadata/trace after 30 days; explicit saves persist until deletion.
 - Research depth is a semantic contract: problem decomposition, per-subquestion source/project/drawing coverage and analysis/evidence obligations. Query/page/time values are bounded execution ceilings, not the user-facing definition of depth.
 - Quick, Balanced and Deep all owe a complete answer across their planned subquestions. Depth changes enrichment and analysis rigor, never permission to deliver a knowingly incomplete answer as complete. External blockers remain explicit and resumable.
-- Portfolio demonstrations use deterministic replay fixtures and must not call OpenAI, Firecrawl, TinEye or the browser extension. Live Firecrawl execution retains a configurable reserve instead of consuming the account's final credits.
+- Deterministic replay fixtures remain the zero-cost development and regression path. Final portfolio demonstrations must be three real Quick/Balanced/Deep research runs and result-page screenshots; live Firecrawl execution retains a configurable reserve until those acceptance runs.
+- Xiaohongshu support uses only the user's visible, signed-in Chrome pages after explicit temporary permission. The system never asks for or stores a password, reads cookies/local storage/private messages, bypasses verification, or performs social actions.
+- Source priority follows research intent: authoritative architecture/project sources establish case facts and completion; Xiaohongshu and Pinterest are visual-inspiration leads for drawing style, massing and diagram language and cannot alone prove a complete project case.
+- Pinterest's current official rules prohibit unauthorized automated scraping. Until the user supplies a permitted official API path, Pinterest may appear only as a search-engine/provider link lead and is excluded from direct Chrome/Firecrawl extraction.
 
 ## Errors Encountered
 
@@ -136,6 +152,15 @@ The code delivery is complete. These product claims require user-owned credentia
 | Bundled Playwright package referenced browser files that were not installed | 2 | Use the system Chrome executable for deterministic local screenshot and extension E2E runs; do not download browsers at runtime |
 | Initial M6 Board screenshot showed all Demo cards without visual assets | 1 | Treat usable local drawing previews and bounded desktop preview height as Board acceptance requirements |
 | Planning recovery called the disabled Windows Store `python` alias | 1 | Run the catch-up script with `apps/api/.venv/Scripts/python.exe`; keep project commands on the resolved workspace runtime |
+| M35 catch-up reused the stale root `.venv` path from a compacted summary | 1 | Stop using the missing root environment; resolve the current app-owned or bundled Python before running catch-up again |
+| M35 inspection assumed a nonexistent `providers/base.py` path | 1 | Discover the concrete provider module with `rg --files`; provider contracts live in `providers.py` |
+| M35 migration inspection included the `__pycache__` directory as a file | 1 | Filter Alembic discovery to `*.py` before reading revision contents |
+| M35 Windows `rg` used shell-style wildcard paths for tests/CSS | 1 | Search concrete directories, then filter `rg --files` output instead of passing wildcard paths |
+| M35 first focused API command duplicated the workspace prefix from an `apps/api` working directory | 1 | Invoke the existing environment as `.venv/Scripts/python.exe` from the API directory |
+| M35 inspection search used an unclosed regular expression | 1 | Stop the malformed pattern and inspect the known `inspection.py` range directly; no production result depended on the failed search |
+| M35 first static gate requested canonical Ruff formatting in four new/touched Python files | 1 | Run the repository formatter only on those files, then rerun the full authoritative verification |
+| M35 post-gate review found model timeout could stop still-available XHS branches | 1 | Add a failing three-branch regression and include XHS availability in the loop stop predicate; all planned XHS branches now continue independently |
+| M35 browser QA used an unavailable DOM constructor inside the restricted read-only page scope | 1 | Re-read the checkbox through its plain `checked` property without relying on page-global constructors; desktop and mobile geometry checks then passed |
 | Board lint rejected synchronous restoration resets inside a React effect | 1 | Move reset/loading transitions to explicit workspace-selection actions and keep the effect limited to asynchronous restoration |
 | Real Chrome capture rejected HTTP/HTTPS wildcard host permissions | 1 | Request optional `<all_urls>` only for the task lifetime, retain public-HTTP(S)-only navigation/injection checks, and revoke at every terminal path |
 | Uvicorn started without a WebSocket protocol implementation | 1 | Add the concrete `websockets` runtime dependency and cover pairing through a real network server |

@@ -59,6 +59,48 @@ describe("content operations", () => {
     ]);
   });
 
+  it("associates a visible thumbnail with its bounded same-page source link", () => {
+    document.body.innerHTML = `
+      <a href="/explore/note-42">
+        <img src="https://images.example/section.jpg" alt="旧厂房剖面">
+        <span>旧厂房更新：架空步道与公共展厅的剖面关系</span>
+      </a>
+    `;
+    const image = document.querySelector("img")!;
+    makeVisible(image);
+    Object.defineProperties(image, {
+      naturalWidth: { value: 1600 },
+      naturalHeight: { value: 900 },
+      currentSrc: { value: "https://images.example/section.jpg" },
+    });
+
+    expect(collectMedia(document)).toEqual([
+      expect.objectContaining({
+        link_url: "http://localhost:3000/explore/note-42",
+        adjacent_text: "旧厂房更新：架空步道与公共展厅的剖面关系",
+      }),
+    ]);
+  });
+
+  it("does not associate a thumbnail with an external-site anchor", () => {
+    document.body.innerHTML = `
+      <a href="https://tracking.example/redirect">
+        <img src="https://images.example/plan.jpg" alt="平面图">
+      </a>
+    `;
+    const image = document.querySelector("img")!;
+    makeVisible(image);
+    Object.defineProperties(image, {
+      naturalWidth: { value: 1600 },
+      naturalHeight: { value: 900 },
+      currentSrc: { value: "https://images.example/plan.jpg" },
+    });
+
+    expect(collectMedia(document)[0]).toEqual(
+      expect.objectContaining({ link_url: null }),
+    );
+  });
+
   it("excludes drawing media outside the visible viewport", () => {
     document.body.innerHTML = `
       <img id="visible" src="https://images.example/visible.jpg" alt="Visible plan">

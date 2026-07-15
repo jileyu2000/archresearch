@@ -99,7 +99,7 @@ function createLiveFetch(options: LiveFetchOptions = {}) {
       const statuses = options.browserStatuses
       const connected = statuses && statuses.length > 0
         ? statuses[Math.min(browserStatusIndex++, statuses.length - 1)]
-        : options.browserConnected ?? false
+        : options.browserConnected ?? true
       return Promise.resolve(jsonResponse({ connected }))
     }
     if (path === '/v1/browser/pairing-code' && method === 'POST') {
@@ -368,6 +368,9 @@ function createSubmitRaceFetch(fail = false) {
   const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input)
     const method = init?.method ?? 'GET'
+    if (path === '/v1/browser/status' && method === 'GET') {
+      return Promise.resolve(jsonResponse({ connected: true }))
+    }
     if (path === '/v1/workspaces' && method === 'GET') {
       return Promise.resolve(jsonResponse([workspace, secondWorkspace]))
     }
@@ -457,6 +460,9 @@ function createTerminalSubmitHydrationRaceFetch() {
   const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input)
     const method = init?.method ?? 'GET'
+    if (path === '/v1/browser/status' && method === 'GET') {
+      return Promise.resolve(jsonResponse({ connected: true }))
+    }
     if (path === '/v1/workspaces') return Promise.resolve(jsonResponse([workspace, secondWorkspace]))
     if (path === '/v1/workspaces/workspace-live/runs' && method === 'GET') return Promise.resolve(jsonResponse([]))
     if (path === '/v1/workspaces/workspace-two/runs' && method === 'GET') return Promise.resolve(jsonResponse([]))
@@ -648,6 +654,8 @@ describe('research board', () => {
     expect(screen.getByRole('radio', { name: /标准.*4 个子问题.*每题 3 轮/ })).toBeChecked()
     expect(screen.getByRole('radio', { name: /深入.*6 个子问题.*每题 4 轮/ })).toBeVisible()
     expect(screen.getByText('目标：每题 3 张证据图 · 方法、转译与边界')).toBeVisible()
+    expect(screen.getByRole('checkbox', { name: /小红书灵感/ })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /Pinterest 图像线索/ })).not.toBeChecked()
     expect(screen.queryByRole('group', { name: '研究目标' })).not.toBeInTheDocument()
     expect(screen.queryByText('Kamala Narayana Temple Survey')).not.toBeInTheDocument()
   })
@@ -668,6 +676,23 @@ describe('research board', () => {
     await user.click(screen.getByRole('button', { name: '查看上次结果' }))
     expect(await screen.findByRole('heading', { name: '研究给出的方向' })).toBeVisible()
     expect(screen.queryByRole('textbox', { name: '研究问题' })).not.toBeInTheDocument()
+  })
+
+  it('restores Xiaohongshu as the default source for every new research request', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', createLiveFetch({ browserConnected: true }))
+    renderBoard()
+
+    await screen.findByText('真实工作区')
+    await user.click(screen.getByRole('button', { name: '添加资料和研究设置' }))
+    await user.click(screen.getByRole('checkbox', { name: /小红书灵感/ }))
+    await user.type(screen.getByRole('textbox', { name: '研究问题' }), '先完成一次不含小红书的研究')
+    await user.click(screen.getByRole('button', { name: '开始研究' }))
+    await screen.findByRole('heading', { name: liveQuestion })
+
+    await user.click(screen.getByRole('button', { name: '发起新研究' }))
+    await user.click(screen.getByRole('button', { name: '添加资料和研究设置' }))
+    expect(screen.getByRole('checkbox', { name: /小红书灵感/ })).toBeChecked()
   })
 
   it('explains a partial recent run without exposing internal reason codes', async () => {
@@ -727,6 +752,7 @@ describe('research board', () => {
     const user = userEvent.setup()
     vi.stubGlobal('fetch', createLiveFetch({
       existingRunStatus: 'completed',
+      browserConnected: false,
       eventTool: 'browser',
       eventSummary: {
         source_url: 'https://example.com/live-mill',
@@ -758,8 +784,8 @@ describe('research board', () => {
     }))
     renderBoard()
 
-    expect(await screen.findByText('公开网页图片可用')).toBeVisible()
-    expect(screen.getByText('你现在看到的是公开网页返回的远程图片。Chrome 未启用只影响登录页面、动态页面和精确裁图。')).toBeVisible()
+    expect(await screen.findByText('小红书灵感需要 Chrome')).toBeVisible()
+    expect(screen.getByText('请先在 Chrome 登录你自己的小红书账号并连接扩展。ArchResearch 不读取或保存账号密码与 Cookie。')).toBeVisible()
     expect(screen.queryByText('图纸提取未连接')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '在 Chrome 中启用精确提取' }))
 
@@ -907,7 +933,45 @@ describe('research board', () => {
     )
   })
 
-  it('continues a new run with public pages when the connected extension belongs to another surface', async () => {
+  it('requires a connected Chrome session before starting Xiaohongshu research', async () => {
+    const user = userEvent.setup()
+    const fetchMock = createLiveFetch({ browserConnected: false })
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    await screen.findByText('真实工作区')
+    await user.click(screen.getByRole('button', { name: '添加资料和研究设置' }))
+    await user.type(screen.getByRole('textbox', { name: '研究问题' }), '从小红书寻找旧建筑剖面灵感')
+    await user.click(screen.getByRole('button', { name: '开始研究' }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent('请先在 Chrome 登录小红书并连接 ArchResearch')
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/v1/workspaces/workspace-live/runs',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
+  it('sends Xiaohongshu as an explicit research source after Chrome authorization', async () => {
+    const user = userEvent.setup()
+    const fetchMock = createLiveFetch({ browserConnected: true, initialStatus: 'searching' })
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    await screen.findByText('真实工作区')
+    await user.click(screen.getByRole('button', { name: '添加资料和研究设置' }))
+    await user.type(screen.getByRole('textbox', { name: '研究问题' }), '从小红书寻找旧建筑剖面灵感')
+    await user.click(screen.getByRole('button', { name: '开始研究' }))
+
+    const startCall = fetchMock.mock.calls.find(([path, init]) => (
+      path === '/v1/workspaces/workspace-live/runs'
+      && (init as RequestInit | undefined)?.method === 'POST'
+    ))
+    expect(JSON.parse(String((startCall?.[1] as RequestInit).body))).toMatchObject({
+      research_sources: ['xiaohongshu'],
+    })
+  })
+
+  it('does not silently skip default Xiaohongshu research when the extension belongs to another surface', async () => {
     const user = userEvent.setup()
     const fetchMock = createLiveFetch({ browserConnected: true, initialStatus: 'searching' })
     vi.mocked(requestBrowserBridge).mockRejectedValue(
@@ -919,12 +983,11 @@ describe('research board', () => {
     await startLiveResearch(user)
 
     expect(requestBrowserBridge).toHaveBeenCalledWith({ type: 'status' })
-    expect(fetchMock).toHaveBeenCalledWith(
+    expect(fetchMock).not.toHaveBeenCalledWith(
       '/v1/workspaces/workspace-live/runs',
       expect.objectContaining({ method: 'POST' }),
     )
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    expect(await screen.findByRole('heading', { name: liveQuestion })).toBeVisible()
+    expect(screen.getByRole('alert')).toHaveTextContent('请先在 Chrome 登录小红书并连接 ArchResearch')
   })
 
   it('starts a new run from an image-less completed result after the extension connects', async () => {

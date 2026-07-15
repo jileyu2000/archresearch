@@ -51,6 +51,7 @@ describe('local API client', () => {
       files: [file],
       goal: 'source_lookup',
       mode: 'balanced',
+      researchSources: ['xiaohongshu', 'pinterest'],
     })
 
     expect(fetchMock).toHaveBeenCalledTimes(3)
@@ -63,6 +64,7 @@ describe('local API client', () => {
       question: '如何形成剖面层次？',
       goal: 'source_lookup',
       budget_mode: 'balanced',
+      research_sources: ['xiaohongshu', 'pinterest'],
     })
     expect(run).toMatchObject({ id: 'run-2', status: 'created', mode: 'balanced' })
   })

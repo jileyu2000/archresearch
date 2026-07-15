@@ -1,5 +1,6 @@
 export type ResearchGoal = 'precedent_research' | 'source_lookup' | 'visual_reference_search'
 export type ResearchMode = 'quick' | 'balanced' | 'deep'
+export type ResearchSource = 'xiaohongshu' | 'pinterest'
 export type RunStatus =
   | 'created'
   | 'planning'
@@ -48,6 +49,7 @@ export interface StartResearchInput {
   files?: File[]
   goal: ResearchGoal
   mode: ResearchMode
+  researchSources?: ResearchSource[]
 }
 
 export interface CoverageReport {
@@ -75,6 +77,7 @@ export interface ResearchRun {
   goal: ResearchGoal
   status: RunStatus
   mode: ResearchMode
+  researchSources?: ResearchSource[]
   subquestions: ResearchSubquestion[]
   budget?: Record<string, number>
   checkpointStage?: string | null
@@ -92,6 +95,7 @@ interface ApiResearchRun {
   goal: ResearchGoal
   status: RunStatus
   budget_mode: ResearchMode
+  research_sources?: ResearchSource[]
   subquestions?: ResearchSubquestion[]
   budget?: Record<string, number>
   checkpoint_stage?: string | null
@@ -241,6 +245,7 @@ function normalizeRun(run: ApiResearchRun): ResearchRun {
     goal: run.goal,
     status: run.status,
     mode: run.budget_mode,
+    researchSources: run.research_sources ?? [],
     subquestions: run.subquestions ?? [],
     budget: run.budget,
     checkpointStage: run.checkpoint_stage,
@@ -337,6 +342,7 @@ export function createApiClient(baseUrl = '/v1') {
             question: input.question,
             goal: input.goal,
             budget_mode: input.mode,
+            research_sources: input.researchSources ?? [],
           }),
         },
       )

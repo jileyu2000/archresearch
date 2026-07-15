@@ -79,6 +79,7 @@ class ResearchRun(TimestampMixin, Base):
     budget_mode: Mapped[str] = mapped_column(String(20))
     budget: Mapped[dict[str, int]] = mapped_column(JSON)
     allowed_domains: Mapped[list[str]] = mapped_column(JSON, default=list)
+    research_sources: Mapped[list[str]] = mapped_column(JSON, default=list)
     subquestions: Mapped[list[dict[str, str]]] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(String(30), default="created", index=True)
     checkpoint_stage: Mapped[str | None] = mapped_column(String(30))

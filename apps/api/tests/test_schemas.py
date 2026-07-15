@@ -9,6 +9,7 @@ from archresearch_api.schemas import (
     EvidenceClaimCreate,
     ResearchGoal,
     ResearchPlan,
+    ResearchSource,
     ResearchSpec,
     ResearchSubquestion,
     RunStatus,
@@ -126,6 +127,24 @@ def test_research_spec_accepts_only_the_three_routing_goals() -> None:
 
     with pytest.raises(ValidationError):
         ResearchSpec(question="提取风格", goal="style_extraction")
+
+
+def test_research_spec_accepts_only_explicit_supported_research_sources() -> None:
+    spec = ResearchSpec(
+        question="从小红书寻找旧建筑改造的剖面表达灵感",
+        research_sources=[ResearchSource.xiaohongshu, ResearchSource.pinterest],
+    )
+
+    assert spec.research_sources == [
+        ResearchSource.xiaohongshu,
+        ResearchSource.pinterest,
+    ]
+
+    with pytest.raises(ValidationError):
+        ResearchSpec(
+            question="从未知平台寻找灵感",
+            research_sources=["unknown_platform"],
+        )
 
 
 def test_run_statuses_match_the_checkpoint_state_machine() -> None:

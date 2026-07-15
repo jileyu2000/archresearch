@@ -33,6 +33,7 @@ def test_alembic_upgrade_head_creates_the_v21_schema(tmp_path: Path) -> None:
     }
     inspector = inspect(create_engine(f"sqlite:///{database_path.as_posix()}"))
     assert {column["name"] for column in inspector.get_columns("research_runs")} >= {
+        "research_sources",
         "subquestions",
         "visual_calls_used",
         "visual_bytes_used",
@@ -76,3 +77,23 @@ def test_unversioned_resume_schema_is_upgraded_to_durable_run_budgets(
         "browser_pages_attempted",
     }
     assert {column["name"] for column in inspector.get_columns("query_attempts")} >= {"run_attempt"}
+
+
+def test_unversioned_durable_schema_is_upgraded_with_research_sources(
+    tmp_path: Path,
+) -> None:
+    api_root = Path(__file__).parents[1]
+    config = Config(api_root / "alembic.ini")
+    database_path = tmp_path / "legacy-durable.db"
+    url = f"sqlite:///{database_path.as_posix()}"
+    config.set_main_option("sqlalchemy.url", url)
+    command.upgrade(config, "a7c8d9e0f1a2")
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(text("DROP TABLE alembic_version"))
+
+    Database(url).migrate()
+
+    assert "research_sources" in {
+        column["name"] for column in inspect(engine).get_columns("research_runs")
+    }

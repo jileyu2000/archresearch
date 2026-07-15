@@ -236,6 +236,7 @@ def create_run(
         budget_mode=payload.budget_mode.value,
         budget=BUDGETS[payload.budget_mode].model_dump(),
         allowed_domains=payload.allowed_domains,
+        research_sources=[source.value for source in payload.research_sources],
         status=RunStatus.created.value,
         coverage_report={},
     )

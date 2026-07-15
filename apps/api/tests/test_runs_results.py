@@ -71,6 +71,26 @@ def test_workspace_runs_are_listed_newest_first(client: TestClient, workspace_id
     assert [item["id"] for item in response.json()] == [second["id"], first["id"]]
 
 
+def test_run_persists_explicit_inspiration_sources(
+    client: TestClient,
+    workspace_id: str,
+) -> None:
+    response = client.post(
+        f"/v1/workspaces/{workspace_id}/runs",
+        json={
+            "question": "从小红书和 Pinterest 寻找建筑分析图表达灵感",
+            "goal": "visual_reference_search",
+            "budget_mode": "quick",
+            "research_sources": ["xiaohongshu", "pinterest"],
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["research_sources"] == ["xiaohongshu", "pinterest"]
+    fetched = client.get(f"/v1/runs/{response.json()['id']}")
+    assert fetched.json()["research_sources"] == ["xiaohongshu", "pinterest"]
+
+
 def test_result_contract_normalizes_legacy_types_and_reports_local_content(
     client: TestClient,
     workspace_id: str,

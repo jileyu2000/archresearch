@@ -28,6 +28,8 @@
   --color-danger-ink: #a63827;
   --color-danger-soft: #fff0ec;
   --color-danger-line: #e6b4aa;
+  --color-warning-soft: #fff8dc;
+  --color-warning-line: #dfc96f;
   --color-image-well: #e5e8e5;
   --color-overlay: rgb(23 26 24 / 28%);
 
@@ -905,6 +907,61 @@ h3 {
   grid-column: 1 / -1;
 }
 
+.research-source-options {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.research-source-options legend {
+  grid-column: 1 / -1;
+  margin-bottom: var(--space-1);
+}
+
+.research-source-options label {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.research-source-options label:has(input:checked) {
+  border-color: var(--color-action);
+  background: var(--color-action-soft);
+}
+
+.research-source-options input {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  accent-color: var(--color-action);
+}
+
+.research-source-options span {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-1);
+}
+
+.research-source-options strong {
+  font-size: var(--font-sm);
+}
+
+.research-source-options small {
+  color: var(--color-ink-secondary);
+  font-size: var(--font-xs);
+  line-height: var(--leading-compact);
+}
+
 .research-field {
   display: grid;
   min-width: 0;
@@ -1054,6 +1111,11 @@ h3 {
 .browser-readiness[data-chrome="connected"] {
   border-color: var(--color-action-line);
   background: var(--color-action-soft);
+}
+
+.browser-readiness[data-chrome="required"] {
+  border-color: var(--color-warning-line);
+  background: var(--color-warning-soft);
 }
 
 .browser-readiness-copy,
@@ -3018,6 +3080,10 @@ h3 {
   .research-form {
     margin: 0 6px;
     padding: var(--space-4);
+  }
+
+  .research-source-options {
+    grid-template-columns: 1fr;
   }
 
   .research-goals button {

@@ -23,6 +23,11 @@ class BudgetMode(StrEnum):
     deep = "deep"
 
 
+class ResearchSource(StrEnum):
+    xiaohongshu = "xiaohongshu"
+    pinterest = "pinterest"
+
+
 class RunStatus(StrEnum):
     created = "created"
     planning = "planning"
@@ -174,6 +179,7 @@ class ResearchSpec(BaseModel):
     goal: ResearchGoal = ResearchGoal.precedent_research
     budget_mode: BudgetMode = BudgetMode.balanced
     allowed_domains: list[str] = Field(default_factory=list, max_length=20)
+    research_sources: list[ResearchSource] = Field(default_factory=list, max_length=5)
 
 
 class WorkspaceCreate(BaseModel):
@@ -254,6 +260,7 @@ class ResearchRunRead(BaseModel):
     goal: ResearchGoal
     budget_mode: BudgetMode
     budget: dict[str, int]
+    research_sources: list[ResearchSource]
     subquestions: list[ResearchSubquestion]
     status: RunStatus
     checkpoint_stage: str | None

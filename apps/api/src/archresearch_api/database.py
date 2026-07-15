@@ -11,6 +11,7 @@ from alembic import command
 INITIAL_SCHEMA_REVISION = "ff58c6bc93c7"
 DEPTH_SCHEMA_REVISION = "8f3b1c2d4e5f"
 RESUME_SCHEMA_REVISION = "9b4c5d6e7f80"
+DURABLE_SCHEMA_REVISION = "a7c8d9e0f1a2"
 
 
 class Base(DeclarativeBase):
@@ -64,8 +65,18 @@ class Database:
             } <= {column["name"] for column in inspector.get_columns("research_runs")} and {
                 "run_attempt"
             } <= {column["name"] for column in inspector.get_columns("query_attempts")}
-            if has_depth_schema and has_resume_schema and has_durable_schema:
+            has_research_sources = {"research_sources"} <= {
+                column["name"] for column in inspector.get_columns("research_runs")
+            }
+            if (
+                has_depth_schema
+                and has_resume_schema
+                and has_durable_schema
+                and has_research_sources
+            ):
                 command.stamp(config, "head")
+            elif has_depth_schema and has_resume_schema and has_durable_schema:
+                command.stamp(config, DURABLE_SCHEMA_REVISION)
             elif has_depth_schema and has_resume_schema:
                 command.stamp(config, RESUME_SCHEMA_REVISION)
             elif has_depth_schema:

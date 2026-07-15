@@ -61,6 +61,7 @@ class MediaRegion(StrictModel):
 class PageMedia(StrictModel):
     media_type: Literal["image", "canvas", "svg"]
     url: str | None
+    link_url: str | None = None
     alt: str = ""
     adjacent_text: str = ""
     intrinsic_width: int = Field(gt=0)

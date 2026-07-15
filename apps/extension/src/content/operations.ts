@@ -3,6 +3,7 @@ import type { SafeClickTarget } from "../protocol";
 export type MediaCandidate = {
   media_type: "image" | "canvas" | "svg";
   url: string | null;
+  link_url: string | null;
   alt: string;
   adjacent_text: string;
   intrinsic_width: number;
@@ -61,6 +62,7 @@ export function collectMedia(root: Document): MediaCandidate[] {
     candidates.push({
       media_type: mediaType,
       url,
+      link_url: findSourceLink(element, root),
       alt: normalizeText(
         element.getAttribute("alt") ?? element.getAttribute("aria-label") ?? "",
         240,
@@ -268,7 +270,31 @@ function findAdjacentText(element: Element): string {
   if (caption && !isSensitive(caption)) {
     return normalizeText(caption.textContent ?? "", 500);
   }
+  const link = element.closest("a[href]");
+  if (link && !isSensitive(link)) {
+    return normalizeText(link.textContent ?? "", 500);
+  }
   return "";
+}
+
+function findSourceLink(element: Element, root: Document): string | null {
+  const link = element.closest<HTMLAnchorElement>("a[href]");
+  if (!link || isSensitive(link)) return null;
+  try {
+    const source = new URL(link.href, root.location.href);
+    const page = new URL(root.location.href);
+    if (
+      !["http:", "https:"].includes(source.protocol) ||
+      source.username ||
+      source.password ||
+      source.origin !== page.origin
+    ) {
+      return null;
+    }
+    return source.href.slice(0, 4_000);
+  } catch {
+    return null;
+  }
 }
 
 function isSensitivePage(root: Document): boolean {

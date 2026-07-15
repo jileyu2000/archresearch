@@ -54,6 +54,7 @@ from .schemas import (
     PublicationTier,
     ResearchGoal,
     ResearchPlan,
+    ResearchSource,
     ResearchSubquestion,
     ResultTier,
     RightsStatus,
@@ -66,6 +67,7 @@ from .visual import (
     RemoteVisualClassifier,
     VisualClassifier,
 )
+from .xiaohongshu import XiaohongshuBrowserSearch
 
 ACTIVE_STAGES = (
     RunStatus.planning,
@@ -141,6 +143,7 @@ def execute_research_run(
             budget_mode = BudgetMode(run.budget_mode)
             workspace_id = run.workspace_id
             allowed_domains = run.allowed_domains
+            research_sources = {ResearchSource(value) for value in (run.research_sources or [])}
             budget = run.budget
             max_pages = budget["max_pages"]
             deadline = started_at + budget["max_seconds"]
@@ -264,9 +267,27 @@ def execute_research_run(
             if public_search_provider is not None
             else 0.0
         )
+        xiaohongshu_search = (
+            XiaohongshuBrowserSearch(browser_client)
+            if ResearchSource.xiaohongshu in research_sources
+            and browser_client is not None
+            and bool(getattr(browser_client, "connected", True))
+            else None
+        )
+        xiaohongshu_searched_subquestions: set[str] = set()
         stop_reason = "budget_exhausted"
         model_search_timed_out = False
-        browser_inspection_failed = False
+        browser_inspection_failed = (
+            ResearchSource.xiaohongshu in research_sources and xiaohongshu_search is None
+        )
+        if browser_inspection_failed:
+            _checkpoint(
+                db,
+                run_id,
+                RunStatus.searching,
+                {"status": "skipped", "error_type": "BrowserUnavailableError"},
+                tool="xiaohongshu_search",
+            )
         for query_index, (round_number, language, subquestion_id, query) in enumerate(
             queries, start=1
         ):
@@ -285,16 +306,36 @@ def execute_research_run(
             can_search_with_model = (
                 not model_search_timed_out and remaining_seconds >= provider_call_reserve
             )
-            if remaining_seconds <= 0 or not (can_search_publicly or can_search_with_model):
+            can_search_xiaohongshu = (
+                xiaohongshu_search is not None
+                and subquestion_id not in xiaohongshu_searched_subquestions
+                and _page_budget_available(
+                    round_number=round_number,
+                    normal_rounds=normal_rounds,
+                    normal_attempts=browser_page_attempts,
+                    normal_limit=max_pages,
+                    subquestion_id=subquestion_id,
+                    recovery_attempts=browser_recovery_page_attempts,
+                    recovery_limit=recovery_pages_per_subquestion,
+                )
+            )
+            if remaining_seconds <= 0 or not (
+                can_search_publicly or can_search_with_model or can_search_xiaohongshu
+            ):
                 stop_reason = "time_budget_exhausted"
                 break
+            provider_query = _query_with_source_preferences(
+                query,
+                goal=goal,
+                research_sources=research_sources,
+            )
             query_attempt_id = _record_query(
                 db,
                 run_id,
                 round_number=round_number,
                 language=language,
                 subquestion_id=subquestion_id,
-                query=query,
+                query=provider_query,
                 purpose=goal.value,
                 provider_name=provider.name,
             )
@@ -310,17 +351,37 @@ def execute_research_run(
                 },
             )
             public_sources: list[ProviderSource] = []
-            if can_search_publicly and public_search_provider is not None:
-                public_sources = _try_public_search(
+            if can_search_xiaohongshu:
+                assert xiaohongshu_search is not None
+                xiaohongshu_searched_subquestions.add(subquestion_id)
+                browser_page_attempts += 1
+                if round_number > normal_rounds:
+                    browser_recovery_page_attempts[subquestion_id] = (
+                        browser_recovery_page_attempts.get(subquestion_id, 0) + 1
+                    )
+                _persist_browser_page_attempts(db, run_id, browser_page_attempts)
+                xiaohongshu_sources, search_failed = _try_xiaohongshu_search(
                     db,
                     run_id,
-                    public_search_provider,
-                    _public_search_query(
-                        goal,
-                        language,
-                        subquestion_text[subquestion_id],
+                    xiaohongshu_search,
+                    subquestion_text[subquestion_id],
+                )
+                browser_inspection_failed = browser_inspection_failed or search_failed
+                public_sources.extend(xiaohongshu_sources)
+            if can_search_publicly and public_search_provider is not None:
+                public_sources = _merge_source_lists(
+                    public_sources,
+                    _try_public_search(
+                        db,
+                        run_id,
+                        public_search_provider,
+                        _public_search_query(
+                            goal,
+                            language,
+                            subquestion_text[subquestion_id],
+                        ),
+                        allowed_domains,
                     ),
-                    allowed_domains,
                 )
                 if public_sources:
                     _persist_sources(
@@ -347,7 +408,7 @@ def execute_research_run(
                 )
             else:
                 try:
-                    provider_result = provider.search(query, goal, allowed_domains)
+                    provider_result = provider.search(provider_query, goal, allowed_domains)
                 except Exception as exc:
                     if not public_sources:
                         raise
@@ -366,6 +427,7 @@ def execute_research_run(
                     )
                 else:
                     provider_result = _merge_public_sources(provider_result, public_sources)
+            provider_result = _constrain_sparse_visual_platform_result(provider_result)
             _raise_if_cancelled(db, run_id)
             _persist_sources(db, run_id, provider_result)
             added_usable_assets = _persist_assets(
@@ -392,6 +454,7 @@ def execute_research_run(
                 parsed_now = False
                 if (
                     public_page_parser is not None
+                    and not _is_sparse_visual_platform_url(source.url)
                     and source.url not in parsed_pages
                     and _page_budget_available(
                         round_number=round_number,
@@ -422,6 +485,7 @@ def execute_research_run(
                     and visual_classifier is not None
                     and candidate_root is not None
                     and bool(getattr(browser_client, "connected", True))
+                    and not _is_pinterest_url(source.url)
                     and source.url not in inspected_urls
                     and _page_budget_available(
                         round_number=round_number,
@@ -1265,18 +1329,75 @@ def _try_public_search(
         return []
 
 
-def _merge_public_sources(
-    result: ProviderSearchResult,
-    public_sources: list[ProviderSource],
-) -> ProviderSearchResult:
+def _try_xiaohongshu_search(
+    db: Database,
+    run_id: str,
+    search: XiaohongshuBrowserSearch,
+    query: str,
+) -> tuple[list[ProviderSource], bool]:
+    try:
+        sources = search.search(query, limit=4)
+        _checkpoint(
+            db,
+            run_id,
+            RunStatus.searching,
+            {"status": "completed", "result_count": len(sources)},
+            tool="xiaohongshu_search",
+        )
+        return sources, False
+    except Exception as exc:
+        _checkpoint(
+            db,
+            run_id,
+            RunStatus.searching,
+            {"status": "skipped", "error_type": type(exc).__name__},
+            tool="xiaohongshu_search",
+        )
+        return [], True
+
+
+def _query_with_source_preferences(
+    query: str,
+    *,
+    goal: ResearchGoal,
+    research_sources: set[ResearchSource],
+) -> str:
+    preferences: list[str] = []
+    if goal is ResearchGoal.precedent_research:
+        preferences.append("优先项目官网、ArchDaily 等完整建筑项目页；视觉平台只能作为灵感线索。")
+    elif goal is ResearchGoal.visual_reference_search:
+        preferences.append("优先图纸风格、建筑形体推演与分析图表达的可见特征。")
+    if ResearchSource.pinterest in research_sources:
+        preferences.append(
+            "可返回 pinterest.com 的原 Pin 链接作为视觉线索，但不得据此确认项目事实。"
+        )
+    if not preferences:
+        return query
+    return f"{query} 来源分工：{' '.join(preferences)}"[:8_000]
+
+
+def _merge_source_lists(
+    first: list[ProviderSource],
+    second: list[ProviderSource],
+) -> list[ProviderSource]:
     merged: list[ProviderSource] = []
     seen: set[str] = set()
-    for source in [*result.sources, *public_sources]:
+    for source in [*first, *second]:
         if source.url in seen:
             continue
         seen.add(source.url)
         merged.append(source)
-    return ProviderSearchResult(sources=merged, assets=result.assets)
+    return merged
+
+
+def _merge_public_sources(
+    result: ProviderSearchResult,
+    public_sources: list[ProviderSource],
+) -> ProviderSearchResult:
+    return ProviderSearchResult(
+        sources=_merge_source_lists(result.sources, public_sources),
+        assets=result.assets,
+    )
 
 
 def _persist_public_page_leads(
@@ -1721,7 +1842,73 @@ def _asset_type_label(asset_type: ArchitectureAssetType) -> str:
     }[asset_type]
 
 
+def _constrain_sparse_visual_platform_result(
+    result: ProviderSearchResult,
+) -> ProviderSearchResult:
+    sources = [
+        (
+            source.model_copy(update={"publication_tier": PublicationTier.aggregator})
+            if _is_sparse_visual_platform_url(source.url)
+            else source
+        )
+        for source in result.sources
+    ]
+    assets: list[ProviderAsset] = []
+    for item in result.assets:
+        if not _is_sparse_visual_platform_url(item.source_url):
+            assets.append(item)
+            continue
+        assets.append(
+            item.model_copy(
+                update={
+                    "publication_tier": PublicationTier.aggregator,
+                    "project_identity": AssociationStatus.unknown,
+                    "asset_association": AssociationStatus.unknown,
+                    "primary_source": PrimarySourceStatus.unknown,
+                    "rights_status": RightsStatus.unknown,
+                    "result_tier": ResultTier.visual_lead,
+                    "project_context": "",
+                    "design_mechanism": "",
+                    "transfer_strategy": [],
+                    "facts": [],
+                    "limitations": list(
+                        dict.fromkeys(
+                            [
+                                *item.limitations,
+                                "视觉平台帖子只支持可见图像观察，不能单独确认完整项目事实、图纸归属或使用权。",
+                            ]
+                        )
+                    ),
+                }
+            )
+        )
+    return ProviderSearchResult(sources=sources, assets=assets)
+
+
+def _is_sparse_visual_platform_url(value: str) -> bool:
+    hostname = (urlparse(value).hostname or "").rstrip(".").lower()
+    return (
+        hostname == "xiaohongshu.com"
+        or hostname.endswith(".xiaohongshu.com")
+        or hostname == "pinterest.com"
+        or hostname.endswith(".pinterest.com")
+        or hostname == "pin.it"
+        or hostname.endswith(".pin.it")
+    )
+
+
+def _is_pinterest_url(value: str) -> bool:
+    hostname = (urlparse(value).hostname or "").rstrip(".").lower()
+    return (
+        hostname == "pinterest.com"
+        or hostname.endswith(".pinterest.com")
+        or hostname == "pin.it"
+        or hostname.endswith(".pin.it")
+    )
+
+
 def _persist_sources(db: Database, run_id: str, result: ProviderSearchResult) -> None:
+    result = _constrain_sparse_visual_platform_result(result)
     expires_at = datetime.now(UTC) + timedelta(days=30)
     with db.session_factory() as session:
         existing = {
@@ -1731,6 +1918,11 @@ def _persist_sources(db: Database, run_id: str, result: ProviderSearchResult) ->
         for source in result.sources:
             existing_page = existing.get(source.url)
             if existing_page is not None:
+                if _is_sparse_visual_platform_url(source.url):
+                    existing_page.publication_tier = PublicationTier.aggregator.value
+                    existing_page.publisher = source.publisher
+                    existing_page.title = source.title
+                    continue
                 if PUBLICATION_TIER_STRENGTH[source.publication_tier.value] > (
                     PUBLICATION_TIER_STRENGTH.get(existing_page.publication_tier, 0)
                 ):
@@ -1760,6 +1952,7 @@ def _persist_assets(
     *,
     subquestion_id: str | None = None,
 ) -> int:
+    result = _constrain_sparse_visual_platform_result(result)
     expires_at = datetime.now(UTC) + timedelta(days=7)
     with db.session_factory() as session:
         pages = {
