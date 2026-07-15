@@ -364,7 +364,7 @@ def test_partial_asset_without_a_source_claim_does_not_complete_its_subquestion(
         run = session.get(ResearchRun, run_id)
 
     assert run is not None
-    assert run.status == RunStatus.partial.value
+    assert run.status == RunStatus.blocked.value
     assert run.coverage_report["covered_subquestions"] == 2
     assert run.coverage_report["gaps"] == ["uncovered_subquestions"]
 
@@ -384,7 +384,7 @@ def test_run_deadline_stops_before_starting_another_provider_call(tmp_path: Path
     with database.session_factory() as session:
         run = session.get(ResearchRun, run_id)
         assert run is not None
-        assert run.status == RunStatus.partial.value
+        assert run.status == RunStatus.blocked.value
         assert run.stop_reason == "time_budget_exhausted"
     assert len(provider.queries) == 1
 
@@ -554,11 +554,11 @@ def test_repeated_asset_stops_enrichment_without_creating_duplicates(tmp_path: P
     assert len(provider.queries) == 12
 
 
-def test_empty_quick_research_uses_one_completion_recovery_pass_for_every_subquestion(
+def test_empty_quick_research_exhausts_three_completion_recovery_passes_for_every_subquestion(
     tmp_path: Path,
 ) -> None:
     database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
-    provider = SequencedProvider([_batch()] * 9)
+    provider = SequencedProvider([_batch()] * 15)
 
     execute_research_run(database, run_id, provider)
 
@@ -583,12 +583,19 @@ def test_empty_quick_research_uses_one_completion_recovery_pass_for_every_subque
         "program",
         "circulation",
         "section",
+        "program",
+        "circulation",
+        "section",
+        "program",
+        "circulation",
+        "section",
     ]
     assert run.coverage_report["subquestion_passes"] == {
-        "program": 3,
-        "circulation": 3,
-        "section": 3,
+        "program": 5,
+        "circulation": 5,
+        "section": 5,
     }
+    assert run.status == RunStatus.blocked.value
 
 
 def test_quick_completion_recovery_can_fill_branches_missed_by_normal_depth(
@@ -620,6 +627,62 @@ def test_quick_completion_recovery_can_fill_branches_missed_by_normal_depth(
     assert run.coverage_report["gaps"] == []
     assert len(provider.queries) == 8
     assert sum(attempt.subquestion_id == "program" for attempt in attempts) == 2
+
+
+def test_incomplete_retry_only_researches_branches_that_still_lack_evidence(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
+
+    class GapAwareProvider:
+        name = "gap-aware"
+
+        def __init__(self) -> None:
+            self.queries: list[str] = []
+            self.generation = 0
+
+        def plan(
+            self,
+            question: str,
+            goal: ResearchGoal,
+            budget_mode: BudgetMode,
+            research_context: str,
+        ) -> ResearchPlan:
+            del question, goal, budget_mode, research_context
+            return _quick_research_plan()
+
+        def search(
+            self,
+            query: str,
+            goal: ResearchGoal,
+            allowed_domains: list[str] | None = None,
+        ) -> ProviderSearchResult:
+            del goal, allowed_domains
+            self.queries.append(query)
+            if "新功能怎样植入" in query:
+                return _batch(_asset("factory", 1))
+            if self.generation > 0 and "公共与后勤怎样分开" in query:
+                return _batch(_asset("station", 2))
+            if self.generation > 0 and "剖面怎样形成层次" in query:
+                return _batch(_asset("dock", 3))
+            return _batch()
+
+    provider = GapAwareProvider()
+    execute_research_run(database, run_id, provider)
+    first_generation_program_queries = sum("新功能怎样植入" in query for query in provider.queries)
+
+    provider.generation = 1
+    _advance_retry_attempt(database, run_id)
+    execute_research_run(database, run_id, provider)
+
+    assert sum("新功能怎样植入" in query for query in provider.queries) == (
+        first_generation_program_queries
+    )
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+    assert run is not None
+    assert run.status == RunStatus.completed.value
+    assert run.coverage_report["covered_subquestions"] == 3
 
 
 def test_web_search_urls_are_not_stored_as_perceptual_hashes(tmp_path: Path) -> None:
@@ -660,7 +723,7 @@ def test_provider_failure_preserves_assets_from_completed_batches(tmp_path: Path
             session.scalars(select(AssetCandidate).where(AssetCandidate.run_id == run_id))
         )
         assert run is not None
-        assert run.status == RunStatus.partial.value
+        assert run.status == RunStatus.blocked.value
         assert run.stop_reason == "provider_error:RuntimeError"
         assert len(assets) == 1
 
@@ -730,7 +793,7 @@ def test_retry_skips_completed_queries_and_resumes_the_failed_subquestion(tmp_pa
     ]
 
 
-def test_retry_replays_completed_queries_after_a_resumed_run_finishes_partial(
+def test_retry_continues_only_uncovered_queries_after_a_resumed_run_stays_blocked(
     tmp_path: Path,
 ) -> None:
     database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
@@ -777,14 +840,14 @@ def test_retry_replays_completed_queries_after_a_resumed_run_finishes_partial(
     with database.session_factory() as session:
         run = session.get(ResearchRun, run_id)
     assert run is not None
-    assert run.status == RunStatus.partial.value
+    assert run.status == RunStatus.blocked.value
 
     _advance_retry_attempt(database, run_id)
     execute_research_run(database, run_id, provider)
 
-    assert sum("新功能怎样植入" in query for query in provider.queries) == 4
-    assert sum("公共与后勤怎样分开" in query for query in provider.queries) == 4
-    assert sum("剖面怎样形成层次" in query for query in provider.queries) == 7
+    assert sum("新功能怎样植入" in query for query in provider.queries) == 1
+    assert sum("公共与后勤怎样分开" in query for query in provider.queries) == 1
+    assert sum("剖面怎样形成层次" in query for query in provider.queries) == 11
 
 
 def test_retry_resume_uses_only_the_immediately_previous_failed_execution(
@@ -884,12 +947,12 @@ def test_service_resume_keeps_completed_keys_inherited_by_the_current_retry(
     execute_research_run(database, run_id, provider)
     execute_research_run(database, run_id, provider)
 
-    assert provider.counts == {"program": 2, "circulation": 2, "section": 4}
+    assert provider.counts == {"program": 1, "circulation": 1, "section": 3}
 
     _advance_retry_attempt(database, run_id)
     execute_research_run(database, run_id, provider)
 
-    assert provider.counts == {"program": 3, "circulation": 2, "section": 4}
+    assert provider.counts == {"program": 2, "circulation": 2, "section": 4}
 
 
 def test_duplicate_asset_keeps_analysis_for_each_supported_subquestion(tmp_path: Path) -> None:
@@ -1332,7 +1395,7 @@ def test_precedent_coverage_requires_displayable_evidence_for_every_subquestion(
         run = session.get(ResearchRun, run_id)
 
     assert run is not None
-    assert run.status == RunStatus.partial.value
+    assert run.status == RunStatus.blocked.value
     assert run.coverage_report["usable_assets"] == 4
     assert run.coverage_report["covered_subquestions"] == 2
     assert "uncovered_subquestions" in run.coverage_report["gaps"]

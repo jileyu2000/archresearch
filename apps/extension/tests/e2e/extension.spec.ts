@@ -395,7 +395,7 @@ test.describe.serial("FastAPI browser workflow", () => {
       const trace = await (
         await fetch(`${api.httpEndpoint}/v1/runs/${createdRun.id}/events`)
       ).text();
-      expect(run.status, trace).toBe("partial");
+      expect(run.status, trace).toBe("blocked");
 
       const results = await requestJson<
         Array<{ id: string; asset_type: string; has_local_content: boolean }>

@@ -147,6 +147,7 @@ def execute_research_run(
             research_context = _research_context(session, workspace_id)
             question = run.question
             existing_subquestions = list(run.subquestions or [])
+            run_attempt = run.attempt
             visual_calls_used = run.visual_calls_used
             visual_bytes_used = run.visual_bytes_used
             visual_byte_limit_reached = run.visual_byte_limit_reached
@@ -192,6 +193,12 @@ def execute_research_run(
             research_context=research_context,
         )
         completed_query_keys = _completed_query_keys_for_resume(db, run_id)
+        initial_coverage = _coverage(db, run_id)
+        completion_continuation = (
+            goal is ResearchGoal.precedent_research
+            and run_attempt > 0
+            and not _completion_satisfied(initial_coverage)
+        )
 
         source_lookup_error: Exception | None = None
         if goal is ResearchGoal.source_lookup and source_lookup_provider is not None:
@@ -263,7 +270,7 @@ def execute_research_run(
         for query_index, (round_number, language, subquestion_id, query) in enumerate(
             queries, start=1
         ):
-            if round_number > normal_rounds:
+            if completion_continuation or round_number > normal_rounds:
                 current_coverage = _coverage(db, run_id)
                 if subquestion_id in current_coverage["covered_subquestion_ids"]:
                     continue
@@ -668,6 +675,9 @@ def execute_research_run(
                 run.stop_reason = (
                     "coverage_satisfied" if _enrichment_satisfied(coverage) else stop_reason
                 )
+            elif goal is ResearchGoal.precedent_research:
+                run.status = RunStatus.blocked.value
+                run.stop_reason = stop_reason
             elif coverage["usable_assets"]:
                 run.status = RunStatus.partial.value
                 run.stop_reason = stop_reason
@@ -2290,7 +2300,10 @@ def _preserve_failure(db: Database, run_id: str, exc: Exception) -> str:
             select(func.count()).select_from(AssetCandidate).where(AssetCandidate.run_id == run_id)
         )
         if run.status != RunStatus.cancelled.value:
-            run.status = RunStatus.partial.value if asset_count else RunStatus.failed.value
+            if ResearchGoal(run.goal) is ResearchGoal.precedent_research and asset_count:
+                run.status = RunStatus.blocked.value
+            else:
+                run.status = RunStatus.partial.value if asset_count else RunStatus.failed.value
             run.stop_reason = f"provider_error:{type(exc).__name__}"
             run.finished_at = datetime.now(UTC)
             session.commit()

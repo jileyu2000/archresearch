@@ -63,7 +63,7 @@ Chrome 的 `captureVisibleTab` 只接受用户手势产生的 `activeTab` 或 `<
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/configure-provider.ps1
 ```
 
-Firecrawl 是可选的公开网页研究器：配置后，每个子问题会先用一条简短的中英文图纸查询实时发现公网来源，再在页面预算内解析最新 Markdown、链接和图片。已知投放尺寸与跨 CDN 的同图会在当前页面内合并；明确标注类型的图片可作为低置信线索保留。即使模型搜索超时，只要 Firecrawl 已获得来源，系统也会继续后续短查询并交付部分结果。Chrome 扩展同时负责登录态、动态交互和精确裁图；Firecrawl 线索在完成视觉分类和来源绑定前始终标为未核验，不会自动升级事实、归属或版权。Key 通过隐藏输入保存到 Windows 凭据管理器：
+Firecrawl 是可选的公开网页研究器：配置后，每个子问题会先用一条简短的中英文图纸查询实时发现公网来源，再在页面预算内解析最新 Markdown、链接和图片。已知投放尺寸与跨 CDN 的同图会在当前页面内合并；明确标注类型的图片可作为低置信线索保留。每次付费搜索或解析前，客户端会通过官方额度接口检查余额；默认至少保留 100 credits，余额无法核验或调用后会跌破保留线时不会发送付费请求。Chrome 扩展同时负责登录态、动态交互和精确裁图；Firecrawl 线索在完成视觉分类和来源绑定前始终标为未核验，不会自动升级事实、归属或版权。Key 通过隐藏输入保存到 Windows 凭据管理器：
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/configure-firecrawl.ps1
@@ -79,6 +79,7 @@ OPENAI_VISION_MODEL=gpt-5.5
 TINEYE_API_KEY=
 FIRECRAWL_API_KEY=
 FIRECRAWL_API_URL=https://api.firecrawl.dev/v2
+FIRECRAWL_CREDIT_RESERVE=100
 ```
 
 ## 研究行为
@@ -89,7 +90,9 @@ FIRECRAWL_API_URL=https://api.firecrawl.dev/v2
 - `source_lookup`：截图或上传图片的来源反查。
 - `visual_reference_search`：按可见表达特征搜索并重排。
 
-Quick、Balanced、Deep 使用固定轮数、查询数、页面数和时间预算。满足覆盖条件时提前结束；连续两批没有新增有效资产、浏览器不可用、网站阻塞或供应商失败时，已有结果会保留并以 `partial` 交付。
+概览、标准、深入都必须覆盖各自拆解出的全部子问题，才会把建筑先例研究标记为 `completed`。三种深度共用 30 分钟的单次执行安全上限；差异只在子问题数量、每题研究轮数、目标案例数量和分析要求。常规研究后还有三轮只补空白分支的恢复查询；主动续研会保留已有证据并跳过已经覆盖的分支。网站阻塞、来源不存在、供应商故障或额度保留线触发时，运行进入可继续的 `blocked`，不会把不完整结果伪装成成品。
+
+作品集演示使用纯本地固定回放数据，不调用 OpenAI、Firecrawl、TinEye 或 Chrome 扩展：`?demo=quick`、`?demo=balanced`、`?demo=deep`。三页分别展示 3、4、6 个完整子问题，并在首屏标明深度合同与零额度消耗。
 
 设计策略研究会先把总问题拆成 3–6 个可检索子问题，再分别召回项目和图纸。结果不是单张图片墙，而是按“子问题 → 项目档案 → 多张互补图纸”组织；每个档案交代项目条件、空间机制、可转译步骤和适用边界。同一图纸支持多个子问题时，各关联保留自己的分析，不把第一个结论复制到其他章节。
 

@@ -1690,6 +1690,31 @@ h3 {
   text-wrap: pretty;
 }
 
+.demo-depth-contract {
+  display: flex;
+  max-width: 1000px;
+  align-items: center;
+  gap: var(--space-3) var(--space-5);
+  padding-top: var(--space-4);
+  margin-top: var(--space-4);
+  border-top: 1px solid var(--color-line);
+  color: var(--color-ink-secondary);
+  flex-wrap: wrap;
+  font-size: var(--font-compact);
+  line-height: var(--leading-body);
+}
+
+.demo-depth-contract strong {
+  color: var(--color-action-hover);
+  font-size: var(--font-base);
+}
+
+.demo-depth-contract small {
+  margin-left: auto;
+  color: var(--color-ink-tertiary);
+  font-size: var(--font-sm);
+}
+
 .section-heading {
   display: flex;
   align-items: flex-end;
@@ -3052,6 +3077,16 @@ h3 {
 
   .result-task-heading {
     padding: var(--space-4) 0 var(--space-6);
+  }
+
+  .demo-depth-contract {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .demo-depth-contract small {
+    margin-left: 0;
   }
 
   .result-workbench {

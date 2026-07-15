@@ -6,10 +6,65 @@ import httpx
 import pytest
 
 from archresearch_api.public_pages import (
+    FirecrawlCreditReserveError,
     FirecrawlPageParser,
     ParsedPublicPage,
     select_project_page_links,
 )
+
+
+def test_firecrawl_reserve_blocks_paid_search_before_crossing_the_floor() -> None:
+    requests: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={"success": True, "data": {"remainingCredits": 101}},
+        )
+
+    parser = FirecrawlPageParser(
+        api_key="fc-secret",
+        credit_reserve=100,
+        client=httpx.Client(transport=httpx.MockTransport(respond)),
+    )
+
+    with pytest.raises(FirecrawlCreditReserveError, match="reserve"):
+        parser.search("adaptive reuse section", limit=4)
+
+    assert [(request.method, request.url.path) for request in requests] == [
+        ("GET", "/v2/team/credit-usage")
+    ]
+
+
+def test_firecrawl_reserve_allows_scrape_that_leaves_the_floor_untouched() -> None:
+    requests: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.method == "GET":
+            return httpx.Response(
+                200,
+                json={"success": True, "data": {"remainingCredits": 101}},
+            )
+        return httpx.Response(
+            200,
+            json={"success": True, "data": {"markdown": "# Project", "metadata": {}}},
+        )
+
+    parser = FirecrawlPageParser(
+        api_key="fc-secret",
+        credit_reserve=100,
+        client=httpx.Client(transport=httpx.MockTransport(respond)),
+    )
+
+    page = parser.parse("https://studio.example/project")
+
+    assert page.title == ""
+    assert [(request.method, request.url.path) for request in requests] == [
+        ("GET", "/v2/team/credit-usage"),
+        ("POST", "/v2/scrape"),
+    ]
 
 
 def test_project_page_link_selection_is_same_host_bounded_and_excludes_navigation() -> None:

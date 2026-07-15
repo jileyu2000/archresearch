@@ -208,6 +208,32 @@ const comparisonFocusLabels: Record<AssetType, string> = {
 
 const demoResearchQuestion = '旧建筑更新中，如何植入新功能，并组织公共与后勤流线和剖面层次？'
 
+const deepDemoSubquestions = [
+  ...demoSubquestions,
+  {
+    id: 'structure',
+    question: '新增构件怎样与旧结构脱开，并保留未来调整的可能？',
+    rationale: '比较独立基础、轻型连接和可逆节点，核对空间策略是否真的能落到构造关系。',
+  },
+  {
+    id: 'environment',
+    question: '采光、通风与旧建筑围护怎样共同支持新的公共空间？',
+    rationale: '把剖面中的光、热和空气路径与空间层次一起研究，避免只讨论形式高差。',
+  },
+]
+
+function demoDepthFromSearch(search: string): ResearchMode | null {
+  const value = new URLSearchParams(search).get('demo')
+  if (value === '1') return 'balanced'
+  return value === 'quick' || value === 'balanced' || value === 'deep' ? value : null
+}
+
+function demoSubquestionsFor(depth: ResearchMode) {
+  if (depth === 'quick') return demoSubquestions.slice(0, 3)
+  if (depth === 'deep') return deepDemoSubquestions
+  return demoSubquestions
+}
+
 const filterAssetTypes = (Object.keys(assetLabels) as AssetType[]).filter(
   (assetType) => assetType !== 'diagram',
 )
@@ -256,11 +282,20 @@ function runAnnouncement(run: ResearchRun) {
     composing: '正在编排参考板',
     completed: '研究已完成',
     partial: '已交付部分结果',
-    blocked: '研究受阻，已有结果已保留',
+    blocked: '研究尚未完成，已有证据已保留',
     cancelled: '已取消',
     failed: '研究失败，已有结果已保留',
   }
   return labels[run.status]
+}
+
+function needsCompletionContinuation(run: ResearchRun) {
+  return run.goal === 'precedent_research'
+    && (run.coverageReport?.gaps ?? []).includes('uncovered_subquestions')
+}
+
+function retryActionLabel(run: ResearchRun) {
+  return needsCompletionContinuation(run) ? '继续补齐研究' : '重试研究'
 }
 
 function partialReasonTitle(stopReason?: string | null) {
@@ -292,11 +327,14 @@ function partialDiagnosis(run: ResearchRun) {
   const gaps = [...new Set((coverage?.gaps ?? []).map(
     (gap) => gapLabels[gap] ?? '仍有研究覆盖项未达到当前深度目标',
   ))]
+  const continuationRequired = needsCompletionContinuation(run)
   return {
-    title: partialReasonTitle(run.stopReason),
+    title: continuationRequired ? '仍有子问题等待补齐' : partialReasonTitle(run.stopReason),
     summary: `已保留 ${usable} 张可用图纸，覆盖 ${projects} 个项目，其中 ${supported} 张达到部分核验或以上。`,
     gaps,
-    nextStep: '可以继续查看现有结果；重试会开启新一轮研究，补找图纸与来源证据。',
+    nextStep: continuationRequired
+      ? '当前内容是续研检查点，不是完整交付；继续补齐会保留已有证据，只研究仍为空白的分支。'
+      : '可以继续查看现有结果；重试会开启新一轮研究，补找图纸与来源证据。',
   }
 }
 
@@ -418,14 +456,28 @@ function toWorkResult(candidate: ApiAssetCandidate): WorkResult {
   }
 }
 
-function demoResults(): WorkResult[] {
-  return evidenceResults.map((result) => ({
-    ...result,
-    previewUrl: result.imageUrl ?? null,
-    previewSource: null,
-    evidenceClaims: [],
-    subquestionAnalysis: {},
-  }))
+function demoResults(depth: ResearchMode): WorkResult[] {
+  const includedSubquestions = new Set(demoSubquestionsFor(depth).map((item) => item.id))
+  return evidenceResults
+    .filter((result) => result.subquestionIds.some((id) => includedSubquestions.has(id)))
+    .map((result) => {
+      const extraAssociations = depth === 'deep'
+        ? {
+            'result-foundry-section': ['structure'],
+            'result-foundry-axon': ['structure'],
+            'result-section-daylight': ['environment'],
+            'result-facade-replay': ['environment'],
+          }[result.id] ?? []
+        : []
+      return {
+        ...result,
+        subquestionIds: [...result.subquestionIds, ...extraAssociations],
+        previewUrl: result.imageUrl ?? null,
+        previewSource: null,
+        evidenceClaims: [],
+        subquestionAnalysis: {},
+      }
+    })
 }
 
 function fallbackSubquestions(results: WorkResult[], question: string): ResearchSubquestion[] {
@@ -505,23 +557,29 @@ function browserWasUnavailableForSource(events: TraceEvent[], sourceUrl: string)
 }
 
 export default function App() {
-  const demoMode = useMemo(() => new URLSearchParams(window.location.search).get('demo') === '1', [])
+  const demoDepth = useMemo(() => demoDepthFromSearch(window.location.search), [])
+  const demoMode = demoDepth !== null
+  const demoProfile = useMemo(() => (
+    demoDepth === null
+      ? null
+      : { results: demoResults(demoDepth), subquestions: demoSubquestionsFor(demoDepth) }
+  ), [demoDepth])
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [activeWorkspaceId, setActiveWorkspaceId] = useState('')
   const [newWorkspaceName, setNewWorkspaceName] = useState('')
-  const [results, setResults] = useState<WorkResult[]>(demoMode ? demoResults() : [])
+  const [results, setResults] = useState<WorkResult[]>(demoProfile?.results ?? [])
   const [selectedResultId, setSelectedResultId] = useState(
-    demoMode ? (evidenceResults[0]?.id ?? '') : '',
+    demoProfile?.results[0]?.id ?? '',
   )
   const [selectedSubquestionId, setSelectedSubquestionId] = useState(
-    demoMode ? (demoSubquestions[0]?.id ?? '') : '',
+    demoProfile?.subquestions[0]?.id ?? '',
   )
   const [failedPreviewUrls, setFailedPreviewUrls] = useState<Record<string, string>>({})
   const [question, setQuestion] = useState('')
   const [referenceUrl, setReferenceUrl] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const [goal, setGoal] = useState<ResearchGoal>('precedent_research')
-  const [mode, setMode] = useState<ResearchMode>('balanced')
+  const [mode, setMode] = useState<ResearchMode>(demoDepth ?? 'balanced')
   const [activeRun, setActiveRun] = useState<ResearchRun | null>(null)
   const [recentRuns, setRecentRuns] = useState<ResearchRun[]>([])
   const [pollingRunId, setPollingRunId] = useState('')
@@ -1241,7 +1299,7 @@ export default function App() {
   )
   const researchQuestion = activeRun?.question ?? (demoMode ? demoResearchQuestion : question)
   const researchSubquestions = demoMode
-    ? demoSubquestions
+    ? (demoProfile?.subquestions ?? [])
     : activeRun?.subquestions.length
       ? activeRun.subquestions
       : fallbackSubquestions(results, researchQuestion)
@@ -1313,7 +1371,7 @@ export default function App() {
     ? stageLabels.findIndex((stage) => stage.status === activeStatus)
     : -1
   const resultViewOpen = !composerOpen
-  const activePartialDiagnosis = activeRun?.status === 'partial'
+  const activePartialDiagnosis = activeRun && ['partial', 'blocked'].includes(activeRun.status)
     ? partialDiagnosis(activeRun)
     : null
   const allResultsMissingPreviews = results.length > 0 && results.every(
@@ -1341,7 +1399,7 @@ export default function App() {
       <header className="app-header">
         <div className="app-brand">
           <span className="brand-mark" aria-hidden="true"><LayoutGrid /></span>
-          <div><strong>ArchResearch</strong><span>{demoMode ? '演示数据' : '本地研究工具'}</span></div>
+          <div><strong>ArchResearch</strong><span>{demoMode ? `演示数据 · ${modeLabels[mode]}研究` : '本地研究工具'}</span></div>
         </div>
         <div className="workspace-switcher">
           <label htmlFor="workspace-switcher">
@@ -1524,7 +1582,7 @@ export default function App() {
               <div className="research-run-actions">
                 {isRunActive && <button className="research-cancel" type="button" onClick={() => void handleCancel()}>取消研究</button>}
                 {activeRun && ['partial', 'blocked', 'failed', 'cancelled'].includes(activeRun.status) && (
-                  <button className="research-retry" type="button" onClick={() => void handleRetry()}>重试研究</button>
+                  <button className="research-retry" type="button" onClick={() => void handleRetry()}>{retryActionLabel(activeRun)}</button>
                 )}
               </div>
             </form>
@@ -1605,7 +1663,7 @@ export default function App() {
             <div className="run-status-actions">
               {isRunActive && <button className="research-cancel" type="button" onClick={() => void handleCancel()}>取消研究</button>}
               {activeRun && ['partial', 'blocked', 'failed', 'cancelled'].includes(activeRun.status) && (
-                <button className="research-retry" type="button" onClick={() => void handleRetry()}>重试研究</button>
+                <button className="research-retry" type="button" onClick={() => void handleRetry()}>{retryActionLabel(activeRun)}</button>
               )}
               <details>
                 <summary>查看研究进度</summary>
@@ -1761,9 +1819,17 @@ export default function App() {
         {resultViewOpen && results.length > 0 && (
           <section className="results-section" aria-label="研究结果">
             <header className="result-task-heading">
-              <span>{demoMode ? '演示任务' : '本次研究任务'}</span>
+              <span>{demoMode ? `${modeLabels[mode]}研究演示` : '本次研究任务'}</span>
               <h1>{researchQuestion}</h1>
               <p>Agent 先把总问题拆成可检索的证据问题，再用具体项目的多张图纸回答。结论和来源不会混在一起。</p>
+              {demoMode && (
+                <div className="demo-depth-contract" role="group" aria-label={`${modeLabels[mode]}研究深度说明`}>
+                  <strong>{modeLabels[mode]}研究</strong>
+                  <span>{researchDepthOptions[mode].coverage}</span>
+                  <span>{researchDepthOptions[mode].target}</span>
+                  <small>固定回放 · 不消耗网页研究额度</small>
+                </div>
+              )}
             </header>
 
             <section className="question-decomposition" aria-label="子问题清单">

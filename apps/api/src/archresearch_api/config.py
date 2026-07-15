@@ -53,6 +53,14 @@ class Settings(BaseSettings):
         default="https://api.firecrawl.dev/v2",
         validation_alias=AliasChoices("FIRECRAWL_API_URL", "ARCHRESEARCH_FIRECRAWL_API_URL"),
     )
+    firecrawl_credit_reserve: int = Field(
+        default=100,
+        ge=0,
+        validation_alias=AliasChoices(
+            "FIRECRAWL_CREDIT_RESERVE",
+            "ARCHRESEARCH_FIRECRAWL_CREDIT_RESERVE",
+        ),
+    )
     max_upload_bytes: int = 30 * 1024 * 1024
     temp_asset_ttl_days: int = 7
     run_metadata_ttl_days: int = 30

@@ -52,6 +52,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | 32. M31 Promote result-use entry | complete | The result header now makes “整理与导出” the filled primary action, previews 对照/规范/导出 before opening, keeps new research secondary, collapses cleanly on mobile, and passes the full 170/53/122/6 gate |
 | 33. M32 Persistent result workbench | complete | The top-right menu is replaced by a full-width in-page workbench exposing compare, style, private/share export and process review directly; 1440/390 acceptance, disabled guidance, zero detector findings and the full 170/53/122/6 gate pass |
 | 34. M33 Completion-first research and final user-flow audit | complete | Completion and enrichment are separate; uncovered branches receive a dedicated recovery pass and per-branch page capacity; honest partial delivery, 739px browser acceptance, 186/62/124/6 verification and three real Quick limitations are recorded |
+| 35. M34 Complete-answer delivery and portfolio demos | complete | All depth modes share one evidence-complete delivery floor and 30-minute safety ceiling; uncovered branches get three recovery rounds and resumable continuation; Firecrawl retains a 100-credit default reserve; three no-cost replay demos and the full 189/66/124/6 gate pass |
 
 ## M6 completion summary
 
@@ -79,6 +80,16 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 6. The final repository gate exits 0: 186 API tests, 62 Board tests, 124 Extension tests, 6 packaged-Chrome E2E cases, all lint/type/build/security contracts and the 30/108 evaluation fixtures pass. Impeccable reports zero design-detector findings.
 7. Three comparable live Quick runs remained honest partials at 3 usable drawings, one concrete project and 1/3 covered branches after the relay model search timed out and Firecrawl returned weak recovery sources. This is a measured provider/recall limitation, not relabeled as completion.
 
+## M34 completion summary
+
+1. Quick, Balanced and Deep now use the same evidence-complete terminal rule. Depth changes 3/4/6-way decomposition, pass count, drawing density and analysis rigor; it no longer changes whether an unanswered branch may be called complete.
+2. All three modes use a 30-minute safety ceiling and three completion-only recovery rounds. An unfinished precedent run becomes a retained `blocked` checkpoint; “继续补齐研究” searches only uncovered branches until the evidence floor is reached.
+3. Firecrawl checks the official remaining-credit endpoint before each paid search or scrape. The application defaults to retaining 100 credits and fails closed when the balance cannot be verified; tests use mocks and M34 made no live Firecrawl call.
+4. `?demo=quick`, `?demo=balanced` and `?demo=deep` are deterministic local replay routes with visible 3/4/6-question depth contracts. They create no workspace/run and call no OpenAI, Firecrawl, TinEye or Chrome extension service.
+5. Clean 1280×720 portfolio captures are stored under `docs/assets/portfolio-demos/`. The three pages have no horizontal overflow and remain visibly distinct in the first fold.
+6. The final repository gate exits 0: 189 API tests, 66 Board tests, 124 Extension tests, 6 packaged-Chrome E2E cases, lint/format/type/build/security contracts and the 30/108 evaluation fixtures all pass without live provider traffic.
+7. Remaining product limits are explicit: provider/source outages can still block completeness; Firecrawl balance is protected but not displayed in the Board; real TinEye, signed-in Chrome permission/crop, automatic StyleProfile extraction and workspace deletion UI still require follow-up acceptance or implementation.
+
 ## External acceptance gates
 
 The code delivery is complete. These product claims require user-owned credentials, paid/live execution, rights-cleared data or human participants and are intentionally not fabricated by the implementation:
@@ -101,6 +112,8 @@ The code delivery is complete. These product claims require user-owned credentia
 - All browser commands are enumerated JSON messages; no arbitrary selectors, JavaScript, credentials, social actions, or general form submission.
 - Temporary candidates expire after 7 days; run metadata/trace after 30 days; explicit saves persist until deletion.
 - Research depth is a semantic contract: problem decomposition, per-subquestion source/project/drawing coverage and analysis/evidence obligations. Query/page/time values are bounded execution ceilings, not the user-facing definition of depth.
+- Quick, Balanced and Deep all owe a complete answer across their planned subquestions. Depth changes enrichment and analysis rigor, never permission to deliver a knowingly incomplete answer as complete. External blockers remain explicit and resumable.
+- Portfolio demonstrations use deterministic replay fixtures and must not call OpenAI, Firecrawl, TinEye or the browser extension. Live Firecrawl execution retains a configurable reserve instead of consuming the account's final credits.
 
 ## Errors Encountered
 
@@ -179,6 +192,9 @@ The code delivery is complete. These product claims require user-owned credentia
 | The first M18 documentation patch assumed README used the architecture document's Mermaid labels | 1 | Re-read the exact README block and apply smaller file-specific patches; no documentation changed in the failed attempt |
 | The first M18 Ruff gate found one 103-character test fixture line | 1 | Wrap the fixture list without changing behavior, then restart the gate from Ruff |
 | Ruff format check found three M18 Python files requiring canonical layout | 1 | Apply Ruff format only to those files, then rerun check/type/tests |
+| M34 browser acceptance initially reached the localhost offline interstitial | 1 | Confirm both services were stopped, restart them through `scripts/start.ps1`, and continue on a fresh local tab without provider traffic |
+| M34 full gate found one stale Python formatting expectation and one packaged-Chrome `partial` assertion | 1 | Format only the touched test and update the E2E terminal expectation to the new truthful `blocked` contract; the full gate then passes |
+| The first saved Balanced portfolio screenshot contained browser compositor black blocks | 2 | Verify the DOM had no black surfaces, discard the corrupted captures, create a fresh local tab and accept only the clean recapture |
 | M18 Mypy found five narrowings/reused-loop-variable type errors | 1 | Add explicit metadata/dict narrowing and distinct type-name variables; no runtime behavior changed |
 | The first M18 credential scan treated runtime `api_key` variable assignments as literal secrets | 1 | Inspect only file/line locations, confirm all ten hits are variable flow or credential reads, and narrow the final scan to quoted secret literals |
 | The first M19 static gate found one 101-character test assertion | 1 | Wrap only the failing generator expression, then restart the focused gate from Ruff |

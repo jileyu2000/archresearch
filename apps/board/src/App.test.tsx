@@ -580,7 +580,7 @@ describe('research board', () => {
     expect(screen.queryByText('预览不可用')).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: '查看 Kamala Narayana Temple Survey 平面图证据' }))
     expect(screen.getByRole('dialog', { name: '来源检视器' })).toHaveTextContent('Kamala Narayana Temple Survey')
-    expect(screen.getByText('演示数据')).toBeVisible()
+    expect(screen.getByText(/演示数据 · 标准研究/)).toBeVisible()
     expect(fetch).not.toHaveBeenCalled()
   })
 
@@ -1194,6 +1194,27 @@ describe('research board', () => {
     expect(screen.getByRole('status')).toHaveTextContent('已创建')
   })
 
+  it('keeps incomplete precedent research blocked and offers continuation instead of delivery', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', createLiveFetch({
+      initialStatus: 'blocked',
+      coverageReport: {
+        usable_assets: 1,
+        project_count: 1,
+        verified_or_partial: 1,
+        gaps: ['uncovered_subquestions'],
+      },
+    }))
+    renderBoard()
+    await startLiveResearch(user)
+
+    expect(await screen.findByText('研究尚未完成，已有证据已保留')).toBeVisible()
+    expect(screen.getByRole('heading', { name: '仍有子问题等待补齐' })).toBeVisible()
+    expect(screen.queryByText('已交付部分结果')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '继续补齐研究' }))
+    expect(screen.getByRole('status')).toHaveTextContent('已创建')
+  })
+
   it('requests fresh temporary page access before retrying a partial run', async () => {
     const user = userEvent.setup()
     const fetchMock = createLiveFetch({
@@ -1555,5 +1576,22 @@ describe('research board', () => {
     expect(within(comparison).getByRole('rowheader', { name: '可借鉴方法' })).toBeVisible()
     expect(within(comparison).getByRole('rowheader', { name: '图中看到' })).toBeVisible()
     expect(within(comparison).getByRole('rowheader', { name: '使用边界' })).toBeVisible()
+  })
+
+  it.each([
+    ['quick', '概览研究', '3 个子问题 · 每题 2 轮', 3],
+    ['balanced', '标准研究', '4 个子问题 · 每题 3 轮', 4],
+    ['deep', '深入研究', '6 个子问题 · 每题 4 轮', 6],
+  ])('renders the no-cost %s portfolio demo with its own complete decomposition', async (depth, label, coverage, count) => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderBoard(`?demo=${depth}`)
+
+    expect(await screen.findByText(`演示数据 · ${label}`)).toBeVisible()
+    expect(screen.getByRole('group', { name: `${label}深度说明` })).toHaveTextContent(coverage)
+    const decomposition = screen.getByRole('region', { name: '子问题清单' })
+    expect(within(decomposition).getAllByRole('heading', { level: 3 })).toHaveLength(count)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

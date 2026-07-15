@@ -20,23 +20,23 @@ def test_research_modes_bound_fair_per_subquestion_passes() -> None:
     assert BUDGETS[BudgetMode.quick].model_dump() == {
         "max_rounds": 2,
         "max_queries": 6,
-        "completion_recovery_rounds": 1,
+        "completion_recovery_rounds": 3,
         "completion_recovery_pages_per_subquestion": 2,
         "max_pages": 12,
-        "max_seconds": 240,
+        "max_seconds": 1800,
     }
     assert BUDGETS[BudgetMode.balanced].model_dump() == {
         "max_rounds": 3,
         "max_queries": 12,
-        "completion_recovery_rounds": 1,
+        "completion_recovery_rounds": 3,
         "completion_recovery_pages_per_subquestion": 2,
         "max_pages": 30,
-        "max_seconds": 720,
+        "max_seconds": 1800,
     }
     assert BUDGETS[BudgetMode.deep].model_dump() == {
         "max_rounds": 4,
         "max_queries": 24,
-        "completion_recovery_rounds": 1,
+        "completion_recovery_rounds": 3,
         "completion_recovery_pages_per_subquestion": 2,
         "max_pages": 60,
         "max_seconds": 1800,

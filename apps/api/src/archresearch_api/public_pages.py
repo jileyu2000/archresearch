@@ -14,6 +14,8 @@ MAX_MARKDOWN_CHARS = 12_000
 MAX_LINKS = 40
 MAX_IMAGES = 40
 FIRECRAWL_REQUEST_TIMEOUT_SECONDS = 20.0
+FIRECRAWL_SEARCH_CREDITS = 2
+FIRECRAWL_SCRAPE_CREDITS = 1
 IMAGE_DELIVERY_VARIANTS = {
     "thumb_jpg": 0,
     "small_jpg": 1,
@@ -99,6 +101,10 @@ class PublicSearchProvider(Protocol):
     ) -> list[PublicSearchLead]: ...
 
 
+class FirecrawlCreditReserveError(RuntimeError):
+    """Raised before a paid request would cross the configured credit floor."""
+
+
 class FirecrawlPageParser:
     name = "firecrawl"
     worst_case_call_seconds = FIRECRAWL_REQUEST_TIMEOUT_SECONDS
@@ -107,6 +113,7 @@ class FirecrawlPageParser:
         self,
         api_key: str,
         base_url: str = "https://api.firecrawl.dev/v2",
+        credit_reserve: int = 0,
         client: httpx.Client | None = None,
     ) -> None:
         normalized_key = api_key.strip()
@@ -114,6 +121,9 @@ class FirecrawlPageParser:
             raise ValueError("Firecrawl API key is required")
         self.api_key = normalized_key
         self.base_url = _public_https_base_url(base_url)
+        if credit_reserve < 0:
+            raise ValueError("Firecrawl credit reserve must be non-negative")
+        self.credit_reserve = credit_reserve
         self.client = client or httpx.Client(timeout=FIRECRAWL_REQUEST_TIMEOUT_SECONDS)
 
     def search(
@@ -128,6 +138,7 @@ class FirecrawlPageParser:
             raise ValueError("Firecrawl search query is required")
         if limit < 1 or limit > 10:
             raise ValueError("Firecrawl search limit must be between 1 and 10")
+        self._ensure_credit_reserve(FIRECRAWL_SEARCH_CREDITS)
         domains = _bounded_domains(include_domains or [])
         request_body: dict[str, Any] = {
             "query": bounded_query,
@@ -177,6 +188,7 @@ class FirecrawlPageParser:
 
     def parse(self, url: str) -> ParsedPublicPage:
         source_url = _public_http_url(url)
+        self._ensure_credit_reserve(FIRECRAWL_SCRAPE_CREDITS)
         response = self.client.post(
             f"{self.base_url}/scrape",
             headers={"Authorization": f"Bearer {self.api_key}"},
@@ -209,6 +221,26 @@ class FirecrawlPageParser:
             links=links,
             images=images,
         )
+
+    def _ensure_credit_reserve(self, required_credits: int) -> None:
+        if self.credit_reserve == 0:
+            return
+        response = self.client.get(
+            f"{self.base_url}/team/credit-usage",
+            headers={"Authorization": f"Bearer {self.api_key}"},
+        )
+        response.raise_for_status()
+        payload: Any = response.json()
+        data = payload.get("data") if isinstance(payload, dict) else None
+        remaining = data.get("remainingCredits") if isinstance(data, dict) else None
+        if not isinstance(remaining, int) or isinstance(remaining, bool) or remaining < 0:
+            raise FirecrawlCreditReserveError(
+                "Firecrawl reserve could not be verified; paid request was not sent"
+            )
+        if remaining - required_credits < self.credit_reserve:
+            raise FirecrawlCreditReserveError(
+                "Firecrawl reserve would be crossed; paid request was not sent"
+            )
 
 
 def infer_architecture_asset_type(image: ParsedPageImage) -> ArchitectureAssetType | None:

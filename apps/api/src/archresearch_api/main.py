@@ -135,11 +135,13 @@ def create_app(
         resolved_public_page_parser = FirecrawlPageParser(
             api_key=stored_firecrawl_runtime.api_key,
             base_url=str(stored_firecrawl_runtime.config.base_url),
+            credit_reserve=resolved_settings.firecrawl_credit_reserve,
         )
     elif resolved_public_page_parser is None and resolved_settings.firecrawl_api_key:
         resolved_public_page_parser = FirecrawlPageParser(
             api_key=resolved_settings.firecrawl_api_key,
             base_url=resolved_settings.firecrawl_api_url,
+            credit_reserve=resolved_settings.firecrawl_credit_reserve,
         )
 
     @asynccontextmanager

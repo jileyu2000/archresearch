@@ -498,7 +498,7 @@ def test_browser_failure_closes_the_tab_and_preserves_web_results(tmp_path: Path
             session.scalars(select(AssetCandidate).where(AssetCandidate.run_id == run_id))
         )
     assert run is not None
-    assert run.status == RunStatus.partial.value
+    assert run.status == RunStatus.blocked.value
     assert run.stop_reason == "browser_inspection_incomplete"
     assert run.coverage_report["gaps"] == ["browser_inspection_incomplete"]
     assert len(assets) == 1
@@ -720,7 +720,7 @@ def test_firecrawl_search_preserves_visual_leads_when_model_search_times_out(
         leads = list(session.scalars(select(AssetCandidate).where(AssetCandidate.run_id == run_id)))
         events = list(session.scalars(select(TraceEvent).where(TraceEvent.run_id == run_id)))
     assert run is not None
-    assert run.status == RunStatus.partial.value
+    assert run.status == RunStatus.blocked.value
     assert parser.queries
     assert parser.queries[0].startswith("建筑项目图纸：")
     assert "主问题：" not in parser.queries[0]
@@ -798,7 +798,7 @@ def test_firecrawl_search_continues_when_model_call_no_longer_fits_deadline(
         run = session.get(ResearchRun, run_id)
         leads = list(session.scalars(select(AssetCandidate).where(AssetCandidate.run_id == run_id)))
     assert run is not None
-    assert run.status == RunStatus.partial.value
+    assert run.status == RunStatus.blocked.value
     assert provider.calls == 0
     assert len(parser.queries) == 1
     assert [lead.image_url for lead in leads] == ["https://cdn.example/firecrawl-section.png"]
@@ -1649,7 +1649,7 @@ def test_page_budget_limits_browser_attempts_without_limiting_web_results(tmp_pa
             session.scalars(select(AssetCandidate).where(AssetCandidate.run_id == run_id))
         )
     assert run is not None
-    assert run.status == RunStatus.partial.value
+    assert run.status == RunStatus.blocked.value
     assert run.stop_reason == "browser_inspection_incomplete"
     assert run.coverage_report["gaps"] == ["browser_inspection_incomplete"]
     assert len(assets) == 1
@@ -1902,7 +1902,7 @@ def test_retry_keeps_browser_and_visual_dependencies_for_inline_runs(tmp_path: P
                 "budget_mode": "quick",
             },
         ).json()
-        assert run["status"] == "partial"
+        assert run["status"] == "blocked"
         browser.calls.clear()
         classifier.calls.clear()
 
