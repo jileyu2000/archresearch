@@ -40,7 +40,11 @@ import {
   type TraceEvent,
   type Workspace,
 } from './api/client'
-import { BrowserBridgeError, requestBrowserBridge } from './browserBridge'
+import {
+  BrowserBridgeError,
+  requestBrowserBridge,
+  type BrowserBridgeStatus,
+} from './browserBridge'
 import {
   demoSubquestions,
   evidenceResults,
@@ -603,6 +607,9 @@ export default function App() {
   const [styleStatus, setStyleStatus] = useState('')
   const [traceEvents, setTraceEvents] = useState<TraceEvent[]>([])
   const [browserConnected, setBrowserConnected] = useState<boolean | null>(null)
+  const [browserReadinessLoading, setBrowserReadinessLoading] = useState(!demoMode)
+  const [browserReadinessError, setBrowserReadinessError] = useState('')
+  const [preflightBridgeStatus, setPreflightBridgeStatus] = useState<BrowserBridgeStatus | null>(null)
   const [browserPairingStatus, setBrowserPairingStatus] = useState('')
   const [browserConnecting, setBrowserConnecting] = useState(false)
   const [rerunStarting, setRerunStarting] = useState(false)
@@ -750,21 +757,43 @@ export default function App() {
     }
   }, [demoMode])
 
-  useEffect(() => {
+  const loadBrowserReadiness = useCallback(async (shouldApply: () => boolean = () => true) => {
     if (demoMode) return
+    const [apiResult, bridgeResult] = await Promise.allSettled([
+      apiClient.getBrowserStatus(),
+      requestBrowserBridge({ type: 'status' }),
+    ])
+    if (!shouldApply()) return
+    if (apiResult.status === 'fulfilled') {
+      setBrowserReadinessError('')
+      setBrowserConnected(apiResult.value.connected)
+    } else {
+      setBrowserReadinessError(apiMessage(apiResult.reason))
+      setBrowserConnected(null)
+    }
+    setPreflightBridgeStatus(
+      bridgeResult.status === 'fulfilled' ? bridgeResult.value : null,
+    )
+    setBrowserReadinessLoading(false)
+  }, [demoMode])
+
+  const refreshBrowserReadiness = useCallback(async () => {
+    if (demoMode) return
+    setBrowserReadinessLoading(true)
+    setBrowserReadinessError('')
+    await loadBrowserReadiness()
+  }, [demoMode, loadBrowserReadiness])
+
+  useEffect(() => {
     let active = true
-    void apiClient
-      .getBrowserStatus()
-      .then((status) => {
-        if (active) setBrowserConnected(status.connected)
-      })
-      .catch(() => {
-        if (active) setBrowserConnected(null)
-      })
+    const timeout = window.setTimeout(() => {
+      void loadBrowserReadiness(() => active)
+    }, 0)
     return () => {
       active = false
+      window.clearTimeout(timeout)
     }
-  }, [demoMode])
+  }, [loadBrowserReadiness])
 
   const hydrateRun = useCallback(async (runId: string, shouldApply: () => boolean = () => true) => {
     const [apiResults, board, userState, events, browserStatus] = await Promise.all([
@@ -1039,6 +1068,7 @@ export default function App() {
     setBrowserPairingStatus('正在检查当前页面的 Chrome 扩展…')
     try {
       const bridgeStatus = await requestBrowserBridge({ type: 'status' })
+      setPreflightBridgeStatus(bridgeStatus)
       if (bridgeStatus.connection === 'connected') {
         const status = await apiClient.getBrowserStatus()
         if (status.connected) {
@@ -1048,11 +1078,12 @@ export default function App() {
         }
       }
       const pairing = await apiClient.createBrowserPairingCode()
-      await requestBrowserBridge({
+      const pairedStatus = await requestBrowserBridge({
         type: 'pair',
         endpoint: 'ws://127.0.0.1:8000/v1/browser',
         token: pairing.code,
       })
+      setPreflightBridgeStatus(pairedStatus)
       for (let attempt = 0; attempt < 20; attempt += 1) {
         const status = await apiClient.getBrowserStatus()
         if (status.connected) {
@@ -1066,6 +1097,7 @@ export default function App() {
       throw new BrowserBridgeError('rejected', 'Pairing authentication timed out')
     } catch (error) {
       setBrowserConnected(false)
+      setPreflightBridgeStatus(null)
       if (
         error instanceof BrowserBridgeError
         && error.code === 'unavailable'
@@ -1114,6 +1146,7 @@ export default function App() {
     }
     try {
       const status = await requestBrowserBridge({ type: 'status' })
+      setPreflightBridgeStatus(status)
       if (status.researchPermission) {
         setBrowserPairingStatus('')
         return true
@@ -1121,6 +1154,7 @@ export default function App() {
     } catch (error) {
       if (error instanceof BrowserBridgeError && error.code === 'unavailable') {
         setBrowserConnected(false)
+        setPreflightBridgeStatus(null)
         if (requireConnected) {
           setActionError('小红书研究需要登录页面。请先在 Chrome 登录小红书并连接 ArchResearch，再开始研究。')
           return false
@@ -1412,6 +1446,50 @@ export default function App() {
     : `${usableResultCount} 张可用参考`
   const workspaceItems = demoMode ? demoWorkspaces : workspaces
   const currentWorkspaceId = demoMode ? (demoWorkspaces[0]?.id ?? '') : activeWorkspaceId
+  const browserBridgeAvailable = preflightBridgeStatus?.connection === 'connected'
+    || (preflightBridgeStatus?.paired === true && preflightBridgeStatus.connection === 'connecting')
+  const browserReadinessState = browserReadinessLoading
+    ? 'loading'
+    : browserReadinessError
+      ? 'unknown'
+      : browserConnected !== true
+        ? 'disconnected'
+        : !preflightBridgeStatus
+          ? 'surface-missing'
+          : !browserBridgeAvailable
+            ? 'surface-disconnected'
+            : preflightBridgeStatus.researchPermission
+              ? 'ready'
+              : 'permission'
+  const browserReadinessSummary = {
+    loading: '正在检查 Chrome 连接与临时权限…',
+    unknown: '暂时无法读取 Chrome 连接状态',
+    disconnected: '开始默认小红书研究前需要连接 Chrome',
+    'surface-missing': '本地服务已连接；请在 Chrome 打开本页',
+    'surface-disconnected': '本地服务已连接；当前页面扩展尚未连通',
+    permission: 'Chrome 已连接；开始研究时确认临时网页权限',
+    ready: 'Chrome 已连接；本次网页读取已授权',
+  }[browserReadinessState]
+  const browserReadinessDetail = {
+    loading: '正在读取连接状态',
+    unknown: '连接状态未读取 · 请检查本地服务后重试',
+    disconnected: '未连接 · 默认小红书研究暂不可用',
+    'surface-missing': '服务已连接 · 当前页面未检测到扩展',
+    'surface-disconnected': '服务已连接 · 当前页面扩展未连通',
+    permission: '已连接 · 开始前需在 Chrome 扩展中确认临时权限',
+    ready: '已连接 · 本次网页读取已授权',
+  }[browserReadinessState]
+  const xiaohongshuReadiness = {
+    loading: '等待 Chrome 检查完成',
+    unknown: '连接状态恢复后再验证登录态',
+    disconnected: '连接 Chrome 后验证登录态',
+    'surface-missing': '请在 Chrome 打开本页后验证登录态',
+    'surface-disconnected': '请等待当前页面扩展连通后验证登录态',
+    permission: '登录态待可见页面验证',
+    ready: '登录态待可见页面验证',
+  }[browserReadinessState]
+  const showBrowserConnectAction = !browserReadinessLoading
+    && (browserConnected !== true || !browserBridgeAvailable)
 
   return (
     <main className="research-desk" data-view={resultViewOpen ? 'results' : 'home'} aria-label="建筑研究画板">
@@ -1601,45 +1679,47 @@ export default function App() {
                   </fieldset>
                 </div>
               )}
-              {!demoMode && (browserConnected !== true || browserPairingStatus) && (
-                <section
-                  className="browser-readiness"
-                  aria-label="研究图片来源与 Chrome 增强"
-                  data-chrome={
-                    browserConnected === true
-                      ? 'connected'
-                      : researchSources.includes('xiaohongshu')
-                        ? 'required'
-                        : 'optional'
-                  }
-                >
-                  <Eye aria-hidden="true" />
-                  <div className="browser-readiness-copy">
-                    <strong>
-                      {browserConnected === true
-                        ? '公开网页图片 + Chrome 精确提取'
-                        : researchSources.includes('xiaohongshu')
-                          ? '小红书灵感需要 Chrome'
-                        : '公开网页图片可用'}
-                    </strong>
-                    <p>
-                      {browserConnected === true
-                        ? '公开网页图片可直接显示；开始研究时，Chrome 会确认登录页面、动态页面和精确裁图的临时权限。'
-                        : researchSources.includes('xiaohongshu')
-                          ? '请先在 Chrome 登录你自己的小红书账号并连接扩展。ArchResearch 不读取或保存账号密码与 Cookie。'
-                        : browserConnected === false
-                          ? '你现在看到的是公开网页返回的远程图片。Chrome 未启用只影响登录页面、动态页面和精确裁图。'
-                          : '公开网页研究可直接运行；正在检查 Chrome 精确提取是否可用。'}
-                    </p>
-                    {browserPairingStatus && <small className="browser-pairing-status" aria-live="polite">{browserPairingStatus}</small>}
-                  </div>
-                  <div className="browser-readiness-actions">
-                    {browserConnected !== true && (
-                      <button type="button" disabled={browserConnecting} onClick={() => void handleConnectBrowser()}>
-                        <MonitorUp aria-hidden="true" />{browserConnecting ? '正在打开 Chrome…' : '在 Chrome 中启用精确提取'}
+              {!demoMode && (
+                <section className="research-preflight" aria-label="运行前检查">
+                  <header className="research-preflight-header">
+                    <div className="research-preflight-title">
+                      <ShieldCheck aria-hidden="true" />
+                      <div>
+                        <strong>运行前检查</strong>
+                        <span aria-live="polite">{browserReadinessSummary}</span>
+                      </div>
+                    </div>
+                    <div className="research-preflight-actions">
+                      {showBrowserConnectAction && (
+                        <button type="button" disabled={browserConnecting} onClick={() => void handleConnectBrowser()}>
+                          <MonitorUp aria-hidden="true" />{browserConnecting ? '正在打开 Chrome…' : '在 Chrome 中启用精确提取'}
+                        </button>
+                      )}
+                      <button type="button" disabled={browserReadinessLoading} onClick={() => void refreshBrowserReadiness()}>
+                        <RefreshCw aria-hidden="true" />{browserReadinessLoading ? '检查中…' : '检查连接'}
                       </button>
-                    )}
+                    </div>
+                  </header>
+                  <div className="research-preflight-list">
+                    <div className="research-preflight-row" data-state={browserReadinessState}>
+                      {browserReadinessState === 'ready' ? <Check aria-hidden="true" /> : <CircleDashed aria-hidden="true" />}
+                      <strong>Chrome 图纸提取</strong>
+                      <span>{browserReadinessDetail}</span>
+                    </div>
+                    <div className="research-preflight-row" data-state="pending">
+                      <CircleDashed aria-hidden="true" />
+                      <strong>小红书</strong>
+                      <span>{xiaohongshuReadiness}</span>
+                    </div>
                   </div>
+                  <footer className="research-preflight-footer">
+                    <span>这里只检查 Chrome 连接与临时权限，不会开始研究。</span>
+                    {(browserReadinessError || browserPairingStatus) && (
+                      <span aria-live="polite">
+                        {browserReadinessError ? '连接状态未读取，请检查本地服务后重试。' : browserPairingStatus}
+                      </span>
+                    )}
+                  </footer>
                 </section>
               )}
               <div className="research-run-actions">

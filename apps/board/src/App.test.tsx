@@ -656,6 +656,10 @@ describe('research board', () => {
     expect(screen.getByText('目标：每题 3 张证据图 · 方法、转译与边界')).toBeVisible()
     expect(screen.getByRole('checkbox', { name: /小红书灵感/ })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: /Pinterest 图像线索/ })).not.toBeChecked()
+    expect(await screen.findByRole('region', { name: '运行前检查' })).toBeVisible()
+    expect(screen.getByText('已连接 · 本次网页读取已授权')).toBeVisible()
+    expect(screen.getByText('登录态待可见页面验证')).toBeVisible()
+    expect(screen.getByText('这里只检查 Chrome 连接与临时权限，不会开始研究。')).toBeVisible()
     expect(screen.queryByRole('group', { name: '研究目标' })).not.toBeInTheDocument()
     expect(screen.queryByText('Kamala Narayana Temple Survey')).not.toBeInTheDocument()
   })
@@ -693,6 +697,51 @@ describe('research board', () => {
     await user.click(screen.getByRole('button', { name: '发起新研究' }))
     await user.click(screen.getByRole('button', { name: '添加资料和研究设置' }))
     expect(screen.getByRole('checkbox', { name: /小红书灵感/ })).toBeChecked()
+  })
+
+  it('refreshes readiness without creating a research run', async () => {
+    const user = userEvent.setup()
+    const fetchMock = createLiveFetch({ browserConnected: true })
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    await screen.findByText('已连接 · 本次网页读取已授权')
+    await user.click(screen.getByRole('button', { name: '检查连接' }))
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.filter(([path]) => path === '/v1/browser/status')).toHaveLength(2)
+    })
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/v1/workspaces/workspace-live/runs',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
+  it('distinguishes the local browser connection from the extension on this page', async () => {
+    vi.mocked(requestBrowserBridge).mockRejectedValue(
+      new BrowserBridgeError('unavailable', 'bridge unavailable on this surface'),
+    )
+    vi.stubGlobal('fetch', createLiveFetch({ browserConnected: true }))
+    renderBoard()
+
+    const preflight = await screen.findByRole('region', { name: '运行前检查' })
+    expect(await within(preflight).findByText('服务已连接 · 当前页面未检测到扩展')).toBeVisible()
+    expect(within(preflight).getByText('请在 Chrome 打开本页后验证登录态')).toBeVisible()
+    expect(within(preflight).getByRole('button', { name: '在 Chrome 中启用精确提取' })).toBeVisible()
+    expect(within(preflight).queryByText('已连接 · 本次网页读取已授权')).not.toBeInTheDocument()
+  })
+
+  it('does not report a disconnected bridge as authorized', async () => {
+    vi.mocked(requestBrowserBridge).mockResolvedValue({
+      paired: true,
+      connection: 'disconnected',
+      researchPermission: true,
+    })
+    vi.stubGlobal('fetch', createLiveFetch({ browserConnected: true }))
+    renderBoard()
+
+    const preflight = await screen.findByRole('region', { name: '运行前检查' })
+    expect(await within(preflight).findByText('服务已连接 · 当前页面扩展未连通')).toBeVisible()
+    expect(within(preflight).queryByText('已连接 · 本次网页读取已授权')).not.toBeInTheDocument()
   })
 
   it('explains a partial recent run without exposing internal reason codes', async () => {
@@ -784,20 +833,20 @@ describe('research board', () => {
     }))
     renderBoard()
 
-    expect(await screen.findByText('小红书灵感需要 Chrome')).toBeVisible()
-    expect(screen.getByText('请先在 Chrome 登录你自己的小红书账号并连接扩展。ArchResearch 不读取或保存账号密码与 Cookie。')).toBeVisible()
+    expect(await screen.findByText('未连接 · 默认小红书研究暂不可用')).toBeVisible()
+    expect(screen.getByText('连接 Chrome 后验证登录态')).toBeVisible()
     expect(screen.queryByText('图纸提取未连接')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '在 Chrome 中启用精确提取' }))
 
-    expect(requestBrowserBridge).toHaveBeenNthCalledWith(1, { type: 'status' })
-    expect(requestBrowserBridge).toHaveBeenNthCalledWith(2, {
+    expect(requestBrowserBridge).toHaveBeenNthCalledWith(2, { type: 'status' })
+    expect(requestBrowserBridge).toHaveBeenNthCalledWith(3, {
       type: 'pair',
       endpoint: 'ws://127.0.0.1:8000/v1/browser',
       token: '731904',
     })
-    expect(within(await screen.findByRole('region', { name: '研究图片来源与 Chrome 增强' })).getByText(
-      '公开网页图片 + Chrome 精确提取',
-      { selector: 'strong' },
+    expect(await screen.findByText('图纸提取扩展已连接', {}, { timeout: 2_000 })).toBeVisible()
+    expect(within(await screen.findByRole('region', { name: '运行前检查' })).getByText(
+      '已连接 · 开始前需在 Chrome 扩展中确认临时权限',
     )).toBeVisible()
     expect(screen.queryByText('731904')).not.toBeInTheDocument()
   })
