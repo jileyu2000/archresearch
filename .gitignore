@@ -46,3 +46,6 @@ outputs/
 Thumbs.db
 .idea/
 .vscode/
+
+# Regenerable coverage data (pytest-cov)
+apps/api/.coverage
