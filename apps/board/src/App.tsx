@@ -1115,6 +1115,8 @@ export default function App() {
   const [browserPairingStatus, setBrowserPairingStatus] = useState('')
   const [browserConnecting, setBrowserConnecting] = useState(false)
   const [rerunStarting, setRerunStarting] = useState(false)
+  const [researchStarting, setResearchStarting] = useState(false)
+  const [composerError, setComposerError] = useState('')
   const [composerOpen, setComposerOpen] = useState(!demoMode)
   const [researchOptionsOpen, setResearchOptionsOpen] = useState(false)
   const [briefReviewLoading, setBriefReviewLoading] = useState(false)
@@ -1670,6 +1672,7 @@ export default function App() {
     ) return
     const requestId = hydrateRequestRef.current + 1
     hydrateRequestRef.current = requestId
+    setResearchStarting(true)
     try {
       const run = await apiClient.startResearch({
         workspaceId: activeWorkspaceId,
@@ -1703,13 +1706,18 @@ export default function App() {
       setWorkspaceCreateOpen(false)
       setResearchOptionsOpen(false)
     } catch (error) {
-      if (hydrateRequestRef.current === requestId) setActionError(apiMessage(error))
+      // Launch failures surface beside the submit button, not only in the
+      // page-level error sink far below the fold.
+      if (hydrateRequestRef.current === requestId) setComposerError(apiMessage(error))
+    } finally {
+      setResearchStarting(false)
     }
   }
 
   async function handleResearchSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setActionError('')
+    setComposerError('')
     if (demoMode) {
       setAnnouncement(
         goal === 'visual_reference_search'
@@ -1733,7 +1741,7 @@ export default function App() {
         })
         await startResearchRun(review.subquestions)
       } catch (error) {
-        setActionError(`任务书读取失败：${apiMessage(error)}`)
+        setComposerError(`任务书读取失败：${apiMessage(error)}`)
       } finally {
         setBriefReviewLoading(false)
       }
@@ -2098,6 +2106,7 @@ export default function App() {
       setReferenceUrl('')
       setFiles([])
       setResearchOptionsOpen(false)
+      setComposerError('')
     }
     setGoal(nextGoal)
   }
@@ -2684,18 +2693,21 @@ export default function App() {
                     <button
                       className="research-submit"
                       type="submit"
-                      disabled={briefReviewLoading || isRunActive || loading || (!demoMode && !activeWorkspaceId)}
+                      disabled={briefReviewLoading || researchStarting || isRunActive || loading || (!demoMode && !activeWorkspaceId)}
                     >
                       {isRunActive
                         ? '研究进行中…'
                         : briefReviewLoading
                           ? '正在准备研究…'
+                        : researchStarting
+                          ? '正在创建研究…'
                         : <><span>{goal === 'visual_reference_search'
                           ? '查找灵感'
                           : '开始研究'}</span><ArrowUp aria-hidden="true" /></>}
                     </button>
                   </ClickSpark>
                 </div>
+                {composerError && <p className="research-submit-error" role="alert">{composerError}</p>}
               </div>
               {goal === 'precedent_research' && researchOptionsOpen && (
                 <section className="research-options" aria-label="可选项目资料">

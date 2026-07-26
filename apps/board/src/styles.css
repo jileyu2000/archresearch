@@ -1368,6 +1368,16 @@ h3 {
   display: none;
 }
 
+.research-submit-error {
+  margin: var(--space-2) 0 0;
+  max-width: 68ch;
+  color: var(--color-danger-ink);
+  font-size: var(--font-compact);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-body);
+  text-wrap: pretty;
+}
+
 .drawing-recovery {
   display: grid;
   min-width: 0;

@@ -766,6 +766,60 @@ describe('research board', () => {
     expect(screen.getByText(/46\.0 MB/)).toBeInTheDocument()
   })
 
+  it('shows a pending submit state while the research run is being created', async () => {
+    const user = userEvent.setup()
+    const fetchMock = createLiveFetch()
+    const passThrough = fetchMock.getMockImplementation()!
+    let releaseStart!: () => void
+    const startGate = new Promise<void>((resolve) => { releaseStart = resolve })
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === '/v1/workspaces/workspace-live/runs' && init?.method === 'POST') {
+        return startGate.then(() => passThrough(input, init))
+      }
+      return passThrough(input, init)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    await screen.findByText('真实工作区')
+    await user.type(screen.getByRole('textbox', { name: '研究问题' }), '旧厂房如何植入展厅？')
+    await user.click(screen.getByRole('button', { name: '开始研究' }))
+
+    const pending = await screen.findByRole('button', { name: '正在创建研究…' })
+    expect(pending).toBeDisabled()
+
+    releaseStart()
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: '正在创建研究…' })).not.toBeInTheDocument()
+    })
+  })
+
+  it('surfaces a research start failure next to the submit button', async () => {
+    const user = userEvent.setup()
+    const fetchMock = createLiveFetch()
+    const passThrough = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === '/v1/workspaces/workspace-live/runs' && init?.method === 'POST') {
+        return Promise.resolve(new Response(JSON.stringify({ detail: '本地服务暂时不可用' }), {
+          status: 503,
+          headers: { 'content-type': 'application/json' },
+        }))
+      }
+      return passThrough(input, init)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    await screen.findByText('真实工作区')
+    await user.type(screen.getByRole('textbox', { name: '研究问题' }), '旧厂房如何植入展厅？')
+    await user.click(screen.getByRole('button', { name: '开始研究' }))
+
+    const formError = await screen.findByRole('alert')
+    expect(formError).toHaveTextContent('本地服务暂时不可用')
+    expect(formError.closest('form')).not.toBeNull()
+    expect(screen.getByRole('button', { name: '开始研究' })).toBeEnabled()
+  })
+
   it('reports a failed backup check without touching current data or exposing a restore action', async () => {
     const user = userEvent.setup()
     const fetchMock = createLiveFetch()

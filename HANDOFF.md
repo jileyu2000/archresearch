@@ -27,7 +27,7 @@
 ## 当前已验证基线
 
 - 分支 `codex/archresearch-v2-1`（未 push，push 需显式授权）。基线链：`98a9a01` → `d772902` 产品基线 → `06f3424` WMI-free 启停 → 此后逐里程碑小步提交（最近 `bb32390` 收藏累加保存）。
-- 权威门禁 `scripts/verify.ps1`：**342 API / 131 Board / 165 Extension / 8 packaged E2E**，加 Ruff/format、strict Mypy、两端 lint/typecheck/build、进程/安全/评测检查。PowerShell 5 会吞中间失败，脚本末行成功文案不能单独作为证明。
+- 权威门禁 `scripts/verify.ps1`：**342 API / 135 Board / 165 Extension / 8 packaged E2E**，加 Ruff/format、strict Mypy、两端 lint/typecheck/build、进程/安全/评测检查。PowerShell 5 会吞中间失败，脚本末行成功文案不能单独作为证明。
 - 进程脚本必须保持无 WMI/CIM（MSIX pwsh 加载 MMI 失败会杀掉自己拉起的服务）：监听发现用 `netstat -ano`，命令行读 PEB。
 - 持久数据基线：**4 workspaces / 13 completed Runs / active 0 / `keep_forever` 13/13 / 301 assets / 8 条收藏 / 1 份任务书**。其中《城市社区共享中心》8 问全部 completed 零缺口（M137）；`76f52c79`（三档验收 Deep）与 `ff16988d`（任务书 Standard）是现行验收声明的底层证据，不是失败记录。
 - 服务：`scripts/start.ps1` 幂等启动 API 8000 / Board 5173，登录自启已配置（M127）。
