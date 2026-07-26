@@ -1863,6 +1863,11 @@
 - 用户指出章节大句与"案例研究结果"区头分不清问题与结论。章节编号从裸数字改为「子问题 N」标记（待归组组改"待归组"），栅格列 32px→auto。真实页面显示 子问题 1/2/3。
 - Board 132/132、lint/typecheck 绿；翻译映射表存 scratchpad（不入库不入 Git）。
 
+## M144 husk-run deletion
+
+- 用户批准删除四条资产不可恢复的空壳 Run（d995bed5/a2cf2e20/d13bdc67/58f4b9f9）。按 M131 流程：先做全量产品备份（55,382,928 B，.artifacts/archresearch-backup-before-husk-delete.zip）；停服后用 `lifecycle.delete_runs` 删除，脚本带四重前置断言（目标存在、目标资产为 0 确系空壳、与保护名单零重叠、保护名单删除前后完整）。
+- 结果：17→13 Runs / 13 keep_forever / 4 workspaces / 301 assets；saved_references 7 前后不变；恢复的 Deep（51 结果）与封存图纸灵感（10 结果）复验完好；API/Board 200。
+
 ## M143 remove the drawing-type filter from architecture results
 
 - 用户判定建筑结果页的「图纸类型」下拉筛选没有用，要求移除。删除筛选控件、`assetFilter` 状态、`filterAssetTypes` 派生与"当前筛选没有图纸"死分支；`visibleResults` 直通全部结果。迁移三处旧契约（demo 首页 combobox 断言、demo 筛选步骤、design-system 的 #asset-filter 44px 移动契约）；PRODUCT.md 同步。图纸灵感侧的逐图类型标签与索引不受影响。
