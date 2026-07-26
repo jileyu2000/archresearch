@@ -1266,6 +1266,35 @@ describe('research board', () => {
     expect(within(recentResearch).queryByText('研究已完成')).not.toBeInTheDocument()
   })
 
+  it('holds drawing inspiration to the same completeness honesty as architectural research', async () => {
+    vi.stubGlobal('fetch', createLiveFetch({
+      existingRuns: [{
+        id: 'run-legacy-visual-enrichment-gap',
+        workspace_id: 'workspace-live',
+        question: '想要一组轴测图，帮我找不同表达风格的参考',
+        title: '轴测图：不同表达风格',
+        subquestions: liveSubquestions,
+        goal: 'visual_reference_search',
+        status: 'completed',
+        budget_mode: 'quick',
+        coverage_report: {
+          usable_assets: 9,
+          covered_subquestions: 3,
+          subquestion_count: 3,
+          gaps: [],
+          enrichment_gaps: ['insufficient_verified_or_partial'],
+        },
+        stop_reason: 'completion_satisfied',
+        created_at: '2026-07-19T16:33:00Z',
+      }],
+    }))
+    renderBoard()
+
+    const recentResearch = await screen.findByRole('region', { name: '最近研究' })
+    expect(await within(recentResearch).findByText('已形成初步灵感')).toBeVisible()
+    expect(within(recentResearch).queryByText('已完成')).not.toBeInTheDocument()
+  })
+
   it('separates drawing inspiration from architectural research and hides depth controls', async () => {
     const user = userEvent.setup()
     const fetchMock = createLiveFetch({ initialStatus: 'searching' })

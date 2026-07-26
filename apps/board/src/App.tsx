@@ -406,11 +406,10 @@ function apiMessage(error: unknown) {
 
 function runAnnouncement(run: ResearchRun) {
   if (
-    run.goal === 'precedent_research'
-    && run.status === 'completed'
+    run.status === 'completed'
     && (run.coverageReport?.enrichment_gaps?.length ?? 0) > 0
   ) {
-    return '研究已形成初步依据'
+    return run.goal === 'visual_reference_search' ? '已形成初步灵感' : '研究已形成初步依据'
   }
   if (run.goal === 'visual_reference_search') {
     const visualLabels: Record<RunStatus, string> = {
