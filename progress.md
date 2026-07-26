@@ -220,3 +220,9 @@
 - 恢复流程从三步（选文件、点检查、点确认）减为两步：选中文件自动检查（role=status 播报，检查只读）；检查通过展示备份内容与当前数据的计数对照；危险按钮改名"替换当前数据并恢复"+ 内联最终确认（取消 autoFocus 在前）。失败文案先说"当前数据没有任何改动 / 已退回原状"；留底只在失败语境提及（诚实性审查裁定：不得用只保护失败场景的机制暗示"可反悔"）。
 - 工程黑话清零并加入 copy-glossary 封禁（原页面标题、原检查按钮名、原恢复分区名、算法名、内部检查术语共 5 个词）。新 token --color-warning-ink #92400e 写入 DESIGN.md 色板表；PRODUCT.md 新增该页设计原则条目。
 - 红绿：3 条新测试（状态优先+自动检查+两段确认合同、过期提醒不夸大、失败检查不动数据），Board 133/133、lint/typecheck/build/design-system/glossary 全绿；loaded 无截图 QA：桌面与 390px 零溢出、44px 触控（修复了一处按钮 38px）、真实 API 的失败检查路径与琥珀过期态实测通过，console 0 错误，注入的测试记录已清理。
+
+## M122 表征启动（模拟试点并行期间）
+
+- API 覆盖率基线（pytest-cov，342 tests）：总体 91%，workflow.py 95% / api.py 91% / lifecycle.py 96% / providers.py 96%；报告在 .artifacts/coverage/。Board/Extension 覆盖率因装插件会重载 dev server，排在盲测结束后。
+- 三份只读拆分地图完成并入档 docs/m122-extraction-map.md：App.tsx 八步顺序（纯库先行、run 轮询钩子最后、TDZ 闭包与双写者旗标）；workflow.py 十步顺序（XHS 回退靠 mutate 调用方列表、trace 摘要即 schema、fallback 靠英文错误子串匹配三大暗礁 + 14 个测试再导出名单）；styles.css 14 文件（design-system 测试按整字符串切片，拆分前必须先迁移测试契约 + 同优先级选择器顺序对清单 + dossier 时代疑似死规则名单，回应 findings 悬案）。
+- 期间未触碰运行中的应用、未改产品代码、未装任何包。

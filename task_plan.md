@@ -44,7 +44,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | Phase | Status | Verification |
 |---|---|---|
 | M121 target-user pilot | in_progress | 代理轮已完成并被 M124 吸收；观察工具包就绪于 `docs/m121-pilot-kit.md`（9 任务、记录表、P0–P3 阈值、硬边界，已过三视角对抗审查）。**等待用户招募 2–3 名真实建筑学生/青年设计师**；观察期间不得自动创建 Live Run、不得截图。全部参与者与任务记录齐并形成严重度/频次矩阵后才 complete。 |
-| M122 behavior characterization and bounded modularization | proposed | 先建立 API/Board/Extension 覆盖率报告与不下降阈值，再沿既有产品边界拆分 `App.tsx`（~4,000 行）、`styles.css`（~5,200 行）、`workflow.py`（~3,500 行）；每个切片后完整门禁不变绿不继续。 |
+| M122 behavior characterization and bounded modularization | proposed（表征已启动） | 表征产出见 `docs/m122-extraction-map.md`：API 覆盖率基线 91%（逐模块不下降阈值），三份拆分地图（`App.tsx` 4,013 行 8 步、`workflow.py` 4,977 行 10+1 步、`styles.css` 5,430 行 14 文件且**测试契约先行**）。Board/Extension 覆盖率待装插件。拆分执行沿既有产品边界，每个切片后完整门禁不变绿不继续。 |
 | M123 repeatable release closure | proposed | 干净 Windows/Chrome 环境证明 setup/start/update 与备份预检；为既有门禁加 CI；把发布证据刷新到最终源码状态（一并处置 M131/M144 后失效的 `docs/release-evidence-2026-07-16.md` 与 8 张旧 PNG）。stage/commit 已单独授权过的除外，push 仍需显式授权。 |
 
 ## External acceptance gates
