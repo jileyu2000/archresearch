@@ -3182,8 +3182,12 @@ export default function App() {
                       </div>
                     ) : <>
                       <ol className="case-answer-list" aria-label={`${group.subquestion.question}的案例结论`}>
-                      {group.dossiers.map((dossier) => {
+                      {group.dossiers.map((dossier, dossierIndex) => {
                         const caseSubquestionId = group.unassigned ? undefined : group.subquestion.id
+                        // The chapter conclusion is the first case's mechanism verbatim,
+                        // so that one case does not read the same sentence twice in a row.
+                        const mechanismIsChapterConclusion = dossierIndex === 0
+                          && dossier.analysis.designMechanism.trim() === group.questionSummary?.statement
                         const selectionKey = collectionSelectionKey(dossier.primary.id, caseSubquestionId)
                         const caseSelected = collectionSelections.some((item) => item.key === selectionKey)
                         const displayProject = userFacingProjectName(dossier.project)
@@ -3220,7 +3224,9 @@ export default function App() {
 
                           <div className="case-answer-layout" data-has-image={Boolean(previewUrl) || undefined}>
                             <section className="case-answer-copy" aria-label={`${displayProject} 的研究结果`}>
-                              <p className="case-answer-mechanism">{dossier.analysis.designMechanism}</p>
+                              {!mechanismIsChapterConclusion && (
+                                <p className="case-answer-mechanism">{dossier.analysis.designMechanism}</p>
+                              )}
                               {actions.length > 0 && <div className="case-answer-actions">
                                 <h5>怎么做</h5>
                                 <ol>{actions.map((step) => <li key={step}>{step}</li>)}</ol>

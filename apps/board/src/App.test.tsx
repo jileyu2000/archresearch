@@ -774,6 +774,12 @@ describe('research board', () => {
     expect(within(foundryDossier).getByRole('heading', { name: '怎么做' })).toBeVisible()
     expect(within(foundryDossier).queryByRole('heading', { name: '可直接采用' })).not.toBeInTheDocument()
     expect(within(foundryDossier).getByText('适用条件')).toBeVisible()
+    const chapterConclusion = programChapter.querySelector('.case-chapter-conclusion')
+    expect(chapterConclusion).not.toBeNull()
+    const conclusionText = chapterConclusion?.textContent?.trim()
+    const repeatedMechanisms = [...programChapter.querySelectorAll('.case-answer-mechanism')]
+      .filter((element) => element.textContent?.trim() === conclusionText)
+    expect(repeatedMechanisms).toHaveLength(0)
     expect(foundryDossier.querySelectorAll('img')).toHaveLength(1)
     expect(screen.getByRole('combobox', { name: '图纸类型' })).toHaveValue('all')
     expect(screen.getByRole('button', { name: '返回主页' })).toBeVisible()
@@ -1577,9 +1583,7 @@ describe('research board', () => {
 
     await user.click(await screen.findByRole('button', { name: `打开研究：${liveQuestion}` }))
     expect(await screen.findByRole('article', { name: '代表案例 Live Mill Conversion' })).toBeVisible()
-    expect(within(screen.getByRole('article', { name: '代表案例 Live Mill Conversion' })).getByText(
-      candidate.design_mechanism,
-    )).toBeVisible()
+    expect(screen.getByText(candidate.design_mechanism)).toBeVisible()
     expect(screen.queryByText('暂无项目预览')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /来源/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
@@ -1612,7 +1616,8 @@ describe('research board', () => {
     expect(dossier.querySelector('.dossier-analysis-column')).not.toBeInTheDocument()
     expect(dossier.querySelector('.dossier-analysis')).not.toBeInTheDocument()
     expect(dossier.querySelector('.case-answer-copy')).toBeInTheDocument()
-    expect(within(dossier).getByText(candidate.design_mechanism)).toBeVisible()
+    expect(screen.getByText(candidate.design_mechanism)).toBeVisible()
+    expect(within(dossier).queryByText(candidate.design_mechanism)).not.toBeInTheDocument()
     expect(within(dossier).getByRole('heading', { name: '怎么做' })).toBeVisible()
     expect(within(dossier).queryByText(candidate.limitations[0])).not.toBeInTheDocument()
   })
@@ -1626,7 +1631,7 @@ describe('research board', () => {
     await screen.findByRole('article', { name: '代表案例 Live Mill Conversion' })
     const dossier = await screen.findByRole('article', { name: '代表案例 Live Mill Conversion' })
     expect(dossier.querySelector('.case-answer-image')).not.toBeInTheDocument()
-    expect(within(dossier).getByText(candidate.design_mechanism)).toBeVisible()
+    expect(screen.getByText(candidate.design_mechanism)).toBeVisible()
     expect(within(dossier).queryByText(/来源|预览不可用|暂无项目预览/)).not.toBeInTheDocument()
   })
 
@@ -1832,7 +1837,7 @@ describe('research board', () => {
     expect(chapterHeading).not.toHaveTextContent(courtyardMechanism)
 
     const mill = within(chapter).getByRole('article', { name: '代表案例 Live Mill Conversion' })
-    expect(mill).toHaveTextContent(candidate.design_mechanism)
+    expect(mill).not.toHaveTextContent(candidate.design_mechanism)
     expect(mill).toHaveTextContent(candidate.transfer_strategy[0])
     expect(mill).toHaveTextContent(candidate.transfer_strategy[1])
     expect(mill).not.toHaveTextContent(candidate.limitations[0])
@@ -1979,9 +1984,7 @@ describe('research board', () => {
 
     await user.click(await screen.findByRole('button', { name: `打开研究：${liveQuestion}` }))
     await screen.findByRole('article', { name: '代表案例 Live Mill Conversion' })
-    expect(within(screen.getByRole('article', { name: '代表案例 Live Mill Conversion' })).getByText(
-      candidate.design_mechanism,
-    )).toBeVisible()
+    expect(screen.getByText(candidate.design_mechanism)).toBeVisible()
     expect(screen.queryByText(/暂无项目预览|打开原始来源/)).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /来源/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '重新研究' })).not.toBeInTheDocument()
@@ -2093,9 +2096,7 @@ describe('research board', () => {
     fireEvent.error(remoteImage)
 
     expect(screen.queryByRole('img', { name: 'Live Mill Conversion 剖面图' })).not.toBeInTheDocument()
-    expect(within(screen.getByRole('article', { name: '代表案例 Live Mill Conversion' })).getByText(
-      candidate.design_mechanism,
-    )).toBeVisible()
+    expect(screen.getByText(candidate.design_mechanism)).toBeVisible()
     expect(screen.queryByText(/暂无项目预览|来源链接/)).not.toBeInTheDocument()
   })
 
@@ -3010,7 +3011,8 @@ describe('research board', () => {
     const circulationDossier = within(circulationChapter).getByRole('article', {
       name: '代表案例 Live Mill Conversion',
     })
-    expect(within(circulationDossier).getByText('公共路径与后勤路径各自连续，只在门厅的受控节点交叉。')).toBeVisible()
+    expect(circulationChapter).toHaveTextContent('公共路径与后勤路径各自连续，只在门厅的受控节点交叉。')
+    expect(within(circulationDossier).queryByText('公共路径与后勤路径各自连续，只在门厅的受控节点交叉。')).not.toBeInTheDocument()
     expect(within(circulationDossier).queryByRole('button', { name: /查看 .*证据/ })).not.toBeInTheDocument()
   })
 
