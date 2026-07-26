@@ -166,6 +166,19 @@ describe('responsive design-system rules', () => {
     expect(styles).toMatch(/\.case-answer-source,\s*\.collection-case-source\s*\{[^}]*text-decoration-color:\s*transparent/)
   })
 
+  it('caps the recent-row status column so long statuses wrap instead of crushing the title', () => {
+    expect(styles).toMatch(
+      /\.recent-open\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) fit-content\(40%\) var\(--icon-sm\)/,
+    )
+  })
+
+  it('lets imageless case answers use the full reading measure', () => {
+    expect(styles).toMatch(
+      /\.case-answer-layout:not\(\[data-has-image="true"\]\) \.case-answer-mechanism[^{]*\{[^}]*max-width:\s*72ch/,
+    )
+    expect(styles).toMatch(/\.case-chapter-heading h3\s*\{[^}]*max-width:\s*64ch/)
+  })
+
   it('stacks applicability labels above their text at body size', () => {
     expect(styles).not.toMatch(/\.synthesis-boundary\s*\{[^}]*grid-template-columns/)
     expect(styles).not.toMatch(/\.case-answer-boundary\s*\{[^}]*grid-template-columns/)

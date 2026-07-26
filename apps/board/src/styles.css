@@ -1566,7 +1566,7 @@ h3 {
 .recent-open {
   display: grid;
   min-height: 72px;
-  grid-template-columns: minmax(0, 1fr) auto var(--icon-sm);
+  grid-template-columns: minmax(0, 1fr) fit-content(40%) var(--icon-sm);
   grid-template-rows: auto auto;
   justify-content: stretch;
   column-gap: var(--space-2);
@@ -3126,7 +3126,7 @@ h3 {
 }
 
 .case-chapter-heading h3 {
-  max-width: 48ch;
+  max-width: 64ch;
   font-size: var(--font-xl);
   line-height: var(--leading-title);
   letter-spacing: 0;
@@ -3207,6 +3207,12 @@ h3 {
   min-width: 0;
   align-content: start;
   gap: var(--space-5);
+}
+
+.case-answer-layout:not([data-has-image="true"]) .case-answer-mechanism,
+.case-answer-layout:not([data-has-image="true"]) .case-answer-actions ol,
+.case-answer-layout:not([data-has-image="true"]) .case-answer-boundary {
+  max-width: 72ch;
 }
 
 .case-answer-mechanism {
