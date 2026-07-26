@@ -35,6 +35,13 @@ describe('copy glossary', () => {
       '已形成初步灵感',
       '还剩',
       '尚未结束或已经完成的研究记录',
+      // Retired with the backup-and-restore page redesign: the page now
+      // speaks in scenarios and consequences, not packaging internals.
+      '工作区数据',
+      '检查备份包',
+      '校验并恢复',
+      'SHA-256',
+      '预检',
     ]
     for (const term of banned) {
       expect(source, `retired term "${term}" must not reappear`).not.toContain(term)

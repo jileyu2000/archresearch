@@ -692,7 +692,7 @@ describe('research board', () => {
     vi.restoreAllMocks()
   })
 
-  it('preflights a workspace backup before offering safe restore', async () => {
+  it('answers backup status first, checks a chosen file automatically, and restores only after an explicit replace confirmation', async () => {
     const user = userEvent.setup()
     const fetchMock = createLiveFetch()
     vi.stubGlobal('fetch', fetchMock)
@@ -704,21 +704,43 @@ describe('research board', () => {
     renderBoard()
 
     await user.click(await screen.findByRole('button', { name: '备份与恢复' }))
-    expect(screen.getByRole('heading', { name: '工作区数据' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '确认恢复' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '备份与恢复' })).toBeInTheDocument()
+
+    // Status precedes actions: current data, this-browser download record, honest manual mode.
+    expect(screen.getByText('上次下载备份')).toBeInTheDocument()
+    expect(screen.getByText(/这个浏览器里还没有下载记录/)).toBeInTheDocument()
+    expect(screen.getByText(/ArchResearch 不会自动备份/)).toBeInTheDocument()
+    expect(screen.getByText(/服务配置和登录信息/)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '下载完整备份' }))
     await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText(/已下载。记得把文件挪到移动硬盘或网盘/)).toBeInTheDocument()
+    const record = JSON.parse(window.localStorage.getItem('archresearch.lastBackupDownload') ?? 'null') as { at: string; bytes: number }
+    expect(record.bytes).toBeGreaterThan(0)
+    expect(Date.parse(record.at)).not.toBeNaN()
+    expect(screen.getByText(/只算这个浏览器的下载记录/)).toBeInTheDocument()
 
+    // Choosing a file starts the check automatically — no separate check button, no jargon.
+    expect(screen.queryByRole('button', { name: '检查备份包' })).not.toBeInTheDocument()
     const file = new File(['backup'], 'workspace.zip', { type: 'application/zip' })
-    await user.upload(screen.getByLabelText('选择 ArchResearch 备份包'), file)
-    await user.click(screen.getByRole('button', { name: '检查备份包' }))
+    await user.upload(screen.getByLabelText('选择备份文件（.zip）'), file)
 
-    expect(await screen.findByText('1 个项目')).toBeInTheDocument()
+    expect(await screen.findByText('检查通过，可以恢复')).toBeInTheDocument()
+    expect(screen.getByText('1 个项目')).toBeInTheDocument()
     expect(screen.getByText('2 条研究记录')).toBeInTheDocument()
     expect(screen.getByText('3 项个人收藏')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: '确认恢复' }))
-    expect(await screen.findByText('工作区已恢复')).toBeInTheDocument()
+    expect(screen.getByText(/恢复后，现在的 1 个项目、0 条研究记录会换成这份备份里的内容/)).toBeInTheDocument()
+
+    // The danger action names its consequence and still requires one inline confirmation.
+    await user.click(screen.getByRole('button', { name: '替换当前数据并恢复' }))
+    expect(screen.getByText(/真的要替换吗/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '取消' }))
+    expect(screen.queryByText(/真的要替换吗/)).not.toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/data-backups/restore'))).toBe(false)
+
+    await user.click(screen.getByRole('button', { name: '替换当前数据并恢复' }))
+    await user.click(screen.getByRole('button', { name: '确定替换' }))
+    expect(await screen.findByText(/恢复完成，现在的数据就是这份备份里的内容/)).toBeInTheDocument()
 
     const dataCalls = fetchMock.mock.calls.filter(([input]) => String(input).includes('/data-backups'))
     expect(dataCalls.map(([input]) => String(input))).toEqual([
@@ -726,6 +748,48 @@ describe('research board', () => {
       '/v1/data-backups/preflight',
       '/v1/data-backups/restore',
     ])
+  })
+
+  it('flags an overdue this-browser backup record without overclaiming other machines', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', createLiveFetch())
+    const twentyDaysAgo = new Date(Date.now() - 20 * 86400000).toISOString()
+    window.localStorage.setItem(
+      'archresearch.lastBackupDownload',
+      JSON.stringify({ at: twentyDaysAgo, bytes: 48234496 }),
+    )
+    renderBoard()
+
+    await user.click(await screen.findByRole('button', { name: '备份与恢复' }))
+    expect(screen.getByText(/距上次下载已 20 天（按这个浏览器的记录）/)).toBeInTheDocument()
+    expect(screen.getByText(/如果这段时间没在别处备份过/)).toBeInTheDocument()
+    expect(screen.getByText(/46\.0 MB/)).toBeInTheDocument()
+  })
+
+  it('reports a failed backup check without touching current data or exposing a restore action', async () => {
+    const user = userEvent.setup()
+    const fetchMock = createLiveFetch()
+    const passThrough = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === '/v1/data-backups/preflight') {
+        return Promise.resolve(new Response(JSON.stringify({ detail: '备份包缺少必需文件' }), {
+          status: 422,
+          headers: { 'content-type': 'application/json' },
+        }))
+      }
+      return passThrough(input, init)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    await user.click(await screen.findByRole('button', { name: '备份与恢复' }))
+    const file = new File(['broken'], 'broken.zip', { type: 'application/zip' })
+    await user.upload(screen.getByLabelText('选择备份文件（.zip）'), file)
+
+    const failure = await screen.findByRole('alert')
+    expect(failure).toHaveTextContent('这份文件没有通过检查')
+    expect(failure).toHaveTextContent('当前数据没有任何改动')
+    expect(screen.queryByRole('button', { name: '替换当前数据并恢复' })).not.toBeInTheDocument()
   })
 
   it('keeps one decorative studio canvas behind both home and result routes', () => {

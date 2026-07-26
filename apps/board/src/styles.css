@@ -30,6 +30,7 @@
   --color-danger-line: #e6b4aa;
   --color-warning-soft: #fff8dc;
   --color-warning-line: #dfc96f;
+  --color-warning-ink: #92400e;
   --color-image-well: #e5e8e5;
   --color-overlay: rgb(23 26 24 / 28%);
 
@@ -709,14 +710,100 @@ h3 {
   min-width: 156px;
 }
 
+.data-backup-section {
+  align-items: start;
+}
+
+.backup-status {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-4) 0 0;
+}
+
+.backup-status > div {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  gap: var(--space-4);
+}
+
+.backup-status dt {
+  color: var(--color-ink-secondary);
+  font-size: var(--font-compact);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-body);
+}
+
+.backup-status dd {
+  margin: 0;
+  max-width: 68ch;
+  color: var(--color-ink);
+  font-size: var(--font-base);
+  line-height: var(--leading-body);
+  text-wrap: pretty;
+}
+
+.backup-overdue {
+  display: block;
+  margin-top: var(--space-2);
+  color: var(--color-warning-ink);
+  font-weight: var(--weight-semibold);
+}
+
+.data-backup-action {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 240px;
+}
+
+.data-backup-action small {
+  color: var(--color-ink-secondary);
+  font-size: var(--font-sm);
+  line-height: var(--leading-body);
+  text-wrap: pretty;
+}
+
 .data-restore-section {
   grid-template-columns: 1fr;
   align-items: stretch;
 }
 
+.data-restore-note,
+.data-restore-checking {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--color-ink-secondary);
+  font-size: var(--font-compact);
+}
+
+.data-restore-error {
+  margin-top: var(--space-4);
+  max-width: 68ch;
+  color: var(--color-danger-ink);
+  font-size: var(--font-base);
+  line-height: var(--leading-body);
+  text-wrap: pretty;
+}
+
+.data-restore-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.data-restore-confirm p {
+  margin: 0;
+  font-weight: var(--weight-semibold);
+}
+
+.data-restore-confirm .danger-action {
+  margin-top: 0;
+}
+
 .data-restore-controls {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: end;
   gap: var(--space-2) var(--space-4);
 }
@@ -808,14 +895,25 @@ h3 {
   }
 
   .data-management-section,
-  .data-restore-controls {
+  .data-restore-controls,
+  .backup-status > div {
     grid-template-columns: 1fr;
   }
 
+  .backup-status > div {
+    gap: var(--space-1);
+  }
+
+  .data-backup-action {
+    max-width: none;
+  }
+
   .data-management-section > button,
+  .data-backup-action button,
   .data-restore-controls button,
   .data-restore-controls input,
-  .backup-preflight-result .danger-action {
+  .backup-preflight-result .danger-action,
+  .data-restore-confirm button {
     width: 100%;
     min-height: 44px;
   }

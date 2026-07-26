@@ -212,3 +212,11 @@
 - findings.md（M0–M120，1,428 行）与 progress.md（07-11 至 07-26 M128，1,699 行）逐字迁入 docs/history/，live 文件只保留当前纪元并在头部留归档指针。
 - 现行文档冲突修复：DESIGN.md 移除已删筛选器引用；README 描述与演示流程数对齐；demo-flows.md 两条流程的步骤改写为当前产品（一键连接、后台研究、答案优先阅读、累加收藏、对照案例策略、权利门禁导出），删除 "来源核验" 等废弃表述；failure-cases.md 的 completed 语义与恢复动作对齐 M124/M128；architecture.md 补 keep_forever 子数据豁免、修正 EvidenceClaim 为 7 天并列出 Run 14 天行。
 - 基线数字统一为实测值：4 workspaces / 13 Runs / keep_forever 13/13 / 301 assets / 8 收藏；门禁 342 API / 131 Board（本轮实跑确认）/ 165 Extension / 8 packaged E2E。
+
+## M147 备份与恢复页重设计（用户报告"意义不明"）
+
+- 参考研究经多 agent 并行完成（WhatsApp/Signal/微信备份页、Bitwarden/1Password/Anki 导入导出、Time Machine/Windows/iCloud），两份竞争方案（状态优先 vs 场景叙事）经诚实性/词汇/可实现性三视角对抗审查后合成：状态优先为骨架，吸收场景式分区标题与内联最终确认。
+- 页面标题与入口统一为"备份与恢复"（原页面标题与入口按钮不一致）。第一屏改为三行状态：当前数据实时计数（workspaces + 全部 Run）、只属于本浏览器的上次下载记录（localStorage，措辞不断言其他设备，≥14 天转 warning-ink 琥珀文字提醒）、"手动备份"诚实说明；排除项一句话（服务配置和登录信息）。
+- 恢复流程从三步（选文件、点检查、点确认）减为两步：选中文件自动检查（role=status 播报，检查只读）；检查通过展示备份内容与当前数据的计数对照；危险按钮改名"替换当前数据并恢复"+ 内联最终确认（取消 autoFocus 在前）。失败文案先说"当前数据没有任何改动 / 已退回原状"；留底只在失败语境提及（诚实性审查裁定：不得用只保护失败场景的机制暗示"可反悔"）。
+- 工程黑话清零并加入 copy-glossary 封禁（原页面标题、原检查按钮名、原恢复分区名、算法名、内部检查术语共 5 个词）。新 token --color-warning-ink #92400e 写入 DESIGN.md 色板表；PRODUCT.md 新增该页设计原则条目。
+- 红绿：3 条新测试（状态优先+自动检查+两段确认合同、过期提醒不夸大、失败检查不动数据），Board 133/133、lint/typecheck/build/design-system/glossary 全绿；loaded 无截图 QA：桌面与 390px 零溢出、44px 触控（修复了一处按钮 38px）、真实 API 的失败检查路径与琥珀过期态实测通过，console 0 错误，注入的测试记录已清理。

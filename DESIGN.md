@@ -189,6 +189,7 @@ ArchResearch 是建筑学生和青年设计师使用的研究工作面。整个�
 | `focus` | 所有键盘焦点的 3px 外轮廓，偏移 2px；焦点不得只靠颜色变化。 |
 | `evidence` / `evidence-soft` | 已核验证据及其低强度底色，只表示核验，不表示收藏或版权。 |
 | `restriction` / `restriction-ink` / `restriction-soft` | 权利限制、拒绝、冲突和错误。小字必须使用对比度更高的 `restriction-ink`。 |
+| `warning-soft` / `warning-line` / `warning-ink` | 需要用户注意但不是错误的状态（如备份记录过期）。文字必须使用深色 `warning-ink`（白底对比度 ≥4.5:1），且颜色之外必须有文字说明。 |
 | `overlay` | 抽屉与对话框遮罩；不得叠加模糊玻璃效果。 |
 
 **证据与权利分离规则。** `verified/partial/visual_lead` 对外固定显示为“来源与内容已核对 / 已有依据，仍需核对 / 只作视觉参考”。后两者使用中性图标加文字；不得用限制红表达低可信度，也不得用核验绿表达可公开分享。

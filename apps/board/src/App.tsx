@@ -326,6 +326,35 @@ const comparisonFocusLabels: Record<AssetType, string> = {
 
 const demoResearchQuestion = '旧建筑更新中，如何植入新功能，并组织公共与后勤流线和剖面层次？'
 const activeWorkspaceStorageKey = 'archresearch.activeWorkspaceId'
+const lastBackupStorageKey = 'archresearch.lastBackupDownload'
+
+interface LastBackupRecord {
+  at: string
+  bytes: number
+}
+
+function readLastBackupRecord(): LastBackupRecord | null {
+  try {
+    const raw = window.localStorage.getItem(lastBackupStorageKey)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { at?: unknown; bytes?: unknown }
+    if (typeof parsed.at !== 'string' || typeof parsed.bytes !== 'number') return null
+    return { at: parsed.at, bytes: parsed.bytes }
+  } catch {
+    return null
+  }
+}
+
+function formatBackupSize(bytes: number) {
+  if (bytes < 1048576) return `${Math.max(1, Math.round(bytes / 1024))} KB`
+  return `${(bytes / 1048576).toFixed(1)} MB`
+}
+
+function formatBackupTime(at: string) {
+  const time = new Date(at)
+  if (Number.isNaN(time.getTime())) return at
+  return `${time.getMonth() + 1} 月 ${time.getDate()} 日 ${String(time.getHours()).padStart(2, '0')}:${String(time.getMinutes()).padStart(2, '0')}`
+}
 
 const deepDemoSubquestions = [
   ...demoSubquestions,
@@ -1038,6 +1067,19 @@ export default function App() {
   const [backupPreflight, setBackupPreflight] = useState<WorkspaceBackupPreflight | null>(null)
   const [dataOperation, setDataOperation] = useState<'backup' | 'preflight' | 'restore' | ''>('')
   const [dataStatus, setDataStatus] = useState('')
+  const [lastBackupRecord, setLastBackupRecord] = useState<LastBackupRecord | null>(readLastBackupRecord)
+  const [backupAgeDays, setBackupAgeDays] = useState<number | null>(null)
+  const [preflightError, setPreflightError] = useState('')
+  const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false)
+
+  function refreshBackupAge(record: LastBackupRecord | null) {
+    if (!record) {
+      setBackupAgeDays(null)
+      return
+    }
+    const days = Math.floor((Date.now() - Date.parse(record.at)) / 86400000)
+    setBackupAgeDays(Number.isFinite(days) ? days : null)
+  }
   const [collectionView, setCollectionView] = useState<'precedent' | 'visual'>('precedent')
   const [selectedCollectionSubquestion, setSelectedCollectionSubquestion] = useState<{
     collectionQuestion: string
@@ -1562,7 +1604,13 @@ export default function App() {
       link.download = filename
       link.click()
       URL.revokeObjectURL(url)
-      setDataStatus('完整备份已下载')
+      // The record is written only after the full archive arrived, so the
+      // status row never claims a download that did not happen.
+      const record: LastBackupRecord = { at: new Date().toISOString(), bytes: blob.size }
+      window.localStorage.setItem(lastBackupStorageKey, JSON.stringify(record))
+      setLastBackupRecord(record)
+      refreshBackupAge(record)
+      setDataStatus('已下载。记得把文件挪到移动硬盘或网盘。')
     } catch (error) {
       setActionError(apiMessage(error))
     } finally {
@@ -1570,16 +1618,16 @@ export default function App() {
     }
   }
 
-  async function handleBackupPreflight() {
-    if (!backupFile) return
+  async function handleBackupPreflight(file: File) {
     setActionError('')
+    setPreflightError('')
     setDataStatus('')
     setDataOperation('preflight')
     try {
-      setBackupPreflight(await apiClient.preflightWorkspaceBackup(backupFile))
-    } catch (error) {
+      setBackupPreflight(await apiClient.preflightWorkspaceBackup(file))
+    } catch {
       setBackupPreflight(null)
-      setActionError(apiMessage(error))
+      setPreflightError('这份文件没有通过检查，不能用来恢复。可能是下载不完整、被改动过，或者不是 ArchResearch 的备份。当前数据没有任何改动，换一份文件再试。')
     } finally {
       setDataOperation('')
     }
@@ -1603,9 +1651,10 @@ export default function App() {
       resetWorkspaceView()
       setBackupPreflight(null)
       setBackupFile(null)
-      setDataStatus('工作区已恢复')
+      setRestoreConfirmOpen(false)
+      setDataStatus('恢复完成，现在的数据就是这份备份里的内容。')
     } catch (error) {
-      setActionError(apiMessage(error))
+      setActionError(`恢复没有完成，已退回原状——当前数据和恢复前一样。${apiMessage(error)}`)
     } finally {
       setDataOperation('')
     }
@@ -2293,6 +2342,7 @@ export default function App() {
     : -1
   const resultViewOpen = !composerOpen && !collectionOpen && !dataManagementOpen
   const homeViewOpen = composerOpen && !collectionOpen && !dataManagementOpen
+  const backupOverdueDays = backupAgeDays !== null && backupAgeDays >= 14 ? backupAgeDays : null
   const activePartialDiagnosis = activeRun && ['partial', 'blocked'].includes(activeRun.status)
     ? partialDiagnosis(activeRun)
     : null
@@ -2378,6 +2428,7 @@ export default function App() {
               onClick={() => {
                 setActionError('')
                 setDataStatus('')
+                refreshBackupAge(lastBackupRecord)
                 setDataManagementOpen(true)
               }}
             >
@@ -2419,76 +2470,131 @@ export default function App() {
           <section className="data-management-page" aria-labelledby="data-management-title">
             <header className="data-management-heading">
               <div>
-                <h1 id="data-management-title">工作区数据</h1>
-                <p>备份项目、研究记录、收藏图片、任务书和导出文件。服务配置与登录凭据不会进入备份。</p>
+                <h1 id="data-management-title">备份与恢复</h1>
+                <p>ArchResearch 的数据全部存在这台电脑上，不在云端。硬盘故障、误删、换电脑——遇到这些事，能把数据找回来的只有你自己下载过的备份文件。这一页做两件事：把当前全部数据打包下载保存；需要时，再用某份备份把数据整体换回来。</p>
               </div>
               <ShieldCheck aria-hidden="true" />
             </header>
 
-            <section className="data-management-section" aria-labelledby="backup-heading">
+            <section className="data-management-section data-backup-section" aria-labelledby="backup-heading">
               <div className="data-management-copy">
-                <h2 id="backup-heading">完整备份</h2>
-                <p>生成一个带文件清单和 SHA-256 校验的 ZIP，可用于迁移或故障恢复。</p>
+                <h2 id="backup-heading">备份：换电脑或重装之前，先下载一份</h2>
+                <dl className="backup-status">
+                  <div>
+                    <dt>当前数据</dt>
+                    <dd>{workspaces.length} 个项目 · {recentRuns.length} 条研究记录（收藏图片、任务书和导出文件会一起打包，不单独计数）</dd>
+                  </div>
+                  <div>
+                    <dt>上次下载备份</dt>
+                    <dd>
+                      {lastBackupRecord
+                        ? `${formatBackupTime(lastBackupRecord.at)} · ${formatBackupSize(lastBackupRecord.bytes)}（只算这个浏览器的下载记录；清除浏览器数据后记录会消失，真正算数的是你存着的备份文件）`
+                        : '这个浏览器里还没有下载记录。如果你在别处下载过，这里不会显示。'}
+                      {backupOverdueDays !== null && (
+                        <span className="backup-overdue">距上次下载已 {backupOverdueDays} 天（按这个浏览器的记录）。如果这段时间没在别处备份过，最近的研究可能还不在任何备份里——建议重新下载一份。</span>
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>备份方式</dt>
+                    <dd>手动。ArchResearch 不会自动备份，需要你定期来这里下载；建议每一两周一次，下载后另存一份到移动硬盘或网盘。</dd>
+                  </div>
+                </dl>
+                <p>备份包含你的全部数据，只有两样不放进去——服务配置和登录信息，换了电脑要重新填写。</p>
               </div>
-              <button
-                className="primary-action"
-                type="button"
-                disabled={Boolean(dataOperation) || isRunActive}
-                onClick={() => void handleDownloadBackup()}
-              >
-                <HardDriveDownload aria-hidden="true" />
-                {dataOperation === 'backup' ? '正在生成…' : '下载完整备份'}
-              </button>
+              <div className="data-backup-action">
+                <button
+                  className="primary-action"
+                  type="button"
+                  disabled={Boolean(dataOperation) || isRunActive}
+                  onClick={() => void handleDownloadBackup()}
+                >
+                  <HardDriveDownload aria-hidden="true" />
+                  {dataOperation === 'backup' ? '正在打包……' : '下载完整备份'}
+                </button>
+                <small>
+                  {isRunActive
+                    ? '有研究正在进行。等它跑完再备份，免得打包进半截结果。'
+                    : '会得到一个 .zip 文件，按你浏览器的下载设置保存。'}
+                </small>
+              </div>
             </section>
 
             <section className="data-management-section data-restore-section" aria-labelledby="restore-heading">
               <div className="data-management-copy">
-                <h2 id="restore-heading">校验并恢复</h2>
-                <p>先检查格式、版本、路径、文件哈希和 SQLite；预检失败不会修改当前数据。</p>
+                <h2 id="restore-heading">恢复：在新电脑上，或者出事之后</h2>
+                <p>恢复会用备份里的内容替换当前的全部数据——项目、研究记录、个人收藏、任务书，一次全换，不是合并；备份之后新增的内容，恢复完成后就没有了。选中文件后会先自动检查，这一步不改动任何数据；真正开始恢复时，中途出任何差错都会用自动留底退回原状。但这些保护管不了选错备份——动手前请确认，这份备份就是你想回到的时间点。</p>
               </div>
               <div className="data-restore-controls">
-                <label htmlFor="workspace-backup-file">选择 ArchResearch 备份包</label>
+                <label htmlFor="workspace-backup-file">选择备份文件（.zip）</label>
                 <input
                   id="workspace-backup-file"
                   type="file"
                   accept=".zip,application/zip"
-                  disabled={Boolean(dataOperation)}
+                  disabled={Boolean(dataOperation) || isRunActive}
                   onChange={(event) => {
-                    setBackupFile(event.target.files?.[0] ?? null)
+                    const file = event.target.files?.[0] ?? null
+                    setBackupFile(file)
                     setBackupPreflight(null)
+                    setPreflightError('')
+                    setRestoreConfirmOpen(false)
                     setDataStatus('')
                     setActionError('')
+                    if (file) void handleBackupPreflight(file)
                   }}
                 />
-                <button
-                  type="button"
-                  disabled={!backupFile || Boolean(dataOperation) || isRunActive}
-                  onClick={() => void handleBackupPreflight()}
-                >
-                  <Upload aria-hidden="true" />
-                  {dataOperation === 'preflight' ? '正在检查…' : '检查备份包'}
-                </button>
+                {isRunActive && <p className="data-restore-note">有研究正在进行，恢复功能暂时停用。等研究结束后再来。</p>}
               </div>
 
+              {dataOperation === 'preflight' && (
+                <p className="data-restore-checking" role="status">正在检查这份备份……不会改动当前数据。</p>
+              )}
+              {preflightError && <p className="data-restore-error" role="alert">{preflightError}</p>}
+
               {backupPreflight?.ready && (
-                <section className="backup-preflight-result" aria-label="备份预检通过">
-                  <header><Check aria-hidden="true" /><strong>备份完整，可以恢复</strong></header>
+                <section className="backup-preflight-result" aria-label="备份检查结果">
+                  <header><Check aria-hidden="true" /><strong>检查通过，可以恢复</strong></header>
                   <ul>
                     <li><strong>{backupPreflight.workspace_count} 个项目</strong></li>
                     <li><strong>{backupPreflight.run_count} 条研究记录</strong></li>
                     <li><strong>{backupPreflight.collection_count} 项个人收藏</strong></li>
                     <li><strong>{backupPreflight.input_artifact_count} 份任务书或附件</strong></li>
+                    <li><strong>约 {formatBackupSize(backupPreflight.total_bytes)}</strong></li>
                   </ul>
-                  <p>恢复时会先为当前数据生成回滚备份；只有全部文件交换成功后才会启用新数据。</p>
-                  <button
-                    className="danger-action"
-                    type="button"
-                    disabled={Boolean(dataOperation) || isRunActive}
-                    onClick={() => void handleRestoreBackup()}
-                  >
-                    <Upload aria-hidden="true" />
-                    {dataOperation === 'restore' ? '正在恢复…' : '确认恢复'}
-                  </button>
+                  <p>恢复后，现在的 {workspaces.length} 个项目、{recentRuns.length} 条研究记录会换成这份备份里的内容；中途出任何差错，会用自动留底退回原状。</p>
+                  {restoreConfirmOpen ? (
+                    <div className="data-restore-confirm" role="group" aria-label="最终确认">
+                      <p>真的要替换吗？开始后请保持页面打开。</p>
+                      {/* 取消 is focused first so the safe exit is one keypress away. */}
+                      <button
+                        type="button"
+                        autoFocus
+                        disabled={dataOperation === 'restore'}
+                        onClick={() => setRestoreConfirmOpen(false)}
+                      >
+                        取消
+                      </button>
+                      <button
+                        className="danger-action"
+                        type="button"
+                        disabled={Boolean(dataOperation) || isRunActive}
+                        onClick={() => void handleRestoreBackup()}
+                      >
+                        <Upload aria-hidden="true" />
+                        {dataOperation === 'restore' ? '正在恢复……' : '确定替换'}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      className="danger-action"
+                      type="button"
+                      disabled={Boolean(dataOperation) || isRunActive}
+                      onClick={() => setRestoreConfirmOpen(true)}
+                    >
+                      <Upload aria-hidden="true" />
+                      替换当前数据并恢复
+                    </button>
+                  )}
                 </section>
               )}
             </section>
