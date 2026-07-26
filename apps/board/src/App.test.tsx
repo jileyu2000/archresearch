@@ -770,6 +770,7 @@ describe('research board', () => {
     const programChapter = screen.getByRole('region', {
       name: '新增功能怎样进入旧结构，同时减少对原构件的改动？',
     })
+    expect(within(programChapter).getByText(/^子问题 \d$/)).toBeVisible()
     const foundryDossier = within(programChapter).getByRole('article', { name: '代表案例 Foundry Commons Replay' })
     expect(within(foundryDossier).getByRole('heading', { name: '怎么做' })).toBeVisible()
     expect(within(foundryDossier).queryByRole('heading', { name: '可直接采用' })).not.toBeInTheDocument()

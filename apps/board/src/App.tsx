@@ -3184,7 +3184,7 @@ export default function App() {
                 {caseGroups.filter((group) => !group.unassigned).map((group) => (
                   <section className="case-chapter" key={group.subquestion.id} aria-labelledby={`case-chapter-${group.subquestion.id}`}>
                     <header className="case-chapter-heading">
-                      <span aria-hidden="true">{group.unassigned ? '?' : group.index + 1}</span>
+                      <span aria-hidden="true">{group.unassigned ? '待归组' : `子问题 ${group.index + 1}`}</span>
                       <div>
                         <h3 id={`case-chapter-${group.subquestion.id}`}>{group.subquestion.question}</h3>
                         {group.questionSummary && (

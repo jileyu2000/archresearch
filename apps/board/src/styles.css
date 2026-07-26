@@ -3118,7 +3118,7 @@ h3 {
 
 .case-chapter-heading {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
   gap: var(--space-4);
   margin-bottom: 0;
@@ -3131,6 +3131,7 @@ h3 {
   color: var(--color-action-hover);
   font-size: var(--font-sm);
   font-weight: var(--weight-bold);
+  white-space: nowrap;
 }
 
 .case-chapter-heading h3 {
