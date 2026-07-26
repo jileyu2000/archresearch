@@ -1,5 +1,12 @@
 # Repository Instructions
 
+## Session Recovery
+
+- At the start of a new conversation, read `HANDOFF.md` completely before taking project actions.
+- Then read active phases in `task_plan.md` and the recent ends of `findings.md` and `progress.md`; search older history only when needed.
+- Treat the working tree as user-owned state. Never reset, overwrite, or clean existing changes during recovery.
+- Update `HANDOFF.md` only when the architecture, verified baseline, or single next action materially changes.
+
 ## Scope
 
 - Build only the approved local-first ArchResearch V2.1 system.
