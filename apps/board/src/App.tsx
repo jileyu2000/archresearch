@@ -177,6 +177,14 @@ function userFacingRecommendation(statement: string) {
     .trim()
 }
 
+function sourceHostLabel(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./u, '')
+  } catch {
+    return '源网页'
+  }
+}
+
 function userFacingProjectName(projectName: string) {
   return projectName
     .replace(/\s*\|\s*(?:ArchDaily(?:\s+China)?|Dezeen|Designboom|Divisare)\s*$/iu, '')
@@ -3237,6 +3245,16 @@ export default function App() {
                                   <span>{dossier.analysis.limitation}</span>
                                 </p>
                               )}
+                              <a
+                                className="case-answer-source"
+                                href={dossier.primary.sourceUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                aria-label={`打开出处：${displayProject}`}
+                              >
+                                <ExternalLink aria-hidden="true" />
+                                <span>出处 · {sourceHostLabel(dossier.primary.sourceUrl)}</span>
+                              </a>
                             </section>
                             {previewResult && previewUrl && (
                               <figure className="case-answer-image">
@@ -3710,6 +3728,16 @@ export default function App() {
                                                   <span>{boundary}</span>
                                                 </p>
                                               )}
+                                              <a
+                                                className="collection-case-source"
+                                                href={item.source_url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                aria-label={`打开出处：${projectName}`}
+                                              >
+                                                <ExternalLink aria-hidden="true" />
+                                                <span>出处 · {sourceHostLabel(item.source_url)}</span>
+                                              </a>
                                             </section>
                                           ) : (
                                             <p className="collection-case-missing">这条收藏还没有形成可复用解法。</p>

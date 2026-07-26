@@ -1919,6 +1919,32 @@ h3 {
   font-size: var(--font-base);
 }
 
+/* One quiet provenance link per case: it opens the source page without
+   bringing back verification copy or the inspector. */
+.case-answer-source,
+.collection-case-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  justify-self: start;
+  margin-top: var(--space-2);
+  color: var(--color-ink-secondary);
+  font-size: var(--font-sm);
+  text-decoration: none;
+}
+
+.case-answer-source:hover,
+.collection-case-source:hover {
+  color: var(--color-ink);
+  text-decoration: underline;
+}
+
+.case-answer-source svg,
+.collection-case-source svg {
+  width: 14px;
+  height: 14px;
+}
+
 .collection-case-missing {
   margin: 0;
   color: var(--color-ink-secondary);

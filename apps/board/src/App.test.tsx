@@ -1062,6 +1062,9 @@ describe('research board', () => {
     expect(within(savedCase).queryByText('A new independent public floor threads through the retained brick shell.')).not.toBeInTheDocument()
     expect(within(savedCase).queryByRole('link', { name: '打开证据来源：Live Mill Conversion' })).not.toBeInTheDocument()
     expect(within(savedCase).queryByRole('link', { name: '打开来源：Live Mill Conversion' })).not.toBeInTheDocument()
+    const savedSourceLink = within(savedCase).getByRole('link', { name: '打开出处：Live Mill Conversion' })
+    expect(savedSourceLink).toHaveAttribute('href', 'https://example.com/case')
+    expect(within(savedCase).getByText('出处 · example.com')).toBeVisible()
     expect(within(savedCase).getByRole('button', { name: '删除收藏：Live Mill Conversion' })).toBeVisible()
     expect(savedCase.querySelector('details')).toBeNull()
     expect(within(savedCase).queryByText('查看完整相关内容')).not.toBeInTheDocument()
@@ -1620,6 +1623,9 @@ describe('research board', () => {
     expect(within(dossier).queryByText(candidate.design_mechanism)).not.toBeInTheDocument()
     expect(within(dossier).getByRole('heading', { name: '怎么做' })).toBeVisible()
     expect(within(dossier).queryByText(candidate.limitations[0])).not.toBeInTheDocument()
+    const sourceLink = within(dossier).getByRole('link', { name: '打开出处：Live Mill Conversion' })
+    expect(sourceLink).toHaveAttribute('href', 'https://example.com/live-mill')
+    expect(within(dossier).getByText('出处 · example.com')).toBeVisible()
   })
 
   it('omits an unavailable recognition image without replacing the answer with a placeholder', async () => {
