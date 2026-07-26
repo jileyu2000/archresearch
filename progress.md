@@ -1720,6 +1720,9 @@
 - 用户批准等待并发轮次结束后再收口。20:20 起文件 mtime 连续 12 分钟不变，判定该轮已结束；Codex 的记录显示它已用完整 `scripts/verify.ps1`（退出码 0，341/115/165/8，四个 PowerShell 套件全绿）验证过当前工作树。
 - 独立复验通过：`scripts/dev-common.ps1`、`start.ps1`、`stop.ps1` 中 `Get-CimInstance`/`Get-WmiObject`/`Get-NetTCPConnection` 命中 0；先前在本 shell 无法执行的 `scripts/tests/process-lifecycle.tests.ps1` 现在 exit=0 通过。M129 门禁的唯一缺口因此闭合。
 - 按已批准的分层边界收口为两次提交而不是混合提交：`scripts/dev-common.ps1` 与 `scripts/tests/process-lifecycle.tests.ps1` 属产品层，单独提交；`AGENTS.md`、`HANDOFF.md`、`task_plan.md`、`findings.md`、`progress.md` 属工程记录层，单独提交。产品改动与记录改动保持可分别回退。
+- 基线为 `98a9a01` → `d772902` 产品基线 → `06f3424` WMI-free listener 修复 → `775c4b7` 工程记录，均为本地提交，未 push。提交后工作树只剩两个有意排除的未跟踪条目：`.artifacts/`（10 张 portfolio PNG，数据备份 ZIP 已 ignore）与 `docs/release-evidence-2026-07-16.md`。
+- 收口后在本会话执行了一次端到端权威门禁 `scripts/verify.ps1`，退出码 0：dev-common、Provider 安全契约、process-lifecycle、autostart 四个 PowerShell 套件全绿，341 API、115 Board、165 Extension、8 packaged Chrome E2E 全通过，Ruff、strict Mypy 19 files、两端 lint/typecheck/build 与评测夹具均通过。这是 WMI 修复后本 shell 首次完整跑通 `verify.ps1`。
+- 只读复验 durable 数据未变：3 workspaces / 14 Runs 全部 completed / active 0，`keep_forever=1` 14/14，封存 Run `10d31b4c-94dd-4442-b24a-fc1b241e658e` 仍为 completed / attempt 0 / coverage_satisfied。`git diff --check` 除既有 LF→CRLF 提示外无问题。
 - 本轮未创建、重试或取消任何 Run，未调用 Provider/Firecrawl，未恢复 Firecrawl，未截图，未改动 durable 数据，未执行 reset/checkout/clean/push。
 
 ## M129 无 WMI 依赖的本地服务启停
