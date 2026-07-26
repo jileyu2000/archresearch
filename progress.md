@@ -1777,6 +1777,18 @@
 - 完整 `scripts/verify.ps1` 退出码 0：341 API / 120 Board / 165 Extension / 8 packaged E2E 与全部静态/构建/进程/安全/评测检查。未改后端、schema、durable 数据，未创建/重试 Run，未截图。
 - 已提交 `3962d8d`（产品）与 `77650f6`（记录）。
 
+## M135 remaining-surface copy closure and pilot kit
+
+- 用户批准继续收尾并授权自主决策。先在真实轴测图 Run 上走查图纸灵感结果页 DOM（69 个唯一文本块），同时启动三审计 + 逐条对抗核验的多智能体 workflow 审计 App.tsx 其余用户可见字符串。
+- 第一轮核验因编排 bug（发现载荷未插值进核验 prompt）被 45 个核验 agent 全部正确拒绝；修复插值后从缓存恢复，审计层零重跑，得到 43 条确认 / 2 条驳回。核验层修正了多条审计层的事实错误（会撒谎的就绪文案、指向不存在按钮的指引、方向写反的提示）。
+- 合并去重为 38 处一致修改，先写 `copy-glossary.test.ts` 源码级守卫（封禁 18 个废弃词 + 3 条必需新文案）确认红灯，再用带前置断言的批量替换脚本一次落地（45 次替换全部命中预期次数，未命中即整体不写入）。
+- 迁移 16 处旧文案断言；两个同名"对照案例策略"入口按钮属有意统一，测试改用 getAllByRole。完整 Board 123/123（新增 3 条词汇守卫）。
+- PRODUCT.md 与 DESIGN.md 的对照行同步为"图中看到/适用条件/对照案例策略"。
+- Loaded QA：真实轴测图 Run 上权利行由"聚合来源 · 权利 权利未知"变为"转载合集（非首发） · 权利 未注明"，旧词 0 命中，溢出 0、错误 0。
+- 完整 `scripts/verify.ps1` 退出码 0：341 API / 123 Board / 165 Extension / 8 packaged E2E 与全部静态/构建/进程/安全/评测检查。未改后端或 durable 数据，未创建/重试 Run，未截图。
+- M121 观察工具包（10 任务、记录表、5 问、阈值、边界）已提交至 docs/pilot/m121-observation-kit.md；实际观察等待用户招募 2–3 名真实用户。
+- 已提交 `3962d8d`（产品）与 `77650f6`（记录）。
+
 ## M121 pilot observation kit (step B preparation)
 
 - 用户指示继续已批准的 A→B→C 顺序；B 需要真人参与，本轮交付试点观察工具包 `docs/m121-pilot-kit.md`，不创建任何 Run。
