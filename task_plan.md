@@ -43,7 +43,10 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 
 | Phase | Status | Verification |
 |---|---|---|
-| M121 simulated-user pilot | in_progress | **2026-07-27 用户决定：验收从真人观察改为多 agent 模拟测试，不再要求招募真人。** 执行标准仍是 `docs/m121-pilot-kit.md` 的任务脚本、判据与 P0–P3 分级：3 个无产品先验的盲测 persona（互不知情，只拿参与者台词）顺序驱动真实应用，判据只给独立评审 agent；结论必须随附"模拟局限"记录（无真实用时/情绪、agent 比真人更会猜界面、T4 任务书路径不可模拟）。当前模拟轮进行中；全部记录归档 + 严重度矩阵 + ≥2 人重复模式立项决定完成后标 complete。 |
+| M121 simulated-user pilot | complete | 2026-07-27 用户将验收改为多 agent 模拟测试后，本轮即验收轮：3 个盲测 persona 按工具包脚本驱动真实应用，独立评审按判据打分。2/3 全程跑通，核心链路判据全过；"怎么做+出处链接"被一致列为最信任资产。产出：5 项 P1（M149）、6 项重复 P2（M150）、当轮修复项（M148）、环境事件复核（零反馈/冻结最可能为自动化 ref 伪影，产品侧真缺口单列）。记录：`docs/m121-simulated-pilot-2026-07-27.md` + 逐字 JSON。图纸灵感线与任务书路径本轮零覆盖，修复后需补定向模拟。 |
+| M148 submit feedback hardening | in_progress | 试点当轮修复：研究提交后按钮立即进入等待态；启动失败的报错就近显示在提交按钮旁（不再只渲染于主页底部）。红绿 + 完整门禁。 |
+| M149 pilot P1 repairs | proposed | 五项：结论栏与证据脱节（先工程根因诊断疑似绑定错位）；保存入口可发现性（结果页直接给"加入个人收藏"动作）；等待期"可用参考"计数全程为 0 的失灵；保留策略提醒与说明（到期提醒/起算日/一学期诉求的产品决策）；案例供给与匹配质量（含中英名不一致核查）。每项独立红绿。 |
+| M150 pilot repeated-P2 batch | proposed | 六项：三档双命名统一为一套词；术语语域清理（初步依据缩略态、连续检索、未读取图片像素、证据方向等）；研究进行中保留全局入口（主页不被进度视图整页接管）；保存成功反馈就近化 + 选中态清空的语义说明；记录/收藏标题的可辨认性；顶栏"查看上次结果/个人收藏"职责梳理。 |
 | M122 behavior characterization and bounded modularization | proposed（表征已启动） | 表征产出见 `docs/m122-extraction-map.md`：API 覆盖率基线 91%（逐模块不下降阈值），三份拆分地图（`App.tsx` 4,013 行 8 步、`workflow.py` 4,977 行 10+1 步、`styles.css` 5,430 行 14 文件且**测试契约先行**）。Board/Extension 覆盖率待装插件。拆分执行沿既有产品边界，每个切片后完整门禁不变绿不继续。 |
 | M123 repeatable release closure | proposed | 干净 Windows/Chrome 环境证明 setup/start/update 与备份预检；为既有门禁加 CI；把发布证据刷新到最终源码状态（一并处置 M131/M144 后失效的 `docs/release-evidence-2026-07-16.md` 与 8 张旧 PNG）。stage/commit 已单独授权过的除外，push 仍需显式授权。 |
 

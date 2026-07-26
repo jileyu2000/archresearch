@@ -226,3 +226,10 @@
 - API 覆盖率基线（pytest-cov，342 tests）：总体 91%，workflow.py 95% / api.py 91% / lifecycle.py 96% / providers.py 96%；报告在 .artifacts/coverage/。Board/Extension 覆盖率因装插件会重载 dev server，排在盲测结束后。
 - 三份只读拆分地图完成并入档 docs/m122-extraction-map.md：App.tsx 八步顺序（纯库先行、run 轮询钩子最后、TDZ 闭包与双写者旗标）；workflow.py 十步顺序（XHS 回退靠 mutate 调用方列表、trace 摘要即 schema、fallback 靠英文错误子串匹配三大暗礁 + 14 个测试再导出名单）；styles.css 14 文件（design-system 测试按整字符串切片，拆分前必须先迁移测试契约 + 同优先级选择器顺序对清单 + dossier 时代疑似死规则名单，回应 findings 悬案）。
 - 期间未触碰运行中的应用、未改产品代码、未装任何包。
+
+## M121 模拟试点执行与闭环
+
+- 用户决定验收改为多 agent 模拟后，本轮升格为验收轮：3 个无先验盲测 persona（大三课设/研一毕设/大四竞赛）顺序驱动真实应用，参与者台词与判据分离，独立评审对照工具包判据打分。总计 4 agent、约 48 分钟、31 万 tokens。
+- U1/U3 全程跑通（各发起一条真实概览研究：7456d7eb completed、afb35779 partial 诚实部分交付；共保存 3 条收藏），核心链路判据全过；U2 场次被疑似自动化伪影污染（首屏正常、11 次点击零响应），四任务记系统原因中断，图纸灵感线零有效覆盖。
+- 会后工程复核：同页实测完全响应、输入框带 required——"冻结/零反馈"归因为 read_page ref 在 React 重渲染后失效的自动化伪影；但确认两个产品真缺口（提交无等待态、启动报错渲染在视野外），列为 M148 当轮修复。
+- 严重度矩阵与处置：5 项 P1 → M149；6 项 ≥2 人重复 P2 → M150；单人 P2 记录不立项。M121 标记 complete。记录归档 docs/m121-simulated-pilot-2026-07-27.md + 逐字 JSON；模拟产物（2 条研究、3 条收藏，均 14 天默认保留）清单交用户决定去留。
