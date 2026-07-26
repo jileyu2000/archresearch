@@ -532,6 +532,11 @@ function recentRunAnnouncement(run: ResearchRun) {
     : runAnnouncement(run)
 }
 
+const announcementExplanations: Record<string, string> = {
+  研究已形成初步依据: '已回答全部研究问题，但案例数量或深度未达完整标准，可作初步参考',
+  已形成初步灵感: '已覆盖全部灵感方向，但可用图纸数量未达完整标准，可作初步参考',
+}
+
 function formatRunDate(value?: string) {
   if (!value) return ''
   const date = new Date(value)
@@ -564,6 +569,7 @@ function RunHistoryList({
         const runDate = formatRunDate(run.updatedAt ?? run.createdAt)
         const usableAssets = run.coverageReport?.usable_assets
         const daysRemaining = retentionDays(run.retentionExpiresAt)
+        const announcement = recentRunAnnouncement(run)
         return (
           <li key={run.id}>
             <div className="recent-run-row">
@@ -577,7 +583,7 @@ function RunHistoryList({
                     runDate || null,
                   ].filter(Boolean).join(' · ')}
                 </span>
-                <span className="recent-status">{recentRunAnnouncement(run)}</span>
+                <span className="recent-status" title={announcementExplanations[announcement]}>{announcement}</span>
                 <ArrowRight aria-hidden="true" />
               </button>
               {onRetentionChange && (
@@ -586,6 +592,9 @@ function RunHistoryList({
                   <button
                     type="button"
                     aria-label={`${run.keepForever ? '取消永久保留' : '永久保留'}：${recordTitle}`}
+                    title={run.keepForever
+                      ? '取消后改为保留 14 天，到期自动删除'
+                      : '设为永久后，这条记录不再自动删除'}
                     disabled={retentionUpdatingId === run.id}
                     onClick={() => onRetentionChange(run)}
                   >
@@ -2383,7 +2392,7 @@ export default function App() {
                 setDataManagementOpen(true)
               }}
             >
-              <HardDriveDownload aria-hidden="true" />数据管理
+              <HardDriveDownload aria-hidden="true" />备份与恢复
             </button>
           )}
           {homeViewOpen && !demoMode && (
@@ -2468,7 +2477,7 @@ export default function App() {
                   onClick={() => void handleBackupPreflight()}
                 >
                   <Upload aria-hidden="true" />
-                  {dataOperation === 'preflight' ? '正在检查…' : '预检备份'}
+                  {dataOperation === 'preflight' ? '正在检查…' : '检查备份包'}
                 </button>
               </div>
 
@@ -2542,7 +2551,7 @@ export default function App() {
                 <div className="research-method">
                   <fieldset className="segmented-control research-depth-options">
                     <legend>研究方式</legend>
-                    <p className="research-source-note">案例会轮换检索多家建筑媒体，只有正文证据完整的项目进入结果。</p>
+                    <p className="research-source-note">案例来自多家建筑媒体的轮流检索，只收录文章内容完整的项目。</p>
                     {(Object.keys(modeLabels) as ResearchMode[]).map((value) => (
                       <label key={value}>
                         <input
@@ -3213,7 +3222,7 @@ export default function App() {
                             <section className="case-answer-copy" aria-label={`${displayProject} 的研究结果`}>
                               <p className="case-answer-mechanism">{dossier.analysis.designMechanism}</p>
                               {actions.length > 0 && <div className="case-answer-actions">
-                                <h5>可直接采用</h5>
+                                <h5>怎么做</h5>
                                 <ol>{actions.map((step) => <li key={step}>{step}</li>)}</ol>
                               </div>}
                               {dossier.analysis.limitation && (
@@ -3691,7 +3700,7 @@ export default function App() {
                                               </div>}
                                               {boundary && (
                                                 <p className="collection-case-boundary">
-                                                  <strong>适用时注意</strong>
+                                                  <strong>适用条件</strong>
                                                   <span>{boundary}</span>
                                                 </p>
                                               )}

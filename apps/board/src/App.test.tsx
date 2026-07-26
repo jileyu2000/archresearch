@@ -703,7 +703,7 @@ describe('research board', () => {
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
     renderBoard()
 
-    await user.click(await screen.findByRole('button', { name: '数据管理' }))
+    await user.click(await screen.findByRole('button', { name: '备份与恢复' }))
     expect(screen.getByRole('heading', { name: '工作区数据' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '确认恢复' })).not.toBeInTheDocument()
 
@@ -712,7 +712,7 @@ describe('research board', () => {
 
     const file = new File(['backup'], 'workspace.zip', { type: 'application/zip' })
     await user.upload(screen.getByLabelText('选择 ArchResearch 备份包'), file)
-    await user.click(screen.getByRole('button', { name: '预检备份' }))
+    await user.click(screen.getByRole('button', { name: '检查备份包' }))
 
     expect(await screen.findByText('1 个项目')).toBeInTheDocument()
     expect(screen.getByText('2 条研究记录')).toBeInTheDocument()
@@ -771,7 +771,8 @@ describe('research board', () => {
       name: '新增功能怎样进入旧结构，同时减少对原构件的改动？',
     })
     const foundryDossier = within(programChapter).getByRole('article', { name: '代表案例 Foundry Commons Replay' })
-    expect(within(foundryDossier).getByRole('heading', { name: '可直接采用' })).toBeVisible()
+    expect(within(foundryDossier).getByRole('heading', { name: '怎么做' })).toBeVisible()
+    expect(within(foundryDossier).queryByRole('heading', { name: '可直接采用' })).not.toBeInTheDocument()
     expect(within(foundryDossier).getByText('适用条件')).toBeVisible()
     expect(foundryDossier.querySelectorAll('img')).toHaveLength(1)
     expect(screen.getByRole('combobox', { name: '图纸类型' })).toHaveValue('all')
@@ -799,7 +800,7 @@ describe('research board', () => {
     expect(screen.getByRole('heading', { name: '最近研究' })).toBeVisible()
     expect(screen.getByRole('group', { name: '研究方式' })).toBeVisible()
     expect(screen.getByRole('radio', { name: /标准.*形成方案依据/ })).toBeChecked()
-    expect(screen.getByText('案例会轮换检索多家建筑媒体，只有正文证据完整的项目进入结果。')).toBeVisible()
+    expect(screen.getByText('案例来自多家建筑媒体的轮流检索，只收录文章内容完整的项目。')).toBeVisible()
     const startButton = screen.getByRole('button', { name: '开始研究' })
     const starterButton = screen.getByRole('button', { name: '填入问题：流线组织，人车在入口冲突，如何重组落客和步行路径？' })
     expect(startButton.closest('.research-submit-spark')).not.toBeNull()
@@ -1050,6 +1051,8 @@ describe('research board', () => {
     expect(within(savedCase).queryByRole('heading', { name: '适用边界' })).not.toBeInTheDocument()
     expect(within(savedCase).queryByText('原文没有给出独立结构层的节点详图，连接方式仍需核对。')).not.toBeInTheDocument()
     expect(within(savedCase).getByText('若旧结构承载不足，应让新增结构独立落地。')).toBeVisible()
+    expect(within(savedCase).getByText('适用条件')).toBeVisible()
+    expect(within(savedCase).queryByText('适用时注意')).not.toBeInTheDocument()
     expect(within(savedCase).queryByText('A new independent public floor threads through the retained brick shell.')).not.toBeInTheDocument()
     expect(within(savedCase).queryByRole('link', { name: '打开证据来源：Live Mill Conversion' })).not.toBeInTheDocument()
     expect(within(savedCase).queryByRole('link', { name: '打开来源：Live Mill Conversion' })).not.toBeInTheDocument()
@@ -1262,8 +1265,12 @@ describe('research board', () => {
     renderBoard()
 
     const recentResearch = await screen.findByRole('region', { name: '最近研究' })
-    expect(await within(recentResearch).findByText('研究已形成初步依据')).toBeVisible()
+    const provisionalStatus = await within(recentResearch).findByText('研究已形成初步依据')
+    expect(provisionalStatus).toBeVisible()
+    expect(provisionalStatus).toHaveAttribute('title', '已回答全部研究问题，但案例数量或深度未达完整标准，可作初步参考')
     expect(within(recentResearch).queryByText('研究已完成')).not.toBeInTheDocument()
+    const retentionButton = within(recentResearch).getByRole('button', { name: /永久保留：高差连廊/ })
+    expect(retentionButton).toHaveAttribute('title', '设为永久后，这条记录不再自动删除')
   })
 
   it('holds drawing inspiration to the same completeness honesty as architectural research', async () => {
@@ -1377,7 +1384,7 @@ describe('research board', () => {
     renderBoard()
 
     await screen.findByText('真实工作区')
-    expect(screen.getByText('案例会轮换检索多家建筑媒体，只有正文证据完整的项目进入结果。')).toBeVisible()
+    expect(screen.getByText('案例来自多家建筑媒体的轮流检索，只收录文章内容完整的项目。')).toBeVisible()
     const depthOption = screen.getByRole('radio', { name: new RegExp(`${label}.*${outcome}`) })
     await user.click(depthOption)
     expect(screen.getByText(description)).toBeVisible()
@@ -1606,7 +1613,7 @@ describe('research board', () => {
     expect(dossier.querySelector('.dossier-analysis')).not.toBeInTheDocument()
     expect(dossier.querySelector('.case-answer-copy')).toBeInTheDocument()
     expect(within(dossier).getByText(candidate.design_mechanism)).toBeVisible()
-    expect(within(dossier).getByRole('heading', { name: '可直接采用' })).toBeVisible()
+    expect(within(dossier).getByRole('heading', { name: '怎么做' })).toBeVisible()
     expect(within(dossier).queryByText(candidate.limitations[0])).not.toBeInTheDocument()
   })
 
