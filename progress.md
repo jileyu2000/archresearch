@@ -1811,6 +1811,15 @@
 - 红绿：结果页与收藏页两条精确 href 契约先红后绿；Board 124/124、ESLint、TypeScript 全绿。PRODUCT.md 与 DESIGN.md 的答案优先条款同步为"唯一出处链接例外"。
 - 批量测试（M137）仍在运行同一 API，为避免资源争抢，loaded 无截图 QA 与完整 `scripts/verify.ps1` 推迟到批量终态后一并执行；Board dev server 已热加载新代码。Board 当前正确显示 Q3 的运行中状态，未触碰"取消研究"。
 - 顺带记录一处运行中状态的候选 P3：活动页标题"已经拆成 3 个证据问题"中的"证据问题"仍是内部词，待批量结束后与 QA 一起处理。
+- 已提交 `736fffc`（出处链接）与 `e761752`（记录）。
+
+## M139 visual-effects refinement round
+
+- 用户要求延续"活泼高级"对全部视觉效果做一轮优化，并给出 collectui/behance/siteinspire 参考。siteinspire 品类分布确认 2026 策展语法（排版主导/网格/单强调色）与制图桌方向一致；盘点显示动效词汇量薄（2 keyframes / 5 transitions / 26 hovers）是"不够活泼"的根源。
+- 三设计师（动效/表面/反馈）+ 逐组对抗核验的 workflow 产出 11 通过 / 6 拒绝；拒绝全部有效（入场编排违反 DESIGN.md、非 token 色值、死选择器、Material 套路）。我预备的 stagger 红灯因此作废重写——红灯应写在裁决后。
+- 合成落地 16 组 CSS：sheet-settle 换页连续帧、目录 chevron 方向微反馈（含 reduced-motion 取消）、dock-rise 升起 + 成功态 fast 落定、收藏注册点 scale 落点、蓝图面纸白焦点环 + 遮罩内缩环、首页输入纸裁切角（≤620px 并入既有块关闭）、注册角 max() 对位工作纸框、图像井灯箱增亮（图纸不缩放）、灵感选择钮 hover/focus/选中渐显 + 触屏常显、出处下划线淡入 + 外链箭头 1px 出走。
+- 冲突裁决：.collection-dock-success 两案取 sheet-settle fast；chevron 取 3px/-2px。一次结构约定坑：中部插入独立 620px 媒体块打破 design-system 切片约定致 5 测试红，改并入既有块后恢复。
+- 三条新动效契约先红后绿（token-only 动画、reduced-motion 取消位移、出处下划线淡入）；Board 127/127、ESLint 0、Impeccable detector []。批量测试（M137）仍在运行，loaded QA 与完整门禁继续推迟到批量终态后统一执行。
 - 已提交 `3962d8d`（产品）与 `77650f6`（记录）。
 
 ## M121 pilot observation kit (step B preparation)
