@@ -1795,6 +1795,22 @@
 - 红绿完整：新增 1 条来源免责句行为测试 + 6 条词汇封禁先确认红；批量替换脚本 12 处全命中；迁移 5 处旧断言（含 aria region 名）。Board 124/124，完整 `scripts/verify.ps1` 退出码 0：341 API / 124 Board / 165 Extension / 8 packaged E2E。
 - Loaded QA：首页实际状态行显示"已完成 · 初步依据"，旧标签与"轮流检索"零命中，来源说明与"N 天后自动删除"生效，溢出 0、错误 0。
 - 5 项发现记录未修（`docs/m121-simulated-walkthrough.md`）：最重的是 S3 出处链接信任冲突（与 M128 用户决策相反，需裁决）；另有跨案例论证措辞（M75 定稿）、时长预估（需实测）、检索相关性（研究质量）、单人困惑项。未创建/重试 Run，未改 durable 数据，未截图。
+- 已提交 `609ea34`（产品）与 `5e6d3e4`（记录）。
+
+## M137 user-brief batch research test
+
+- 用户提交 `城市社区共享中心建筑设计任务书.docx`：8 个收集好的设计问题 + 完整课程任务书，即此前删除旧记录时预告的"新的实际测试"。
+- 任务书部分用 PyMuPDF 渲染为 5 页可检索 PDF（3,354 可读字符，用与 brief-review 相同的 fitz 路径验证）；8 个问题逐字采用文档原文。
+- 驱动脚本走产品自身 M107 契约：新建工作区「城市社区共享中心」（cf067667）、任务书存为 InputArtifact（7258e3b0）、每题 brief-review(quick) → 带 typed subquestions 创建 Run → 轮询至终态；单活跃 Run 门控顺序执行，绝不 retry 任何 Run，JSONL 全程留痕。
+- Q1 的 brief-review 两次 502（Provider 规划调用瞬时失败），驱动按设计诚实跳过；Q2 起恢复正常（`9f3c86d8` 已创建执行）。规划调用不是 Run，批量结束后对 Q1 再执行一次 brief-review 补齐。
+- Q2 `9f3c86d8` 约 7 分钟到终态 `partial/budget_exhausted`：8 usable、2 projects、2/3 覆盖，enrichment 缺口如实记录。批量继续。
+
+## M138 quiet provenance links on case answers
+
+- 用户在等待批量期间裁决模拟试点的出处冲突："标一下，可点击进源网页，不影响阅读纯净"。实现为每案例一个安静链接：结果页案例用 primary asset 的 sourceUrl，收藏案例用持久化的 SavedReference source_url（普通 Run 过期不破坏收藏出处）；文字为"出处 · 域名"，aria 为"打开出处：项目名"，置于适用条件之后。不恢复检视器、核验文案或其他来源动作。
+- 红绿：结果页与收藏页两条精确 href 契约先红后绿；Board 124/124、ESLint、TypeScript 全绿。PRODUCT.md 与 DESIGN.md 的答案优先条款同步为"唯一出处链接例外"。
+- 批量测试（M137）仍在运行同一 API，为避免资源争抢，loaded 无截图 QA 与完整 `scripts/verify.ps1` 推迟到批量终态后一并执行；Board dev server 已热加载新代码。Board 当前正确显示 Q3 的运行中状态，未触碰"取消研究"。
+- 顺带记录一处运行中状态的候选 P3：活动页标题"已经拆成 3 个证据问题"中的"证据问题"仍是内部词，待批量结束后与 QA 一起处理。
 - 已提交 `3962d8d`（产品）与 `77650f6`（记录）。
 
 ## M121 pilot observation kit (step B preparation)
