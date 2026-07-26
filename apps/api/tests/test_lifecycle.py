@@ -12,6 +12,7 @@ from archresearch_api.lifecycle import cleanup_expired_data
 from archresearch_api.main import create_app
 from archresearch_api.models import (
     AssetCandidate,
+    EvidenceClaim,
     QueryAttempt,
     ReferenceBoard,
     ResearchRun,
@@ -135,6 +136,91 @@ def test_cleanup_removes_expired_temporary_data_but_keeps_saved_snapshots(
         assert [saved.note for saved in session.scalars(select(SavedReference))] == ["keep"]
         assert [event.sequence for event in session.scalars(select(TraceEvent))] == [2]
         assert [query.query for query in session.scalars(select(QueryAttempt))] == ["fresh"]
+
+
+def test_cleanup_never_deletes_evidence_belonging_to_permanent_runs(
+    tmp_path: Path,
+) -> None:
+    database = Database(f"sqlite:///{(tmp_path / 'cleanup.db').as_posix()}")
+    database.create_all()
+    now = datetime.now(UTC)
+    kept_file = tmp_path / "runtime" / "runs" / "kept.png"
+    kept_file.parent.mkdir(parents=True)
+    kept_file.write_bytes(b"kept")
+    with database.session_factory() as session:
+        workspace = Workspace(name="Retention")
+        session.add(workspace)
+        session.flush()
+
+        def make_run(keep_forever: bool) -> ResearchRun:
+            run = ResearchRun(
+                workspace_id=workspace.id,
+                question="retention",
+                goal=ResearchGoal.precedent_research.value,
+                budget_mode=BudgetMode.quick.value,
+                budget=BUDGETS[BudgetMode.quick].model_dump(),
+                allowed_domains=[],
+                status=RunStatus.completed.value,
+                coverage_report={},
+                keep_forever=keep_forever,
+            )
+            session.add(run)
+            session.flush()
+            return run
+
+        kept_run = make_run(keep_forever=True)
+        ordinary_run = make_run(keep_forever=False)
+
+        def make_children(run: ResearchRun, storage: str | None) -> None:
+            page = SourcePage(
+                run_id=run.id,
+                url=f"https://example.com/{run.id}",
+                expires_at=now - timedelta(seconds=1),
+            )
+            session.add(page)
+            session.flush()
+            asset = AssetCandidate(
+                run_id=run.id,
+                source_page_id=page.id,
+                project_name="Expired evidence",
+                asset_type="section",
+                source_url=page.url,
+                image_url="https://images.example/expired.png",
+                storage_path=storage,
+                expires_at=now - timedelta(seconds=1),
+            )
+            session.add(asset)
+            session.flush()
+            session.add(
+                EvidenceClaim(
+                    asset_candidate_id=asset.id,
+                    claim_type="fact",
+                    statement="expired but load-bearing",
+                    expires_at=now - timedelta(seconds=1),
+                )
+            )
+
+        make_children(kept_run, str(kept_file))
+        make_children(ordinary_run, None)
+        session.commit()
+        kept_run_id = kept_run.id
+
+    report = cleanup_expired_data(
+        database,
+        data_dir=tmp_path / "runtime",
+        now=now,
+        metadata_ttl_days=30,
+    )
+
+    assert report.assets == 1
+    assert report.sources == 1
+    assert report.evidence_claims == 1
+    assert kept_file.exists()
+    with database.session_factory() as session:
+        surviving_assets = session.scalars(select(AssetCandidate)).all()
+        assert [asset.run_id for asset in surviving_assets] == [kept_run_id]
+        assert [page.run_id for page in session.scalars(select(SourcePage))] == [kept_run_id]
+        assert len(session.scalars(select(EvidenceClaim)).all()) == 1
 
 
 def test_cleanup_removes_expired_runs_and_files_but_keeps_permanent_runs(

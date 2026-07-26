@@ -54,11 +54,15 @@ def cleanup_expired_data(
     expired_runs = delete_runs(database, data_dir=data_dir, run_ids=expired_run_ids)
 
     with database.session_factory() as session:
+        # 永久封存不只保护 Run 行：一条 keep_forever Run 的资产、来源页和
+        # 逐字证据就是它的验收内容，过期时钟对它们全部停摆。
+        kept_run_ids = select(ResearchRun.id).where(ResearchRun.keep_forever.is_(True))
         expired_assets = list(
             session.scalars(
                 select(AssetCandidate).where(
                     AssetCandidate.expires_at.is_not(None),
                     AssetCandidate.expires_at <= cutoff_time,
+                    AssetCandidate.run_id.not_in(kept_run_ids),
                 )
             )
         )
@@ -67,14 +71,19 @@ def cleanup_expired_data(
                 select(SourcePage).where(
                     SourcePage.expires_at.is_not(None),
                     SourcePage.expires_at <= cutoff_time,
+                    SourcePage.run_id.not_in(kept_run_ids),
                 )
             )
+        )
+        kept_asset_ids = select(AssetCandidate.id).where(
+            AssetCandidate.run_id.in_(kept_run_ids)
         )
         expired_claims = list(
             session.scalars(
                 select(EvidenceClaim).where(
                     EvidenceClaim.expires_at.is_not(None),
                     EvidenceClaim.expires_at <= cutoff_time,
+                    EvidenceClaim.asset_candidate_id.not_in(kept_asset_ids),
                 )
             )
         )
