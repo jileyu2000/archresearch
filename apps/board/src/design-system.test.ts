@@ -51,13 +51,6 @@ describe('responsive design-system rules', () => {
     )
   })
 
-  it('keeps the architectural result filter at touch size on mobile', () => {
-    const mobileStart = styles.indexOf('@media (max-width: 620px)')
-    const mobileRules = styles.slice(mobileStart)
-
-    expect(mobileRules).toMatch(/#asset-filter\s*\{\s*min-height:\s*44px/)
-  })
-
   it('keeps recent research compact while every record remains in one scrollable list', () => {
     expect(styles).toMatch(
       /\.recent-panel > header\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto/s,

@@ -353,10 +353,6 @@ function demoSubquestionsFor(depth: ResearchMode) {
   return demoSubquestions
 }
 
-const filterAssetTypes = (Object.keys(assetLabels) as AssetType[]).filter(
-  (assetType) => assetType !== 'diagram',
-)
-
 const stageLabels: Array<{ status: RunStatus; label: string }> = [
   { status: 'planning', label: '规划' },
   { status: 'searching', label: '搜索' },
@@ -1057,7 +1053,6 @@ export default function App() {
   const [lastExport, setLastExport] = useState<BoardExport | null>(null)
   const [actionError, setActionError] = useState('')
   const [loading, setLoading] = useState(!demoMode)
-  const [assetFilter, setAssetFilter] = useState<'all' | AssetType>('all')
   const [savedIds, setSavedIds] = useState<string[]>([])
   const [rejectedIds, setRejectedIds] = useState<string[]>([])
   const [notes, setNotes] = useState<Record<string, string>>({})
@@ -2109,11 +2104,7 @@ export default function App() {
     const result = results.find((item) => item.id === id)
     return result && ['user_owned', 'open_license', 'permissioned'].includes(result.rightsStatus)
   }).length
-  const visibleResults = results.filter((result) =>
-    assetFilter === 'all'
-    || result.assetType === assetFilter
-    || (assetFilter === 'analysis_diagram' && result.assetType === 'diagram'),
-  )
+  const visibleResults = results
   const researchQuestion = activeRun?.question ?? (demoMode ? demoResearchQuestion : question)
   const isVisualResearch = activeRun?.goal === 'visual_reference_search'
   const currentStageLabels = isVisualResearch ? visualStageLabels : stageLabels
@@ -3169,15 +3160,6 @@ export default function App() {
                 <div>
                   <h2>案例研究结果</h2>
                 </div>
-                <label htmlFor="asset-filter">
-                  <span>图纸类型</span>
-                  <select id="asset-filter" value={assetFilter} onChange={(event) => setAssetFilter(event.target.value as 'all' | AssetType)}>
-                    <option value="all">全部类型</option>
-                    {filterAssetTypes.map((assetType) => (
-                      <option key={assetType} value={assetType}>{assetLabels[assetType]}</option>
-                    ))}
-                  </select>
-                </label>
               </header>
 
               <div className="case-chapters">
@@ -3414,10 +3396,6 @@ export default function App() {
             </section>
             )}
           </section>
-        )}
-
-        {resultViewOpen && results.length > 0 && visibleResults.length === 0 && (
-          <section className="empty-filter"><h2>当前筛选没有图纸</h2><p>切换图纸类型查看其他结果。</p></section>
         )}
 
         {resultViewOpen && results.length > 0 && (

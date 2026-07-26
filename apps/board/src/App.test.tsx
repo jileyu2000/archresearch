@@ -782,7 +782,6 @@ describe('research board', () => {
       .filter((element) => element.textContent?.trim() === conclusionText)
     expect(repeatedMechanisms).toHaveLength(0)
     expect(foundryDossier.querySelectorAll('img')).toHaveLength(1)
-    expect(screen.getByRole('combobox', { name: '图纸类型' })).toHaveValue('all')
     expect(screen.getByRole('button', { name: '返回主页' })).toBeVisible()
     expect(screen.getByRole('button', { name: '选择案例 Kamala Narayana Temple Survey' })).toBeVisible()
     expect(screen.queryByRole('dialog', { name: '来源检视器' })).not.toBeInTheDocument()
@@ -3460,10 +3459,6 @@ describe('research board', () => {
     renderBoard('?demo=1')
 
     await screen.findByRole('heading', { name: '案例研究结果' })
-    expect(screen.getAllByRole('option', { name: '分析图' })).toHaveLength(1)
-    await user.selectOptions(screen.getByRole('combobox', { name: '图纸类型' }), 'section')
-    expect(screen.getAllByRole('article', { name: '代表案例 Section Layers Replay' }).length).toBeGreaterThan(0)
-    await user.selectOptions(screen.getByRole('combobox', { name: '图纸类型' }), 'all')
     await user.click(screen.getByRole('button', { name: '选择案例 Section Layers Replay' }))
     await user.click(screen.getByRole('button', { name: '选择案例 Layered Axon Replay' }))
     await user.click(screen.getAllByRole('button', { name: '对照案例策略' })[0])

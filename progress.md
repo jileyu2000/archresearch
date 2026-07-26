@@ -1862,6 +1862,11 @@
 - 用户看到既有结果仍是英文名（特性只对重启后新 Run 生效）。执行存量回填：54 个唯一项目名经同一 Provider 一次性译出（54/54 映射齐全，抽查合格：圣母恩宠文化中心、荷兰银行 / Mecanoo 等），停服后写入 192 条建筑资产的全部分析分支（仅补空缺、不覆盖），重启验证真实页面 7/7 案例中文标题 + 7 条原名参考行。
 - 用户指出章节大句与"案例研究结果"区头分不清问题与结论。章节编号从裸数字改为「子问题 N」标记（待归组组改"待归组"），栅格列 32px→auto。真实页面显示 子问题 1/2/3。
 - Board 132/132、lint/typecheck 绿；翻译映射表存 scratchpad（不入库不入 Git）。
+
+## M143 remove the drawing-type filter from architecture results
+
+- 用户判定建筑结果页的「图纸类型」下拉筛选没有用，要求移除。删除筛选控件、`assetFilter` 状态、`filterAssetTypes` 派生与"当前筛选没有图纸"死分支；`visibleResults` 直通全部结果。迁移三处旧契约（demo 首页 combobox 断言、demo 筛选步骤、design-system 的 #asset-filter 44px 移动契约）；PRODUCT.md 同步。图纸灵感侧的逐图类型标签与索引不受影响。
+- Board 131/131、ESLint、TypeScript 绿；真实页面验证筛选器消失、区头只余"案例研究结果"、7 案例完整渲染、溢出 0 错误 0。
 - 已提交 `3962d8d`（产品）与 `77650f6`（记录）。
 
 ## M121 pilot observation kit (step B preparation)
