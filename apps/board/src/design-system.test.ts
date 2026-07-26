@@ -144,6 +144,28 @@ describe('responsive design-system rules', () => {
     expect(styles).toMatch(/\.case-answer-heading h4\s*\{[^}]*max-width:\s*40ch/)
   })
 
+  it('runs every animation through the shared motion tokens', () => {
+    const animationDeclarations = [...styles.matchAll(/animation:\s*([^;]+);/g)].map((m) => m[1])
+    expect(animationDeclarations.length).toBeGreaterThanOrEqual(5)
+    for (const declaration of animationDeclarations) {
+      expect(declaration, `animation "${declaration}" must use duration tokens`).toMatch(/var\(--duration-/)
+      expect(declaration, `animation "${declaration}" must use easing tokens`).toMatch(/var\(--ease-/)
+    }
+    expect(styles).toMatch(/@keyframes\s+sheet-settle/)
+    expect(styles).toMatch(/@keyframes\s+dock-rise/)
+    expect(styles).toMatch(/@keyframes\s+saved-dot-in/)
+    expect(styles).toMatch(/prefers-reduced-motion/)
+  })
+
+  it('disables directional chevron nudges under reduced motion', () => {
+    const reduced = styles.slice(styles.indexOf('@media (prefers-reduced-motion: reduce)'))
+    expect(reduced).toMatch(/\.collection-directory-list button:hover svg[\s\S]{0,240}?transform:\s*none/)
+  })
+
+  it('fades the provenance underline in instead of snapping it', () => {
+    expect(styles).toMatch(/\.case-answer-source,\s*\.collection-case-source\s*\{[^}]*text-decoration-color:\s*transparent/)
+  })
+
   it('stacks applicability labels above their text at body size', () => {
     expect(styles).not.toMatch(/\.synthesis-boundary\s*\{[^}]*grid-template-columns/)
     expect(styles).not.toMatch(/\.case-answer-boundary\s*\{[^}]*grid-template-columns/)
