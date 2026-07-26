@@ -1593,6 +1593,21 @@ M89 取舍：不新增画布、拖拽或协作系统；只把现有结果工具�
 - 删除后的持久基线为 3 workspaces / 9 Runs（全部 completed）/ active 0 / `keep_forever=1` 9/9 / 5 收藏 / 1 份任务书；磁盘 `runs/` 目录从 6 个减为 3 个。封存 Run `10d31b4c-94dd-4442-b24a-fc1b241e658e` 未在删除名单内，仍为 completed / attempt 0 / coverage_satisfied。
 - 遗留的证据不一致必须记录，不能装作没有：`docs/release-evidence-2026-07-16.md` 冻结的三个 accepted run 里有两个（`7d8faa53`、`b4c314a6`）的底层数据已被删除，`.artifacts/portfolio/` 中对应的 8 张 PNG 因此只剩截图而无可核对的 Run。该文档与 10 张 PNG 都未纳入 Git，处置留到 M123 刷新发布证据时一并决定。
 
+## 2026-07-26 M132 案例研究页与收藏页的版式实测
+
+- 在 1920×1080 真实页面上实测，**根因不是留白多少，而是同一页有两条互相冲突的左边界**。`.results-section` 与 `.collection-page` 是 `max-width: var(--layout-stage-max)`（1600px）居中，左边界 x=153；而内部的 `.case-chapter`（`styles.css:2975`）和 `.collection-architecture`（`styles.css:1699`）是 `max-width: 1180px; margin: 0 auto`，在 1600px 里再次居中，左边界 x=**363**。于是章节标题、研究结论、`个人收藏` h1 全在 153，案例正文和收藏案例全在 363，相差 210px。
+- 同一原因造成控件“飞到右边”：`图纸类型` select 贴的是 1600px 外框右缘（x=1597），`选择案例` 贴的是 1180px 内框右缘（x=1445），两者与正文右缘（约 1160）分别相距 264px 和 285px。截图里那种“标签在最左、控件在最右、中间一大片空”的观感就来自这两层不同宽度的框。
+- 阅读列宽在一页里跳了四次：研究结论 header 673px → `.synthesis-primary` 920px → `.case-chapter` 1180px → `.case-answer-copy` 808px。左缘固定而右缘反复移动，是这两页最强的“排版没做完”信号。
+- 行长实测超标的正是没有 measure 的块：`.synthesis-primary li` 896px / 112ch，`.synthesis-boundary` 值列 828px / 153ch，收藏页 `.collection-question-heading h2` 1081px（24px 字号下每行约 45 个汉字）。反之写了 `max-width: 58ch/64ch` 的 `.case-answer-mechanism`、`.case-answer-actions ol` 实测 63–76ch，本来就是舒适的，说明问题是覆盖不全而不是数值错。
+- 三处“标签轨”是 M99 已被 M100 否决过的做法的残留：`.synthesis-boundary` `80px minmax(0,1fr)`、`.case-answer-boundary` `80px minmax(0,1fr)`、`.collection-case-boundary` `84px minmax(0,1fr)`。12px 的“适用条件”只占 48px，轨道却是 80–84px，再加 12px gap，必然留出可见空档；正文里还重复一次“适用边界：”“页面不是…”之类的自我标注。
+- 这三处适用条件同时是全页最小的字（`--font-sm` 12px），却承载用户必须遵守的使用边界；`优先做法`/`核心解法`/`怎么做` 反而是 14–16px。层级与重要性相反。
+- CollectUI 本轮可以正常打开（此前两次会话超时），但它是 Dribbble 作品图聚合站，正文全是图片、无可读结构，且以 landing/branding/motion 类营销版式为主。对一个中文密集研究阅读面没有可直接迁移的结构；照搬只会得到 impeccable 明确列为 slop 的通用卡片墙。真正适用的成熟范式是文档/编辑型阅读版式：单一文档栏 + 固定 measure + 贴着内容的操作，而不是画廊式卡片。
+- 第一版修复只做到“统一左缘”是不够的，用户当场指出问题：内容全部贴左、右侧留下约 600px 空白，反而更像没做完。教训是**对齐一致 ≠ 版式成立**；页面级规则必须同时决定内容栏的宽度、位置和两侧余量，而不是只消除内部差异。
+- 因此确立全局文档规则并写进 `design-system.test.ts`：`--layout-doc-max: 1180px`，`.result-task-heading`、`.research-synthesis`、`.case-analysis > .results-header`、`.case-chapter`、`.collection-page > .panel-heading`、`.collection-page > .collection-entry-switch`、`.collection-architecture`、`.collection-question-directory` 共用一条 `max-width + margin-inline: auto` 规则。任何新增的结果/收藏区块只要加进这一条选择器就自动符合版式，不需要各自设宽度。
+- 实测结果：1920 下左右边距 362 / 378，1440 下 122 / 138，两页所有区块只有一个左缘和一个右缘；`图纸类型` 筛选器与 `选择案例`、收藏页删除按钮的右缘都精确落在 1542（1920 时）文档右缘上，不再分别停在 1600px 外框和 1180px 内框。
+- 行长同时收口：案例标题从 148ch 降到 46ch，`优先做法` 从 112ch 降到 69ch，适用条件从 12px/153ch 变为 14px/69ch。收藏页与结果页均无超过 80ch 的文本块。
+- 另修两处“标签自我重复”：`userFacingRecommendation` 原本只剥离 `【转译建议…】` 方括号形式，真实数据是裸的 `转译建议：`，因此界面上每条做法都以标签开头；适用条件同样带 `适用边界：` 前缀。现在两者都在展示层剥离，durable 数据不变。
+
 ## 2026-07-26 M129 开发服务启停的 WMI 依赖
 
 - 现象与最初判断的偏差：`Get-NetTCPConnection -ErrorAction SilentlyContinue` 在本机返回空并不代表端口空闲，它的 CIM 层此时已经坏了，`-ErrorAction SilentlyContinue` 把失败吞掉。真正可信的空闲证据是 `Get-AvailableTcpPort` 的绑定成功和 `netstat -ano`，两者都不经 WMI。

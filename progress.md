@@ -1743,6 +1743,18 @@
 - 重启服务后 API/Board 均 200。持久基线现为 3 workspaces / 9 Runs 全部 completed / active 0 / `keep_forever=1` 9/9 / 5 收藏 / 1 份任务书，磁盘 `runs/` 目录由 6 减为 3；封存 Run `10d31b4c-94dd-4442-b24a-fc1b241e658e` 不在删除名单内且状态未变。
 - loaded 无截图复验：首页 9 条记录、4 条“研究已完成”、3 条图纸“已完成”、2 条“研究已形成初步依据”（即保留的两条验收 Run），横向溢出 0、页面错误 0。
 - 本轮只删除运行数据，未改动任何产品代码，因此沿用同日 `scripts/verify.ps1` 退出码 0 的门禁结果（341 API / 116 Board / 165 Extension / 8 packaged E2E）。未创建/重试/取消 Run，未调用 Provider，未恢复 Firecrawl，未截图。
+- 记录已更新并提交为 `e6d0002`。
+
+## M132 one document column for results and collections
+
+- 用户要求优化案例研究页与收藏页排版并点名参考 collectui.com。加载 impeccable（register 判定为 product，读 `reference/product.md` 与 `reference/layout.md`），在 1920 真实页面上量测而不是凭截图猜测。
+- CollectUI 本轮打得开，但内容是 Dribbble 作品图、以营销版式为主，对中文密集研究阅读面没有可迁移结构。诚实记录为“不适用”，改用文档/编辑型阅读版式，未照搬画廊卡片。
+- 实测根因是两条互相冲突的左边界（外框 1600 居中于 x=153，内框 1180 再次居中于 x=363），加上一页内四次变化的阅读列宽和三处 M100 已否决的固定标签轨残留。
+- 先写红灯：`design-system.test.ts` 新增四条 CSS 契约，`App.test.tsx` 新增一条标签自我重复契约，确认 5 条全部失败后才改实现。
+- 第一版只统一左缘，内容贴左、右侧空 600px；用户立即指出“为什么偏在左边”。据此改为真正的全局规则：一条共享的 `max-width: var(--layout-doc-max); margin-inline: auto`，覆盖结果页与收藏页全部文档级区块，并把该规则本身写成测试，新增区块只要加进选择器即可合规。
+- 一次否定的负向断言写法出错：`[\s\S]*?` 会跨越规则块匹配到文件后面的 `margin: 0 auto`。改用 `[^}]*` 限定在同一规则块内，负向断言才有意义。
+- 实测收口：1920 边距 362/378、1440 边距 122/138，两页各只剩一个左缘一个右缘；筛选器、选择案例、删除按钮的右缘与文档右缘重合。案例标题 148ch→46ch，优先做法 112ch→69ch，适用条件 12px/153ch→14px/69ch，两页无超过 80ch 的文本；390px 无溢出、无截断、无小于 44px 的命中区、页面错误 0。
+- 完整 `scripts/verify.ps1` 退出码 0：341 API / 120 Board / 165 Extension / 8 packaged E2E，四个 PowerShell 套件、Ruff、strict Mypy、两端 lint/typecheck/build 与评测夹具全部通过。未改后端、schema、导出或 durable 数据，未创建/重试 Run，未截图。
 - 本轮未创建、重试或取消任何 Run，未调用 Provider/Firecrawl，未恢复 Firecrawl，未截图，未改动 durable 数据，未执行 reset/checkout/clean/push。
 
 ## M129 无 WMI 依赖的本地服务启停
