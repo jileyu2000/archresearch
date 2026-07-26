@@ -1820,6 +1820,14 @@
 - 合成落地 16 组 CSS：sheet-settle 换页连续帧、目录 chevron 方向微反馈（含 reduced-motion 取消）、dock-rise 升起 + 成功态 fast 落定、收藏注册点 scale 落点、蓝图面纸白焦点环 + 遮罩内缩环、首页输入纸裁切角（≤620px 并入既有块关闭）、注册角 max() 对位工作纸框、图像井灯箱增亮（图纸不缩放）、灵感选择钮 hover/focus/选中渐显 + 触屏常显、出处下划线淡入 + 外链箭头 1px 出走。
 - 冲突裁决：.collection-dock-success 两案取 sheet-settle fast；chevron 取 3px/-2px。一次结构约定坑：中部插入独立 620px 媒体块打破 design-system 切片约定致 5 测试红，改并入既有块后恢复。
 - 三条新动效契约先红后绿（token-only 动画、reduced-motion 取消位移、出处下划线淡入）；Board 127/127、ESLint 0、Impeccable detector []。批量测试（M137）仍在运行，loaded QA 与完整门禁继续推迟到批量终态后统一执行。
+- 已提交 `3c4aea5`（视觉实现）与 `0a8fd57`（记录）。
+
+## M140 research runs never hijack the app on open
+
+- 用户在批量测试期间打开 Board，落进了正在运行 Run 的进度页并质疑"这不应该是后台进程吗"。根因是遗留的开屏自动恢复：mount effect 找到最新非终态 Run 后直接 setActiveRun + 关闭 composer + 切换 active workspace，把整个视图接管。
+- 修复：打开应用永远落主页。mount 只注册最新非终态 Run 的静默轮询；轮询循环改为前台感知——始终刷新最近研究行，仅当用户正在查看该 Run（activeRunIdRef 匹配）才更新活动视图/播报/终态 hydrate；后台轮询失败静默停止不打扰主页；不再后台切换 active workspace。会话内用户亲自发起研究仍立即进入进度视图；从主页点开运行中记录仍走 openRun 恢复进度。
+- 红绿：新契约"后台研究运行时打开应用停在主页、点开记录才见进度"先红；两条编码旧自动恢复行为的测试（隐藏项目管理、取消不被轮询覆盖）迁移为点开后断言。Board 128/128、ESLint、TypeScript 全绿。
+- 真实批量运行中的实测：主页标题可见、无"取消研究"劫持、批量 Run 以"正在浏览页面"实时状态行出现在最近研究，溢出 0、错误 0。DESIGN.md"问题先于结果"条款更新为后台进程规则。
 - 已提交 `3962d8d`（产品）与 `77650f6`（记录）。
 
 ## M121 pilot observation kit (step B preparation)
