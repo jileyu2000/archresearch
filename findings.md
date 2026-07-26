@@ -1583,6 +1583,16 @@ M89 取舍：不新增画布、拖拽或协作系统；只把现有结果工具�
 - `58f4b9f9`（2026-07-11）的 `coverage_report` 根本没有 `enrichment_gaps` 键，Board 的 `?? 0` 把它当作无缺口。这是比 enrichment 规则更早的记录，不能与真正达标的 Run 混为一谈，但也不应假装它被评估过。
 - 不采用回填持久状态的修法：这 7 条里包含 M53/M65 的三档验收 Run 与旧发布证据引用的 `7d8faa53`/`b4c314a6`，改写它们的 `status` 会使既有验收记录与发布证据失真。修复只在展示层进行，durable 数据不动。
 
+## 2026-07-26 M131 旧深度不足 Run 的定向删除
+
+- 用户判定这批旧记录属于失败记录并要求删除，后续会有新的实际测试。核对后指出其中两条不是失败记录而是记录正在引用的验收证据，用户随即确认删 5 保 2。这条边界值得固化：**“深度不足”不等于“失败”，删除前必须逐条对照它在 `HANDOFF.md`/`task_plan.md` 里的身份**。
+- 已删除 5 条：`7d8faa53`（M46 之前的 Balanced 发布证据）、`b4c314a6`（同期 Deep 发布证据）、`42668844`（HANDOFF 第 9 条的 Quick 链路验收）、`e525ca77`（M76 图纸灵感 Live）、`5e4184cf`（M121 代理轮 Quick）。保留 `76f52c79`（M53/M65 被接受的 Deep）与 `ff16988d`（M107 唯一真实任务书 Standard Run）直到新的实际测试产生替代证据。
+- 删除前先用产品自带的 `POST /v1/data-backups` 生成 70,957,655 字节完整备份并通过 `POST /v1/data-backups/preflight`：`ready=true`、66 文件、14 Runs、5 收藏、1 份任务书，SHA-256 `2B8D692BB01C257F7B345B52FC9D0D46C39FE9CCC21C6AF35FE563D4B7956A4C`。因此这次删除可整体回滚，不是不可逆操作。
+- 删除走产品既有的 `lifecycle.delete_runs` 安全 helper，不写裸 SQL：显式 run_id 列表、目标必须全部存在、目标与保留名单不得重叠、保留名单在删除前必须都在。执行前停服、执行后重启，避免与运行中的 API 争抢 SQLite。
+- 个人收藏未受影响，这验证了 M93/M100 的快照设计：`ff16988d` 上挂着 2 条收藏，但收藏保存的是独立 snapshot 与本地图副本，删除前后 `saved_references` 均为 5。删除前已确认另有 2 条收藏本就指向早已不存在的 Run 仍正常。
+- 删除后的持久基线为 3 workspaces / 9 Runs（全部 completed）/ active 0 / `keep_forever=1` 9/9 / 5 收藏 / 1 份任务书；磁盘 `runs/` 目录从 6 个减为 3 个。封存 Run `10d31b4c-94dd-4442-b24a-fc1b241e658e` 未在删除名单内，仍为 completed / attempt 0 / coverage_satisfied。
+- 遗留的证据不一致必须记录，不能装作没有：`docs/release-evidence-2026-07-16.md` 冻结的三个 accepted run 里有两个（`7d8faa53`、`b4c314a6`）的底层数据已被删除，`.artifacts/portfolio/` 中对应的 8 张 PNG 因此只剩截图而无可核对的 Run。该文档与 10 张 PNG 都未纳入 Git，处置留到 M123 刷新发布证据时一并决定。
+
 ## 2026-07-26 M129 开发服务启停的 WMI 依赖
 
 - 现象与最初判断的偏差：`Get-NetTCPConnection -ErrorAction SilentlyContinue` 在本机返回空并不代表端口空闲，它的 CIM 层此时已经坏了，`-ErrorAction SilentlyContinue` 把失败吞掉。真正可信的空闲证据是 `Get-AvailableTcpPort` 的绑定成功和 `netstat -ano`，两者都不经 WMI。

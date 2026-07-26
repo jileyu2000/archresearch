@@ -148,6 +148,10 @@
 73. 本地 pwsh 的 WMI 缺陷已由并发 Codex 会话红绿修复并提交为 `06f3424`：MSIX 版 pwsh 7.6.4 无法加载 MMI 原生 DLL，`start.ps1` 的归属校验抛 `DllNotFoundException … E_ACCESSDENIED`，catch 分支随即杀掉它自己刚拉起的 API 与 Vite——这正是“登录后打不开且日志无错误”的真因，M127 开机自启每次登录都会重演。监听发现改用 `netstat -ano`（按环回端点与未连接对端判定，不依赖本地化状态词），命令行改用 `NtQueryInformationProcess` 读 PEB；函数签名、工作区归属语义与 `start.ps1`/`stop.ps1` 调用点不变。`scripts/dev-common.ps1`、`start.ps1`、`stop.ps1` 中 WMI 原语命中为 0，`process-lifecycle.tests.ps1` 已在两个独立会话中通过。
 74. 本工作区由多个 agent 会话并发写入，这是长期约束而非偶发情况。已实测：产品基线提交完成后，同一工作树的 `scripts/dev-common.ps1` 与 `scripts/tests/process-lifecycle.tests.ps1` 仍在被写，`dev-common.ps1` 由 269 行增长到 431 行，`task_plan.md`/`findings.md`/`progress.md` 也在被并发追加。任何 `git add` 只保证“逐文件读取时刻”的快照，不保证跨文件一致性；提交前后都必须重新读 `git status`，并在另一方仍在写记录文件时暂停提交。
 75. 提交与推送的当前边界：本地提交已获授权并已执行，`git push` 仍未获授权且从未执行。禁止 `git add -A`、reset、checkout、clean。10 张 PNG 证据包保持未跟踪，等 M123 刷新证据时再决定是否纳入。
+76. M130 已把完整性诚实标签统一到两种模式。M124 的严格规则本身没有失效——`workflow.py:1373` 只有 `gaps` 与 `enrichment_gaps` 同时为空才写 `completed`；首页混排完全来自 M124 之前创建的历史数据。真实缺陷是 `App.tsx` 的降级条件写死 `precedent_research`，图纸灵感 Run 在相同条件下仍自称“已完成”；现改为两种 goal 同时生效，分别输出“已形成初步灵感”与“研究已形成初步依据”。门禁 341 API / 116 Board / 165 Extension / 8 packaged E2E 全绿。
+77. **当前持久基线已变为 3 projects / 9 Runs / 9 completed / active 0 / `keep_forever=1` 9/9 / 5 收藏 / 1 份任务书。** M131 经用户逐条确认后删除了 5 条 M124 之前的深度不足 Run：`7d8faa53`、`b4c314a6`、`42668844`、`e525ca77`、`5e4184cf`。删除前已生成并预检通过 70,957,655 字节完整备份，走产品既有 `lifecycle.delete_runs` 安全 helper，停服执行、重启后 API/Board 200。封存 Run `10d31b4c-94dd-4442-b24a-fc1b241e658e` 不在删除名单内，仍 completed / attempt 0 / coverage_satisfied，永久封存且绝不 retry。
+78. `76f52c79`（M53/M65 被接受的 Deep）与 `ff16988d`（M107 唯一真实任务书 Standard Run）**被明确保留**，因为它们是现有“已验证”声明的底层数据，不是失败记录。它们在首页显示为“研究已形成初步依据”，这是诚实的旧规则标签，不是缺陷。只有当新的实际测试产生替代证据后才可考虑删除。
+79. 遗留证据不一致：`docs/release-evidence-2026-07-16.md` 冻结的三个 accepted run 里，`7d8faa53` 与 `b4c314a6` 的底层数据已删除，`.artifacts/portfolio/` 对应的 8 张 PNG 只剩截图。该文档与 10 张 PNG 均未纳入 Git，处置推迟到 M123 刷新发布证据时一并决定，不要当作当前有效证据引用。
 
 ## 工作区保护
 

@@ -1733,6 +1733,16 @@
 - 先写红灯行为测试（图纸灵感 completed + enrichment_gaps 必须不显示“已完成”），确认失败后才把降级条件改为对两种 goal 同时生效，并按语境分别输出“已形成初步灵感”与“研究已形成初步依据”。不回填持久状态，因为受影响的 7 条包含 M53/M65 三档验收 Run 与旧发布证据引用的记录。
 - 验证：Board 116/116 全绿；loaded 无截图 QA 在 desktop 与 390×844 下均为 14 条记录、6 条建筑诚实标签 + 1 条图纸诚实标签、横向溢出 0、截断 0；完整 `scripts/verify.ps1` 退出码 0，341 API / 116 Board / 165 Extension / 8 packaged E2E 与全部静态、构建、进程、安全、评测检查通过。
 - 未创建/重试/取消任何 Run，未调用 Provider，未截图，未改动 durable 数据。
+- 用户批准后提交为 `84b8657`（产品）与 `6320643`（记录），仍未 push。
+
+## M131 targeted deletion of legacy under-depth Runs
+
+- 用户要求把旧的深度不足记录当作失败记录删除。删除前逐条核对身份，指出 `76f52c79`（M53/M65 被接受的 Deep）与 `ff16988d`（M107 唯一真实任务书 Standard，107 条逐字证据、2 条关联收藏）并非失败而是记录正在引用的验收证据；用户确认删 5 保 2。
+- 先用产品自带备份接口生成 70,957,655 字节完整备份并通过预检（`ready=true`、66 文件、14 Runs、5 收藏、1 任务书），使本次删除可整体回滚。
+- 停服后用 `lifecycle.delete_runs` 安全 helper 删除 5 条，脚本带存在性、保留名单重叠与保留名单完整性三重前置断言，删除后立即复读校验：`deleted=5`、目标残留 0、保留名单丢失 0、`saved_references` 前后同为 5。
+- 重启服务后 API/Board 均 200。持久基线现为 3 workspaces / 9 Runs 全部 completed / active 0 / `keep_forever=1` 9/9 / 5 收藏 / 1 份任务书，磁盘 `runs/` 目录由 6 减为 3；封存 Run `10d31b4c-94dd-4442-b24a-fc1b241e658e` 不在删除名单内且状态未变。
+- loaded 无截图复验：首页 9 条记录、4 条“研究已完成”、3 条图纸“已完成”、2 条“研究已形成初步依据”（即保留的两条验收 Run），横向溢出 0、页面错误 0。
+- 本轮只删除运行数据，未改动任何产品代码，因此沿用同日 `scripts/verify.ps1` 退出码 0 的门禁结果（341 API / 116 Board / 165 Extension / 8 packaged E2E）。未创建/重试/取消 Run，未调用 Provider，未恢复 Firecrawl，未截图。
 - 本轮未创建、重试或取消任何 Run，未调用 Provider/Firecrawl，未恢复 Firecrawl，未截图，未改动 durable 数据，未执行 reset/checkout/clean/push。
 
 ## M129 无 WMI 依赖的本地服务启停
