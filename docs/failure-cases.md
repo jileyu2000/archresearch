@@ -6,7 +6,7 @@ ArchResearch 的基本原则是：后续阶段失败时不丢弃已经取得的�
 
 | 终态 | 含义 | 用户下一步 |
 |---|---|---|
-| `completed` | 覆盖门槛达标 | 筛选、比较、收藏和导出 |
+| `completed` | 覆盖与结果强度门槛同时达标 | 阅读案例答案、对照、收藏和导出 |
 | `partial` | 已有可用资产，但覆盖不足或后续工具失败 | 先使用已有结果，再重试缺口 |
 | `blocked` | 研究正常结束但没有可用资产 | 调整问题、输入或浏览器权限后重试 |
 | `cancelled` | 用户主动取消；已有检查点保留 | 稍后重试同一次运行 |
@@ -30,7 +30,7 @@ ArchResearch 的基本原则是：后续阶段失败时不丢弃已经取得的�
 | 恶意页面提示注入 | 页面含“忽略指令”、隐藏表单或敏感区域 | 内容仅作不可信数据；不改变动作、预算或系统指令 | 无需用户处理；继续研究或拒绝该来源 | `fixtures/pages/malicious-page.html` |
 | 私网/内网重定向 | API DNS 检查与扩展 URL 检查发现非公网地址 | 拒绝导航，不下载内容，Trace 只记脱敏错误类型 | 使用公开 HTTP(S) 来源 | 恶意页面的链路本地 URL、URL 安全测试 |
 | 无限滚动、超大图或媒体过多 | 滚动距离、截图面积、候选数、页面数受协议和预算限制 | 超界动作拒绝；已枚举候选保留 | 使用页面内可见候选或其他来源 | 协议边界与截图测试 |
-| 图片无法确认项目归属 | 来源文字、反向搜索和页面关系不足 | `asset_association=unknown/probable`，结果降为 `partial` 或 `visual_lead` | 打开来源卡人工核验；不得把视觉相似当成事实 | Evidence schema 与排序测试 |
+| 图片无法确认项目归属 | 来源文字和页面关系不足 | `asset_association=unknown/probable`，结果降为 `partial` 或 `visual_lead` | 通过出处链接回源网页人工核对；不得把视觉相似当成事实 | Evidence schema 与排序测试 |
 | PDF 文本为空或 OCR 不可靠 | 提取不到足够文本或页图分类置信不足 | 保留 PDF 页码和可见区域，不生成无定位事实 | 换清晰 PDF/图片，或人工补充项目文字 | PDF 输入和 EvidenceClaim 校验 |
 | 本地服务或电脑重启 | 启动时发现陈旧进程状态或非终态运行 | Windows 登录启动入口调用 `scripts/start.ps1`，重新验证 API/Board；SQLite 检查点识别待恢复任务并幂等重跑，已落盘资产保留 | 首次执行 `scripts/configure-autostart.ps1`；需要立即恢复时也可手动运行 `scripts/start.ps1` | autostart、process lifecycle 与 startup resume 测试 |
 | 用户取消 | `/v1/runs/{id}/cancel` 写入 `cancelled` 并通知扩展 | 当前结果和 Trace 保留，研究标签页关闭，已授予权限保留 | 点“重试”继续同一运行；需要时从扩展主动撤销 | cancel/retry 集成测试 |

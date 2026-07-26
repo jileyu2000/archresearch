@@ -1,6 +1,6 @@
 # ArchResearch V2.1
 
-面向建筑学生和青年设计师的本地优先实时研究 Agent。用户输入具体设计问题，并可附加任务书 PDF 或案例 URL；系统进行有预算的多轮网页研究，定位平面、剖面、分析图和效果图，核验图片与项目来源关系，最后编排成可筛选、比较和导出的图纸参考板。
+面向建筑学生和青年设计师的本地优先实时研究 Agent。用户输入具体设计问题，并可附加任务书 PDF 或案例 URL；系统进行有预算的多轮网页研究，定位平面、剖面、分析图和效果图，核对图片与项目来源关系，最后编排成可直接阅读、可收藏、可对照和导出的案例答案与灵感板。
 
 本项目不建设平台案例库，不维护全局图片索引，也不跨工作区复用第三方图像语料。
 
@@ -144,13 +144,13 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/validate-evaluation-fixtur
 
 `http://127.0.0.1:5173/?demo=1`
 
-演示数据只用于说明画板交互，与实时研究结果严格分开。三条完整演示流程、预期证据边界和失败恢复路径见[演示流程](docs/demo-flows.md)。
+演示数据只用于说明画板交互，与实时研究结果严格分开。两条完整演示流程、预期证据边界和失败恢复路径见[演示流程](docs/demo-flows.md)。
 
 ## 交付文档
 
 - [系统架构与数据流](docs/architecture.md)
 - [失败案例与恢复策略](docs/failure-cases.md)
-- [三条完整演示流程](docs/demo-flows.md)
+- [两条完整演示流程](docs/demo-flows.md)
 - [历史 gpt-5.5 实时研究 Smoke 记录](docs/evaluation/live-smoke-2026-07-11.md)
 - [30 条版本化研究任务](fixtures/queries/README.md)
 - [九类图纸分类评测集](fixtures/evaluation/README.md)

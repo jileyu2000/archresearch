@@ -23,7 +23,7 @@ flowchart LR
 
 | 组件 | 职责 | 不负责 |
 |---|---|---|
-| 参考板 | 工作区输入、运行状态、筛选、证据详情、收藏/拒绝、2–6 项比较、StyleProfile 与导出 | 自行抓网页、决定来源可信度 |
+| 参考板 | 工作区输入、后台运行状态、答案优先的案例阅读、个人收藏、2–6 项案例策略对照、表达规范与导出 | 自行抓网页、决定来源可信度 |
 | 本地 API | 状态机、预算、供应商调用、来源与资产持久化、排序、检查点、版权门禁、TTL 清理 | 使用浏览器 Cookie、运行远程脚本 |
 | Chrome 扩展 | 在用户动作授权后打开页面、读取受限语义快照与元数据、枚举媒体、滚动、裁取候选区域 | 读取 Cookie/LocalStorage/密码/私信，发布、点赞、购买或提交普通表单 |
 | Playwright 本地浏览器 | 用子问题级查询实时发现公开来源，读取动态渲染后的正文、链接、图片 URL 与图注 | 用户 Chrome 登录态、任意交互、来源/版权升级、批量站点爬取 |
@@ -54,7 +54,7 @@ stateDiagram-v2
     inspecting --> failed: "失败且没有资产"
 ```
 
-每个阶段向 SQLite 提交检查点并写入脱敏 `TraceEvent`。每条 Run 默认设置 14 天保留期，可由用户单独改为永久保留；应用启动时删除到期 Run 及其候选文件、导出文件与关联用户状态，同时清理其他过期临时数据，并恢复未进入终态的运行。`partial`、`blocked`、`cancelled` 和 `failed` 可重试；重试增加 `attempt`，保留已有资产与证据。
+每个阶段向 SQLite 提交检查点并写入脱敏 `TraceEvent`。每条 Run 默认设置 14 天保留期，可由用户单独改为永久保留；`keep_forever` 同时豁免该 Run 的资产、来源页与证据声明各自的独立过期时钟，永久 Run 的子数据不会被启动清扫删除。应用启动时删除到期 Run 及其候选文件、导出文件与关联用户状态，同时清理其他过期临时数据，并恢复未进入终态的运行。`partial`、`blocked`、`cancelled` 和 `failed` 可重试；重试增加 `attempt`，保留已有资产与证据。
 
 默认预算：
 
@@ -111,9 +111,12 @@ Chrome broker、终态消息和受管标签在 V2.1 中是单连接资源，因�
 
 | 数据 | 默认留存 |
 |---|---|
-| 未收藏候选图块、临时 DOM | 7 天 |
-| 查询、来源元数据、EvidenceClaim、Trace | 30 天 |
+| 未收藏候选图块、临时 DOM、EvidenceClaim | 7 天 |
+| 查询、来源元数据、Trace | 30 天 |
+| Run 行 | 14 天，可逐条设为永久 |
 | 用户上传、SavedReference、ReferenceBoard、StyleProfile | 用户删除前 |
+
+`keep_forever=1` 的 Run 连同其全部子数据豁免以上所有时钟（M141 修复）。
 
 `InputArtifact` 属于 workspace，不只属于一次 Run。建筑研究没有 PDF 时，Board 继续在开始研究前保存当前场景提交的 URL/文件并直接创建 Run；URL 仅以研究线索字符串进入 planner/query，持久 PDF 最多抽取 2,000 字正文进入同一 research context。有 PDF 时，同一次“开始研究”先把文件、主问题和档位 multipart POST 到非持久化 `/v1/workspaces/{id}/brief-review`：API 在内存中校验大小与 PDF、最多读取 12,000 字，调用同一 typed planning provider 返回 `project_summary`、最多六条 `project_boundaries` 和与档位一致的 `ResearchSubquestion`。该内部请求不写 `InputArtifact`、不占用单活 Run gate，也不产生 ResearchRun；成功后 Board 立即调用现有 input upload 和 Run POST，并把 3/4/6 条 subquestions 放入 `ResearchSpec`。API 校验数量与唯一 id 后写入 `ResearchRun.subquestions`，workflow 的 checkpoint-first planner 直接使用它们而不重新规划。Board 不渲染 review 响应为新的用户界面；失败时保留表单并停止创建 Run，避免静默丢失任务书边界。建筑研究接受可选任务书 PDF 和案例 URL；`visual_reference_search` 不显示这组输入。切换 goal 清空尚未提交的 Board 表单，不删除既有 workspace artifacts。界面不得把 URL 描述为保证优先访问，也不得声称普通建筑研究或图纸灵感会视觉理解用户上传图片；建筑研究不添加 artifact 仍可仅凭问题开始。
 
