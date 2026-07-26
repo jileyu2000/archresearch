@@ -27,6 +27,14 @@ describe('copy glossary', () => {
       '该历史候选',
       '线型层级',
       '加入成功',
+      // Retired after the simulated persona walkthrough: three first-time
+      // readers each stumbled on these exact phrases.
+      '轮流检索',
+      '案例子问题',
+      '研究已形成初步依据',
+      '已形成初步灵感',
+      '还剩',
+      '尚未结束或已经完成的研究记录',
     ]
     for (const term of banned) {
       expect(source, `retired term "${term}" must not reappear`).not.toContain(term)

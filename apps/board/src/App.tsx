@@ -409,7 +409,7 @@ function runAnnouncement(run: ResearchRun) {
     run.status === 'completed'
     && (run.coverageReport?.enrichment_gaps?.length ?? 0) > 0
   ) {
-    return run.goal === 'visual_reference_search' ? '已形成初步灵感' : '研究已形成初步依据'
+    return run.goal === 'visual_reference_search' ? '已完成 · 初步灵感' : '已完成 · 初步依据'
   }
   if (run.goal === 'visual_reference_search') {
     const visualLabels: Record<RunStatus, string> = {
@@ -533,8 +533,8 @@ function recentRunAnnouncement(run: ResearchRun) {
 }
 
 const announcementExplanations: Record<string, string> = {
-  研究已形成初步依据: '已回答全部研究问题，但案例数量或深度未达完整标准，可作初步参考',
-  已形成初步灵感: '已覆盖全部灵感方向，但可用图纸数量未达完整标准，可作初步参考',
+  '已完成 · 初步依据': '已回答全部研究问题，但案例数量或深度未达完整标准，可作初步参考',
+  '已完成 · 初步灵感': '已覆盖全部灵感方向，但可用图纸数量未达完整标准，可作初步参考',
 }
 
 function formatRunDate(value?: string) {
@@ -588,7 +588,7 @@ function RunHistoryList({
               </button>
               {onRetentionChange && (
                 <div className="retention-control">
-                  <span>{run.keepForever ? '永久保留' : `还剩 ${daysRemaining ?? 14} 天`}</span>
+                  <span>{run.keepForever ? '永久保留' : `${daysRemaining ?? 14} 天后自动删除`}</span>
                   <button
                     type="button"
                     aria-label={`${run.keepForever ? '取消永久保留' : '永久保留'}：${recordTitle}`}
@@ -837,7 +837,7 @@ function collectionCaseSubquestions(item: PersonalCollection): CollectionCaseSub
   if (stored.length > 0) return stored
   return [{
     id: 'legacy',
-    question: '未记录具体案例子问题',
+    question: '未记录具体研究子问题',
     project_context: item.snapshot.project_context?.trim() ?? '',
     design_mechanism: item.snapshot.design_mechanism?.trim() || item.note.trim(),
     transfer_strategy: item.snapshot.transfer_strategy ?? [],
@@ -967,7 +967,7 @@ function uniqueSummaryItems(items: string[], limit: number) {
   return unique
 }
 
-const auditBoundaryPattern = /原文|正文|来源|源网站|证据|核对|核验|未给出|未说明|未记录|待确认|仍需确认|不详|证明|断言|实证|drawing_ids|研究子问题|页面仅支持/
+const auditBoundaryPattern = /原文|正文|来源|源网站|证据|核对|核验|未给出|未说明|未记录|待确认|仍需确认|不详|证明|断言|实证|drawing_ids|研究子问题|页面仅支持|页面不是|页面没有|页面未|页面不涉及|本页没有/
 
 function userFacingBoundary(statement: string) {
   return statement.replace(/^(?:适用边界|适用条件|适用时注意|边界)\s*[：:]\s*/u, '').trim()
@@ -2551,7 +2551,7 @@ export default function App() {
                 <div className="research-method">
                   <fieldset className="segmented-control research-depth-options">
                     <legend>研究方式</legend>
-                    <p className="research-source-note">案例来自多家建筑媒体的轮流检索，只收录文章内容完整的项目。</p>
+                    <p className="research-source-note">案例来自 ArchDaily、Dezeen、Designboom 等建筑媒体，只收录文章内容完整的项目。</p>
                     {(Object.keys(modeLabels) as ResearchMode[]).map((value) => (
                       <label key={value}>
                         <input
@@ -2710,7 +2710,7 @@ export default function App() {
               <header>
                 <div>
                   <h2 id="recent-heading">最近研究</h2>
-                  <p>{demoMode ? '继续尚未结束或已经完成的任务。' : '按问题查看尚未结束或已经完成的研究记录。'}</p>
+                  <p>{demoMode ? '继续尚未结束或已经完成的任务。' : '按问题查看全部研究记录。'}</p>
                 </div>
                 {!demoMode && (
                   <div className="workspace-actions">
@@ -3000,7 +3000,7 @@ export default function App() {
                       <p>{subquestion.rationale}</p>
                     </div>
                     <span className="subquestion-coverage">
-                      {subquestion.passCount !== undefined && `已调研 ${subquestion.passCount} 轮 · `}
+                      {!isVisualResearch && subquestion.passCount !== undefined && `已调研 ${subquestion.passCount} 轮 · `}
                       {isVisualResearch
                         ? subquestion.inspirationCount > 0
                           ? `${subquestion.inspirationCount} 张灵感图`
@@ -3624,7 +3624,7 @@ export default function App() {
                                 })}
                               >
                                 <span className="collection-directory-copy">
-                                  <small>案例子问题</small>
+                                  <small>研究子问题</small>
                                   <strong>{group.question}</strong>
                                   <span>{collectionQuestion}</span>
                                 </span>
@@ -3661,10 +3661,10 @@ export default function App() {
                             <section
                               className="collection-subquestion"
                               key={group.id}
-                              aria-label={`案例子问题：${group.question}`}
+                              aria-label={`研究子问题：${group.question}`}
                             >
                               <header className="collection-subquestion-heading">
-                                <span>案例子问题</span>
+                                <span>研究子问题</span>
                                 <h3>{group.question}</h3>
                                 <small>{group.entries.length} 个已收藏案例</small>
                               </header>

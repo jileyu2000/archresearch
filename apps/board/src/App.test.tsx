@@ -806,7 +806,7 @@ describe('research board', () => {
     expect(screen.getByRole('heading', { name: '最近研究' })).toBeVisible()
     expect(screen.getByRole('group', { name: '研究方式' })).toBeVisible()
     expect(screen.getByRole('radio', { name: /标准.*形成方案依据/ })).toBeChecked()
-    expect(screen.getByText('案例来自多家建筑媒体的轮流检索，只收录文章内容完整的项目。')).toBeVisible()
+    expect(screen.getByText('案例来自 ArchDaily、Dezeen、Designboom 等建筑媒体，只收录文章内容完整的项目。')).toBeVisible()
     const startButton = screen.getByRole('button', { name: '开始研究' })
     const starterButton = screen.getByRole('button', { name: '填入问题：流线组织，人车在入口冲突，如何重组落客和步行路径？' })
     expect(startButton.closest('.research-submit-spark')).not.toBeNull()
@@ -1036,7 +1036,7 @@ describe('research board', () => {
     await user.click(programQuestionLink)
     expect(within(collectionPage).getByRole('button', { name: '返回问题目录' })).toBeVisible()
     const caseSubquestion = within(collectionPage).getByRole('region', {
-      name: '案例子问题：公共功能怎样与保留结构形成清晰层次？',
+      name: '研究子问题：公共功能怎样与保留结构形成清晰层次？',
     })
     expect(within(caseSubquestion).getByRole('heading', {
       level: 3,
@@ -1085,7 +1085,7 @@ describe('research board', () => {
     await user.click(within(collectionPage).getByRole('button', { name: '返回问题目录' }))
     expect(within(collectionPage).getByRole('region', { name: '建筑问题目录' })).toBeVisible()
     expect(within(collectionPage).queryByRole('region', {
-      name: '案例子问题：公共功能怎样与保留结构形成清晰层次？',
+      name: '研究子问题：公共功能怎样与保留结构形成清晰层次？',
     })).not.toBeInTheDocument()
 
     await user.click(within(collectionPage).getByRole('button', {
@@ -1192,7 +1192,7 @@ describe('research board', () => {
     expect(within(recentResearch).queryByRole('button', { name: /查看全部历史/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('dialog', { name: '全部历史' })).not.toBeInTheDocument()
     expect(within(recentResearch).getByText('永久保留')).toBeVisible()
-    expect(within(recentResearch).getAllByText(/还剩 \d+ 天/)).toHaveLength(11)
+    expect(within(recentResearch).getAllByText(/\d+ 天后自动删除/)).toHaveLength(11)
 
     await user.click(within(recentResearch).getByRole('button', { name: '永久保留：历史研究 2' }))
     expect(fetch).toHaveBeenCalledWith('/v1/runs/run-history-2/retention', {
@@ -1271,7 +1271,7 @@ describe('research board', () => {
     renderBoard()
 
     const recentResearch = await screen.findByRole('region', { name: '最近研究' })
-    const provisionalStatus = await within(recentResearch).findByText('研究已形成初步依据')
+    const provisionalStatus = await within(recentResearch).findByText('已完成 · 初步依据')
     expect(provisionalStatus).toBeVisible()
     expect(provisionalStatus).toHaveAttribute('title', '已回答全部研究问题，但案例数量或深度未达完整标准，可作初步参考')
     expect(within(recentResearch).queryByText('研究已完成')).not.toBeInTheDocument()
@@ -1304,7 +1304,7 @@ describe('research board', () => {
     renderBoard()
 
     const recentResearch = await screen.findByRole('region', { name: '最近研究' })
-    expect(await within(recentResearch).findByText('已形成初步灵感')).toBeVisible()
+    expect(await within(recentResearch).findByText('已完成 · 初步灵感')).toBeVisible()
     expect(within(recentResearch).queryByText('已完成')).not.toBeInTheDocument()
   })
 
@@ -1390,7 +1390,7 @@ describe('research board', () => {
     renderBoard()
 
     await screen.findByText('真实工作区')
-    expect(screen.getByText('案例来自多家建筑媒体的轮流检索，只收录文章内容完整的项目。')).toBeVisible()
+    expect(screen.getByText('案例来自 ArchDaily、Dezeen、Designboom 等建筑媒体，只收录文章内容完整的项目。')).toBeVisible()
     const depthOption = screen.getByRole('radio', { name: new RegExp(`${label}.*${outcome}`) })
     await user.click(depthOption)
     expect(screen.getByText(description)).toBeVisible()
@@ -2558,6 +2558,22 @@ describe('research board', () => {
     expect(within(synthesis).getByText('仅当净高与结构余量足够时，独立植入才成立。')).toBeVisible()
     expect(within(synthesis).queryByText(/转译建议[：:]/)).not.toBeInTheDocument()
     expect(within(synthesis).queryByText(/适用边界[：:]/)).not.toBeInTheDocument()
+  })
+
+  it('does not present a source disclaimer as an applicability condition', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', createLiveFetch({
+      existingRunStatus: 'completed',
+      candidateOverrides: {
+        limitations: ['页面没有提供透视校正方法、构件分层规则或恢复尺度的技术流程。'],
+      },
+    }))
+    renderBoard()
+
+    await user.click(await screen.findByRole('button', { name: `打开研究：${liveQuestion}` }))
+    const dossier = await screen.findByRole('article', { name: '代表案例 Live Mill Conversion' })
+    expect(within(dossier).queryByText('适用条件')).not.toBeInTheDocument()
+    expect(within(dossier).queryByText(/页面没有提供/)).not.toBeInTheDocument()
   })
 
   it('turns machine-shaped fallback synthesis into a concise result without exposing raw text', async () => {
