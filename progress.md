@@ -1723,6 +1723,16 @@
 - 基线为 `98a9a01` → `d772902` 产品基线 → `06f3424` WMI-free listener 修复 → `775c4b7` 工程记录，均为本地提交，未 push。提交后工作树只剩两个有意排除的未跟踪条目：`.artifacts/`（10 张 portfolio PNG，数据备份 ZIP 已 ignore）与 `docs/release-evidence-2026-07-16.md`。
 - 收口后在本会话执行了一次端到端权威门禁 `scripts/verify.ps1`，退出码 0：dev-common、Provider 安全契约、process-lifecycle、autostart 四个 PowerShell 套件全绿，341 API、115 Board、165 Extension、8 packaged Chrome E2E 全通过，Ruff、strict Mypy 19 files、两端 lint/typecheck/build 与评测夹具均通过。这是 WMI 修复后本 shell 首次完整跑通 `verify.ps1`。
 - 只读复验 durable 数据未变：3 workspaces / 14 Runs 全部 completed / active 0，`keep_forever=1` 14/14，封存 Run `10d31b4c-94dd-4442-b24a-fc1b241e658e` 仍为 completed / attempt 0 / coverage_satisfied。`git diff --check` 除既有 LF→CRLF 提示外无问题。
+
+## M130 uniform completeness honesty across goals
+
+- 用户从首页截图提出：为什么有的记录写“已完成”、有的写“研究已形成初步依据”，完整性规则是否失效。先只读诊断，未改代码。
+- 结论一：规则没有失效。`workflow.py:1373` 在 M124 之后只有 `_enrichment_satisfied`（`gaps` 与 `enrichment_gaps` 同时为空）才写 `completed`，否则为 `partial`，当前代码不可能再产生“completed 但深度不足”。
+- 结论二：混排来自历史数据。14 条 Run 创建于 07-11 至 07-25，全部早于今天的 M124；旧规则只查 `gaps`，因此 7 条持久 `completed` 却带非空 `enrichment_gaps`。M124 只加了展示层诚实降级，没有改写这批数据。
+- 结论三：当前代码确有一处真实不一致。`App.tsx` 的降级条件写死 `precedent_research`，图纸灵感 Run 走 `visualLabels` 直接显示“已完成”；`e525ca77` 在与被降级建筑 Run 完全相同的条件下仍自称已完成。
+- 先写红灯行为测试（图纸灵感 completed + enrichment_gaps 必须不显示“已完成”），确认失败后才把降级条件改为对两种 goal 同时生效，并按语境分别输出“已形成初步灵感”与“研究已形成初步依据”。不回填持久状态，因为受影响的 7 条包含 M53/M65 三档验收 Run 与旧发布证据引用的记录。
+- 验证：Board 116/116 全绿；loaded 无截图 QA 在 desktop 与 390×844 下均为 14 条记录、6 条建筑诚实标签 + 1 条图纸诚实标签、横向溢出 0、截断 0；完整 `scripts/verify.ps1` 退出码 0，341 API / 116 Board / 165 Extension / 8 packaged E2E 与全部静态、构建、进程、安全、评测检查通过。
+- 未创建/重试/取消任何 Run，未调用 Provider，未截图，未改动 durable 数据。
 - 本轮未创建、重试或取消任何 Run，未调用 Provider/Firecrawl，未恢复 Firecrawl，未截图，未改动 durable 数据，未执行 reset/checkout/clean/push。
 
 ## M129 无 WMI 依赖的本地服务启停

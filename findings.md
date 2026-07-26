@@ -1574,6 +1574,15 @@ M89 取舍：不新增画布、拖拽或协作系统；只把现有结果工具�
 - 唯一无法执行的门禁步骤是 `scripts/tests/process-lifecycle.tests.ps1`。本会话 shell 的 CIM/WMI 运行时已损坏：`Get-CimInstance Win32_Process` 直接抛 `Microsoft.Management.Infrastructure.Native.ApplicationMethods` 类型初始化异常，禁用沙箱后同样失败，因此这是环境限制而非代码回归；M127/M128 曾在 Codex 环境下通过该脚本。
 - 共享工作区并发写入已被实测确认，必须作为长期约束记录：本 Codex 会话在我提交后仍在写同一工作树，`scripts/tests/process-lifecycle.tests.ps1` 与 `scripts/dev-common.ps1` 的 mtime 分别为 20:03:14 与 20:03:44（提交发生在约 20:02–20:03），`dev-common.ps1` 从提交内的 269 行增长到工作树 431 行，改动方向正是把监听进程检测改为不依赖 WMI。结论：本工作区的 `git add` 只能保证“逐文件读取时刻”的快照，任何跨文件一致性都必须与并发写入方协调，提交前后都要重新读 `git status`。
 
+## 2026-07-26 M130 首页“已完成 / 已形成初步依据”混排诊断
+
+- 用户提出的规则本身没有失效。M124 之后的终态判定在 `workflow.py:1373` 只有 `_enrichment_satisfied(coverage)` 为真才写 `completed`，即 `gaps` 与 `enrichment_gaps` 同时为空，`stop_reason` 恒为 `coverage_satisfied`；达不到就是 `partial`。按当前代码不可能再产生“completed 但深度不足”的记录。
+- 混排的成因完全是历史数据。14 条 Run 创建于 2026-07-11 至 2026-07-25，全部早于今天落地的 M124。旧规则只要求 `gaps` 为空（`completion_satisfied`），不检查 enrichment，因此 7 条 Run 持久状态是 `completed`，`coverage_report.enrichment_gaps` 却非空，且带着当前代码已不可能再产生的 `stop_reason=completion_satisfied`。M124 没有改写这批数据，只在 Board 增加了诚实降级标签。
+- 实测每条记录的显示标签：6 条建筑 Run 显示“研究已形成初步依据”（`7d8faa53`、`b4c314a6`、`42668844`、`76f52c79`、`ff16988d`、`5e4184cf`），4 条建筑 Run 显示“研究已完成”（`58f4b9f9`、`d13bdc67`、`a2cf2e20`、`d995bed5`），4 条图纸灵感 Run 显示“已完成”。用户截图中的两条“初步依据”加一条“已完成”与此一致。
+- 发现一个当前代码的真实不一致，与历史数据无关：`App.tsx:407-414` 的 enrichment 降级条件写死了 `run.goal === 'precedent_research'`，图纸灵感 Run 走 `visualLabels` 直接显示“已完成”。`e525ca77` 正是 `completed` 且 `enrichment_gaps=['insufficient_verified_or_partial']`，与被降级的建筑 Run 条件相同却仍自称已完成。同一条件两种诚实标准，是这份列表看起来随意的直接原因。
+- `58f4b9f9`（2026-07-11）的 `coverage_report` 根本没有 `enrichment_gaps` 键，Board 的 `?? 0` 把它当作无缺口。这是比 enrichment 规则更早的记录，不能与真正达标的 Run 混为一谈，但也不应假装它被评估过。
+- 不采用回填持久状态的修法：这 7 条里包含 M53/M65 的三档验收 Run 与旧发布证据引用的 `7d8faa53`/`b4c314a6`，改写它们的 `status` 会使既有验收记录与发布证据失真。修复只在展示层进行，durable 数据不动。
+
 ## 2026-07-26 M129 开发服务启停的 WMI 依赖
 
 - 现象与最初判断的偏差：`Get-NetTCPConnection -ErrorAction SilentlyContinue` 在本机返回空并不代表端口空闲，它的 CIM 层此时已经坏了，`-ErrorAction SilentlyContinue` 把失败吞掉。真正可信的空闲证据是 `Get-AvailableTcpPort` 的绑定成功和 `netstat -ano`，两者都不经 WMI。
