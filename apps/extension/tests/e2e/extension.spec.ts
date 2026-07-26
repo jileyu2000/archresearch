@@ -2,7 +2,7 @@ import { once } from "node:events";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync } from "node:fs";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
-import { createServer, type Server } from "node:http";
+import { createServer, type Server, type ServerResponse } from "node:http";
 import { type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -94,13 +94,16 @@ test.describe.serial("packaged MV3 browser bridge", () => {
     await popup.reload();
     await expect(popup.locator('[data-role="connection"]')).toHaveText("已连接");
     await expect.poll(() => hasHostAccess(serviceWorker)).toBe(true);
-    await popup.getByRole("button", { name: "授予网页读取权限" }).click();
     await expect(popup.locator('[data-role="permission"]')).toHaveText(
       "网页读取已授权",
     );
-    await expect
-      .poll(() => hasHostAccess(serviceWorker))
-      .toBe(true);
+    await expect(
+      popup.getByRole("button", { name: "允许网页读取" }),
+    ).toBeHidden();
+    await expect(
+      popup.getByRole("button", { name: "撤销网页读取权限" }),
+    ).toBeVisible();
+    await expect(popup.locator('[data-role="manual-pairing"]')).toBeHidden();
   });
 
   test("enumerates drawing assets and metadata from a static page", async () => {
@@ -173,6 +176,70 @@ test.describe.serial("packaged MV3 browser bridge", () => {
 
     await coordinator.command("close_tab", { tab_id: tabId });
     await expect.poll(() => managedPage.isClosed()).toBe(true);
+  });
+
+  test("preinstalls the listener before a managed page finishes loading", async () => {
+    const url = fixtures.url("/never-finishes");
+    const opened = await coordinator.command("open_url", { url });
+    const tabId = readTabId(opened);
+    const managedPage = await waitForPage(context, url);
+    await managedPage.locator("#stream-ready").waitFor();
+    expect(await managedPage.evaluate(() => document.readyState)).toBe("loading");
+    await expect.poll(() => managedTabIds(serviceWorker)).toEqual([tabId]);
+
+    const direct = await directContentCommand(serviceWorker, tabId, {
+      action: "enumerate_media",
+    });
+    expect(direct).toMatchObject({
+      ok: true,
+      result: {
+        media: [
+          {
+            media_type: "svg",
+            alt: "Streaming longitudinal section",
+            adjacent_text: "Section parsed before the response ends.",
+          },
+        ],
+      },
+    });
+    expect(
+      await serviceWorker.evaluate(() =>
+        chrome.scripting.getRegisteredContentScripts(),
+      ),
+    ).toEqual([]);
+
+    const normal = readMedia(
+      await coordinator.command("enumerate_media", { tab_id: tabId }),
+    );
+    expect(normal).toHaveLength(1);
+    expect(normal[0]?.alt).toBe("Streaming longitudinal section");
+
+    await coordinator.command("close_tab", { tab_id: tabId });
+    await expect.poll(() => managedPage.isClosed()).toBe(true);
+    await expect.poll(() => managedTabIds(serviceWorker)).toEqual([]);
+  });
+
+  test("waits for the latest listener after a managed tab hard-navigates", async () => {
+    const firstUrl = fixtures.url("/static");
+    const opened = await coordinator.command("open_url", { url: firstUrl });
+    const tabId = readTabId(opened);
+    const managedPage = await waitForPage(context, firstUrl);
+    await managedPage.waitForLoadState("domcontentloaded");
+
+    const secondUrl = fixtures.url("/never-finishes");
+    await managedPage.goto(secondUrl, { waitUntil: "commit" });
+    await managedPage.locator("#stream-ready").waitFor();
+    expect(await managedPage.evaluate(() => document.readyState)).toBe("loading");
+
+    const media = readMedia(
+      await coordinator.command("enumerate_media", { tab_id: tabId }),
+    );
+    expect(media).toHaveLength(1);
+    expect(media[0]?.alt).toBe("Streaming longitudinal section");
+
+    await coordinator.command("close_tab", { tab_id: tabId });
+    await expect.poll(() => managedPage.isClosed()).toBe(true);
+    await expect.poll(() => managedTabIds(serviceWorker)).toEqual([]);
   });
 
   test("finds media added by a lazy page after a fixed scroll action", async () => {
@@ -274,39 +341,33 @@ test.describe.serial("packaged MV3 browser bridge", () => {
 
   });
 
-  test("revokes permissions, closes tabs, and reconnects without reopening access", async () => {
+  test("keeps approved access, closes tabs, and reconnects without another prompt", async () => {
     coordinator.send({
       type: "research.session",
       protocol_version: 1,
       state: "completed",
     });
     await expect.poll(() => hostileManagedPage.isClosed()).toBe(true);
-    await expect.poll(() => hasHostAccess(serviceWorker)).toBe(false);
+    await expect.poll(() => hasHostAccess(serviceWorker)).toBe(true);
     await popup.reload();
     await expect(popup.locator('[data-role="permission"]')).toHaveText(
-      "网页读取未授权",
+      "网页读取已授权",
     );
 
-    const locked = await coordinator.command("wait", { milliseconds: 0 });
-    expect(locked).toMatchObject({
-      ok: false,
-      error: { code: "permission_required" },
-    });
+    const available = await coordinator.command("wait", { milliseconds: 0 });
+    expect(available).toMatchObject({ ok: true });
 
     coordinator.dropActiveConnection();
     await coordinator.waitForAuthenticationCount(2);
     await popup.reload();
     await expect(popup.locator('[data-role="connection"]')).toHaveText("已连接");
     await expect(popup.locator('[data-role="permission"]')).toHaveText(
-      "网页读取未授权",
+      "网页读取已授权",
     );
-    await expect.poll(() => hasHostAccess(serviceWorker)).toBe(false);
+    await expect.poll(() => hasHostAccess(serviceWorker)).toBe(true);
 
-    const stillLocked = await coordinator.command("wait", { milliseconds: 0 });
-    expect(stillLocked).toMatchObject({
-      ok: false,
-      error: { code: "permission_required" },
-    });
+    const stillAvailable = await coordinator.command("wait", { milliseconds: 0 });
+    expect(stillAvailable).toMatchObject({ ok: true });
   });
 
 });
@@ -348,9 +409,10 @@ test.describe.serial("FastAPI browser workflow", () => {
         `${api.httpEndpoint}/v1/browser/pairing-code`,
         { method: "POST" },
       );
+      await popup.getByText("连接有问题？手动配对", { exact: true }).click();
       await popup.locator('[data-role="endpoint"]').fill(api.websocketEndpoint);
       await popup.locator('[data-role="token"]').fill(pairing.code);
-      await popup.getByRole("button", { name: "手动配对" }).click();
+      await popup.getByRole("button", { name: "使用配对码连接" }).click();
       await expect
         .poll(() => storedPairingToken(serviceWorker))
         .not.toBe(pairing.code);
@@ -415,11 +477,13 @@ test.describe.serial("FastAPI browser workflow", () => {
         Array.from(new Uint8Array((await content.arrayBuffer()).slice(0, 8))),
       ).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
 
-      await expect.poll(() => hasHostAccess(serviceWorker)).toBe(false);
+      await expect.poll(() => hasHostAccess(serviceWorker)).toBe(true);
       await popup.reload();
       await expect(popup.locator('[data-role="permission"]')).toHaveText(
-        "网页读取未授权",
+        "网页读取已授权",
       );
+      await popup.getByRole("button", { name: "撤销网页读取权限" }).click();
+      await expect.poll(() => hasHostAccess(serviceWorker)).toBe(false);
     } finally {
       await api.close();
     }
@@ -471,6 +535,18 @@ function storedPairingToken(worker: Worker): Promise<string | null> {
   });
 }
 
+function managedTabIds(worker: Worker): Promise<number[]> {
+  return worker.evaluate(async () => {
+    const stored = await chrome.storage.session.get(
+      "archresearch.managed_tabs",
+    );
+    const value = stored["archresearch.managed_tabs"];
+    return Array.isArray(value)
+      ? value.filter((item): item is number => typeof item === "number")
+      : [];
+  });
+}
+
 async function primeOptionalHostAccess(
   userDataDir: string,
   extensionPath: string,
@@ -519,12 +595,23 @@ class FixtureServer {
   private constructor(
     private readonly server: Server,
     readonly port: number,
+    private readonly hangingResponses: Set<ServerResponse>,
   ) {}
 
   static async start(): Promise<FixtureServer> {
     const fixtureDirectory = resolve(import.meta.dirname, "fixtures");
+    const hangingResponses = new Set<ServerResponse>();
     const server = createServer(async (request, response) => {
       const pathname = new URL(request.url ?? "/", "http://fixture").pathname;
+      if (pathname === "/never-finishes") {
+        hangingResponses.add(response);
+        response.on("close", () => hangingResponses.delete(response));
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        response.write(
+          await readFile(resolve(fixtureDirectory, "never-finishes.html")),
+        );
+        return;
+      }
       const pages: Record<string, string> = {
         "/board": "board.html",
         "/static": "static.html",
@@ -547,7 +634,11 @@ class FixtureServer {
     });
     server.listen(0, "127.0.0.1");
     await once(server, "listening");
-    return new FixtureServer(server, readPort(server.address()));
+    return new FixtureServer(
+      server,
+      readPort(server.address()),
+      hangingResponses,
+    );
   }
 
   url(pathname: string): string {
@@ -559,6 +650,10 @@ class FixtureServer {
   }
 
   async close(): Promise<void> {
+    for (const response of this.hangingResponses) {
+      response.destroy();
+    }
+    this.hangingResponses.clear();
     await new Promise<void>((resolveClose, rejectClose) => {
       this.server.close((error) => {
         if (error) {
@@ -569,6 +664,22 @@ class FixtureServer {
       });
     });
   }
+}
+
+function directContentCommand(
+  worker: Worker,
+  tabId: number,
+  command: Record<string, unknown>,
+): Promise<unknown> {
+  return worker.evaluate(
+    ({ targetTabId, contentCommand }) =>
+      chrome.tabs.sendMessage(targetTabId, {
+        type: "archresearch.content",
+        protocol_version: 1,
+        command: contentCommand,
+      }),
+    { targetTabId: tabId, contentCommand: command },
+  );
 }
 
 async function requestBoardBridge(

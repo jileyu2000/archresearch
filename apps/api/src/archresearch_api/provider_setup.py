@@ -5,7 +5,9 @@ import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TextIO
+from typing import Any, Literal, TextIO
+
+from pydantic import BaseModel, ConfigDict
 
 from .provider_credentials import (
     KeyringBackend,
@@ -29,6 +31,12 @@ class ProbeResult:
     capability: str
 
 
+class ProviderProbePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["ok"]
+
+
 def probe_provider(
     api_key: str,
     config: SuoxieProviderConfig,
@@ -36,19 +44,20 @@ def probe_provider(
 ) -> ProbeResult:
     factory = client_factory or _create_openai_client
     client = factory(api_key=api_key, base_url=str(config.base_url))
-    response = client.responses.create(
+    response = client.responses.parse(
         model=config.research_model,
-        tools=[{"type": "web_search", "search_context_size": "low"}],
-        include=["web_search_call.results"],
-        input="Find the official OpenAI API documentation homepage and cite it.",
-        max_output_tokens=96,
+        reasoning={"effort": "medium"},
+        input="Return status=ok in the required structured format.",
+        text_format=ProviderProbePayload,
+        max_output_tokens=64,
     )
-    if not any(_output_type(item) == "web_search_call" for item in response.output):
-        raise ProviderCapabilityError("Responses web search was not executed")
+    if response.output_parsed is None:
+        raise ProviderCapabilityError("Responses structured output was not returned")
+    ProviderProbePayload.model_validate(response.output_parsed)
     return ProbeResult(
         provider=config.name,
         model=config.research_model,
-        capability="responses.web_search",
+        capability="responses.structured_output",
     )
 
 
@@ -78,7 +87,7 @@ def main(
         probe = probe_provider(api_key, config, client_factory)
     except Exception:
         print(
-            "连接测试失败：请检查 Key，以及中转站对 Responses API 和 web_search 的支持。",
+            "连接测试失败：请检查 Key，以及中转站对 Responses 结构化输出的支持。",
             file=error_stream,
         )
         return 1
@@ -101,14 +110,6 @@ def _create_openai_client(**kwargs: str) -> Any:
     from openai import OpenAI
 
     return OpenAI(api_key=kwargs["api_key"], base_url=kwargs["base_url"])
-
-
-def _output_type(item: Any) -> str | None:
-    if isinstance(item, dict):
-        value = item.get("type")
-    else:
-        value = getattr(item, "type", None)
-    return value if isinstance(value, str) else None
 
 
 if __name__ == "__main__":

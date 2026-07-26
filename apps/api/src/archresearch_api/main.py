@@ -9,18 +9,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import models  # noqa: F401
-from .api import router
+from .api import execute_reserved_research_run, router
 from .browser import BrowserBroker, PairingAuthority, create_browser_router
 from .config import Settings
 from .database import Database
 from .lifecycle import cleanup_expired_data, incomplete_run_ids
 from .provider_credentials import (
-    FirecrawlRuntime,
     KeyringBackend,
     ProviderRuntime,
     get_windows_keyring,
-    load_firecrawl_config,
-    load_firecrawl_runtime,
     load_provider_config,
     load_provider_runtime,
 )
@@ -30,22 +27,21 @@ from .providers import (
     MockResearchProvider,
     OpenAIResearchProvider,
     ResearchProvider,
-    ReverseImageProvider,
-    TinEyeProvider,
 )
-from .public_pages import FirecrawlPageParser, PublicPageParser
+from .public_pages import LocalBrowserPageParser, PublicPageParser
+from .run_gate import ResearchRunGate
 from .visual import MockVisualClassifier, OpenAIVisualClassifier, VisualClassifier
-from .workflow import execute_research_run
+from .xiaohongshu import OpenCliXiaohongshuSearch, XiaohongshuSearch
 
 
 def create_app(
     settings: Settings | None = None,
     *,
     research_provider: ResearchProvider | None = None,
-    tineye_provider: ReverseImageProvider | None = None,
     browser_broker: BrowserBroker | None = None,
     visual_classifier: VisualClassifier | None = None,
     public_page_parser: PublicPageParser | None = None,
+    xiaohongshu_search: XiaohongshuSearch | None = None,
     chrome_launcher: Callable[[str], bool] | None = None,
     keyring_backend: KeyringBackend | None = None,
     openai_client_factory: Callable[..., Any] | None = None,
@@ -54,30 +50,22 @@ def create_app(
     database = Database(resolved_settings.database_url)
     browser_authority = PairingAuthority(resolved_settings.data_dir)
     resolved_browser_broker = browser_broker or BrowserBroker()
+    run_gate = ResearchRunGate()
     browser_router = create_browser_router(
         browser_authority,
         resolved_browser_broker,
         chrome_launcher=chrome_launcher,
     )
     stored_runtime: ProviderRuntime | None = None
-    stored_firecrawl_runtime: FirecrawlRuntime | None = None
-    if (
-        load_provider_config(resolved_settings.data_dir) is not None
-        or load_firecrawl_config(resolved_settings.data_dir) is not None
-    ):
+    if load_provider_config(resolved_settings.data_dir) is not None:
         try:
             credential_backend = keyring_backend or get_windows_keyring()
             stored_runtime = load_provider_runtime(
                 resolved_settings.data_dir,
                 credential_backend,
             )
-            stored_firecrawl_runtime = load_firecrawl_runtime(
-                resolved_settings.data_dir,
-                credential_backend,
-            )
         except Exception:
             stored_runtime = None
-            stored_firecrawl_runtime = None
     shared_client: Any | None = None
     if stored_runtime is not None:
         if openai_client_factory is None:
@@ -124,25 +112,16 @@ def create_app(
                     model=resolved_settings.vision_model,
                 )
             )
-    resolved_tineye_provider = tineye_provider
-    if resolved_tineye_provider is None and resolved_settings.tineye_api_key:
-        resolved_tineye_provider = TinEyeProvider(
-            api_key=resolved_settings.tineye_api_key,
-            base_url=resolved_settings.tineye_api_url,
-        )
     resolved_public_page_parser = public_page_parser
-    if resolved_public_page_parser is None and stored_firecrawl_runtime is not None:
-        resolved_public_page_parser = FirecrawlPageParser(
-            api_key=stored_firecrawl_runtime.api_key,
-            base_url=str(stored_firecrawl_runtime.config.base_url),
-            credit_reserve=resolved_settings.firecrawl_credit_reserve,
-        )
-    elif resolved_public_page_parser is None and resolved_settings.firecrawl_api_key:
-        resolved_public_page_parser = FirecrawlPageParser(
-            api_key=resolved_settings.firecrawl_api_key,
-            base_url=resolved_settings.firecrawl_api_url,
-            credit_reserve=resolved_settings.firecrawl_credit_reserve,
-        )
+    if resolved_public_page_parser is None and (
+        stored_runtime is not None or resolved_settings.provider_mode == "openai"
+    ):
+        resolved_public_page_parser = LocalBrowserPageParser()
+    resolved_xiaohongshu_search = xiaohongshu_search
+    if resolved_xiaohongshu_search is None and (
+        stored_runtime is not None or resolved_settings.provider_mode == "openai"
+    ):
+        resolved_xiaohongshu_search = OpenCliXiaohongshuSearch.discover()
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -156,17 +135,20 @@ def create_app(
         )
 
         async def resume_run(run_id: str) -> None:
+            if not run_gate.reserve(run_id):
+                return
             await asyncio.to_thread(
-                execute_research_run,
+                execute_reserved_research_run,
+                run_gate,
                 database,
                 run_id,
                 provider,
                 resolved_browser_broker.notify_terminal,
-                source_lookup_provider=resolved_tineye_provider,
                 browser_client=resolved_browser_broker,
                 visual_classifier=resolved_visual_classifier,
                 candidate_root=resolved_settings.data_dir / "runs",
                 public_page_parser=resolved_public_page_parser,
+                xiaohongshu_search=resolved_xiaohongshu_search,
             )
 
         run_ids = incomplete_run_ids(database)
@@ -175,7 +157,13 @@ def create_app(
             for run_id in run_ids:
                 await resume_run(run_id)
         else:
-            resume_tasks = [asyncio.create_task(resume_run(run_id)) for run_id in run_ids]
+
+            async def resume_runs() -> None:
+                for run_id in run_ids:
+                    await resume_run(run_id)
+
+            if run_ids:
+                resume_tasks = [asyncio.create_task(resume_runs())]
         try:
             yield
         finally:
@@ -192,10 +180,12 @@ def create_app(
     app.state.settings = resolved_settings
     app.state.database = database
     app.state.research_provider = provider
-    app.state.tineye_provider = resolved_tineye_provider
     app.state.browser_broker = resolved_browser_broker
     app.state.visual_classifier = resolved_visual_classifier
     app.state.public_page_parser = resolved_public_page_parser
+    app.state.xiaohongshu_search = resolved_xiaohongshu_search
+    app.state.run_gate = run_gate
+    app.state.data_maintenance = False
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],

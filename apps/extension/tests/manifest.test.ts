@@ -37,6 +37,7 @@ describe("Manifest V3 security boundary", () => {
       "scripting",
       "activeTab",
       "sidePanel",
+      "alarms",
     ]);
     expect(permissions).not.toEqual(
       expect.arrayContaining([

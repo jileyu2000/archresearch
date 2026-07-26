@@ -34,7 +34,7 @@ class RemoteVisualCandidate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     candidate_id: str = Field(pattern=r"^image_[1-9][0-9]*$", max_length=30)
-    image_url: str = Field(min_length=1, max_length=2_000)
+    image_url: str = Field(min_length=1, max_length=3_000_000)
     caption: str = Field(default="", max_length=500)
 
 
@@ -191,6 +191,7 @@ class OpenAIVisualClassifier:
         )
         response = self.client.responses.parse(
             model=self.model,
+            reasoning={"effort": "medium"},
             input=[
                 {
                     "role": "user",
@@ -253,6 +254,7 @@ class OpenAIVisualClassifier:
                 )
             response = self.client.responses.parse(
                 model=self.model,
+                reasoning={"effort": "medium"},
                 input=[{"role": "user", "content": content}],
                 text_format=RemoteVisualClassificationBatch,
             )

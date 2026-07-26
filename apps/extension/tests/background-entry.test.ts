@@ -10,11 +10,20 @@ function makeChromeApi() {
         set: vi.fn().mockResolvedValue(undefined),
         remove: vi.fn().mockResolvedValue(undefined),
       },
+      session: {
+        get: vi.fn().mockResolvedValue({}),
+        set: vi.fn().mockResolvedValue(undefined),
+        remove: vi.fn().mockResolvedValue(undefined),
+      },
     },
     permissions: {
       request: vi.fn().mockResolvedValue(true),
       remove: vi.fn().mockResolvedValue(true),
       contains: vi.fn().mockResolvedValue(false),
+    },
+    alarms: {
+      create: vi.fn(),
+      onAlarm: { addListener: vi.fn() },
     },
     tabs: {
       create: vi.fn(),
@@ -24,6 +33,7 @@ function makeChromeApi() {
       get: vi.fn(),
       query: vi.fn(),
       update: vi.fn(),
+      onUpdated: { addListener: vi.fn(), removeListener: vi.fn() },
       onRemoved: { addListener: vi.fn() },
     },
     scripting: { executeScript: vi.fn() },
@@ -39,6 +49,27 @@ describe("service-worker entry point", () => {
 
     expect(api.runtime.onMessage.addListener).toHaveBeenCalledOnce();
     expect(api.tabs.onRemoved.addListener).toHaveBeenCalledOnce();
+    expect(api.alarms.create).toHaveBeenCalledWith("archresearch.reconnect", {
+      periodInMinutes: 1,
+    });
+    expect(api.alarms.onAlarm.addListener).toHaveBeenCalledOnce();
     await vi.waitFor(() => expect(api.storage.local.get).toHaveBeenCalledOnce());
+  });
+
+  it("cleans orphaned managed tabs before restoring the saved pairing", async () => {
+    const api = makeChromeApi();
+    api.storage.session.get.mockResolvedValue({
+      "archresearch.managed_tabs": [41, 42],
+    });
+    api.tabs.remove.mockResolvedValue(undefined);
+
+    startBackground(api, vi.fn());
+
+    await vi.waitFor(() => expect(api.storage.local.get).toHaveBeenCalledOnce());
+    expect(api.tabs.remove).toHaveBeenCalledWith(41);
+    expect(api.tabs.remove).toHaveBeenCalledWith(42);
+    expect(
+      api.tabs.remove.mock.invocationCallOrder.at(-1),
+    ).toBeLessThan(api.storage.local.get.mock.invocationCallOrder[0]!);
   });
 });

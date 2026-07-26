@@ -1,8 +1,11 @@
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import fitz  # type: ignore[import-untyped]
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
-from archresearch_api.models import AssetCandidate
+from archresearch_api.models import AssetCandidate, InputArtifact, ResearchRun, SavedReference
 
 
 def _create_run(client: TestClient, workspace_id: str, mode: str = "balanced") -> dict[str, object]:
@@ -61,6 +64,59 @@ def test_mock_run_persists_stage_checkpoints_and_results(
     )
 
 
+def test_project_brief_review_precedes_run_creation_and_confirmed_questions_are_used(
+    client: TestClient,
+    workspace_id: str,
+) -> None:
+    document = fitz.open()
+    page = document.new_page()
+    page.insert_text(
+        (72, 72),
+        "Smart museum brief: serial gallery, work process, virtual and physical experience.",
+    )
+    pdf_bytes = document.tobytes()
+    document.close()
+    question = "耕织图是一份图案画作，建筑是立体的三维的，该如何转译提取元素呢。"
+
+    response = client.post(
+        f"/v1/workspaces/{workspace_id}/brief-review",
+        data={"question": question, "budget_mode": "balanced"},
+        files={
+            "file": (
+                "2024 研一概念设计-窦平平.pdf",
+                pdf_bytes,
+                "application/pdf",
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    review = response.json()
+    assert review["filename"] == "2024 研一概念设计-窦平平.pdf"
+    assert review["page_count"] == 1
+    assert "苏州科技馆蚕桑丝织文化智慧博物馆概念设计" in review["project_summary"]
+    assert len(review["project_boundaries"]) >= 3
+    assert len(review["subquestions"]) == 4
+    with client.app.state.database.session_factory() as session:
+        assert list(session.scalars(select(ResearchRun))) == []
+        assert list(session.scalars(select(InputArtifact))) == []
+
+    review["subquestions"][0]["question"] = "长卷的连续叙事如何成为可行走的空间序列？"
+    run_response = client.post(
+        f"/v1/workspaces/{workspace_id}/runs",
+        json={
+            "question": question,
+            "goal": "precedent_research",
+            "budget_mode": "balanced",
+            "research_sources": [],
+            "subquestions": review["subquestions"],
+        },
+    )
+
+    assert run_response.status_code == 201
+    assert run_response.json()["subquestions"] == review["subquestions"]
+
+
 def test_workspace_runs_are_listed_newest_first(client: TestClient, workspace_id: str) -> None:
     first = _create_run(client, workspace_id, mode="quick")
     second = _create_run(client, workspace_id, mode="balanced")
@@ -71,24 +127,103 @@ def test_workspace_runs_are_listed_newest_first(client: TestClient, workspace_id
     assert [item["id"] for item in response.json()] == [second["id"], first["id"]]
 
 
-def test_run_persists_explicit_inspiration_sources(
+def test_run_defaults_to_fourteen_days_and_can_be_kept_permanently(
+    client: TestClient,
+    workspace_id: str,
+) -> None:
+    before = datetime.now(UTC)
+    run = _create_run(client, workspace_id, mode="quick")
+    expiry = datetime.fromisoformat(str(run["retention_expires_at"]))
+
+    assert run["keep_forever"] is False
+    assert before + timedelta(days=13, hours=23) <= expiry <= before + timedelta(days=14, minutes=1)
+
+    permanent = client.patch(
+        f"/v1/runs/{run['id']}/retention",
+        json={"permanent": True},
+    )
+    assert permanent.status_code == 200
+    assert permanent.json()["keep_forever"] is True
+    assert permanent.json()["retention_expires_at"] is None
+
+    reset_at = datetime.now(UTC)
+    temporary = client.patch(
+        f"/v1/runs/{run['id']}/retention",
+        json={"permanent": False},
+    )
+    reset_expiry = datetime.fromisoformat(temporary.json()["retention_expires_at"])
+    assert temporary.status_code == 200
+    assert temporary.json()["keep_forever"] is False
+    assert (
+        reset_at + timedelta(days=13, hours=23)
+        <= reset_expiry
+        <= reset_at + timedelta(days=14, minutes=1)
+    )
+
+
+def test_new_run_is_rejected_while_another_research_is_active(
+    client: TestClient,
+    workspace_id: str,
+) -> None:
+    active = _create_run(client, workspace_id, mode="quick")
+    with client.app.state.database.session_factory() as session:
+        run = session.get(ResearchRun, active["id"])
+        assert run is not None
+        run.status = "searching"
+        run.finished_at = None
+        session.commit()
+
+    response = client.post(
+        f"/v1/workspaces/{workspace_id}/runs",
+        json={
+            "question": "同时发起的第二个研究不应抢占浏览器",
+            "goal": "precedent_research",
+            "budget_mode": "quick",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "已有研究正在进行，请先等待完成或取消。"
+
+
+def test_retry_is_rejected_while_a_different_research_is_active(
+    client: TestClient,
+    workspace_id: str,
+) -> None:
+    active = _create_run(client, workspace_id, mode="quick")
+    retryable = _create_run(client, workspace_id, mode="quick")
+    with client.app.state.database.session_factory() as session:
+        active_run = session.get(ResearchRun, active["id"])
+        retry_run = session.get(ResearchRun, retryable["id"])
+        assert active_run is not None
+        assert retry_run is not None
+        active_run.status = "searching"
+        active_run.finished_at = None
+        retry_run.status = "blocked"
+        retry_run.stop_reason = "fixture_blocked"
+        session.commit()
+
+    response = client.post(f"/v1/runs/{retryable['id']}/retry")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "已有研究正在进行，请先等待完成或取消。"
+
+
+def test_run_rejects_removed_pinterest_source(
     client: TestClient,
     workspace_id: str,
 ) -> None:
     response = client.post(
         f"/v1/workspaces/{workspace_id}/runs",
         json={
-            "question": "从小红书和 Pinterest 寻找建筑分析图表达灵感",
+            "question": "从已移除的平台寻找建筑分析图表达灵感",
             "goal": "visual_reference_search",
             "budget_mode": "quick",
-            "research_sources": ["xiaohongshu", "pinterest"],
+            "research_sources": ["pinterest"],
         },
     )
 
-    assert response.status_code == 201
-    assert response.json()["research_sources"] == ["xiaohongshu", "pinterest"]
-    fetched = client.get(f"/v1/runs/{response.json()['id']}")
-    assert fetched.json()["research_sources"] == ["xiaohongshu", "pinterest"]
+    assert response.status_code == 422
 
 
 def test_result_contract_normalizes_legacy_types_and_reports_local_content(
@@ -154,6 +289,187 @@ def test_save_and_reject_are_workspace_scoped(client: TestClient, workspace_id: 
     assert rejected.status_code == 201
     assert rejected.json()["source_url"] == candidate["source_url"]
     assert "storage_path" not in rejected.json()
+
+
+def test_personal_collections_keep_question_mode_and_local_content(
+    client: TestClient, workspace_id: str
+) -> None:
+    run = _create_run(client, workspace_id)
+    candidate = client.get(f"/v1/runs/{run['id']}/results").json()[0]
+    data_dir = Path(client.app.state.settings.data_dir)
+    candidate_dir = data_dir / "runs" / str(run["id"]) / "candidates"
+    candidate_dir.mkdir(parents=True, exist_ok=True)
+    image_bytes = b"\x89PNG\r\n\x1a\ncollection-copy"
+    candidate_path = candidate_dir / "collection-source.png"
+    candidate_path.write_bytes(image_bytes)
+    with client.app.state.database.session_factory() as session:
+        asset = session.get(AssetCandidate, candidate["id"])
+        assert asset is not None
+        sibling_assets = list(
+            session.scalars(
+                select(AssetCandidate)
+                .where(
+                    AssetCandidate.run_id == run["id"],
+                    AssetCandidate.id != candidate["id"],
+                )
+                .order_by(AssetCandidate.rank_index, AssetCandidate.id)
+                .limit(2)
+            )
+        )
+        assert len(sibling_assets) == 2
+        asset.asset_type = "section"
+        asset.image_url = "https://example.com/saved-section.jpg"
+        asset.rank_index = 0
+        sibling_image_specs = [
+            (sibling_assets[0], "elevation", "https://example.com/project-elevation.jpg"),
+            (sibling_assets[1], "site_plan", "https://example.com/project-site-plan.jpg"),
+        ]
+        for index, (sibling, asset_type, image_url) in enumerate(sibling_image_specs, start=1):
+            sibling.project_name = asset.project_name
+            sibling.asset_type = asset_type
+            sibling.image_url = image_url
+            sibling.source_url = asset.source_url
+            sibling.rank_index = index
+        asset.storage_path = str(candidate_path)
+        assert asset.evidence_claims
+        first_subquestion_id = candidate["subquestion_ids"][0]
+        first_analysis = candidate["subquestion_analysis"][first_subquestion_id]
+        matching_claim = asset.evidence_claims[0]
+        matching_claim.statement = first_analysis["design_mechanism"]
+        matching_claim.source_url = candidate["source_url"]
+        matching_claim.text_excerpt = "A retained structure supports the saved case mechanism."
+        session.commit()
+
+    saved = client.post(f"/v1/results/{candidate['id']}/save", json={"note": "可用于剖面"})
+
+    assert saved.status_code == 201
+    snapshot = saved.json()["snapshot"]
+    assert snapshot["question"] == run["question"]
+    assert snapshot["goal"] == "precedent_research"
+    assert snapshot["collection_file"].endswith(".png")
+    case_images = snapshot["case_images"]
+    assert case_images == [
+        {
+            "asset_id": candidate["id"],
+            "asset_type": "section",
+            "image_url": "https://example.com/saved-section.jpg",
+            "source_url": candidate["source_url"],
+        },
+        {
+            "asset_id": sibling_assets[0].id,
+            "asset_type": "elevation",
+            "image_url": "https://example.com/project-elevation.jpg",
+            "source_url": candidate["source_url"],
+        },
+        {
+            "asset_id": sibling_assets[1].id,
+            "asset_type": "site_plan",
+            "image_url": "https://example.com/project-site-plan.jpg",
+            "source_url": candidate["source_url"],
+        },
+    ]
+    subquestions_by_id = {item["id"]: item for item in run["subquestions"]}
+    expected_ids = candidate["subquestion_ids"]
+    case_subquestions = snapshot["case_subquestions"]
+    assert [item["id"] for item in case_subquestions] == expected_ids
+    for item in case_subquestions:
+        analysis = candidate["subquestion_analysis"][item["id"]]
+        assert item["question"] == subquestions_by_id[item["id"]]["question"]
+        assert item["project_context"] == analysis["project_context"]
+        assert item["design_mechanism"] == analysis["design_mechanism"]
+        assert item["transfer_strategy"] == analysis["transfer_strategy"]
+        assert item["limitations"] == analysis["limitations"]
+        if item["id"] == first_subquestion_id:
+            assert item["evidence"]["source_url"] == candidate["source_url"]
+            assert item["evidence"]["statement"] in {
+                analysis["project_context"],
+                analysis["design_mechanism"],
+            }
+            assert item["evidence"]["text_excerpt"]
+
+    with client.app.state.database.session_factory() as session:
+        saved_record = session.get(SavedReference, saved.json()["id"])
+        assert saved_record is not None
+        legacy_snapshot = dict(saved_record.snapshot)
+        legacy_snapshot.pop("case_subquestions")
+        legacy_snapshot.pop("case_images")
+        saved_record.snapshot = legacy_snapshot
+        session.commit()
+
+    collections = client.get(f"/v1/workspaces/{workspace_id}/collections")
+    assert collections.status_code == 200
+    assert [item["id"] for item in collections.json()] == [saved.json()["id"]]
+    assert collections.json()[0]["snapshot"]["case_subquestions"] == case_subquestions
+    assert collections.json()[0]["snapshot"]["case_images"] == case_images
+    with client.app.state.database.session_factory() as session:
+        upgraded_record = session.get(SavedReference, saved.json()["id"])
+        assert upgraded_record is not None
+        assert upgraded_record.snapshot["case_subquestions"] == case_subquestions
+        assert upgraded_record.snapshot["case_images"] == case_images
+    content = client.get(f"/v1/collections/{saved.json()['id']}/content")
+    assert content.status_code == 200
+    assert content.content == image_bytes
+
+    deleted = client.delete(f"/v1/collections/{saved.json()['id']}")
+
+    assert deleted.status_code == 204
+    assert client.get(f"/v1/workspaces/{workspace_id}/collections").json() == []
+    assert not (data_dir / "collections" / snapshot["collection_file"]).exists()
+
+
+def test_saved_case_subquestions_follow_explicit_selection_and_note_updates_preserve_it(
+    client: TestClient, workspace_id: str
+) -> None:
+    run = _create_run(client, workspace_id)
+    candidates = client.get(f"/v1/runs/{run['id']}/results").json()
+    candidate = candidates[0]
+    first_id = candidate["subquestion_ids"][0]
+    second_id = next(item["id"] for item in run["subquestions"] if item["id"] != first_id)
+    with client.app.state.database.session_factory() as session:
+        asset = session.get(AssetCandidate, candidate["id"])
+        assert asset is not None
+        first_analysis = dict(asset.subquestion_analysis[first_id])
+        asset.subquestion_ids = [first_id, second_id]
+        asset.subquestion_analysis = {
+            **asset.subquestion_analysis,
+            second_id: {
+                **first_analysis,
+                "design_mechanism": "第二个子问题的独立空间机制。",
+            },
+        }
+        session.commit()
+
+    selected_one = client.post(
+        f"/v1/results/{candidate['id']}/save",
+        json={"note": "先收藏一个子问题", "subquestion_ids": [first_id]},
+    )
+    assert selected_one.status_code == 201
+    assert [item["id"] for item in selected_one.json()["snapshot"]["case_subquestions"]] == [
+        first_id
+    ]
+
+    note_only = client.post(
+        f"/v1/results/{candidate['id']}/save",
+        json={"note": "只更新备注"},
+    )
+    assert note_only.status_code == 201
+    assert [item["id"] for item in note_only.json()["snapshot"]["case_subquestions"]] == [first_id]
+
+    selected_two = client.post(
+        f"/v1/results/{candidate['id']}/save",
+        json={"note": "收藏两个子问题", "subquestion_ids": [first_id, second_id]},
+    )
+    assert selected_two.status_code == 201
+    assert [item["id"] for item in selected_two.json()["snapshot"]["case_subquestions"]] == [
+        first_id,
+        second_id,
+    ]
+
+    invalid = client.post(
+        f"/v1/results/{candidate['id']}/save",
+        json={"note": "非法关联", "subquestion_ids": ["not-on-this-case"]},
+    )
+    assert invalid.status_code == 422
 
 
 def test_user_state_upserts_notes_and_supports_idempotent_undo(
@@ -242,6 +558,10 @@ def test_asset_content_serves_only_existing_files_inside_the_run_storage_root(
     assert response.status_code == 200
     assert response.content == image_bytes
     assert response.headers["content-type"] == "image/png"
+
+    legacy_export_response = client.get(f"/v1/results/{candidates[0]['id']}/content")
+    assert legacy_export_response.status_code == 200
+    assert legacy_export_response.content == image_bytes
 
     for candidate in candidates[1:5]:
         rejected_response = client.get(f"/v1/assets/{candidate['id']}/content")

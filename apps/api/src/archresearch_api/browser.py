@@ -14,7 +14,7 @@ from typing import Any, Literal, Protocol, cast
 from urllib.parse import urlparse
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, model_validator
 
 PROTOCOL_VERSION: Literal[1] = 1
@@ -47,6 +47,7 @@ class PairingCodeRead(StrictModel):
 
 class BrowserStatusRead(StrictModel):
     connected: bool
+    xiaohongshu_search_available: bool
 
 
 class ChromeLaunchRead(StrictModel):
@@ -384,7 +385,14 @@ class BrowserBroker:
         if running_loop is loop:
             loop.create_task(self.broadcast_terminal(state))
         else:
-            asyncio.run_coroutine_threadsafe(self.broadcast_terminal(state), loop)
+            delivery = asyncio.run_coroutine_threadsafe(
+                self.broadcast_terminal(state),
+                loop,
+            )
+            try:
+                delivery.result(timeout=5)
+            except Exception:
+                delivery.cancel()
 
     def _fail_pending(self, error: Exception) -> None:
         for future in self._pending.values():
@@ -433,7 +441,8 @@ def open_board_in_chrome(url: str) -> bool:
     chrome = next((candidate for candidate in candidates if candidate.is_file()), None)
     if chrome is None:
         return False
-    subprocess.Popen([str(chrome), "--new-tab", url], close_fds=True)
+    launch_url = f"{url}&attempt={uuid4().hex}"
+    subprocess.Popen([str(chrome), "--new-tab", launch_url], close_fds=True)
     return True
 
 
@@ -454,8 +463,13 @@ def create_browser_router(
         return PairingCodeRead(code=authority.issue_code())
 
     @router.get("/browser/status", response_model=BrowserStatusRead)
-    def browser_status() -> BrowserStatusRead:
-        return BrowserStatusRead(connected=broker.connected)
+    def browser_status(request: Request) -> BrowserStatusRead:
+        return BrowserStatusRead(
+            connected=broker.connected,
+            xiaohongshu_search_available=(
+                getattr(request.app.state, "xiaohongshu_search", None) is not None
+            ),
+        )
 
     @router.post("/browser/open-chrome", response_model=ChromeLaunchRead)
     def open_chrome() -> ChromeLaunchRead:

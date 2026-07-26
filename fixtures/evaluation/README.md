@@ -1,6 +1,6 @@
 # Evaluation fixtures
 
-This directory contains offline, versioned fixtures for the ArchResearch M6 evaluation. Loading or validating these files does not call OpenAI, TinEye, or any website.
+This directory contains offline, versioned fixtures for the ArchResearch M6 evaluation. Loading or validating these files does not call OpenAI or any website.
 
 ## Classification set
 
@@ -22,4 +22,3 @@ pwsh -NoProfile -File scripts/validate-evaluation-fixtures.ps1
 The validator generates the dataset twice and compares every relative path and hash. It also parses every image as SVG XML and checks that all nine classes have at least 12 unique samples.
 
 These synthetic fixtures test contracts, class balance and repeatability. They do not replace the separate 100+ independently collected and rights-cleared real-image benchmark needed before making claims about production classification accuracy.
-

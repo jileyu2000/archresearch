@@ -1,8 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { requestBrowserBridge } from './browserBridge'
+import { requestBrowserBridge, resolveBrowserEndpoint } from './browserBridge'
 
 describe('Board extension bridge client', () => {
+  it('uses the API port selected by the local launcher', () => {
+    expect(resolveBrowserEndpoint('ws://127.0.0.1:8007/v1/browser')).toBe(
+      'ws://127.0.0.1:8007/v1/browser',
+    )
+  })
+
   it('sends one correlated pairing request and validates the extension status', async () => {
     const postMessage = vi.spyOn(window, 'postMessage').mockImplementation((message) => {
       const request = message as { id: string }

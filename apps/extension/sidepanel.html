@@ -17,28 +17,34 @@
           <p class="value" data-role="connection">检查中</p>
         </div>
         <div class="status-item">
-          <span class="label">研究权限</span>
+          <span class="label">网页读取权限</span>
           <p class="value" data-role="permission">检查中</p>
         </div>
       </section>
-      <form data-role="pair-form">
-        <label>
-          本地服务地址
-          <input data-role="endpoint" type="url" value="ws://127.0.0.1:8000/v1/browser" required>
-        </label>
-        <label>
-          一次性配对码
-          <input data-role="token" inputmode="numeric" autocomplete="one-time-code" required>
-        </label>
-        <button type="submit">手动配对</button>
-      </form>
-      <div class="actions">
-        <button type="button" data-command="permissions.request">授予网页读取权限</button>
-        <button type="button" data-command="permissions.revoke">撤销权限</button>
-        <button class="wide" type="button" data-command="disconnect">断开连接</button>
-      </div>
+      <section class="permission-step" aria-label="当前操作">
+        <p class="permission-guidance" data-role="permission-guidance" role="status">正在确认下一步…</p>
+        <button class="primary-action" type="button" data-command="permissions.request">允许网页读取</button>
+        <button type="button" data-command="permissions.revoke">撤销网页读取权限</button>
+      </section>
+      <details class="manual-pairing" data-role="manual-pairing">
+        <summary>连接有问题？手动配对</summary>
+        <div class="manual-pairing-body">
+          <form data-role="pair-form">
+            <label>
+              本地服务地址
+              <input data-role="endpoint" type="url" value="ws://127.0.0.1:8000/v1/browser" required>
+            </label>
+            <label>
+              一次性配对码
+              <input data-role="token" inputmode="numeric" autocomplete="one-time-code" required>
+            </label>
+            <button type="submit">使用配对码连接</button>
+          </form>
+          <button class="disconnect" type="button" data-command="disconnect">断开当前连接</button>
+        </div>
+      </details>
       <p class="error" data-role="error" role="alert"></p>
-      <p class="boundary">扩展只会打开项目页、读取可见图文并截取所需区域；不会读取账号凭据，也不会点赞、评论或发布内容。临时网页读取权限会在研究结束后撤销。</p>
+      <p class="boundary">只读取研究任务中打开的可见网页，不读取 Cookie、密码、浏览器存储或私信。授权会保留，直到你主动撤销或卸载扩展。</p>
     </main>
     <script type="module" src="/src/sidepanel.ts"></script>
   </body>

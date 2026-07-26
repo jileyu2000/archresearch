@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Streaming Drawing</title>
+    <style>
+      body { margin: 0; font-family: sans-serif; }
+      figure { margin: 32px; width: 640px; }
+      svg { display: block; width: 640px; height: 360px; }
+    </style>
+  </head>
+  <body>
+    <figure id="stream-ready">
+      <svg aria-label="Streaming longitudinal section" viewBox="0 0 1200 675">
+        <rect width="1200" height="675" fill="#f4f4f0"></rect>
+        <path d="M80 530H1120M180 530V210H520V530M680 530V130H1020V530"
+              fill="none" stroke="#171b19" stroke-width="12"></path>
+      </svg>
+      <figcaption>Section parsed before the response ends.</figcaption>
+    </figure>
+    <!-- The fixture server intentionally keeps this response open. -->

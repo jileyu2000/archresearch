@@ -18,7 +18,9 @@ const command = <T extends BrowserCommand["action"]>(
 function makeBrowserPort() {
   return {
     createTab: vi.fn().mockResolvedValue({ id: 42, url: "https://example.com" }),
+    closeAllTabs: vi.fn().mockResolvedValue(undefined),
     removeTab: vi.fn().mockResolvedValue(undefined),
+    releaseTab: vi.fn(),
     injectContentScript: vi.fn().mockResolvedValue(undefined),
     sendContentCommand: vi.fn().mockResolvedValue({ title: "Project" }),
     captureTab: vi
@@ -32,7 +34,26 @@ function makeBrowserPort() {
   };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, reject, resolve };
+}
+
 describe("browser command executor", () => {
+  it("asks the browser port to close provisional tabs when a session ends", async () => {
+    const port = makeBrowserPort();
+    const executor = new BrowserCommandExecutor(port);
+
+    await executor.closeAllManagedTabs();
+
+    expect(port.closeAllTabs).toHaveBeenCalledOnce();
+  });
+
   it("opens a background tab and marks only that tab as managed", async () => {
     const port = makeBrowserPort();
     const executor = new BrowserCommandExecutor(port);
@@ -53,7 +74,7 @@ describe("browser command executor", () => {
     expect(port.injectContentScript).not.toHaveBeenCalled();
   });
 
-  it("injects bundled content code before executing a page operation", async () => {
+  it("uses the content listener prepared during managed tab creation", async () => {
     const port = makeBrowserPort();
     const executor = new BrowserCommandExecutor(port);
     await executor.execute(
@@ -63,10 +84,25 @@ describe("browser command executor", () => {
     await expect(
       executor.execute(command("page_metadata", { tab_id: 42 })),
     ).resolves.toEqual({ title: "Project" });
-    expect(port.injectContentScript).toHaveBeenCalledWith(42);
+    expect(port.injectContentScript).not.toHaveBeenCalled();
     expect(port.sendContentCommand).toHaveBeenCalledWith(42, {
       action: "page_metadata",
     });
+  });
+
+  it("releases tab-scoped browser listeners when Chrome closes a managed tab", async () => {
+    const port = makeBrowserPort();
+    const executor = new BrowserCommandExecutor(port);
+    await executor.execute(
+      command("open_url", { url: "https://example.com/project" }),
+    );
+
+    executor.releaseTab(42);
+
+    expect(port.releaseTab).toHaveBeenCalledWith(42);
+    await expect(
+      executor.execute(command("page_metadata", { tab_id: 42 })),
+    ).rejects.toThrow(/not managed/i);
   });
 
   it("forwards the fixed semantic snapshot command without selectors", async () => {
@@ -243,13 +279,31 @@ describe("browser command executor", () => {
 
     await executor.closeAllManagedTabs();
 
-    expect(port.removeTab).toHaveBeenCalledWith(42);
-    expect(port.removeTab).toHaveBeenCalledWith(43);
+    expect(port.closeAllTabs).toHaveBeenCalledOnce();
     await expect(
       executor.execute(command("enumerate_media", { tab_id: 42 })),
     ).rejects.toThrow(/not managed/i);
     await expect(
       executor.execute(command("enumerate_media", { tab_id: 43 })),
+    ).rejects.toThrow(/not managed/i);
+  });
+
+  it("rejects and closes a tab that finishes opening after session cleanup", async () => {
+    const port = makeBrowserPort();
+    const pendingTab = deferred<{ id: number; url: string }>();
+    port.createTab.mockReturnValueOnce(pendingTab.promise);
+    const executor = new BrowserCommandExecutor(port);
+
+    const opened = executor.execute(
+      command("open_url", { url: "https://example.com/late" }),
+    );
+    await executor.closeAllManagedTabs();
+    pendingTab.resolve({ id: 42, url: "https://example.com/late" });
+
+    await expect(opened).rejects.toThrow(/session ended/i);
+    expect(port.removeTab).toHaveBeenCalledWith(42);
+    await expect(
+      executor.execute(command("enumerate_media", { tab_id: 42 })),
     ).rejects.toThrow(/not managed/i);
   });
 });

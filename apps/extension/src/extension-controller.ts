@@ -7,7 +7,7 @@ type SocketClient = {
   connect(): void;
   disconnect(): void;
   getStatus(): ConnectionStatus;
-  setResearchPermission(granted: boolean): void;
+  setResearchPermission(granted: boolean): Promise<void> | void;
 };
 
 type SocketClientFactory = (
@@ -24,9 +24,10 @@ export class ExtensionController {
     private readonly store: Pick<PairingStore, "load" | "save">,
     private readonly permissions: Pick<
       BrowserPermissionService,
-      "requestForResearch" | "revokeAfterResearch" | "hasResearchAccess"
+      "revokeAfterResearch" | "hasResearchAccess"
     >,
     private readonly clientFactory: SocketClientFactory,
+    private readonly startup: Promise<void> = Promise.resolve(),
   ) {}
 
   restore(): Promise<void> {
@@ -35,6 +36,7 @@ export class ExtensionController {
   }
 
   private async restoreSavedPairing(): Promise<void> {
+    await this.startup;
     const pairing = await this.store.load();
     if (pairing) {
       this.connect(pairing, await this.permissions.hasResearchAccess());
@@ -50,7 +52,7 @@ export class ExtensionController {
       case "ui.pair":
         return this.pair(command);
       case "ui.disconnect":
-        this.client?.setResearchPermission(false);
+        await this.client?.setResearchPermission(false);
         this.client?.disconnect();
         return this.status();
       case "ui.permissions.request": {
@@ -61,12 +63,12 @@ export class ExtensionController {
         ) {
           throw new Error("Research permission requires a paired and connected client");
         }
-        const granted = await this.permissions.requestForResearch();
-        this.client.setResearchPermission(granted);
+        const granted = await this.permissions.hasResearchAccess();
+        await this.client.setResearchPermission(granted);
         return this.status();
       }
       case "ui.permissions.revoke":
-        this.client?.setResearchPermission(false);
+        await this.client?.setResearchPermission(false);
         await this.permissions.revokeAfterResearch();
         return this.status();
     }
@@ -77,7 +79,10 @@ export class ExtensionController {
   ): Promise<Record<string, unknown>> {
     const pairing = { endpoint: command.endpoint, token: command.token };
     await this.store.save(pairing);
-    this.client?.disconnect();
+    if (this.client) {
+      await this.client.setResearchPermission(false);
+      this.client.disconnect();
+    }
     this.connect(pairing, await this.permissions.hasResearchAccess());
     return this.status();
   }
@@ -90,7 +95,7 @@ export class ExtensionController {
       this.pairing = rotated;
     });
     this.client.connect();
-    this.client.setResearchPermission(researchPermissionGranted);
+    void this.client.setResearchPermission(researchPermissionGranted);
   }
 
   private async status(): Promise<Record<string, unknown>> {

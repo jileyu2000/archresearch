@@ -1,4 +1,5 @@
 $ErrorActionPreference = "Stop"
+$PSNativeCommandUseErrorActionPreference = $true
 
 $workspace = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $venvPython = Join-Path $workspace ".venv\Scripts\python.exe"
@@ -28,4 +29,3 @@ Set-Location -LiteralPath $workspace
 & $pnpm.Source --dir apps/extension run build
 
 Write-Output "Setup complete. Start with scripts\start.ps1"
-

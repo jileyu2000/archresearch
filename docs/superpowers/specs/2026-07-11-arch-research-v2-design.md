@@ -18,7 +18,7 @@ The API listens only on loopback. The extension pairs using a one-time code and 
 
 ## Research Behavior
 
-Supported research goals are `precedent_research`, `source_lookup`, and `visual_reference_search`. Export and style extraction are post-processing actions.
+Supported research goals are `precedent_research` and `visual_reference_search`. Export and style extraction are post-processing actions.
 
 The deterministic loop is:
 
@@ -55,4 +55,3 @@ The interface is an architectural evidence desk. It uses a restrained vellum/gra
 ## Acceptance
 
 The implementation must provide deterministic mock mode, test the API/extension protocol, persist and resume state transitions, deliver partial results on failures, enforce share-export rights gates, and build all three runtimes successfully. Live provider calls remain opt-in through local secrets.
-

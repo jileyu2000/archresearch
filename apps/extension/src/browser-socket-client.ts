@@ -24,7 +24,6 @@ type CommandExecutor = {
   releaseTab(tabId: number): void;
   closeAllManagedTabs(): Promise<void>;
 };
-type PermissionRevoker = { revokeAfterResearch(): Promise<boolean> };
 type StatusListener = (status: ConnectionStatus) => void;
 type PairingTokenListener = (token: string) => Promise<void> | void;
 type ReconnectScheduler = (
@@ -43,9 +42,7 @@ const HEARTBEAT_INTERVAL_MS = 20_000;
 
 export class BrowserSocketClient {
   private socket: SocketLike | null = null;
-  private permissionsRevoked = false;
   private researchPermissionGranted = false;
-  private revocationInFlight: Promise<boolean> | null = null;
   private status: ConnectionStatus = "disconnected";
   private connectionGeneration = 0;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -54,7 +51,6 @@ export class BrowserSocketClient {
     private readonly pairing: Pairing,
     private readonly socketFactory: SocketFactory,
     private readonly executor: CommandExecutor,
-    private readonly permissions: PermissionRevoker,
     private readonly onStatus: StatusListener = () => undefined,
     private readonly onPairingToken: PairingTokenListener = () => undefined,
     private readonly scheduleReconnect: ReconnectScheduler = defaultReconnectScheduler,
@@ -63,8 +59,6 @@ export class BrowserSocketClient {
   connect(): void {
     this.disconnect(false);
     const generation = ++this.connectionGeneration;
-    this.permissionsRevoked = false;
-    this.researchPermissionGranted = false;
     this.setStatus("connecting");
     const socket = this.socketFactory(this.pairing.endpoint);
     this.socket = socket;
@@ -76,7 +70,7 @@ export class BrowserSocketClient {
       });
     };
     socket.onmessage = (event) => {
-      void this.handleMessage(event.data);
+      void this.handleMessage(event.data, generation, socket);
     };
     socket.onerror = () => this.setStatus("error");
     socket.onclose = (event) => {
@@ -84,8 +78,7 @@ export class BrowserSocketClient {
       const authenticationRejected = event?.code === 1008;
       this.socket = null;
       this.setStatus(authenticationRejected ? "error" : "disconnected");
-      this.researchPermissionGranted = false;
-      void this.endResearchSession()
+      void this.closeManagedTabs()
         .catch(() => undefined)
         .then(() => {
           if (this.connectionGeneration !== generation) {
@@ -104,7 +97,7 @@ export class BrowserSocketClient {
     };
   }
 
-  disconnect(revokePermissions = true): void {
+  disconnect(clearResearchPermission = true): void {
     this.connectionGeneration += 1;
     this.stopHeartbeat();
     const hadSocket = this.socket !== null;
@@ -115,12 +108,11 @@ export class BrowserSocketClient {
       socket.close();
     }
     this.setStatus("disconnected");
-    this.researchPermissionGranted = false;
-    if (hadSocket || revokePermissions) {
-      void this.executor.closeAllManagedTabs();
+    if (clearResearchPermission) {
+      this.researchPermissionGranted = false;
     }
-    if (revokePermissions) {
-      void this.revokeOnce();
+    if (hadSocket || clearResearchPermission) {
+      void this.executor.closeAllManagedTabs();
     }
   }
 
@@ -128,29 +120,35 @@ export class BrowserSocketClient {
     return this.status;
   }
 
-  setResearchPermission(granted: boolean): void {
+  async setResearchPermission(granted: boolean): Promise<void> {
     this.researchPermissionGranted = granted;
-    if (granted) {
-      this.permissionsRevoked = false;
+    if (!granted) {
+      await this.executor.closeAllManagedTabs();
     }
   }
 
-  private async handleMessage(rawMessage: string): Promise<void> {
+  private async handleMessage(
+    rawMessage: string,
+    generation: number,
+    socket: SocketLike,
+  ): Promise<void> {
+    if (!this.isCurrentConnection(generation, socket)) return;
     let message: unknown;
     try {
       message = JSON.parse(rawMessage);
     } catch {
-      this.sendProtocolError("unknown");
+      this.sendProtocolError("unknown", generation, socket);
       return;
     }
 
     if (isTerminalSessionMessage(message)) {
-      this.researchPermissionGranted = false;
-      await this.endResearchSession();
+      await this.closeManagedTabs();
       return;
     }
     if (isPairedMessage(message)) {
       await this.onPairingToken(message.token);
+      if (!this.isCurrentConnection(generation, socket)) return;
+      this.pairing.token = message.token;
       this.setStatus("connected");
       this.startHeartbeat();
       return;
@@ -168,12 +166,12 @@ export class BrowserSocketClient {
     try {
       command = parseBrowserCommand(message);
     } catch {
-      this.sendProtocolError(readSafeCommandId(message));
+      this.sendProtocolError(readSafeCommandId(message), generation, socket);
       return;
     }
 
     if (!this.researchPermissionGranted) {
-      this.send({
+      this.sendToConnection(generation, socket, {
         type: "browser.result",
         protocol_version: 1,
         id: command.id,
@@ -188,7 +186,7 @@ export class BrowserSocketClient {
 
     try {
       const result = await this.executor.execute(command);
-      this.send({
+      this.sendToConnection(generation, socket, {
         type: "browser.result",
         protocol_version: 1,
         id: command.id,
@@ -196,7 +194,7 @@ export class BrowserSocketClient {
         result,
       });
     } catch {
-      this.send({
+      this.sendToConnection(generation, socket, {
         type: "browser.result",
         protocol_version: 1,
         id: command.id,
@@ -206,8 +204,12 @@ export class BrowserSocketClient {
     }
   }
 
-  private sendProtocolError(id: string): void {
-    this.send({
+  private sendProtocolError(
+    id: string,
+    generation: number,
+    socket: SocketLike,
+  ): void {
+    this.sendToConnection(generation, socket, {
       type: "browser.result",
       protocol_version: 1,
       id,
@@ -221,6 +223,26 @@ export class BrowserSocketClient {
     if (socket && socket.readyState === socket.OPEN) {
       socket.send(JSON.stringify(message));
     }
+  }
+
+  private sendToConnection(
+    generation: number,
+    socket: SocketLike,
+    message: unknown,
+  ): void {
+    if (
+      this.isCurrentConnection(generation, socket) &&
+      socket.readyState === socket.OPEN
+    ) {
+      socket.send(JSON.stringify(message));
+    }
+  }
+
+  private isCurrentConnection(
+    generation: number,
+    socket: SocketLike,
+  ): boolean {
+    return this.connectionGeneration === generation && this.socket === socket;
   }
 
   private startHeartbeat(): void {
@@ -237,30 +259,8 @@ export class BrowserSocketClient {
     }
   }
 
-  private async endResearchSession(): Promise<void> {
+  private async closeManagedTabs(): Promise<void> {
     await this.executor.closeAllManagedTabs();
-    await this.revokeOnce();
-  }
-
-  private async revokeOnce(): Promise<boolean> {
-    if (this.permissionsRevoked) {
-      return true;
-    }
-    if (this.revocationInFlight) {
-      return this.revocationInFlight;
-    }
-    const attempt = this.permissions.revokeAfterResearch().then((revoked) => {
-      if (revoked) {
-        this.permissionsRevoked = true;
-      }
-      return revoked;
-    });
-    this.revocationInFlight = attempt;
-    try {
-      return await attempt;
-    } finally {
-      this.revocationInFlight = null;
-    }
   }
 
   private setStatus(status: ConnectionStatus): void {

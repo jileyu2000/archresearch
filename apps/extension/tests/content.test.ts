@@ -59,6 +59,84 @@ describe("content operations", () => {
     ]);
   });
 
+  it("bounds media enumeration work on pages with a heavy DOM", () => {
+    document.body.innerHTML = Array.from(
+      { length: 650 },
+      (_, index) =>
+        `<a href="/explore/note-${index}"><img src="https://images.example/${index}.jpg" alt="Drawing ${index}"></a>`,
+    ).join("");
+    const getBounds = vi.fn(() => ({
+      x: 10,
+      y: 20,
+      top: 20,
+      left: 10,
+      right: 650,
+      bottom: 500,
+      width: 640,
+      height: 480,
+      toJSON: () => ({}),
+    }));
+    document.querySelectorAll("img").forEach((image, index) => {
+      Object.defineProperty(image, "getBoundingClientRect", {
+        value: getBounds,
+      });
+      Object.defineProperties(image, {
+        naturalWidth: { value: 1_600 },
+        naturalHeight: { value: 900 },
+        currentSrc: { value: `https://images.example/${index}.jpg` },
+      });
+    });
+
+    const media = collectMedia(document);
+
+    expect(media).toHaveLength(100);
+    expect(media.at(-1)?.alt).toBe("Drawing 99");
+    expect(getBounds.mock.calls.length).toBeLessThanOrEqual(200);
+  });
+
+  it("stops scanning after a bounded number of unusable media nodes", () => {
+    document.body.innerHTML = "<img>".repeat(650);
+    const getBounds = vi.fn(() => ({
+      x: 10,
+      y: 20,
+      top: 20,
+      left: 10,
+      right: 20,
+      bottom: 30,
+      width: 10,
+      height: 10,
+      toJSON: () => ({}),
+    }));
+    document.querySelectorAll("img").forEach((image) => {
+      Object.defineProperty(image, "getBoundingClientRect", {
+        value: getBounds,
+      });
+    });
+
+    expect(collectMedia(document)).toEqual([]);
+    expect(getBounds.mock.calls.length).toBeLessThanOrEqual(1_000);
+  });
+
+  it("returns promptly when the media collection time budget is exhausted", () => {
+    document.body.innerHTML = `
+      <img src="https://images.example/section.jpg" alt="旧厂房剖面">
+    `;
+    const image = document.querySelector("img")!;
+    makeVisible(image);
+    Object.defineProperties(image, {
+      naturalWidth: { value: 1600 },
+      naturalHeight: { value: 900 },
+      currentSrc: { value: "https://images.example/section.jpg" },
+    });
+    const now = vi
+      .spyOn(window.performance, "now")
+      .mockReturnValueOnce(0)
+      .mockReturnValue(2_000);
+
+    expect(collectMedia(document)).toEqual([]);
+    expect(now).toHaveBeenCalled();
+  });
+
   it("associates a visible thumbnail with its bounded same-page source link", () => {
     document.body.innerHTML = `
       <a href="/explore/note-42">
@@ -80,6 +158,80 @@ describe("content operations", () => {
         adjacent_text: "旧厂房更新：架空步道与公共展厅的剖面关系",
       }),
     ]);
+  });
+
+  it("associates media with a nearby sibling link in the same card", () => {
+    document.body.innerHTML = `
+      <article class="note-card">
+        <a href="/explore/note-84">旧厂房改造剖面</a>
+        <div class="cover"><img src="https://images.example/section.jpg" alt="旧厂房剖面"></div>
+      </article>
+    `;
+    const image = document.querySelector("img")!;
+    makeVisible(image);
+    Object.defineProperties(image, {
+      naturalWidth: { value: 1600 },
+      naturalHeight: { value: 900 },
+      currentSrc: { value: "https://images.example/section.jpg" },
+    });
+
+    expect(collectMedia(document)[0]).toEqual(
+      expect.objectContaining({
+        link_url: "http://localhost:3000/explore/note-84",
+        adjacent_text: "旧厂房改造剖面",
+      }),
+    );
+  });
+
+  it("associates deeply nested media with the bounded semantic card link", () => {
+    document.body.innerHTML = `
+      <section class="note-item">
+        <div><div><div><div><div><div>
+          <img src="https://images.example/section.jpg" alt="旧厂房剖面">
+        </div></div></div></div></div></div>
+        <footer>
+          <a href="/explore/note-126?xsec_token=visible">旧厂房剖面叙事与线型层级</a>
+        </footer>
+      </section>
+    `;
+    const image = document.querySelector("img")!;
+    makeVisible(image);
+    Object.defineProperties(image, {
+      naturalWidth: { value: 1600 },
+      naturalHeight: { value: 900 },
+      currentSrc: { value: "https://images.example/section.jpg" },
+    });
+
+    expect(collectMedia(document)[0]).toEqual(
+      expect.objectContaining({
+        link_url:
+          "http://localhost:3000/explore/note-126?xsec_token=visible",
+        adjacent_text: "旧厂房剖面叙事与线型层级",
+      }),
+    );
+  });
+
+  it("does not treat a generic page section as one media card", () => {
+    document.body.innerHTML = `
+      <section class="feeds-container">
+        <a href="/explore/unrelated-note">页面级导航链接</a>
+        <div><div><img src="https://images.example/section.jpg" alt="旧厂房剖面"></div></div>
+      </section>
+    `;
+    const image = document.querySelector("img")!;
+    makeVisible(image);
+    Object.defineProperties(image, {
+      naturalWidth: { value: 1600 },
+      naturalHeight: { value: 900 },
+      currentSrc: { value: "https://images.example/section.jpg" },
+    });
+
+    expect(collectMedia(document)[0]).toEqual(
+      expect.objectContaining({
+        link_url: null,
+        adjacent_text: "",
+      }),
+    );
   });
 
   it("does not associate a thumbnail with an external-site anchor", () => {

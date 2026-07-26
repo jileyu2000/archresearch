@@ -10,8 +10,9 @@ export type BrowserTab = {
 
 export type BrowserPort = {
   createTab(url: string, active: boolean): Promise<BrowserTab>;
+  closeAllTabs(): Promise<void>;
   removeTab(tabId: number): Promise<void>;
-  injectContentScript(tabId: number): Promise<void>;
+  releaseTab(tabId: number): void;
   sendContentCommand(tabId: number, command: ContentCommand): Promise<unknown>;
   captureTab(tabId: number): Promise<string>;
   getTab(tabId: number): Promise<BrowserTab>;
@@ -26,6 +27,7 @@ type ScreenshotCropper = (
 
 export class BrowserCommandExecutor {
   private readonly managedTabIds = new Set<number>();
+  private lifecycleGeneration = 0;
 
   constructor(
     private readonly browser: BrowserPort,
@@ -36,14 +38,23 @@ export class BrowserCommandExecutor {
   async execute(command: BrowserCommand): Promise<unknown> {
     switch (command.action) {
       case "open_url": {
+        const lifecycleGeneration = this.lifecycleGeneration;
         const tab = await this.browser.createTab(command.payload.url, false);
+        if (lifecycleGeneration !== this.lifecycleGeneration) {
+          await this.browser.removeTab(tab.id).catch(() => undefined);
+          throw new Error("Browser research session ended while opening the tab");
+        }
+        this.managedTabIds.add(tab.id);
         try {
           requireSafePublicTab(await this.browser.getTab(tab.id));
+          if (lifecycleGeneration !== this.lifecycleGeneration) {
+            throw new Error("Browser research session ended while opening the tab");
+          }
         } catch (error) {
+          this.managedTabIds.delete(tab.id);
           await this.browser.removeTab(tab.id).catch(() => undefined);
           throw error;
         }
-        this.managedTabIds.add(tab.id);
         return { tab_id: tab.id, url: tab.url ?? command.payload.url };
       }
       case "wait":
@@ -92,12 +103,13 @@ export class BrowserCommandExecutor {
 
   releaseTab(tabId: number): void {
     this.managedTabIds.delete(tabId);
+    this.browser.releaseTab(tabId);
   }
 
   async closeAllManagedTabs(): Promise<void> {
-    const tabIds = [...this.managedTabIds];
+    this.lifecycleGeneration += 1;
     this.managedTabIds.clear();
-    await Promise.allSettled(tabIds.map((tabId) => this.browser.removeTab(tabId)));
+    await this.browser.closeAllTabs();
   }
 
   private async executeInManagedTab(
@@ -106,7 +118,6 @@ export class BrowserCommandExecutor {
   ): Promise<unknown> {
     this.requireManagedTab(tabId);
     await this.requireSafeManagedTab(tabId);
-    await this.browser.injectContentScript(tabId);
     const result = await this.browser.sendContentCommand(tabId, command);
     await this.requireSafeManagedTab(tabId);
     return result;

@@ -18,6 +18,12 @@ export class BrowserBridgeError extends Error {
   }
 }
 
+export function resolveBrowserEndpoint(
+  configuredEndpoint = import.meta.env.VITE_ARCHRESEARCH_BROWSER_ENDPOINT,
+): string {
+  return configuredEndpoint || 'ws://127.0.0.1:8000/v1/browser'
+}
+
 export function requestBrowserBridge(
   command: BrowserBridgeCommand,
   timeoutMs = 2_000,

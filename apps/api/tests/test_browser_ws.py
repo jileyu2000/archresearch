@@ -9,7 +9,13 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from starlette.websockets import WebSocketDisconnect
 
-from archresearch_api.browser import BrowserBroker, BrowserNavigationError
+import archresearch_api.browser as browser_module
+from archresearch_api.browser import (
+    CHROME_BOARD_URL,
+    BrowserBroker,
+    BrowserNavigationError,
+    open_board_in_chrome,
+)
 from archresearch_api.config import Settings
 from archresearch_api.main import create_app
 from archresearch_api.models import ResearchRun
@@ -22,6 +28,34 @@ class RecordingSocket:
 
     async def send_json(self, message: dict[str, Any]) -> None:
         self.messages.append(message)
+
+
+def test_real_chrome_launcher_adds_a_unique_connection_attempt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    chrome = tmp_path / "Google" / "Chrome" / "Application" / "chrome.exe"
+    launched: list[tuple[list[str], bool]] = []
+    monkeypatch.setattr(browser_module.os, "name", "nt")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    monkeypatch.setattr(
+        browser_module.Path,
+        "is_file",
+        lambda path: path == chrome,
+    )
+    monkeypatch.setattr(
+        browser_module.subprocess,
+        "Popen",
+        lambda args, close_fds: launched.append((args, close_fds)),
+    )
+
+    assert open_board_in_chrome(CHROME_BOARD_URL) is True
+    assert len(launched) == 1
+    args, close_fds = launched[0]
+    assert args[:2] == [str(chrome), "--new-tab"]
+    assert args[2].startswith(f"{CHROME_BOARD_URL}&attempt=")
+    assert len(args[2].removeprefix(f"{CHROME_BOARD_URL}&attempt=")) == 32
+    assert close_fds is True
 
 
 def test_pairing_code_rotates_once_and_persistent_token_survives_restart(tmp_path: Path) -> None:
@@ -83,7 +117,21 @@ def test_pairing_code_rotates_once_and_persistent_token_survives_restart(tmp_pat
 
 
 def test_browser_status_tracks_authenticated_extension_connection(client: TestClient) -> None:
-    assert client.get("/v1/browser/status").json() == {"connected": False}
+    assert client.get("/v1/browser/status").json() == {
+        "connected": False,
+        "xiaohongshu_search_available": False,
+    }
+
+
+def test_browser_status_reports_independent_xiaohongshu_search_backend(
+    client: TestClient,
+) -> None:
+    client.app.state.xiaohongshu_search = object()
+
+    assert client.get("/v1/browser/status").json() == {
+        "connected": False,
+        "xiaohongshu_search_available": True,
+    }
 
 
 def test_authenticated_extension_heartbeat_keeps_connection_active(
@@ -107,7 +155,10 @@ def test_authenticated_extension_heartbeat_keeps_connection_active(
             "type": "browser.heartbeat_ack",
             "protocol_version": 1,
         }
-        assert client.get("/v1/browser/status").json() == {"connected": True}
+        assert client.get("/v1/browser/status").json() == {
+            "connected": True,
+            "xiaohongshu_search_available": False,
+        }
     pairing_code = client.post("/v1/browser/pairing-code").json()["code"]
 
     with client.websocket_connect("/v1/browser") as websocket:
@@ -119,9 +170,15 @@ def test_authenticated_extension_heartbeat_keeps_connection_active(
             }
         )
         assert websocket.receive_json()["type"] == "browser.paired"
-        assert client.get("/v1/browser/status").json() == {"connected": True}
+        assert client.get("/v1/browser/status").json() == {
+            "connected": True,
+            "xiaohongshu_search_available": False,
+        }
 
-    assert client.get("/v1/browser/status").json() == {"connected": False}
+    assert client.get("/v1/browser/status").json() == {
+        "connected": False,
+        "xiaohongshu_search_available": False,
+    }
 
 
 def test_open_chrome_board_uses_only_the_fixed_local_connection_url(tmp_path: Path) -> None:
@@ -288,6 +345,34 @@ def test_broker_broadcasts_research_terminal_states(state: str) -> None:
                 "state": state,
             }
         ]
+
+    asyncio.run(exercise())
+
+
+def test_worker_terminal_notification_waits_for_extension_cleanup_delivery() -> None:
+    async def exercise() -> None:
+        started = asyncio.Event()
+        release = asyncio.Event()
+
+        class BlockingSocket(RecordingSocket):
+            async def send_json(self, message: dict[str, Any]) -> None:
+                started.set()
+                await release.wait()
+                await super().send_json(message)
+
+        broker = BrowserBroker()
+        broker.bind_loop()
+        socket = BlockingSocket()
+        await broker.attach(socket)
+
+        notification = asyncio.create_task(asyncio.to_thread(broker.notify_terminal, "completed"))
+        await started.wait()
+        await asyncio.sleep(0)
+
+        assert notification.done() is False
+        release.set()
+        await asyncio.wait_for(notification, timeout=1)
+        assert socket.messages[0]["state"] == "completed"
 
     asyncio.run(exercise())
 

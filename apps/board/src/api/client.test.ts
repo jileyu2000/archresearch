@@ -10,6 +10,59 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 describe('local API client', () => {
+  it('downloads, preflights, and restores a verified workspace backup', async () => {
+    const preflight = {
+      ready: true,
+      format_version: 1,
+      schema_revision: 'd0f1a2b3c4d5',
+      file_count: 5,
+      total_bytes: 4096,
+      categories: { database: 1, runs: 1, collections: 1, workspaces: 1, exports: 1 },
+      workspace_count: 1,
+      run_count: 2,
+      collection_count: 3,
+      input_artifact_count: 1,
+    }
+    const archive = new Blob(['backup'], { type: 'application/zip' })
+    const downloadResponse = new Response(archive, {
+      headers: {
+        'content-type': 'application/zip',
+        'content-disposition': 'attachment; filename="archresearch-backup.zip"',
+      },
+    })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(downloadResponse)
+      .mockResolvedValueOnce(jsonResponse(preflight))
+      .mockResolvedValueOnce(jsonResponse({
+        ...preflight,
+        restored: true,
+        rollback_backup: 'archresearch-rollback.zip',
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+    const client = createApiClient('/v1')
+    const file = new File([archive], 'workspace.zip', { type: 'application/zip' })
+
+    await expect(client.downloadWorkspaceBackup()).resolves.toEqual({
+      blob: expect.any(Blob),
+      filename: 'archresearch-backup.zip',
+    })
+    await expect(client.preflightWorkspaceBackup(file)).resolves.toEqual(preflight)
+    await expect(client.restoreWorkspaceBackup(file)).resolves.toEqual(expect.objectContaining({
+      restored: true,
+      rollback_backup: 'archresearch-rollback.zip',
+    }))
+
+    expect(fetchMock.mock.calls[0]).toEqual(['/v1/data-backups', { method: 'POST' }])
+    expect(fetchMock.mock.calls[1]).toEqual([
+      '/v1/data-backups/preflight',
+      expect.objectContaining({ method: 'POST', body: expect.any(FormData) }),
+    ])
+    const restoreBody = fetchMock.mock.calls[2]?.[1]?.body as FormData
+    expect(restoreBody.get('confirmation')).toBe('restore-verified-backup')
+    expect(restoreBody.get('file')).toBe(file)
+  })
+
   it('lists and creates workspaces without inventing demo data', async () => {
     const fetchMock = vi
       .fn()
@@ -32,6 +85,39 @@ describe('local API client', () => {
     ])
   })
 
+  it('reviews a project brief without creating a run', async () => {
+    const review = {
+      filename: '2024 研一概念设计-窦平平.pdf',
+      page_count: 3,
+      project_summary: '苏州科技馆蚕桑丝织文化智慧博物馆概念设计',
+      project_boundaries: ['对象：苏州科技馆', '主题：蚕桑丝织文化'],
+      subquestions: [
+        { id: 'process_sequence', question: '工序如何成为参观序列？', rationale: '建立时间顺序。' },
+        { id: 'gallery_syntax', question: '长廊如何成为空间语法？', rationale: '提取空间组织。' },
+        { id: 'actor_tool_space', question: '人物、器具与场所如何形成互动节点？', rationale: '提取行为关系。' },
+        { id: 'four_dimensional', question: '二维叙事如何形成四维体验？', rationale: '加入时间与交互。' },
+      ],
+    }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(review))
+    vi.stubGlobal('fetch', fetchMock)
+    const client = createApiClient('/v1')
+    const file = new File(['brief'], review.filename, { type: 'application/pdf' })
+
+    await expect(client.reviewProjectBrief({
+      workspaceId: 'workspace-live',
+      question: '耕织图如何从二维转译为三维建筑？',
+      mode: 'balanced',
+      file,
+    })).resolves.toEqual(review)
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/v1/workspaces/workspace-live/brief-review')
+    expect(fetchMock.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      method: 'POST',
+      body: expect.any(FormData),
+    }))
+  })
+
   it('registers URL and file inputs before starting a run', async () => {
     const fetchMock = vi
       .fn()
@@ -49,9 +135,15 @@ describe('local API client', () => {
       question: '如何形成剖面层次？',
       referenceUrl: 'https://example.com/project',
       files: [file],
-      goal: 'source_lookup',
+      goal: 'precedent_research',
       mode: 'balanced',
-      researchSources: ['xiaohongshu', 'pinterest'],
+      researchSources: ['xiaohongshu'],
+      subquestions: [
+        { id: 'sequence', question: '如何形成连续空间序列？', rationale: '用户确认的问题。' },
+        { id: 'threshold', question: '如何设置空间阈限？', rationale: '用户确认的问题。' },
+        { id: 'interaction', question: '如何组织互动节点？', rationale: '用户确认的问题。' },
+        { id: 'validation', question: '如何验证转译结果？', rationale: '用户确认的问题。' },
+      ],
     })
 
     expect(fetchMock).toHaveBeenCalledTimes(3)
@@ -62,9 +154,15 @@ describe('local API client', () => {
     expect((fetchMock.mock.calls[1]?.[1] as RequestInit).body).toBeInstanceOf(FormData)
     expect(JSON.parse(String((fetchMock.mock.calls[2]?.[1] as RequestInit).body))).toEqual({
       question: '如何形成剖面层次？',
-      goal: 'source_lookup',
+      goal: 'precedent_research',
       budget_mode: 'balanced',
-      research_sources: ['xiaohongshu', 'pinterest'],
+      research_sources: ['xiaohongshu'],
+      subquestions: [
+        { id: 'sequence', question: '如何形成连续空间序列？', rationale: '用户确认的问题。' },
+        { id: 'threshold', question: '如何设置空间阈限？', rationale: '用户确认的问题。' },
+        { id: 'interaction', question: '如何组织互动节点？', rationale: '用户确认的问题。' },
+        { id: 'validation', question: '如何验证转译结果？', rationale: '用户确认的问题。' },
+      ],
     })
     expect(run).toMatchObject({ id: 'run-2', status: 'created', mode: 'balanced' })
   })
@@ -175,7 +273,7 @@ describe('local API client', () => {
     vi.stubGlobal('fetch', fetchMock)
     const client = createApiClient('/v1')
 
-    await client.saveResult('asset-1', '重点比较首层')
+    await client.saveResult('asset-1', '重点比较首层', ['program', 'circulation'])
     await client.unsaveResult('asset-1')
     await client.rejectResult('asset-1', '与当前尺度不符')
     await client.unrejectResult('asset-1')
@@ -190,6 +288,7 @@ describe('local API client', () => {
     ])
     expect(JSON.parse(String((fetchMock.mock.calls[0]?.[1] as RequestInit).body))).toEqual({
       note: '重点比较首层',
+      subquestion_ids: ['program', 'circulation'],
     })
     expect(JSON.parse(String((fetchMock.mock.calls[4]?.[1] as RequestInit).body))).toEqual({
       selected_asset_ids: ['asset-1', 'asset-2'],

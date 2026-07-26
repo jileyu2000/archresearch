@@ -3,21 +3,19 @@ import { describe, expect, it, vi } from "vitest";
 import {
   ALL_HOST_ORIGINS,
   BrowserPermissionService,
+  requestResearchAccess,
 } from "../src/permissions";
 import { PairingStore } from "../src/pairing-store";
 
 describe("browser permissions", () => {
-  it("requests only the declared temporary web origins", async () => {
+  it("requests only the declared web origins from the direct UI gesture", async () => {
     const request = vi.fn().mockResolvedValue(true);
-    const remove = vi.fn().mockResolvedValue(true);
-    const contains = vi.fn().mockResolvedValue(false);
-    const service = new BrowserPermissionService({ request, remove, contains });
 
-    await expect(service.requestForResearch()).resolves.toBe(true);
+    await expect(requestResearchAccess({ request })).resolves.toBe(true);
     expect(request).toHaveBeenCalledWith({ origins: ALL_HOST_ORIGINS });
   });
 
-  it("revokes all temporary web origins when research ends", async () => {
+  it("revokes all web origins only after an explicit user action", async () => {
     const request = vi.fn().mockResolvedValue(true);
     const remove = vi.fn().mockResolvedValue(true);
     const contains = vi.fn().mockResolvedValue(false);

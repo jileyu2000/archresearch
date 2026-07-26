@@ -46,6 +46,16 @@ function makeExecutor() {
   };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, reject, resolve };
+}
+
 describe("local browser WebSocket client", () => {
   it("keeps the authenticated MV3 service worker active every 20 seconds", () => {
     vi.useFakeTimers();
@@ -55,7 +65,6 @@ describe("local browser WebSocket client", () => {
         { endpoint: "ws://127.0.0.1:8000/v1/browser", token: "pairing-token" },
         vi.fn(() => socket),
         makeExecutor(),
-        { revokeAfterResearch: vi.fn() },
       );
       client.connect();
       socket.open();
@@ -85,7 +94,6 @@ describe("local browser WebSocket client", () => {
       { endpoint: "ws://127.0.0.1:8000/v1/browser", token: "pairing-token" },
       vi.fn(() => socket),
       makeExecutor(),
-      { revokeAfterResearch: vi.fn() },
       onStatus,
     );
 
@@ -106,7 +114,6 @@ describe("local browser WebSocket client", () => {
       { endpoint: "ws://127.0.0.1:8000/v1/browser", token: "expired-code" },
       vi.fn(() => socket),
       makeExecutor(),
-      { revokeAfterResearch: vi.fn().mockResolvedValue(true) },
       onStatus,
       undefined,
       scheduleReconnect,
@@ -128,7 +135,6 @@ describe("local browser WebSocket client", () => {
       { endpoint: "ws://127.0.0.1:8000/v1/browser", token: "pairing-token" },
       vi.fn(() => socket),
       makeExecutor(),
-      { revokeAfterResearch: vi.fn() },
     );
 
     client.connect();
@@ -150,7 +156,6 @@ describe("local browser WebSocket client", () => {
       { endpoint: "ws://127.0.0.1:8000/v1/browser", token: "pairing-token" },
       vi.fn(() => socket),
       executor,
-      { revokeAfterResearch: vi.fn() },
     );
     client.connect();
     socket.open();
@@ -175,7 +180,6 @@ describe("local browser WebSocket client", () => {
       { endpoint: "ws://127.0.0.1:8000/v1/browser", token: "one-time-code" },
       vi.fn(() => socket),
       makeExecutor(),
-      { revokeAfterResearch: vi.fn() },
       undefined,
       saveRotatedToken,
     );
@@ -193,6 +197,39 @@ describe("local browser WebSocket client", () => {
     );
   });
 
+  it("reconnects with the server-issued persistent token", async () => {
+    const firstSocket = new FakeSocket();
+    const secondSocket = new FakeSocket();
+    const sockets = [firstSocket, secondSocket];
+    const scheduleReconnect = vi.fn((callback: () => void) => callback());
+    const client = new BrowserSocketClient(
+      { endpoint: "ws://127.0.0.1:8000/v1/browser", token: "one-time-code" },
+      vi.fn(() => sockets.shift()!),
+      makeExecutor(),
+      undefined,
+      vi.fn().mockResolvedValue(undefined),
+      scheduleReconnect,
+    );
+    client.connect();
+    firstSocket.open();
+    firstSocket.receive({
+      type: "browser.paired",
+      protocol_version: 1,
+      token: "persistent-local-token",
+    });
+    await vi.waitFor(() => expect(client.getStatus()).toBe("connected"));
+
+    firstSocket.onclose?.();
+    await vi.waitFor(() => expect(secondSocket.onopen).not.toBeNull());
+    secondSocket.open();
+
+    expect(JSON.parse(secondSocket.send.mock.calls[0]![0])).toEqual({
+      type: "browser.authenticate",
+      protocol_version: 1,
+      token: "persistent-local-token",
+    });
+  });
+
   it("returns a generic protocol error without echoing hostile input", async () => {
     const socket = new FakeSocket();
     const executor = makeExecutor();
@@ -200,7 +237,6 @@ describe("local browser WebSocket client", () => {
       { endpoint: "ws://127.0.0.1:8000/v1/browser", token: "pairing-token" },
       vi.fn(() => socket),
       executor,
-      { revokeAfterResearch: vi.fn() },
     );
     client.connect();
     socket.open();
@@ -224,42 +260,48 @@ describe("local browser WebSocket client", () => {
   });
 
   it.each(["completed", "partial", "blocked", "cancelled", "failed"])(
-    "revokes host permissions when a research session is %s",
+    "closes managed tabs but keeps approved host access when a research session is %s",
     async (state) => {
       const socket = new FakeSocket();
-      const revokeAfterResearch = vi.fn().mockResolvedValue(true);
+      const executor = makeExecutor();
       const client = new BrowserSocketClient(
         { endpoint: "ws://127.0.0.1:8000/v1/browser", token: "pairing-token" },
         vi.fn(() => socket),
-        makeExecutor(),
-        { revokeAfterResearch },
+        executor,
       );
       client.connect();
       socket.open();
+      client.setResearchPermission(true);
 
       socket.receive({
         type: "research.session",
         protocol_version: 1,
         state,
       });
-      await vi.waitFor(() => expect(revokeAfterResearch).toHaveBeenCalledOnce());
+      await vi.waitFor(() =>
+        expect(executor.closeAllManagedTabs).toHaveBeenCalledOnce(),
+      );
+      socket.receive(validCommand);
+      await vi.waitFor(() => expect(executor.execute).toHaveBeenCalledOnce());
     },
   );
 
-  it("revokes host permissions if the local connection closes unexpectedly", async () => {
+  it("keeps approved host access if the local connection closes unexpectedly", async () => {
     const socket = new FakeSocket();
-    const revokeAfterResearch = vi.fn().mockResolvedValue(true);
+    const executor = makeExecutor();
     const client = new BrowserSocketClient(
       { endpoint: "ws://127.0.0.1:8000/v1/browser", token: "pairing-token" },
       vi.fn(() => socket),
-      makeExecutor(),
-      { revokeAfterResearch },
+      executor,
     );
     client.connect();
     socket.open();
+    client.setResearchPermission(true);
 
     socket.onclose?.();
-    await vi.waitFor(() => expect(revokeAfterResearch).toHaveBeenCalledOnce());
+    await vi.waitFor(() =>
+      expect(executor.closeAllManagedTabs).toHaveBeenCalledOnce(),
+    );
   });
 
   it("reconnects only after an unexpected close has cleaned up the session", async () => {
@@ -267,26 +309,30 @@ describe("local browser WebSocket client", () => {
     const secondSocket = new FakeSocket();
     const sockets = [firstSocket, secondSocket];
     const executor = makeExecutor();
-    const revokeAfterResearch = vi.fn().mockResolvedValue(true);
     const scheduleReconnect = vi.fn((callback: () => void) => callback());
     const client = new BrowserSocketClient(
       { endpoint: "ws://127.0.0.1:8000/v1/browser", token: "pairing-token" },
       vi.fn(() => sockets.shift()!),
       executor,
-      { revokeAfterResearch },
       undefined,
       undefined,
       scheduleReconnect,
     );
     client.connect();
     firstSocket.open();
+    client.setResearchPermission(true);
 
     firstSocket.onclose?.();
     await vi.waitFor(() => expect(secondSocket.onopen).not.toBeNull());
     secondSocket.open();
+    secondSocket.receive({
+      type: "browser.authenticated",
+      protocol_version: 1,
+    });
+    secondSocket.receive(validCommand);
 
     expect(executor.closeAllManagedTabs).toHaveBeenCalledOnce();
-    expect(revokeAfterResearch).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(executor.execute).toHaveBeenCalledOnce());
     expect(scheduleReconnect).toHaveBeenCalledWith(expect.any(Function), 1_000);
     expect(secondSocket.send).toHaveBeenCalledWith(
       JSON.stringify({
@@ -297,6 +343,39 @@ describe("local browser WebSocket client", () => {
     );
   });
 
+  it("does not send a late command result through a replacement connection", async () => {
+    const firstSocket = new FakeSocket();
+    const secondSocket = new FakeSocket();
+    const sockets = [firstSocket, secondSocket];
+    const executor = makeExecutor();
+    const pendingResult = deferred<unknown>();
+    executor.execute.mockReturnValueOnce(pendingResult.promise);
+    const scheduleReconnect = vi.fn((callback: () => void) => callback());
+    const client = new BrowserSocketClient(
+      { endpoint: "ws://127.0.0.1:8000/v1/browser", token: "pairing-token" },
+      vi.fn(() => sockets.shift()!),
+      executor,
+      undefined,
+      undefined,
+      scheduleReconnect,
+    );
+    client.connect();
+    firstSocket.open();
+    await client.setResearchPermission(true);
+    firstSocket.receive(validCommand);
+    await vi.waitFor(() => expect(executor.execute).toHaveBeenCalledOnce());
+
+    firstSocket.onclose?.();
+    await vi.waitFor(() => expect(secondSocket.onopen).not.toBeNull());
+    secondSocket.open();
+    secondSocket.send.mockClear();
+    pendingResult.resolve({ waited_ms: 0 });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(secondSocket.send).not.toHaveBeenCalled();
+  });
+
   it("does not reconnect after an explicit disconnect", async () => {
     const socket = new FakeSocket();
     const scheduleReconnect = vi.fn();
@@ -304,7 +383,6 @@ describe("local browser WebSocket client", () => {
       { endpoint: "ws://127.0.0.1:8000/v1/browser", token: "pairing-token" },
       vi.fn(() => socket),
       makeExecutor(),
-      { revokeAfterResearch: vi.fn().mockResolvedValue(true) },
       undefined,
       undefined,
       scheduleReconnect,
@@ -325,7 +403,6 @@ describe("local browser WebSocket client", () => {
       { endpoint: "ws://127.0.0.1:8000/v1/browser", token: "pairing-token" },
       vi.fn(() => socket),
       executor,
-      { revokeAfterResearch: vi.fn() },
     );
     client.connect();
     socket.open();
@@ -341,14 +418,13 @@ describe("local browser WebSocket client", () => {
     });
   });
 
-  it("closes managed tabs and locks commands after a terminal state", async () => {
+  it("keeps commands available after terminal cleanup until access is explicitly reset", async () => {
     const socket = new FakeSocket();
     const executor = makeExecutor();
     const client = new BrowserSocketClient(
       { endpoint: "ws://127.0.0.1:8000/v1/browser", token: "pairing-token" },
       vi.fn(() => socket),
       executor,
-      { revokeAfterResearch: vi.fn().mockResolvedValue(true) },
     );
     client.connect();
     socket.open();
@@ -362,37 +438,34 @@ describe("local browser WebSocket client", () => {
     await vi.waitFor(() => expect(executor.closeAllManagedTabs).toHaveBeenCalledOnce());
 
     socket.receive(validCommand);
-    await vi.waitFor(() => expect(socket.send).toHaveBeenCalledTimes(2));
-    expect(executor.execute).not.toHaveBeenCalled();
-
-    client.setResearchPermission(true);
-    socket.receive(validCommand);
     await vi.waitFor(() => expect(executor.execute).toHaveBeenCalledOnce());
+
+    client.setResearchPermission(false);
+    socket.receive(validCommand);
+    await vi.waitFor(() => expect(socket.send).toHaveBeenCalledTimes(3));
+    expect(executor.execute).toHaveBeenCalledOnce();
+    expect(JSON.parse(socket.send.mock.calls.at(-1)![0])).toMatchObject({
+      error: { code: "permission_required" },
+    });
   });
 
-  it("retries permission revocation when Chrome reports failure", async () => {
+  it("closes managed tabs immediately when research permission is revoked", async () => {
     const socket = new FakeSocket();
-    const revokeAfterResearch = vi
-      .fn()
-      .mockResolvedValueOnce(false)
-      .mockResolvedValueOnce(true);
+    const executor = makeExecutor();
     const client = new BrowserSocketClient(
       { endpoint: "ws://127.0.0.1:8000/v1/browser", token: "pairing-token" },
       vi.fn(() => socket),
-      makeExecutor(),
-      { revokeAfterResearch },
+      executor,
     );
     client.connect();
     socket.open();
+    client.setResearchPermission(true);
+    executor.closeAllManagedTabs.mockClear();
 
-    const terminal = {
-      type: "research.session",
-      protocol_version: 1,
-      state: "failed",
-    };
-    socket.receive(terminal);
-    await vi.waitFor(() => expect(revokeAfterResearch).toHaveBeenCalledOnce());
-    socket.receive(terminal);
-    await vi.waitFor(() => expect(revokeAfterResearch).toHaveBeenCalledTimes(2));
+    client.setResearchPermission(false);
+
+    await vi.waitFor(() =>
+      expect(executor.closeAllManagedTabs).toHaveBeenCalledOnce(),
+    );
   });
 });

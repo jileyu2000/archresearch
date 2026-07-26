@@ -36,8 +36,8 @@ def test_suoxie_defaults_use_the_api_model_without_the_opencode_prefix() -> None
 
     assert isinstance(config.base_url, AnyHttpUrl)
     assert str(config.base_url) == "https://suoxie.codes/v1"
-    assert config.research_model == "gpt-5.5"
-    assert config.vision_model == "gpt-5.5"
+    assert config.research_model == "gpt-5.6-sol"
+    assert config.vision_model == "gpt-5.6-sol"
     assert "suoxie/" not in config.research_model
 
 
@@ -69,8 +69,8 @@ def test_successful_commit_stores_key_only_in_keyring(tmp_path: Path) -> None:
         "provider": "suoxie",
         "name": "梭子蟹 API",
         "base_url": "https://suoxie.codes/v1",
-        "research_model": "gpt-5.5",
-        "vision_model": "gpt-5.5",
+        "research_model": "gpt-5.6-sol",
+        "vision_model": "gpt-5.6-sol",
     }
 
 

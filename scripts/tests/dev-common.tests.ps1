@@ -37,4 +37,14 @@ if (-not $verifyScript.Contains('$PSNativeCommandUseErrorActionPreference = $tru
     throw "Expected verify.ps1 to stop when a native verification command fails."
 }
 
+$setupScript = Get-Content -Raw (Join-Path $workspace.Path "scripts\setup.ps1")
+if (-not $setupScript.Contains('$PSNativeCommandUseErrorActionPreference = $true')) {
+    throw "Expected setup.ps1 to stop when a native installation command fails."
+}
+
+$boardScript = Get-Content -Raw (Join-Path $workspace.Path "scripts\run-board.ps1")
+if (-not $boardScript.Contains('VITE_ARCHRESEARCH_BROWSER_ENDPOINT')) {
+    throw "Expected the board launcher to expose the selected API port to browser pairing."
+}
+
 Write-Output "dev-common tests passed"

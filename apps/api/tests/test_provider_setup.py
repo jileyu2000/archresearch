@@ -34,9 +34,10 @@ class FakeResponses:
         self.output = output
         self.requests: list[dict[str, Any]] = []
 
-    def create(self, **kwargs: Any) -> Any:
+    def parse(self, **kwargs: Any) -> Any:
         self.requests.append(kwargs)
-        return SimpleNamespace(output=self.output)
+        parsed = {"status": "ok"} if any(item.type == "message" for item in self.output) else None
+        return SimpleNamespace(output=self.output, output_parsed=parsed)
 
 
 class FakeClient:
@@ -44,8 +45,8 @@ class FakeClient:
         self.responses = FakeResponses(output)
 
 
-def test_probe_requires_a_responses_web_search_call() -> None:
-    client = FakeClient([SimpleNamespace(type="web_search_call")])
+def test_probe_requires_medium_structured_responses_without_web_search() -> None:
+    client = FakeClient([SimpleNamespace(type="message")])
     factory_calls: list[dict[str, str]] = []
 
     def factory(**kwargs: str) -> FakeClient:
@@ -54,25 +55,26 @@ def test_probe_requires_a_responses_web_search_call() -> None:
 
     result = probe_provider("sk-test", SuoxieProviderConfig(), factory)
 
-    assert result.capability == "responses.web_search"
-    assert result.model == "gpt-5.5"
+    assert result.capability == "responses.structured_output"
+    assert result.model == "gpt-5.6-sol"
     assert factory_calls == [{"api_key": "sk-test", "base_url": "https://suoxie.codes/v1"}]
     request = client.responses.requests[0]
-    assert request["model"] == "gpt-5.5"
-    assert request["tools"] == [{"type": "web_search", "search_context_size": "low"}]
-    assert request["include"] == ["web_search_call.results"]
+    assert request["model"] == "gpt-5.6-sol"
+    assert request["reasoning"] == {"effort": "medium"}
+    assert "tools" not in request
+    assert request["text_format"].__name__ == "ProviderProbePayload"
 
 
-def test_probe_rejects_a_text_only_compatible_endpoint() -> None:
-    client = FakeClient([SimpleNamespace(type="message")])
+def test_probe_rejects_a_response_without_a_message() -> None:
+    client = FakeClient([SimpleNamespace(type="reasoning")])
 
-    with pytest.raises(ProviderCapabilityError, match="web search"):
+    with pytest.raises(ProviderCapabilityError, match="structured output"):
         probe_provider("sk-test", SuoxieProviderConfig(), lambda **_: client)
 
 
 def test_cli_success_tests_before_storing_and_never_prints_the_key(tmp_path: Path) -> None:
     keyring = FakeKeyring()
-    client = FakeClient([SimpleNamespace(type="web_search_call")])
+    client = FakeClient([SimpleNamespace(type="message")])
     stdout = io.StringIO()
     stderr = io.StringIO()
 
@@ -90,7 +92,7 @@ def test_cli_success_tests_before_storing_and_never_prints_the_key(tmp_path: Pat
     assert (tmp_path / "provider.json").exists()
     combined = stdout.getvalue() + stderr.getvalue()
     assert "sk-private-value" not in combined
-    assert "responses.web_search" in stdout.getvalue()
+    assert "responses.structured_output" in stdout.getvalue()
 
 
 def test_cli_probe_failure_preserves_existing_credential_and_config(tmp_path: Path) -> None:

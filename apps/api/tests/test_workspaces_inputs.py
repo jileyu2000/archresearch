@@ -2,6 +2,8 @@ from io import BytesIO
 
 from fastapi.testclient import TestClient
 
+from archresearch_api.models import ResearchRun
+
 
 def test_workspace_crud(client: TestClient) -> None:
     created = client.post(
@@ -10,6 +12,7 @@ def test_workspace_crud(client: TestClient) -> None:
     )
     assert created.status_code == 201
     workspace = created.json()
+    assert workspace["archived_at"] is None
 
     listed = client.get("/v1/workspaces")
     assert listed.status_code == 200
@@ -25,6 +28,30 @@ def test_workspace_crud(client: TestClient) -> None:
 
     assert client.delete(f"/v1/workspaces/{workspace['id']}").status_code == 204
     assert client.get(f"/v1/workspaces/{workspace['id']}").status_code == 404
+
+
+def test_history_record_name_is_derived_from_question_content(
+    client: TestClient, workspace_id: str
+) -> None:
+    question = "我想问的问题是：耕织图是一份图案画作，建筑是立体的三维的，该如何转译提取元素呢。"
+    with client.app.state.database.session_factory() as session:
+        session.add(
+            ResearchRun(
+                workspace_id=workspace_id,
+                question=question,
+                goal="precedent_research",
+                budget_mode="balanced",
+                budget={},
+                status="completed",
+            )
+        )
+        session.commit()
+
+    response = client.get(f"/v1/workspaces/{workspace_id}/runs")
+
+    assert response.status_code == 200
+    assert response.json()[0]["title"] == "耕织图：转译提取元素"
+    assert response.json()[0]["question"] == question
 
 
 def test_add_url_and_upload_pdf_with_page_metadata(client: TestClient, workspace_id: str) -> None:

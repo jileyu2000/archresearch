@@ -106,6 +106,7 @@ def test_openai_visual_classifier_sends_only_bounded_text_and_the_crop() -> None
     assert result.asset_type is ArchitectureAssetType.plan
     request = calls[0]
     assert request["model"] == "gpt-5.4-mini"
+    assert request["reasoning"] == {"effort": "medium"}
     assert request["text_format"] is VisualClassification
     content = request["input"][0]["content"]
     assert content[1] == {"type": "input_image", "image_url": crop, "detail": "high"}
@@ -189,6 +190,7 @@ def test_openai_remote_visual_batch_is_bounded_low_detail_and_structured() -> No
     assert len(result.classifications) == 2
     request = calls[0]
     assert request["model"] == "gpt-5.5"
+    assert request["reasoning"] == {"effort": "medium"}
     assert request["text_format"] is RemoteVisualClassificationBatch
     content = request["input"][0]["content"]
     images = [part for part in content if part["type"] == "input_image"]

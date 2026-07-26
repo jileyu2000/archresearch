@@ -7,12 +7,14 @@ type PermissionPort = {
   contains(options: { origins: string[] }): Promise<boolean>;
 };
 
+export function requestResearchAccess(
+  permissions: Pick<PermissionPort, "request">,
+): Promise<boolean> {
+  return permissions.request({ origins: ALL_HOST_ORIGINS });
+}
+
 export class BrowserPermissionService {
   constructor(private readonly permissions: PermissionPort) {}
-
-  requestForResearch(): Promise<boolean> {
-    return this.permissions.request({ origins: ALL_HOST_ORIGINS });
-  }
 
   revokeAfterResearch(): Promise<boolean> {
     return this.permissions.remove({ origins: ALL_HOST_ORIGINS });

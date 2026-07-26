@@ -15,8 +15,8 @@ catch {
 Write-Host "ArchResearch API setup"
 Write-Host "Provider: Suoxie API"
 Write-Host "Base URL: https://suoxie.codes/v1"
-Write-Host "Model: gpt-5.5"
-Write-Host "A potentially billable Responses + web_search probe runs before saving."
+Write-Host "Model: gpt-5.6-sol (reasoning: medium)"
+Write-Host "A small potentially billable structured-output probe runs before saving."
 
 $secureKey = Read-Host "Enter API Key (input is hidden)" -AsSecureString
 $bstr = [IntPtr]::Zero

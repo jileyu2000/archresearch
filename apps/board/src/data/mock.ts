@@ -72,16 +72,6 @@ export interface WorkspaceSummary {
   active?: boolean
 }
 
-export interface TraceItem {
-  id: string
-  stage: string
-  tool: string
-  summary: string
-  duration: string
-  cost: string
-  status: 'done' | 'active' | 'queued'
-}
-
 export const workspaces: WorkspaceSummary[] = [
   {
     id: 'adaptive-reuse',
@@ -473,44 +463,5 @@ export const evidenceResults: EvidenceResult[] = [
     limitation: '夹具未标注实际人流量、门禁设备和消防分区。',
     accent: '#657B86',
     drawing: 'circulation',
-  },
-]
-
-export const traceItems: TraceItem[] = [
-  {
-    id: 'trace-plan',
-    stage: '规划',
-    tool: 'research_spec',
-    summary: '拆分为旧建筑植入、首层人车分流、剖面层次三项证据缺口。',
-    duration: '0.8 s',
-    cost: '¥0.02',
-    status: 'done',
-  },
-  {
-    id: 'trace-search',
-    stage: '搜索',
-    tool: 'web_search',
-    summary: '执行 6 条中英文查询，保留 18 个候选项目页。',
-    duration: '12.4 s',
-    cost: '¥0.18',
-    status: 'done',
-  },
-  {
-    id: 'trace-inspect',
-    stage: '检视',
-    tool: 'browser',
-    summary: '打开 12 个页面，枚举 74 个媒体节点，留下 21 张候选图纸。',
-    duration: '38.6 s',
-    cost: '—',
-    status: 'done',
-  },
-  {
-    id: 'trace-verify',
-    stage: '核验',
-    tool: 'source_verifier',
-    summary: '7 张进入画板，3 张已核验，2 张部分核验。',
-    duration: '16.2 s',
-    cost: '¥0.11',
-    status: 'active',
   },
 ]

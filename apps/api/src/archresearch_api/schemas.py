@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import ipaddress
-from datetime import datetime
+import re
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Literal
 from urllib.parse import urlparse
@@ -10,10 +11,36 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from .visual import ArchitectureAssetType
 
+RECORD_TITLE_MAX_LENGTH = 28
+_RECORD_TITLE_LEAD = re.compile(
+    r"^(?:我想问的问题是|我想问的是|我的问题是|问题是|请问)\s*[：:，,]?\s*"
+)
+_RECORD_TITLE_SPLIT = re.compile(
+    r"(?:[，,；;：:]\s*)?(?:(?:该|应|应该|应当|要|可以)\s*)?(?:如何|怎样|怎么)"
+)
+
+
+def research_record_title(question: str) -> str:
+    text = " ".join(question.split())
+    text = _RECORD_TITLE_LEAD.sub("", text).strip(" ：:，,。.!！?？；;")
+    split = _RECORD_TITLE_SPLIT.search(text)
+    if split is not None:
+        context = text[: split.start()].strip(" ，,。.!！?？；;")
+        action = text[split.end() :].strip(" ，,。.!！?？；;")
+        action = re.sub(r"[呢吗呀吧]$", "", action)
+        if context and action:
+            first_clause = re.split(r"[，,；;]", context, maxsplit=1)[0]
+            subject = re.match(r"^(.{2,12}?)(?:是|作为)", first_clause)
+            context = subject.group(1) if subject else context
+            text = f"{context}：{action}"
+    if len(text) > RECORD_TITLE_MAX_LENGTH:
+        prefix = text[: RECORD_TITLE_MAX_LENGTH - 1].rstrip(" 的与和及、，：:；;–-")
+        return f"{prefix}…"
+    return text or "未命名研究"
+
 
 class ResearchGoal(StrEnum):
     precedent_research = "precedent_research"
-    source_lookup = "source_lookup"
     visual_reference_search = "visual_reference_search"
 
 
@@ -25,7 +52,6 @@ class BudgetMode(StrEnum):
 
 class ResearchSource(StrEnum):
     xiaohongshu = "xiaohongshu"
-    pinterest = "pinterest"
 
 
 class RunStatus(StrEnum):
@@ -164,6 +190,8 @@ class ResearchSubquestion(BaseModel):
 
 
 class ResearchPlan(BaseModel):
+    project_summary: str = Field(default="", max_length=2_000)
+    project_boundaries: list[str] = Field(default_factory=list, max_length=6)
     subquestions: list[ResearchSubquestion] = Field(min_length=3, max_length=6)
 
     @model_validator(mode="after")
@@ -179,7 +207,37 @@ class ResearchSpec(BaseModel):
     goal: ResearchGoal = ResearchGoal.precedent_research
     budget_mode: BudgetMode = BudgetMode.balanced
     allowed_domains: list[str] = Field(default_factory=list, max_length=20)
-    research_sources: list[ResearchSource] = Field(default_factory=list, max_length=5)
+    research_sources: list[ResearchSource] = Field(
+        default_factory=lambda: [ResearchSource.xiaohongshu],
+        max_length=5,
+    )
+    subquestions: list[ResearchSubquestion] | None = Field(
+        default=None,
+        min_length=3,
+        max_length=6,
+    )
+
+    @model_validator(mode="after")
+    def require_complete_confirmed_question_directory(self) -> ResearchSpec:
+        if self.subquestions is None:
+            return self
+        expected = DEPTH_TARGETS[self.budget_mode].subquestions
+        if len(self.subquestions) != expected:
+            raise ValueError(
+                f"Confirmed question directory must contain exactly {expected} questions"
+            )
+        ids = [item.id for item in self.subquestions]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Confirmed question directory ids must be unique")
+        return self
+
+
+class ProjectBriefReviewRead(BaseModel):
+    filename: str
+    page_count: int = Field(ge=1)
+    project_summary: str = Field(min_length=1, max_length=2_000)
+    project_boundaries: list[str] = Field(min_length=1, max_length=6)
+    subquestions: list[ResearchSubquestion] = Field(min_length=3, max_length=6)
 
 
 class WorkspaceCreate(BaseModel):
@@ -192,6 +250,7 @@ class WorkspaceUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     brief: str | None = Field(default=None, max_length=20_000)
     constraints: list[str] | None = Field(default=None, max_length=100)
+    archived_at: datetime | None = None
 
 
 class WorkspaceRead(BaseModel):
@@ -201,6 +260,7 @@ class WorkspaceRead(BaseModel):
     name: str
     brief: str
     constraints: list[str]
+    archived_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -240,6 +300,24 @@ class InputArtifactRead(BaseModel):
     created_at: datetime
 
 
+class WorkspaceBackupPreflightRead(BaseModel):
+    ready: bool
+    format_version: int
+    schema_revision: str
+    file_count: int
+    total_bytes: int
+    categories: dict[str, int]
+    workspace_count: int
+    run_count: int
+    collection_count: int
+    input_artifact_count: int
+
+
+class WorkspaceRestoreRead(WorkspaceBackupPreflightRead):
+    restored: bool
+    rollback_backup: str
+
+
 class CoverageReport(BaseModel):
     usable_assets: int = 0
     project_count: int = 0
@@ -257,6 +335,7 @@ class ResearchRunRead(BaseModel):
     id: str
     workspace_id: str
     question: str
+    title: str = ""
     goal: ResearchGoal
     budget_mode: BudgetMode
     budget: dict[str, int]
@@ -267,8 +346,26 @@ class ResearchRunRead(BaseModel):
     coverage_report: dict[str, Any]
     stop_reason: str | None
     attempt: int
+    keep_forever: bool
+    retention_expires_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+    @model_validator(mode="after")
+    def derive_title_from_question(self) -> ResearchRunRead:
+        self.title = research_record_title(self.question)
+        return self
+
+    @field_validator("retention_expires_at", mode="before")
+    @classmethod
+    def attach_utc_to_retention_expiry(cls, value: datetime | None) -> datetime | None:
+        if value is not None and value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value
+
+
+class RunRetentionUpdate(BaseModel):
+    permanent: bool
 
 
 ClaimType = Literal["fact", "observation", "inference", "limitation"]
@@ -374,6 +471,50 @@ class AssetCandidateRead(BaseModel):
 
 class SaveCreate(BaseModel):
     note: str = Field(default="", max_length=4_000)
+    subquestion_ids: list[str] | None = Field(default=None, max_length=6)
+
+
+class SavedReferenceCaseEvidence(BaseModel):
+    statement: str
+    text_excerpt: str
+    source_url: str | None = None
+
+
+class SavedReferenceCaseImage(BaseModel):
+    asset_id: str
+    asset_type: ArchitectureAssetType
+    image_url: str
+    source_url: str
+
+
+class SavedReferenceCaseSubquestion(BaseModel):
+    id: str
+    question: str
+    project_context: str = ""
+    design_mechanism: str = ""
+    transfer_strategy: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+    evidence: SavedReferenceCaseEvidence | None = None
+
+
+class SavedReferenceSnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    question: str | None = None
+    goal: ResearchGoal | None = None
+    project_name: str | None = None
+    asset_type: ArchitectureAssetType | None = None
+    image_url: str | None = None
+    collection_file: str | None = None
+    result_tier: str | None = None
+    rights_status: str | None = None
+    visual_observation: str = ""
+    project_context: str = ""
+    design_mechanism: str = ""
+    transfer_strategy: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+    case_images: list[SavedReferenceCaseImage] = Field(default_factory=list)
+    case_subquestions: list[SavedReferenceCaseSubquestion] = Field(default_factory=list)
 
 
 class SavedReferenceRead(BaseModel):
@@ -384,7 +525,7 @@ class SavedReferenceRead(BaseModel):
     asset_candidate_id: str
     source_url: str
     note: str
-    snapshot: dict[str, Any]
+    snapshot: SavedReferenceSnapshot
     created_at: datetime
 
 

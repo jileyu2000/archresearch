@@ -1,15 +1,18 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Activity,
+  ArrowLeft,
   ArrowRight,
   ArrowUp,
+  Bookmark,
   Check,
+  ChevronRight,
   CircleDashed,
   Columns3,
   Download,
   Eye,
   ExternalLink,
   FolderPlus,
+  HardDriveDownload,
   ImageOff,
   LayoutGrid,
   MonitorUp,
@@ -21,6 +24,8 @@ import {
   Share2,
   ShieldCheck,
   SlidersHorizontal,
+  Trash2,
+  Upload,
   X,
 } from 'lucide-react'
 
@@ -31,33 +36,36 @@ import {
   type ApiEvidenceClaim,
   type ArchitectureAssetType,
   type BoardExport,
+  type PersonalCollection,
   type ResearchGoal,
   type ResearchMode,
   type ResearchRun,
+  type ResearchSynthesis,
+  type ResearchSynthesisFinding,
   type ResearchSource,
   type ResearchSubquestion,
   type RunStatus,
   type TraceEvent,
   type Workspace,
+  type WorkspaceBackupPreflight,
 } from './api/client'
 import {
   BrowserBridgeError,
   requestBrowserBridge,
+  resolveBrowserEndpoint,
   type BrowserBridgeStatus,
 } from './browserBridge'
 import {
   demoSubquestions,
   evidenceResults,
-  traceItems,
-  workspaces as demoWorkspaces,
   type AssetType,
   type EvidenceResult,
-  type ResultTier,
 } from './data/mock'
 import { ClickSpark } from './components/ClickSpark'
 import { StudioBackdrop } from './components/StudioBackdrop'
 
 type WorkResult = EvidenceResult & {
+  analysisReady: boolean
   evidenceClaims: ApiEvidenceClaim[]
   previewUrl: string | null
   previewSource: 'public' | 'chrome' | null
@@ -76,6 +84,18 @@ type StyleDraft = {
   primaryColor: string
   lineHierarchy: 'relative' | 'contrast' | 'uniform'
   fontCategory: 'sans' | 'serif' | 'mono'
+  texture: 'none' | 'vellum' | 'grain'
+  layoutNotes: string
+}
+
+type CollectionSelection = {
+  key: string
+  resultId: string
+  subquestionId?: string
+}
+
+function collectionSelectionKey(resultId: string, subquestionId?: string) {
+  return subquestionId ? `${subquestionId}:${resultId}` : `asset:${resultId}`
 }
 
 const terminalStatuses = new Set<RunStatus>([
@@ -86,10 +106,12 @@ const terminalStatuses = new Set<RunStatus>([
   'failed',
 ])
 
-const tierLabels: Record<ResultTier, string> = {
-  verified: '已核验参考',
-  partial: '部分核验参考',
-  visual_lead: '视觉线索参考',
+function questionRelevanceLabel(relevance: number) {
+  if (relevance >= 4) return '直接支撑本题'
+  if (relevance >= 3) return '与本题高度相关'
+  if (relevance >= 2) return '可补充本题'
+  if (relevance >= 1) return '与本题关联较弱'
+  return '与本题无直接关系'
 }
 
 const publicationTierLabels: Record<ApiAssetCandidate['publication_tier'], string> = {
@@ -115,6 +137,80 @@ const rightsStatusLabels: Record<ApiAssetCandidate['rights_status'], string> = {
 }
 
 const chineseCharacterPattern = /[\u3400-\u9fff]/
+const localSynthesisPrefix = '【本地证据汇总】'
+const synthesisHeadlineCharacterLimit = 84
+
+function synthesisSegment(statement: string, label: string) {
+  const prefix = `${label}：`
+  const segment = statement
+    .split('；')
+    .map((item) => item.trim())
+    .find((item) => item.startsWith(prefix))
+  return segment?.slice(prefix.length).trim() ?? ''
+}
+
+function conciseSynthesisHeadline(statement: string) {
+  const trimmed = statement.trim()
+  if (trimmed.length <= synthesisHeadlineCharacterLimit) return trimmed
+  const firstSentence = trimmed.match(/^.{16,84}?[。！？]/u)?.[0]
+  if (firstSentence) return firstSentence
+  return `${trimmed.slice(0, synthesisHeadlineCharacterLimit - 1).trim()}…`
+}
+
+function fallbackAnswerMechanism(statement: string) {
+  const firstFinding = statement
+    .replace(localSynthesisPrefix, '')
+    .replace(/^[；：:\s]+/u, '')
+    .split('；')
+    .map((item) => item.trim())
+    .find(Boolean) ?? statement
+  return firstFinding.replace(/^[^：]{1,80}：/u, '').trim()
+}
+
+function userFacingRecommendation(statement: string) {
+  return statement
+    .replace(/^【(?:转译建议|建议|操作)[^】]*】\s*/u, '')
+    .replace(/^转译步骤[（(][^）)]+[）)]\s*[：:]\s*/u, '')
+    .replace(/^(?:建议|操作)\s*[：:]\s*/u, '')
+    .replace(/(?:该建议转译自|后半部分属于)[^。！？]*[。！？]?/gu, '')
+    .replace(/[，,]\s*(?:不能|不可)[^。！？]*(?:推定|证明|断言)[^。！？]*[。！？]?/gu, '。')
+    .trim()
+}
+
+function userFacingProjectName(projectName: string) {
+  return projectName
+    .replace(/\s*\|\s*(?:ArchDaily(?:\s+China)?|Dezeen|Designboom|Divisare)\s*$/iu, '')
+    .trim()
+}
+
+function researchSynthesisOverview(synthesis: ResearchSynthesis) {
+  const rawStatement = synthesis.answer.statement.trim()
+  const isFallback = synthesis.generation_mode === 'deterministic_fallback'
+    || rawStatement.startsWith(localSynthesisPrefix)
+  const isMachineShaped = isFallback || rawStatement.length > 96
+  const mechanism = synthesis.causal_chains
+    .map((finding) => synthesisSegment(finding.statement, '机制'))
+    .find(Boolean)
+  const headline = isMachineShaped
+    ? conciseSynthesisHeadline(mechanism || fallbackAnswerMechanism(rawStatement))
+    : rawStatement
+  const seenActions = new Set<string>()
+  const actions: ResearchSynthesisFinding[] = []
+  for (const finding of synthesis.recommendations) {
+    const statement = userFacingRecommendation(finding.statement)
+    if (!statement || seenActions.has(statement)) continue
+    seenActions.add(statement)
+    actions.push({ ...finding, statement })
+    if (actions.length === 3) break
+  }
+  return {
+    actions,
+    headline,
+    isFallback,
+    isProjected: headline !== rawStatement,
+    rawStatement,
+  }
+}
 
 function chineseText(value: string | undefined, fallback: string) {
   const trimmed = value?.trim() ?? ''
@@ -125,6 +221,16 @@ function chineseItems(values: string[] | undefined) {
   return (values ?? []).map((item) => item.trim()).filter((item) => chineseCharacterPattern.test(item))
 }
 
+function visualPlatformName(sourceUrl: string) {
+  try {
+    const hostname = new URL(sourceUrl).hostname.toLowerCase()
+    if (hostname === 'xiaohongshu.com' || hostname.endsWith('.xiaohongshu.com')) return '小红书'
+  } catch {
+    return null
+  }
+  return null
+}
+
 const modeLabels: Record<ResearchMode, string> = {
   quick: '概览',
   balanced: '标准',
@@ -133,29 +239,27 @@ const modeLabels: Record<ResearchMode, string> = {
 
 const researchDepthOptions: Record<ResearchMode, { coverage: string; target: string }> = {
   quick: {
-    coverage: '3 个子问题 · 每题 2 轮',
-    target: '目标：每题 2 张证据图 · 观察与方法',
+    coverage: '快速找方向',
+    target: '从少量高相关案例提炼做法，给出直接建议',
   },
   balanced: {
-    coverage: '4 个子问题 · 每题 3 轮',
-    target: '目标：每题 3 张证据图 · 方法、转译与边界',
+    coverage: '形成方案依据',
+    target: '比较多个案例的条件、做法与结果，说明适用边界',
   },
   deep: {
-    coverage: '6 个子问题 · 每题 4 轮',
-    target: '目标：每题 3 张证据图 · 多来源核验与跨案例比较',
+    coverage: '做跨案例论证',
+    target: '综合更多案例，指出共识、冲突、不确定性和失效边界',
   },
 }
 
 const goalLabels: Record<ResearchGoal, string> = {
-  precedent_research: '设计策略',
-  source_lookup: '来源反查',
-  visual_reference_search: '视觉参考',
+  precedent_research: '建筑设计研究',
+  visual_reference_search: '图纸灵感',
 }
 
 const goalPlaceholders: Record<ResearchGoal, string> = {
   precedent_research: '例如：旧建筑植入新功能时，如何拆分公共流线与后勤流线？',
-  source_lookup: '上传截图或粘贴网页链接，说明你想确认的项目或原始出处。',
-  visual_reference_search: '例如：寻找浅色轴测图、蓝灰配色和留白版式的相似表达。',
+  visual_reference_search: '例如：我想出一张轴测图，帮我找几种风格。',
 }
 
 const problemStarters: Array<{
@@ -212,6 +316,7 @@ const comparisonFocusLabels: Record<AssetType, string> = {
 }
 
 const demoResearchQuestion = '旧建筑更新中，如何植入新功能，并组织公共与后勤流线和剖面层次？'
+const activeWorkspaceStorageKey = 'archresearch.activeWorkspaceId'
 
 const deepDemoSubquestions = [
   ...demoSubquestions,
@@ -246,29 +351,53 @@ const filterAssetTypes = (Object.keys(assetLabels) as AssetType[]).filter(
 const stageLabels: Array<{ status: RunStatus; label: string }> = [
   { status: 'planning', label: '规划' },
   { status: 'searching', label: '搜索' },
-  { status: 'inspecting', label: '浏览页面' },
-  { status: 'analyzing', label: '识别图纸' },
+  { status: 'inspecting', label: '读取项目' },
+  { status: 'analyzing', label: '分析正文' },
   { status: 'verifying', label: '核验来源' },
   { status: 'gap_check', label: '检查缺口' },
-  { status: 'composing', label: '编排结果' },
+  { status: 'composing', label: '综合方法' },
+  { status: 'completed', label: '完成' },
+]
+
+const visualStageLabels: Array<{ status: RunStatus; label: string }> = [
+  { status: 'planning', label: '确定方向' },
+  { status: 'searching', label: '搜索灵感' },
+  { status: 'inspecting', label: '读取图纸' },
+  { status: 'analyzing', label: '分析画面' },
+  { status: 'verifying', label: '核对来源' },
+  { status: 'gap_check', label: '检查方向' },
+  { status: 'composing', label: '整理灵感' },
   { status: 'completed', label: '完成' },
 ]
 
 const activeStageDescriptions: Partial<Record<RunStatus, string>> = {
   created: '任务已经进入队列，正在准备研究计划',
   planning: '正在拆解问题并生成可检索的证据方向',
-  searching: '正在从公开网页中寻找项目与图纸',
-  inspecting: '正在读取候选项目页面并定位图纸',
-  analyzing: '正在区分平面、剖面、分析图与效果图',
-  verifying: '正在核对图片、项目与发布来源的关系',
-  gap_check: '正在检查案例、图纸类型和证据缺口',
-  composing: '正在去重、排序并编排图纸参考板',
+  searching: '正在从公开网页中寻找相关项目与原始来源',
+  inspecting: '正在读取候选项目正文与项目背景',
+  analyzing: '正在提取逐字引文、设计机制与转译步骤',
+  verifying: '正在核对正文事实、项目身份与发布来源',
+  gap_check: '正在检查案例正文和子问题证据缺口',
+  composing: '正在比较案例并综合可转译的设计方法',
+}
+
+const visualActiveStageDescriptions: Partial<Record<RunStatus, string>> = {
+  created: '任务已经进入队列，正在准备灵感检索',
+  planning: '正在把需求整理成不同的图纸风格方向',
+  searching: '正在按图纸类型和表达风格寻找参考',
+  inspecting: '正在读取笔记图片并判断图纸类型与风格',
+  analyzing: '正在提取线型、配色、材质和构图特征',
+  verifying: '正在核对原笔记来源和可见图像内容',
+  gap_check: '正在检查每个灵感方向是否已有可用参考',
+  composing: '正在按风格方向整理图纸灵感',
 }
 
 const defaultStyle: StyleDraft = {
   primaryColor: '#315cf4',
   lineHierarchy: 'relative',
   fontCategory: 'sans',
+  texture: 'none',
+  layoutNotes: '',
 }
 
 function apiMessage(error: unknown) {
@@ -276,15 +405,40 @@ function apiMessage(error: unknown) {
 }
 
 function runAnnouncement(run: ResearchRun) {
+  if (
+    run.goal === 'precedent_research'
+    && run.status === 'completed'
+    && (run.coverageReport?.enrichment_gaps?.length ?? 0) > 0
+  ) {
+    return '研究已形成初步依据'
+  }
+  if (run.goal === 'visual_reference_search') {
+    const visualLabels: Record<RunStatus, string> = {
+      created: '已创建',
+      planning: '正在确定方向',
+      searching: '正在搜索灵感',
+      inspecting: '正在读取图纸',
+      analyzing: '正在分析画面',
+      verifying: '正在核对来源',
+      gap_check: '正在检查方向',
+      composing: '正在整理灵感',
+      completed: '已完成',
+      partial: '已保留部分灵感',
+      blocked: '需要检查环境',
+      cancelled: '已取消',
+      failed: '未完成',
+    }
+    return visualLabels[run.status]
+  }
   const labels: Record<RunStatus, string> = {
     created: '已创建',
     planning: '正在规划',
     searching: '正在搜索',
     inspecting: '正在浏览页面',
-    analyzing: '正在识别图纸',
+    analyzing: '正在分析项目正文',
     verifying: '正在核验来源',
     gap_check: '正在检查证据缺口',
-    composing: '正在编排参考板',
+    composing: '正在综合设计方法',
     completed: '研究已完成',
     partial: '已交付部分结果',
     blocked: '研究尚未完成，已有证据已保留',
@@ -295,8 +449,13 @@ function runAnnouncement(run: ResearchRun) {
 }
 
 function needsCompletionContinuation(run: ResearchRun) {
+  const completionGaps = new Set([
+    'uncovered_subquestions',
+    'article_analysis_incomplete',
+    'research_synthesis_incomplete',
+  ])
   return run.goal === 'precedent_research'
-    && (run.coverageReport?.gaps ?? []).includes('uncovered_subquestions')
+    && (run.coverageReport?.gaps ?? []).some((gap) => completionGaps.has(gap))
 }
 
 function retryActionLabel(run: ResearchRun) {
@@ -304,42 +463,67 @@ function retryActionLabel(run: ResearchRun) {
 }
 
 function partialReasonTitle(stopReason?: string | null) {
-  if (stopReason === 'budget_exhausted') return '本轮检索额度已用完'
+  if (stopReason === 'budget_exhausted') return '当前自动补齐已到上限'
   if (stopReason === 'time_budget_exhausted') return '本轮研究达到时间上限'
-  if (stopReason === 'no_new_assets') return '连续检索没有找到新的有效图纸'
-  if (stopReason === 'unverified_visual_leads') return '已找到图纸，但来源证据还不够'
+  if (stopReason === 'visual_budget_exhausted') return '本轮图纸检查容量已用完'
+  if (stopReason === 'no_new_assets') return '连续检索没有找到新的有效项目证据'
+  if (stopReason === 'unverified_visual_leads') return '已找到图片，但还不能用它确认项目事实'
   if (stopReason === 'browser_inspection_incomplete') return 'Chrome 图纸检查未完成'
-  if (stopReason === 'no_usable_assets') return '暂未找到能直接使用的图纸'
+  if (stopReason === 'no_usable_assets') return '暂未找到能支撑结论的项目证据'
   if (stopReason?.startsWith('provider_error:')) return '部分网页研究服务暂时不可用'
-  if (stopReason?.startsWith('source_lookup_error:')) return '图片来源反查暂时未完成'
   return '本次研究先交付当前可用结果'
 }
 
 function partialDiagnosis(run: ResearchRun) {
   const coverage = run.coverageReport
   const usable = coverage?.usable_assets ?? 0
+  if (run.goal === 'visual_reference_search') {
+    const totalDirections = coverage?.subquestion_count ?? run.subquestions.length
+    const coveredDirections = coverage?.covered_subquestions ?? 0
+    const visualGapLabels: Record<string, string> = {
+      insufficient_usable_assets: '可用图纸参考还不够',
+      fewer_than_six_usable_assets: '可用图纸参考还不够',
+      insufficient_project_diversity: '不同风格的参考还不够多样',
+      insufficient_verified_or_partial: '部分图片还没有形成可用的视觉观察',
+      uncovered_subquestions: '仍有灵感方向没有可用图纸参考',
+      browser_inspection_incomplete: '部分笔记图片未能完成读取',
+    }
+    const gaps = (coverage?.gaps ?? []).map(
+      (gap) => visualGapLabels[gap] ?? gap.replaceAll('_', ' '),
+    )
+    return {
+      title: usable > 0 ? '还有灵感方向待补充' : '暂未找到可用图纸灵感',
+      summary: `已保留 ${usable} 张可用灵感图，覆盖 ${coveredDirections}/${totalDirections} 个方向。`,
+      gaps,
+      nextStep: usable > 0
+        ? '可以先使用已有灵感；重新查找会保留当前结果，只补未覆盖的方向。'
+        : '换一种图纸类型、风格词或画面特征后再查找。',
+    }
+  }
   const projects = coverage?.project_count ?? 0
   const supported = coverage?.verified_or_partial ?? 0
   const gapLabels: Record<string, string> = {
-    insufficient_usable_assets: `可用图纸数量未达到“${modeLabels[run.mode]}”深度目标`,
-    fewer_than_six_usable_assets: `可用图纸数量未达到“${modeLabels[run.mode]}”深度目标`,
+    insufficient_usable_assets: `“${modeLabels[run.mode]}”档位需要更多可用项目证据`,
+    fewer_than_six_usable_assets: `“${modeLabels[run.mode]}”档位需要更多可用项目证据`,
     insufficient_project_diversity: '具体项目数量还不足，案例覆盖不够多样',
-    insufficient_verified_or_partial: '达到部分核验或以上的图纸还不够',
-    uncovered_subquestions: '仍有子问题没有足够图纸支撑',
+    insufficient_verified_or_partial: '已有来源依据的项目证据还不够',
+    uncovered_subquestions: '仍有子问题没有足够的项目原文支撑',
+    article_analysis_incomplete: '部分来源还没有同时说明项目条件、设计做法和可借鉴步骤',
+    research_synthesis_incomplete: '案例依据已经保留，但当前档位要求的结论还没整理完成',
     browser_inspection_incomplete: 'Chrome 未能完成候选页面的图纸检查，现有网页结果已保留',
     insufficient_multi_asset_projects: '部分项目还缺少平面、剖面等互补图纸',
   }
   const gaps = [...new Set((coverage?.gaps ?? []).map(
-    (gap) => gapLabels[gap] ?? '仍有研究覆盖项未达到当前深度目标',
+    (gap) => gapLabels[gap] ?? '仍有研究内容未达到当前档位目标',
   ))]
   const continuationRequired = needsCompletionContinuation(run)
   return {
     title: continuationRequired ? '仍有子问题等待补齐' : partialReasonTitle(run.stopReason),
-    summary: `已保留 ${usable} 张可用图纸，覆盖 ${projects} 个项目，其中 ${supported} 张达到部分核验或以上。`,
+    summary: `已保留 ${usable} 条可用项目证据，覆盖 ${projects} 个项目，其中 ${supported} 条已有来源依据。`,
     gaps,
     nextStep: continuationRequired
       ? '当前内容是续研检查点，不是完整交付；继续补齐会保留已有证据，只研究仍为空白的分支。'
-      : '可以继续查看现有结果；重试会开启新一轮研究，补找图纸与来源证据。',
+      : '可以继续查看现有结果；重试会开启新一轮研究，补找项目原文与来源依据。',
   }
 }
 
@@ -354,6 +538,68 @@ function formatRunDate(value?: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ''
   return new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(date)
+}
+
+function retentionDays(value?: string | null) {
+  if (!value) return null
+  const expiry = new Date(value)
+  if (Number.isNaN(expiry.getTime())) return null
+  return Math.max(0, Math.ceil((expiry.getTime() - Date.now()) / 86_400_000))
+}
+
+function RunHistoryList({
+  runs,
+  onOpen,
+  onRetentionChange,
+  retentionUpdatingId,
+}: {
+  runs: ResearchRun[]
+  onOpen: (run: ResearchRun) => void
+  onRetentionChange?: (run: ResearchRun) => void
+  retentionUpdatingId?: string
+}) {
+  return (
+    <ul className="recent-list">
+      {runs.map((run) => {
+        const recordTitle = run.title?.trim() || run.question
+        const runDate = formatRunDate(run.updatedAt ?? run.createdAt)
+        const usableAssets = run.coverageReport?.usable_assets
+        const daysRemaining = retentionDays(run.retentionExpiresAt)
+        return (
+          <li key={run.id}>
+            <div className="recent-run-row">
+              <button className="recent-open" type="button" aria-label={`打开研究：${recordTitle}`} onClick={() => onOpen(run)}>
+                <span className="recent-question">{recordTitle}</span>
+                <span className="recent-meta">
+                  {[
+                    goalLabels[run.goal] ?? '研究任务',
+                    run.goal === 'visual_reference_search' ? null : modeLabels[run.mode],
+                    usableAssets === undefined ? null : `${usableAssets} 张参考`,
+                    runDate || null,
+                  ].filter(Boolean).join(' · ')}
+                </span>
+                <span className="recent-status">{recentRunAnnouncement(run)}</span>
+                <ArrowRight aria-hidden="true" />
+              </button>
+              {onRetentionChange && (
+                <div className="retention-control">
+                  <span>{run.keepForever ? '永久保留' : `还剩 ${daysRemaining ?? 14} 天`}</span>
+                  <button
+                    type="button"
+                    aria-label={`${run.keepForever ? '取消永久保留' : '永久保留'}：${recordTitle}`}
+                    disabled={retentionUpdatingId === run.id}
+                    onClick={() => onRetentionChange(run)}
+                  >
+                    {retentionUpdatingId === run.id ? '保存中…' : (run.keepForever ? '取消永久' : '设为永久')}
+                  </button>
+                </div>
+              )}
+            </div>
+          </li>
+        )
+      })}
+    </ul>
+  )
 }
 
 function drawingFor(assetType: AssetType): EvidenceResult['drawing'] {
@@ -372,6 +618,20 @@ function drawingFor(assetType: AssetType): EvidenceResult['drawing'] {
   return drawings[assetType] ?? 'grid'
 }
 
+function legacyChineseAnalysis(candidate: ApiAssetCandidate, assetType: ArchitectureAssetType) {
+  const assetLabel = assetLabels[assetType]
+  return {
+    projectContext: `${candidate.project_name} 的来源页收录了这张${assetLabel}，可作为当前子问题的图片线索，项目原文仍需核对。`,
+    designMechanism: '现有记录只确认图纸类型与来源关系，不足以断言更具体的空间机制。',
+    transferStrategy: [
+      `先用这张${assetLabel}核对与当前子问题直接相关的空间关系。`,
+      '再回到原始来源确认图纸归属、尺度和适用边界。',
+    ],
+    observation: `当前记录未保留这张${assetLabel}的中文图面观察，请结合图纸和原始来源核对。`,
+    limitation: '该历史候选只保留了来源与图纸类型，具体机制、尺度和适用边界仍需核对。',
+  }
+}
+
 function toWorkResult(candidate: ApiAssetCandidate): WorkResult {
   const assetType = candidate.asset_type as ArchitectureAssetType
   const facts = chineseItems(candidate.facts)
@@ -379,12 +639,19 @@ function toWorkResult(candidate: ApiAssetCandidate): WorkResult {
   const inferences = chineseItems(candidate.inferences)
   const limitations = chineseItems(candidate.limitations)
   const transferStrategy = chineseItems(candidate.transfer_strategy)
+  const analysisReady = Boolean(
+    chineseCharacterPattern.test(candidate.project_context ?? '')
+    && chineseCharacterPattern.test(candidate.design_mechanism ?? '')
+    && transferStrategy.length
+    && candidate.evidence_claims.some((claim) => Boolean(claim.text_excerpt?.trim())),
+  )
+  const legacyAnalysis = legacyChineseAnalysis(candidate, assetType)
   return {
     id: candidate.id,
     title: chineseText(candidate.inferences[0], `${assetLabels[assetType]}研究线索`),
     project: candidate.project_name,
     location: '实时网页研究',
-    year: '待核验',
+    year: '年份待核对',
     assetType,
     tier: candidate.result_tier,
     relevance: Math.max(0, Math.min(4, candidate.relevance)) as EvidenceResult['relevance'],
@@ -397,44 +664,45 @@ function toWorkResult(candidate: ApiAssetCandidate): WorkResult {
     sourceUrl: candidate.source_url,
     imageUrl: candidate.image_url,
     subquestionIds: candidate.subquestion_ids ?? [],
+    analysisReady,
     subquestionAnalysis: Object.fromEntries(
       Object.entries(candidate.subquestion_analysis ?? {}).map(([id, analysis]) => [
         id,
         {
           projectContext: chineseText(
             analysis.project_context,
-            '此历史结果的项目条件为外文；重新研究后可生成中文分析。',
+            legacyAnalysis.projectContext,
           ),
           designMechanism: chineseText(
             analysis.design_mechanism,
-            '此历史结果的空间机制为外文；重新研究后可生成中文分析。',
+            legacyAnalysis.designMechanism,
           ),
           transferStrategy: chineseItems(analysis.transfer_strategy).length
             ? chineseItems(analysis.transfer_strategy)
-            : ['连接扩展并重新研究，生成中文转译步骤。'],
+            : legacyAnalysis.transferStrategy,
           observations: chineseItems(analysis.observations).length
             ? chineseItems(analysis.observations)
-            : ['尚未生成中文视觉观察。'],
+            : [legacyAnalysis.observation],
           limitations: chineseItems(analysis.limitations).length
             ? chineseItems(analysis.limitations)
-            : ['尚未生成中文适用边界。'],
+            : [legacyAnalysis.limitation],
         },
       ]),
     ),
     projectContext:
       chineseCharacterPattern.test(candidate.project_context ?? '')
         ? candidate.project_context ?? ''
-        : facts.join(' ') || '此历史结果的项目条件为外文；重新研究后可生成中文分析。',
+        : facts.join(' ') || legacyAnalysis.projectContext,
     designMechanism:
       chineseCharacterPattern.test(candidate.design_mechanism ?? '')
         ? candidate.design_mechanism ?? ''
-        : observations.join(' ') || '此历史结果的空间机制为外文；重新研究后可生成中文分析。',
+        : observations.join(' ') || legacyAnalysis.designMechanism,
     transferStrategy:
       transferStrategy.length
         ? transferStrategy
         : inferences.length
           ? inferences
-          : ['连接扩展并重新研究，生成中文转译步骤。'],
+          : legacyAnalysis.transferStrategy,
     previewUrl: candidate.has_local_content
       ? `/v1/assets/${candidate.id}/content`
       : candidate.image_url,
@@ -443,10 +711,10 @@ function toWorkResult(candidate: ApiAssetCandidate): WorkResult {
       : candidate.image_url
         ? 'public'
         : null,
-    fact: facts[0] ?? '此历史结果的来源事实为外文，请打开原始页面核对。',
-    observation: observations[0] ?? '尚未生成中文视觉观察。',
-    inference: inferences[0] ?? '尚未生成中文设计方法推断。',
-    limitation: limitations[0] ?? '尚未生成中文适用边界。',
+    fact: facts[0] ?? legacyAnalysis.projectContext,
+    observation: observations[0] ?? legacyAnalysis.observation,
+    inference: inferences[0] ?? legacyAnalysis.designMechanism,
+    limitation: limitations[0] ?? legacyAnalysis.limitation,
     accent:
       candidate.result_tier === 'verified'
         ? '#2D846B'
@@ -476,6 +744,7 @@ function demoResults(depth: ResearchMode): WorkResult[] {
         : []
       return {
         ...result,
+        analysisReady: true,
         subquestionIds: [...result.subquestionIds, ...extraAssociations],
         previewUrl: result.imageUrl ?? null,
         previewSource: null,
@@ -526,19 +795,174 @@ function supportsSubquestion(
   return knownAssociations.includes(subquestionId)
 }
 
+type CollectionCaseSubquestion = NonNullable<
+  PersonalCollection['snapshot']['case_subquestions']
+>[number]
+
+type CollectionCaseImage = NonNullable<
+  PersonalCollection['snapshot']['case_images']
+>[number]
+
+function collectionCaseImages(item: PersonalCollection): CollectionCaseImage[] {
+  const stored = item.snapshot.case_images?.filter((image) => image.image_url.trim()).slice(0, 3) ?? []
+  if (stored.length > 0) return stored
+  if (!item.snapshot.image_url) return []
+  return [{
+    asset_id: item.asset_candidate_id,
+    asset_type: item.snapshot.asset_type ?? 'photograph',
+    image_url: item.snapshot.image_url,
+    source_url: item.source_url,
+  }]
+}
+
+function collectionCaseImageUrl(item: PersonalCollection, image: CollectionCaseImage) {
+  if (image.asset_id === item.asset_candidate_id && item.snapshot.collection_file) {
+    return `/v1/collections/${item.id}/content`
+  }
+  return image.image_url
+}
+
+function collectionCaseSubquestions(item: PersonalCollection): CollectionCaseSubquestion[] {
+  const stored = item.snapshot.case_subquestions?.filter((subquestion) => (
+    subquestion.question.trim()
+  )) ?? []
+  if (stored.length > 0) return stored
+  return [{
+    id: 'legacy',
+    question: '未记录具体案例子问题',
+    project_context: item.snapshot.project_context?.trim() ?? '',
+    design_mechanism: item.snapshot.design_mechanism?.trim() || item.note.trim(),
+    transfer_strategy: item.snapshot.transfer_strategy ?? [],
+    limitations: item.snapshot.limitations ?? [],
+  }]
+}
+
+function collectionCaseGroups(items: PersonalCollection[]) {
+  const groups = new Map<string, {
+    id: string
+    question: string
+    entries: Array<{ item: PersonalCollection; analysis: CollectionCaseSubquestion }>
+  }>()
+  for (const item of items) {
+    for (const analysis of collectionCaseSubquestions(item)) {
+      const current = groups.get(analysis.id) ?? {
+        id: analysis.id,
+        question: analysis.question,
+        entries: [],
+      }
+      current.entries.push({ item, analysis })
+      groups.set(analysis.id, current)
+    }
+  }
+  return [...groups.values()]
+}
+
 function analysisFor(result: WorkResult, subquestionId: string) {
   const scoped = result.subquestionAnalysis[subquestionId]
+  const limitations = scoped?.limitations.length ? scoped.limitations : [result.limitation]
   return {
     projectContext: scoped?.projectContext.trim() || result.projectContext,
     designMechanism: scoped?.designMechanism.trim() || result.designMechanism,
     transferStrategy: scoped?.transferStrategy.length ? scoped.transferStrategy : result.transferStrategy,
     observation: scoped?.observations.find((item) => item.trim()) || result.observation,
-    limitation: scoped?.limitations.find((item) => item.trim()) || result.limitation,
+    limitation: firstUserFacingBoundary(limitations),
   }
 }
 
-function traceSummary(summary: unknown) {
-  return typeof summary === 'string' ? summary : JSON.stringify(summary)
+function normalizedCopy(value: string) {
+  return value.trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+function isLegacyObservationFallback(value: string) {
+  return /^当前记录未保留这张.+的中文图面观察，请结合图纸和原始来源核对。$/.test(value.trim())
+}
+
+function projectPreviewCopy(
+  assets: WorkResult[],
+  projectAnalysis: ReturnType<typeof analysisFor>,
+  subquestionId: string,
+) {
+  const assetCopy = new Map<string, { title?: string; observation?: string }>()
+  if (assets.length === 1) {
+    const result = assets[0]
+    assetCopy.set(result.id, {
+      title: result.title,
+      observation: analysisFor(result, subquestionId).observation,
+    })
+    return { shared: [] as string[], assetCopy }
+  }
+
+  const analysisKeys = new Set([
+    projectAnalysis.projectContext,
+    projectAnalysis.designMechanism,
+    ...projectAnalysis.transferStrategy,
+    projectAnalysis.limitation,
+  ].map(normalizedCopy))
+  const titles = assets.map((result) => result.title)
+  const observations = assets.map((result) => analysisFor(result, subquestionId).observation)
+  const titleCounts = new Map<string, number>()
+  const observationCounts = new Map<string, number>()
+  for (const title of titles) {
+    const key = normalizedCopy(title)
+    titleCounts.set(key, (titleCounts.get(key) ?? 0) + 1)
+  }
+  for (const observation of observations) {
+    const key = isLegacyObservationFallback(observation) ? 'legacy-fallback' : normalizedCopy(observation)
+    observationCounts.set(key, (observationCounts.get(key) ?? 0) + 1)
+  }
+
+  const shared: string[] = []
+  const sharedKeys = new Set<string>()
+  for (const title of titles) {
+    const key = normalizedCopy(title)
+    if (analysisKeys.has(key) || (titleCounts.get(key) ?? 0) < 2 || sharedKeys.has(key)) continue
+    shared.push(title)
+    sharedKeys.add(key)
+  }
+  for (const observation of observations) {
+    const key = isLegacyObservationFallback(observation) ? 'legacy-fallback' : normalizedCopy(observation)
+    if (analysisKeys.has(normalizedCopy(observation)) || (observationCounts.get(key) ?? 0) < 2 || sharedKeys.has(key)) continue
+    shared.push(key === 'legacy-fallback'
+      ? '当前记录未保留这些图的中文图面观察，请结合图纸和原始来源核对。'
+      : observation)
+    sharedKeys.add(key)
+  }
+
+  assets.forEach((result, index) => {
+    const titleKey = normalizedCopy(result.title)
+    const observation = observations[index]
+    const observationKey = isLegacyObservationFallback(observation)
+      ? 'legacy-fallback'
+      : normalizedCopy(observation)
+    const uniqueTitle = !analysisKeys.has(titleKey) && titleCounts.get(titleKey) === 1
+    const uniqueObservation = !analysisKeys.has(normalizedCopy(observation))
+      && observationCounts.get(observationKey) === 1
+    assetCopy.set(result.id, {
+      title: uniqueTitle ? result.title : undefined,
+      observation: uniqueObservation ? observation : undefined,
+    })
+  })
+  return { shared, assetCopy }
+}
+
+function uniqueSummaryItems(items: string[], limit: number) {
+  const seen = new Set<string>()
+  const unique: string[] = []
+  for (const item of items) {
+    const value = item.trim()
+    const key = value.replace(/\s+/g, ' ').toLowerCase()
+    if (!value || seen.has(key)) continue
+    seen.add(key)
+    unique.push(value)
+    if (unique.length === limit) break
+  }
+  return unique
+}
+
+const auditBoundaryPattern = /原文|正文|来源|源网站|证据|核对|核验|未给出|未说明|未记录|待确认|仍需确认|不详|证明|断言|实证|drawing_ids|研究子问题|页面仅支持/
+
+function firstUserFacingBoundary(items: string[]) {
+  return uniqueSummaryItems(items, items.length).find((item) => !auditBoundaryPattern.test(item)) ?? ''
 }
 
 function availablePreviewUrl(result: WorkResult, failedPreviewUrls: Record<string, string>) {
@@ -585,9 +1009,24 @@ export default function App() {
   const [files, setFiles] = useState<File[]>([])
   const [goal, setGoal] = useState<ResearchGoal>('precedent_research')
   const [mode, setMode] = useState<ResearchMode>(demoDepth ?? 'balanced')
-  const [researchSources, setResearchSources] = useState<ResearchSource[]>(['xiaohongshu'])
   const [activeRun, setActiveRun] = useState<ResearchRun | null>(null)
   const [recentRuns, setRecentRuns] = useState<ResearchRun[]>([])
+  const [collectionOpen, setCollectionOpen] = useState(false)
+  const [dataManagementOpen, setDataManagementOpen] = useState(false)
+  const [backupFile, setBackupFile] = useState<File | null>(null)
+  const [backupPreflight, setBackupPreflight] = useState<WorkspaceBackupPreflight | null>(null)
+  const [dataOperation, setDataOperation] = useState<'backup' | 'preflight' | 'restore' | ''>('')
+  const [dataStatus, setDataStatus] = useState('')
+  const [collectionView, setCollectionView] = useState<'precedent' | 'visual'>('precedent')
+  const [selectedCollectionSubquestion, setSelectedCollectionSubquestion] = useState<{
+    collectionQuestion: string
+    subquestionId: string
+  } | null>(null)
+  const [personalCollections, setPersonalCollections] = useState<PersonalCollection[]>([])
+  const [collectionsLoading, setCollectionsLoading] = useState(false)
+  const [collectionSaving, setCollectionSaving] = useState(false)
+  const [collectionSaveSucceeded, setCollectionSaveSucceeded] = useState(false)
+  const [retentionUpdatingId, setRetentionUpdatingId] = useState('')
   const [pollingRunId, setPollingRunId] = useState('')
   const [announcement, setAnnouncement] = useState('')
   const [lastExport, setLastExport] = useState<BoardExport | null>(null)
@@ -598,15 +1037,16 @@ export default function App() {
   const [rejectedIds, setRejectedIds] = useState<string[]>([])
   const [notes, setNotes] = useState<Record<string, string>>({})
   const [comparisonIds, setComparisonIds] = useState<string[]>([])
+  const [collectionSelections, setCollectionSelections] = useState<CollectionSelection[]>([])
   const [comparisonOpen, setComparisonOpen] = useState(false)
   const [shareSummaryOpen, setShareSummaryOpen] = useState(false)
   const [styleProfileOpen, setStyleProfileOpen] = useState(false)
-  const [traceOpen, setTraceOpen] = useState(false)
   const [boardId, setBoardId] = useState(demoMode ? 'mock-board-active' : '')
   const [styleProfile, setStyleProfile] = useState<StyleDraft>(defaultStyle)
   const [styleStatus, setStyleStatus] = useState('')
   const [traceEvents, setTraceEvents] = useState<TraceEvent[]>([])
   const [browserConnected, setBrowserConnected] = useState<boolean | null>(null)
+  const [xiaohongshuSearchAvailable, setXiaohongshuSearchAvailable] = useState(false)
   const [browserReadinessLoading, setBrowserReadinessLoading] = useState(!demoMode)
   const [browserReadinessError, setBrowserReadinessError] = useState('')
   const [preflightBridgeStatus, setPreflightBridgeStatus] = useState<BrowserBridgeStatus | null>(null)
@@ -615,6 +1055,7 @@ export default function App() {
   const [rerunStarting, setRerunStarting] = useState(false)
   const [composerOpen, setComposerOpen] = useState(!demoMode)
   const [researchOptionsOpen, setResearchOptionsOpen] = useState(false)
+  const [briefReviewLoading, setBriefReviewLoading] = useState(false)
   const [workspaceCreateOpen, setWorkspaceCreateOpen] = useState(false)
   const [inspectorOpen, setInspectorOpen] = useState(false)
   const overlayTriggerRef = useRef<HTMLElement | null>(null)
@@ -627,12 +1068,11 @@ export default function App() {
   const chromeConnectAttemptedRef = useRef(false)
 
   const selectedResult = results.find((result) => result.id === selectedResultId)
-  const overlayOpen = inspectorOpen || traceOpen || comparisonOpen || shareSummaryOpen || styleProfileOpen
+  const overlayOpen = inspectorOpen || comparisonOpen || shareSummaryOpen || styleProfileOpen
 
   const closeOverlays = useCallback(() => {
     const trigger = overlayTriggerRef.current
     setInspectorOpen(false)
-    setTraceOpen(false)
     setComparisonOpen(false)
     setShareSummaryOpen(false)
     setStyleProfileOpen(false)
@@ -685,6 +1125,12 @@ export default function App() {
     setPollingRunId('')
     setActiveRun(null)
     setRecentRuns([])
+    setCollectionOpen(false)
+    setCollectionView('precedent')
+    setSelectedCollectionSubquestion(null)
+    setCollectionSaveSucceeded(false)
+    setPersonalCollections([])
+    setRetentionUpdatingId('')
     setAnnouncement('')
     setLastExport(null)
     setResults([])
@@ -698,7 +1144,6 @@ export default function App() {
     setNotes({})
     setTraceEvents([])
     setStyleProfile(defaultStyle)
-    setResearchSources(['xiaohongshu'])
     setComposerOpen(true)
     setResearchOptionsOpen(false)
     setInspectorOpen(false)
@@ -708,8 +1153,149 @@ export default function App() {
     setRecentRuns((current) => [
       nextRun,
       ...current.filter((run) => run.id !== nextRun.id),
-    ].slice(0, 4))
+    ])
   }, [])
+
+  const handleRunRetention = useCallback(async (run: ResearchRun) => {
+    setRetentionUpdatingId(run.id)
+    setActionError('')
+    try {
+      const updated = await apiClient.updateRunRetention(run.id, !run.keepForever)
+      setRecentRuns((current) => current.map((item) => (
+        item.id === updated.id ? updated : item
+      )))
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : '无法更新历史保留设置。')
+    } finally {
+      setRetentionUpdatingId('')
+    }
+  }, [])
+
+  async function openPersonalCollections(trigger: HTMLElement) {
+    overlayTriggerRef.current = trigger
+    setCollectionOpen(true)
+    setCollectionView('precedent')
+    setSelectedCollectionSubquestion(null)
+    setComposerOpen(false)
+    setCollectionSaveSucceeded(false)
+    if (demoMode || !activeWorkspaceId) {
+      setPersonalCollections([])
+      return
+    }
+    setCollectionsLoading(true)
+    setActionError('')
+    try {
+      setPersonalCollections(await apiClient.listPersonalCollections(activeWorkspaceId))
+    } catch (error) {
+      setActionError(`个人收藏未读取：${apiMessage(error)}`)
+    } finally {
+      setCollectionsLoading(false)
+    }
+  }
+
+  async function deletePersonalCollection(collectionId: string) {
+    setActionError('')
+    try {
+      await apiClient.deletePersonalCollection(collectionId)
+      setPersonalCollections((current) => current.filter((item) => item.id !== collectionId))
+      setSavedIds((current) => current.filter((id) => (
+        personalCollections.find((item) => item.id === collectionId)?.asset_candidate_id !== id
+      )))
+    } catch (error) {
+      setActionError(`收藏未删除：${apiMessage(error)}`)
+    }
+  }
+
+  async function addSelectionToCollection() {
+    const pendingSelections: CollectionSelection[] = isVisualResearch
+      ? comparisonIds.filter((id) => !savedIds.includes(id)).map((resultId) => ({
+          key: collectionSelectionKey(resultId),
+          resultId,
+        }))
+      : collectionSelections
+    const pendingIds = [...new Set(pendingSelections.map((item) => item.resultId))]
+    if (pendingIds.length === 0) return
+    if (demoMode) {
+      setSavedIds((current) => [...new Set([...current, ...pendingIds])])
+      setCollectionSelections([])
+      setComparisonIds([])
+      setCollectionSaveSucceeded(true)
+      return
+    }
+    setCollectionSaving(true)
+    setActionError('')
+    try {
+      const currentCollections = activeWorkspaceId
+        ? await apiClient.listPersonalCollections(activeWorkspaceId)
+        : personalCollections
+      const currentQuestion = activeRun?.question.trim()
+      const superseded = currentQuestion
+        ? currentCollections.filter((item) => (
+            item.snapshot.question?.trim() === currentQuestion
+            && item.snapshot.goal === activeRun?.goal
+          ))
+        : []
+      const savedItems: PersonalCollection[] = []
+      for (const resultId of pendingIds) {
+        if (rejectedIds.includes(resultId)) {
+          await apiClient.unrejectResult(resultId)
+          setRejectedIds((current) => current.filter((id) => id !== resultId))
+        }
+        const subquestionIds = pendingSelections
+          .filter((item) => item.resultId === resultId)
+          .map((item) => item.subquestionId)
+          .filter((item): item is string => Boolean(item))
+        savedItems.push(await apiClient.saveResult(
+          resultId,
+          notes[resultId] ?? '',
+          subquestionIds.length > 0 ? subquestionIds : undefined,
+        ))
+      }
+      const savedItemIds = new Set(savedItems.map((item) => item.id))
+      const removedCollections = superseded.filter((item) => !savedItemIds.has(item.id))
+      await Promise.all(removedCollections.map((item) => apiClient.deletePersonalCollection(item.id)))
+      const supersededAssetIds = new Set(superseded.map((item) => item.asset_candidate_id))
+      setSavedIds((current) => [
+        ...new Set([
+          ...current.filter((id) => !supersededAssetIds.has(id)),
+          ...pendingIds,
+        ]),
+      ])
+      setPersonalCollections((current) => [
+        ...savedItems,
+        ...current.filter((item) => (
+          !removedCollections.some((oldItem) => oldItem.id === item.id)
+          && !savedItems.some((saved) => saved.id === item.id)
+        )),
+      ])
+      setCollectionSelections([])
+      setComparisonIds([])
+      if (activeRun) await apiClient.updateBoard(activeRun.id, [])
+      setAnnouncement(`${pendingSelections.length} 项已加入个人收藏`)
+      setCollectionSaveSucceeded(true)
+    } catch (error) {
+      setActionError(`收藏未保存：${apiMessage(error)}`)
+    } finally {
+      setCollectionSaving(false)
+    }
+  }
+
+  async function clearResultSelection() {
+    const previous = comparisonIds
+    const previousCollectionSelections = collectionSelections
+    setComparisonIds([])
+    setCollectionSelections([])
+    setCollectionSaveSucceeded(false)
+    setLastExport(null)
+    if (demoMode || !activeRun) return
+    try {
+      await apiClient.updateBoard(activeRun.id, [])
+    } catch (error) {
+      setComparisonIds(previous)
+      setCollectionSelections(previousCollectionSelections)
+      setActionError(`选择未清空：${apiMessage(error)}`)
+    }
+  }
 
   const clearRunView = useCallback(() => {
     setResults([])
@@ -718,6 +1304,8 @@ export default function App() {
     setFailedPreviewUrls({})
     setBoardId('')
     setComparisonIds([])
+    setCollectionSelections([])
+    setCollectionSaveSucceeded(false)
     setSavedIds([])
     setRejectedIds([])
     setNotes({})
@@ -743,8 +1331,10 @@ export default function App() {
           ]
         }
         if (!active) return
+        const rememberedWorkspaceId = window.localStorage.getItem(activeWorkspaceStorageKey)
+        const initialWorkspace = next.find((workspace) => workspace.id === rememberedWorkspaceId) ?? next[0]
         setWorkspaces(next)
-        setActiveWorkspaceId(next[0].id)
+        setActiveWorkspaceId(initialWorkspace.id)
       })
       .catch((error) => {
         if (active) {
@@ -767,9 +1357,11 @@ export default function App() {
     if (apiResult.status === 'fulfilled') {
       setBrowserReadinessError('')
       setBrowserConnected(apiResult.value.connected)
+      setXiaohongshuSearchAvailable(apiResult.value.xiaohongshu_search_available)
     } else {
       setBrowserReadinessError(apiMessage(apiResult.reason))
       setBrowserConnected(null)
+      setXiaohongshuSearchAvailable(false)
     }
     setPreflightBridgeStatus(
       bridgeResult.status === 'fulfilled' ? bridgeResult.value : null,
@@ -818,6 +1410,7 @@ export default function App() {
     )
     setTraceEvents(events)
     setBrowserConnected(browserStatus?.connected ?? null)
+    setXiaohongshuSearchAvailable(browserStatus?.xiaohongshu_search_available ?? false)
     const profile = await apiClient.getStyleProfile(board.id)
     if (!shouldApply()) return
     if (profile) {
@@ -831,30 +1424,11 @@ export default function App() {
           profile.font_category === 'serif' || profile.font_category === 'mono'
             ? profile.font_category
             : 'sans',
+        texture: profile.texture === 'vellum' || profile.texture === 'grain' ? profile.texture : 'none',
+        layoutNotes: profile.layout_notes ?? '',
       })
     } else {
       setStyleProfile(defaultStyle)
-    }
-  }, [])
-
-  const syncProvisionalResults = useCallback(async (runId: string, shouldApply: () => boolean) => {
-    try {
-      const apiResults = await apiClient.getResults(runId)
-      if (!shouldApply()) return
-      const nextResults = apiResults.map(toWorkResult)
-      setResults(nextResults)
-      setSelectedResultId((current) => (
-        current && nextResults.some((result) => result.id === current)
-          ? current
-          : nextResults[0]?.id ?? ''
-      ))
-      setSelectedSubquestionId((current) => (
-        current && nextResults.some((result) => result.subquestionIds.includes(current))
-          ? current
-          : nextResults[0]?.subquestionIds[0] ?? ''
-      ))
-    } catch {
-      // A provisional read must not stop the run-status poll; terminal hydration retries it.
     }
   }, [])
 
@@ -866,33 +1440,44 @@ export default function App() {
     setActiveRun(run)
     setAnnouncement(runAnnouncement(run))
     setComposerOpen(false)
+    setWorkspaceCreateOpen(false)
     setResearchOptionsOpen(false)
     clearRunView()
+    if (!demoMode && run.workspaceId && run.workspaceId !== activeWorkspaceId) {
+      window.localStorage.setItem(activeWorkspaceStorageKey, run.workspaceId)
+      setActiveWorkspaceId(run.workspaceId)
+    }
     try {
-      await hydrateRun(run.id, () => hydrateRequestRef.current === requestId)
-      if (
-        hydrateRequestRef.current === requestId
-        && !terminalStatuses.has(run.status)
-      ) setPollingRunId(run.id)
+      if (terminalStatuses.has(run.status)) {
+        await hydrateRun(run.id, () => hydrateRequestRef.current === requestId)
+      } else if (hydrateRequestRef.current === requestId) {
+        setPollingRunId(run.id)
+      }
     } catch (error) {
       if (hydrateRequestRef.current === requestId) setActionError(apiMessage(error))
     }
-  }, [clearRunView, hydrateRun])
+  }, [activeWorkspaceId, clearRunView, demoMode, hydrateRun])
 
   useEffect(() => {
-    if (demoMode || !activeWorkspaceId) return
+    if (demoMode || workspaces.length === 0) return
     let active = true
-    void apiClient
-      .listRuns(activeWorkspaceId)
-      .then(async (runs) => {
+    void Promise.all(workspaces.map((workspace) => apiClient.listRuns(workspace.id)))
+      .then(async (workspaceRuns) => {
         if (!active) return
-        setRecentRuns(runs.slice(0, 4))
-        const latest = runs[0]
-        if (!latest || terminalStatuses.has(latest.status)) return
+        const runs = workspaceRuns.flat().sort((first, second) => (
+          Date.parse(second.updatedAt ?? second.createdAt ?? '')
+          - Date.parse(first.updatedAt ?? first.createdAt ?? '')
+        ))
+        setRecentRuns(runs)
+        const latest = runs.find((run) => !terminalStatuses.has(run.status))
+        if (!latest) return
+        if (latest.workspaceId && latest.workspaceId !== activeWorkspaceId) {
+          window.localStorage.setItem(activeWorkspaceStorageKey, latest.workspaceId)
+          setActiveWorkspaceId(latest.workspaceId)
+        }
         setActiveRun(latest)
         setAnnouncement(runAnnouncement(latest))
         setComposerOpen(false)
-        await hydrateRun(latest.id, () => active)
         if (active) setPollingRunId(latest.id)
       })
       .catch((error) => {
@@ -904,7 +1489,7 @@ export default function App() {
     return () => {
       active = false
     }
-  }, [activeWorkspaceId, demoMode, hydrateRun])
+  }, [activeWorkspaceId, demoMode, workspaces])
 
   useEffect(() => {
     if (demoMode || !pollingRunId) return
@@ -926,11 +1511,6 @@ export default function App() {
               nextRun.id,
               () => hydrateRequestRef.current === requestId,
             )
-          } else {
-            await syncProvisionalResults(
-              nextRun.id,
-              () => hydrateRequestRef.current === requestId,
-            )
           }
         })
         .catch((error) => {
@@ -943,7 +1523,7 @@ export default function App() {
         })
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [demoMode, hydrateRun, pollingRunId, syncProvisionalResults, updateRecentRun])
+  }, [demoMode, hydrateRun, pollingRunId, updateRecentRun])
 
   async function handleCreateWorkspace(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -954,6 +1534,7 @@ export default function App() {
       setWorkspaces((current) => [...current, created])
       resetWorkspaceView()
       setLoading(true)
+      window.localStorage.setItem(activeWorkspaceStorageKey, created.id)
       setActiveWorkspaceId(created.id)
       setNewWorkspaceName('')
       setWorkspaceCreateOpen(false)
@@ -962,22 +1543,75 @@ export default function App() {
     }
   }
 
-  function handleWorkspaceChange(workspaceId: string) {
-    if (demoMode || workspaceId === activeWorkspaceId) return
-    resetWorkspaceView()
-    setLoading(true)
-    setActiveWorkspaceId(workspaceId)
+  async function handleDownloadBackup() {
+    setActionError('')
+    setDataStatus('')
+    setDataOperation('backup')
+    try {
+      const { blob, filename } = await apiClient.downloadWorkspaceBackup()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      link.click()
+      URL.revokeObjectURL(url)
+      setDataStatus('完整备份已下载')
+    } catch (error) {
+      setActionError(apiMessage(error))
+    } finally {
+      setDataOperation('')
+    }
   }
 
-  async function handleResearchSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  async function handleBackupPreflight() {
+    if (!backupFile) return
     setActionError('')
-    if (demoMode) {
-      setAnnouncement(`${modeLabels[mode]} 模式研究已开始（本地演示）`)
-      setComposerOpen(false)
-      return
+    setDataStatus('')
+    setDataOperation('preflight')
+    try {
+      setBackupPreflight(await apiClient.preflightWorkspaceBackup(backupFile))
+    } catch (error) {
+      setBackupPreflight(null)
+      setActionError(apiMessage(error))
+    } finally {
+      setDataOperation('')
     }
-    if (!(await ensureBrowserResearchAccess(researchSources.includes('xiaohongshu')))) return
+  }
+
+  async function handleRestoreBackup() {
+    if (!backupFile || !backupPreflight?.ready) return
+    setActionError('')
+    setDataStatus('')
+    setDataOperation('restore')
+    try {
+      await apiClient.restoreWorkspaceBackup(backupFile)
+      const restoredWorkspaces = await apiClient.listWorkspaces()
+      setWorkspaces(restoredWorkspaces)
+      const restoredWorkspace = restoredWorkspaces.find(({ id }) => id === activeWorkspaceId)
+        ?? restoredWorkspaces[0]
+      if (restoredWorkspace) {
+        setActiveWorkspaceId(restoredWorkspace.id)
+        window.localStorage.setItem(activeWorkspaceStorageKey, restoredWorkspace.id)
+      }
+      resetWorkspaceView()
+      setBackupPreflight(null)
+      setBackupFile(null)
+      setDataStatus('工作区已恢复')
+    } catch (error) {
+      setActionError(apiMessage(error))
+    } finally {
+      setDataOperation('')
+    }
+  }
+
+  async function startResearchRun(subquestions?: ResearchSubquestion[]) {
+    const researchSources: ResearchSource[] = goal === 'visual_reference_search'
+      ? ['xiaohongshu']
+      : []
+    if (
+      goal === 'visual_reference_search'
+      && !(await ensureBrowserResearchAccess(true))
+    ) return
     const requestId = hydrateRequestRef.current + 1
     hydrateRequestRef.current = requestId
     try {
@@ -987,8 +1621,9 @@ export default function App() {
         referenceUrl,
         files,
         goal,
-        mode,
+        mode: goal === 'visual_reference_search' ? 'quick' : mode,
         researchSources,
+        subquestions,
       })
       if (hydrateRequestRef.current !== requestId) return
       updateRecentRun(run)
@@ -1009,10 +1644,46 @@ export default function App() {
       }
       if (hydrateRequestRef.current !== requestId) return
       setComposerOpen(false)
+      setWorkspaceCreateOpen(false)
       setResearchOptionsOpen(false)
     } catch (error) {
       if (hydrateRequestRef.current === requestId) setActionError(apiMessage(error))
     }
+  }
+
+  async function handleResearchSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setActionError('')
+    if (demoMode) {
+      setAnnouncement(
+        goal === 'visual_reference_search'
+          ? '图纸灵感检索已开始（本地演示）'
+          : `${modeLabels[mode]} 模式研究已开始（本地演示）`,
+      )
+      setComposerOpen(false)
+      return
+    }
+    const projectBrief = goal === 'precedent_research'
+      ? files.find((file) => file.name.toLowerCase().endsWith('.pdf'))
+      : undefined
+    if (projectBrief) {
+      setBriefReviewLoading(true)
+      try {
+        const review = await apiClient.reviewProjectBrief({
+          workspaceId: activeWorkspaceId,
+          question,
+          mode,
+          file: projectBrief,
+        })
+        await startResearchRun(review.subquestions)
+      } catch (error) {
+        setActionError(`任务书读取失败：${apiMessage(error)}`)
+      } finally {
+        setBriefReviewLoading(false)
+      }
+      return
+    }
+    await startResearchRun()
   }
 
   async function handleCancel() {
@@ -1080,7 +1751,7 @@ export default function App() {
       const pairing = await apiClient.createBrowserPairingCode()
       const pairedStatus = await requestBrowserBridge({
         type: 'pair',
-        endpoint: 'ws://127.0.0.1:8000/v1/browser',
+        endpoint: resolveBrowserEndpoint(),
         token: pairing.code,
       })
       setPreflightBridgeStatus(pairedStatus)
@@ -1132,11 +1803,16 @@ export default function App() {
     chromeConnectAttemptedRef.current = true
     const url = new URL(window.location.href)
     url.searchParams.delete('connect')
+    url.searchParams.delete('attempt')
     window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
     void handleConnectBrowser(false)
   }, [browserConnected, browserConnecting, chromeConnectRequested, demoMode, handleConnectBrowser])
 
   async function ensureBrowserResearchAccess(requireConnected = false) {
+    if (requireConnected && xiaohongshuSearchAvailable) {
+      setBrowserPairingStatus('')
+      return true
+    }
     if (browserConnected !== true) {
       if (requireConnected) {
         setActionError('小红书研究需要登录页面。请先在 Chrome 登录小红书并连接 ArchResearch，再开始研究。')
@@ -1159,13 +1835,13 @@ export default function App() {
           setActionError('小红书研究需要登录页面。请先在 Chrome 登录小红书并连接 ArchResearch，再开始研究。')
           return false
         }
-        setBrowserPairingStatus('当前页面未检测到 Chrome 扩展；本次将继续研究公开网页，并跳过登录页面与精确裁图。')
+        setBrowserPairingStatus('当前页面未检测到 Chrome 扩展；本次将继续研究公开网页，并跳过登录页面和当前页面的高清图纸读取。')
         return true
       }
       setActionError('无法向扩展确认网页读取权限。请在已安装扩展的 Chrome 中打开本页。')
       return false
     }
-    setActionError('Chrome 为保护全站读取权限，需要在扩展中确认本次研究。请点击浏览器工具栏的 ArchResearch，选择“授予网页读取权限”，再回来开始研究。')
+    setActionError('Chrome 首次使用需要你确认网页读取权限。配对已经自动完成，无需填写配对码；请点击浏览器工具栏的 ArchResearch，选择“允许网页读取”，再回来开始研究。授权后不会每次重复询问。')
     return false
   }
 
@@ -1249,6 +1925,7 @@ export default function App() {
         setLastExport(null)
       }
       await apiClient.rejectResult(resultId, 'not_useful_for_current_problem')
+      setCollectionSelections((current) => current.filter((item) => item.resultId !== resultId))
       setRejectedIds((current) => [...new Set([...current, resultId])])
     } catch (error) {
       if (boardSelectionUpdated && activeRun) {
@@ -1270,6 +1947,8 @@ export default function App() {
   }
 
   async function toggleComparison(resultId: string) {
+    const previousCollectionSaveSucceeded = collectionSaveSucceeded
+    const addsUnsavedResult = !comparisonIds.includes(resultId) && !savedIds.includes(resultId)
     const next = comparisonIds.includes(resultId)
       ? comparisonIds.filter((id) => id !== resultId)
       : comparisonIds.length < 6
@@ -1278,13 +1957,47 @@ export default function App() {
     if (next === comparisonIds) return
     const previous = comparisonIds
     setComparisonIds(next)
+    if (addsUnsavedResult) setCollectionSaveSucceeded(false)
     setLastExport(null)
     if (demoMode || !activeRun) return
     try {
       await apiClient.updateBoard(activeRun.id, next)
     } catch (error) {
       setComparisonIds(previous)
+      setCollectionSaveSucceeded(previousCollectionSaveSucceeded)
       setActionError(`对比选择未保存：${apiMessage(error)}`)
+    }
+  }
+
+  async function toggleCaseCollection(resultId: string, subquestionId?: string) {
+    const key = collectionSelectionKey(resultId, subquestionId)
+    const isSelected = collectionSelections.some((item) => item.key === key)
+    const nextSelections = isSelected
+      ? collectionSelections.filter((item) => item.key !== key)
+      : collectionSelections.length < 6
+        ? [...collectionSelections, { key, resultId, subquestionId }]
+        : collectionSelections
+    if (nextSelections === collectionSelections) return
+    const previousSelections = collectionSelections
+    const previousComparison = comparisonIds
+    const nextComparison = isSelected && !nextSelections.some((item) => item.resultId === resultId)
+      ? comparisonIds.filter((id) => id !== resultId)
+      : comparisonIds.includes(resultId)
+        ? comparisonIds
+        : [...comparisonIds, resultId]
+    const previousCollectionSaveSucceeded = collectionSaveSucceeded
+    setCollectionSelections(nextSelections)
+    setComparisonIds(nextComparison)
+    if (!isSelected) setCollectionSaveSucceeded(false)
+    setLastExport(null)
+    if (demoMode || !activeRun) return
+    try {
+      await apiClient.updateBoard(activeRun.id, nextComparison)
+    } catch (error) {
+      setCollectionSelections(previousSelections)
+      setComparisonIds(previousComparison)
+      setCollectionSaveSucceeded(previousCollectionSaveSucceeded)
+      setActionError(`选择未保存：${apiMessage(error)}`)
     }
   }
 
@@ -1293,7 +2006,9 @@ export default function App() {
     try {
       const exported = await apiClient.exportBoard(boardId, exportMode)
       setLastExport(exported)
-      setAnnouncement(exportMode === 'private' ? '个人研究板已生成' : '分享来源板已生成')
+      setAnnouncement(exportMode === 'private'
+        ? `${isVisualResearch ? '图纸整理版' : '策略矩阵'}已生成`
+        : `${isVisualResearch ? '分享来源板' : '分享证据板'}已生成`)
       setShareSummaryOpen(false)
     } catch (error) {
       setActionError(`导出失败：${apiMessage(error)}`)
@@ -1311,9 +2026,9 @@ export default function App() {
       await apiClient.saveStyleProfile(boardId, {
         palette: [styleProfile.primaryColor],
         line_weights: lineWeights,
-        texture: 'none',
+        texture: styleProfile.texture,
         font_category: styleProfile.fontCategory,
-        layout_notes: '证据栏保持在图纸侧边，并与来源链对应。',
+        layout_notes: styleProfile.layoutNotes,
       })
       setStyleStatus('表达规范已保存')
     } catch (error) {
@@ -1322,24 +2037,40 @@ export default function App() {
     }
   }
 
+  function selectResearchGoal(nextGoal: ResearchGoal) {
+    if (nextGoal !== goal) {
+      setReferenceUrl('')
+      setFiles([])
+      setResearchOptionsOpen(false)
+    }
+    setGoal(nextGoal)
+  }
+
   function applyProblemStarter(prompt: string, starterGoal: ResearchGoal) {
     setQuestion(prompt)
-    setGoal(starterGoal)
+    selectResearchGoal(starterGoal)
     questionInputRef.current?.focus()
   }
 
-  function showNewResearch() {
+  function returnHome() {
     hydrateRequestRef.current += 1
     setPollingRunId('')
     setActiveRun(null)
     setAnnouncement('')
     setLastExport(null)
-    setQuestion('')
-    setReferenceUrl('')
-    setFiles([])
-    setResearchSources(['xiaohongshu'])
+    if (!collectionOpen) {
+      setQuestion('')
+      setReferenceUrl('')
+      setFiles([])
+    }
+    setCollectionOpen(false)
+    setDataManagementOpen(false)
+    setCollectionView('precedent')
+    setSelectedCollectionSubquestion(null)
+    setCollectionSaveSucceeded(false)
     setComposerOpen(true)
     setResearchOptionsOpen(false)
+    setWorkspaceCreateOpen(false)
   }
 
   const shareableCount = comparisonIds.filter((id) => {
@@ -1352,29 +2083,57 @@ export default function App() {
     || (assetFilter === 'analysis_diagram' && result.assetType === 'diagram'),
   )
   const researchQuestion = activeRun?.question ?? (demoMode ? demoResearchQuestion : question)
+  const isVisualResearch = activeRun?.goal === 'visual_reference_search'
+  const currentStageLabels = isVisualResearch ? visualStageLabels : stageLabels
+  const currentStageDescriptions = isVisualResearch
+    ? visualActiveStageDescriptions
+    : activeStageDescriptions
   const researchSubquestions = demoMode
     ? (demoProfile?.subquestions ?? [])
     : activeRun?.subquestions.length
       ? activeRun.subquestions
       : fallbackSubquestions(results, researchQuestion)
-  const subquestionSummaries = researchSubquestions.map((subquestion) => {
+  const displayResearchSubquestions = isVisualResearch
+    ? researchSubquestions.map((subquestion, index) => {
+        const legacyQuestionShape = /^(哪些|如何|怎样|什么|是否|能否)|[?？]$/.test(
+          subquestion.question.trim(),
+        )
+        if (!legacyQuestionShape) return subquestion
+        return {
+          ...subquestion,
+          question: `旧版灵感分组 ${index + 1}`,
+          rationale: '这条历史任务按旧规则生成；重新查找会围绕你指定的图纸类型比较不同风格。',
+        }
+      })
+    : researchSubquestions
+  const visualInspirationResults = visibleResults.filter((result) => visualPlatformName(result.sourceUrl))
+  const visualInspirationNoteCount = new Set(
+    visualInspirationResults.map((result) => result.sourceUrl),
+  ).size
+  const caseResults = visibleResults.filter(
+    (result) => !visualPlatformName(result.sourceUrl) && result.analysisReady,
+  )
+  const subquestionSummaries = displayResearchSubquestions.map((subquestion) => {
     const assets = results.filter(
       (result) => supportsSubquestion(result, subquestion.id, researchSubquestions),
     )
+    const caseAssets = assets.filter((result) => !visualPlatformName(result.sourceUrl))
+    const inspirationAssets = assets.filter((result) => visualPlatformName(result.sourceUrl))
     return {
       ...subquestion,
-      assetCount: assets.length,
-      projectCount: new Set(assets.map((result) => result.project)).size,
+      caseAssetCount: caseAssets.length,
+      inspirationCount: inspirationAssets.length,
+      projectCount: new Set(caseAssets.map((result) => result.project)).size,
       passCount: activeRun?.coverageReport?.subquestion_passes?.[subquestion.id],
     }
   })
-  const unassignedResults = visibleResults.filter((result) => (
+  const unassignedResults = caseResults.filter((result) => (
     !researchSubquestions.some((subquestion) => (
       supportsSubquestion(result, subquestion.id, researchSubquestions)
     ))
   ))
   const groupingSubquestions = [
-    ...researchSubquestions,
+    ...displayResearchSubquestions,
     ...(unassignedResults.length > 0
       ? [{
           id: 'unassigned',
@@ -1387,7 +2146,7 @@ export default function App() {
     const unassigned = subquestion.id === 'unassigned'
     const assets = unassigned
       ? unassignedResults
-      : visibleResults.filter(
+      : caseResults.filter(
           (result) => supportsSubquestion(result, subquestion.id, researchSubquestions),
         )
     const dossiers = [...assets.reduce((projects, result) => {
@@ -1398,36 +2157,147 @@ export default function App() {
     }, new Map<string, WorkResult[]>()).entries()].map(([project, projectAssets]) => {
       const primary = projectAssets.find((result) => result.subquestionAnalysis[subquestion.id])
         ?? projectAssets[0]
+      const analysis = analysisFor(primary, subquestion.id)
       return {
         project,
         assets: projectAssets,
         primary,
-        analysis: analysisFor(primary, subquestion.id),
+        analysis,
+        previewCopy: projectPreviewCopy(projectAssets, analysis, subquestion.id),
       }
     })
-    return { index, subquestion, assets, dossiers, unassigned }
+    const questionSummary = unassigned || dossiers.length === 0
+      ? null
+      : {
+          statement: uniqueSummaryItems(
+            dossiers.map((dossier) => dossier.analysis.designMechanism),
+            1,
+          )[0],
+        }
+    return {
+      index,
+      subquestion,
+      assets,
+      dossiers,
+      questionSummary,
+      unassigned,
+    }
   })
+  const unassignedInspiration = visualInspirationResults.filter((result) => (
+    !researchSubquestions.some((subquestion) => (
+      supportsSubquestion(result, subquestion.id, researchSubquestions)
+    ))
+  ))
+  const inspirationGroups = [
+    ...displayResearchSubquestions,
+    ...(unassignedInspiration.length > 0
+      ? [{
+          id: 'unassigned-inspiration',
+          question: '待归组的制图灵感',
+          rationale: '这些图片已完成图纸识别，但还没有确认它对应哪个灵感方向。',
+        }]
+      : []),
+  ].map((subquestion) => {
+    const assets = subquestion.id === 'unassigned-inspiration'
+      ? unassignedInspiration
+      : visualInspirationResults.filter(
+          (result) => supportsSubquestion(result, subquestion.id, researchSubquestions),
+        )
+    const typeGroups = [...assets.reduce((types, result) => {
+      const current = types.get(result.assetType) ?? []
+      current.push(result)
+      types.set(result.assetType, current)
+      return types
+    }, new Map<AssetType, WorkResult[]>()).entries()].map(([assetType, typeAssets]) => ({
+      assetType,
+      assets: typeAssets,
+    }))
+    const noteGroups = [...assets.reduce((notes, result) => {
+      const current = notes.get(result.sourceUrl) ?? []
+      current.push(result)
+      notes.set(result.sourceUrl, current)
+      return notes
+    }, new Map<string, WorkResult[]>()).entries()].map(([sourceUrl, noteAssets]) => ({
+      sourceUrl,
+      assets: noteAssets,
+      primary: noteAssets[0],
+      observation: uniqueSummaryItems(
+        noteAssets.map((result) => analysisFor(result, subquestion.id).observation),
+        1,
+      )[0] ?? '',
+      relevance: Math.max(...noteAssets.map((result) => result.relevance)),
+    }))
+    return { subquestion, assets, typeGroups, noteGroups }
+  }).filter((group) => group.assets.length > 0)
   const selectedComparisonResults = results.filter((result) => comparisonIds.includes(result.id))
-  const selectedAnalysis = selectedResult
-    ? analysisFor(
-        selectedResult,
-        selectedSubquestionId || selectedResult.subquestionIds[0] || researchSubquestions[0]?.id || 'general',
-      )
+  const selectedPendingCollectionCount = isVisualResearch
+    ? comparisonIds.filter((id) => !savedIds.includes(id)).length
+    : collectionSelections.length
+  const collectionSections = [
+    {
+      key: 'precedent',
+      title: '建筑方案',
+      items: personalCollections.filter((item) => item.snapshot.goal !== 'visual_reference_search'),
+    },
+    {
+      key: 'visual',
+      title: '图纸灵感',
+      items: personalCollections.filter((item) => item.snapshot.goal === 'visual_reference_search'),
+    },
+  ].map((section) => ({
+    ...section,
+    groups: [...section.items.reduce((groups, item) => {
+      const question = item.snapshot.question?.trim() || '未归类的历史收藏'
+      const current = groups.get(question) ?? []
+      current.push(item)
+      groups.set(question, current)
+      return groups
+    }, new Map<string, PersonalCollection[]>()).entries()],
+  }))
+  const activeCollectionSection = collectionSections.find((section) => section.key === collectionView)
+  const collectionQuestionDirectory = activeCollectionSection?.key === 'precedent'
+    ? activeCollectionSection.groups.flatMap(([collectionQuestion, items]) => (
+        collectionCaseGroups(items).map((group) => ({ collectionQuestion, group }))
+      ))
+    : []
+  const activeCollectionSubquestion = selectedCollectionSubquestion
+    ? collectionQuestionDirectory.find(({ collectionQuestion, group }) => (
+        collectionQuestion === selectedCollectionSubquestion.collectionQuestion
+        && group.id === selectedCollectionSubquestion.subquestionId
+      ))
     : null
+  const selectedProjectCount = new Set(
+    selectedComparisonResults.map((result) => result.project.trim().toLocaleLowerCase()),
+  ).size
+  const privateExportDisabled = isVisualResearch
+    ? comparisonIds.length === 0
+    : selectedProjectCount < 2
+  const selectedPreviewUrl = selectedResult
+    ? availablePreviewUrl(selectedResult, failedPreviewUrls)
+    : null
+  const selectedPreviewLoadFailed = Boolean(
+    selectedResult?.previewUrl && failedPreviewUrls[selectedResult.id] === selectedResult.previewUrl,
+  )
   const comparisonFocuses = [...new Set(selectedComparisonResults.map((result) => comparisonFocusLabels[result.assetType]))]
   const comparisonOverview = comparisonFocuses.length === 1
-    ? `这 ${selectedComparisonResults.length} 项都在回答“${comparisonFocuses[0]}”，重点比较可借鉴方法、证据状态和使用边界。`
+    ? `这 ${selectedComparisonResults.length} 项都在回答“${comparisonFocuses[0]}”，重点比较可借鉴方法、可见观察和使用边界。`
     : `这 ${selectedComparisonResults.length} 项分别覆盖“${comparisonFocuses.join('、')}”。它们更适合组合使用，而不是选一个“赢家”。`
   const recommendedComparisonResult = selectedComparisonResults[0]
   const activeStatus = activeRun?.status
   const isRunActive = activeStatus ? !terminalStatuses.has(activeStatus) : false
   const activeStageIndex = activeStatus
-    ? stageLabels.findIndex((stage) => stage.status === activeStatus)
+    ? currentStageLabels.findIndex((stage) => stage.status === activeStatus)
     : -1
-  const resultViewOpen = !composerOpen
+  const resultViewOpen = !composerOpen && !collectionOpen && !dataManagementOpen
+  const homeViewOpen = composerOpen && !collectionOpen && !dataManagementOpen
   const activePartialDiagnosis = activeRun && ['partial', 'blocked'].includes(activeRun.status)
     ? partialDiagnosis(activeRun)
     : null
+  const activeSynthesis = activeRun?.coverageReport?.synthesis
+  const synthesisOverview = activeSynthesis ? researchSynthesisOverview(activeSynthesis) : null
+  const synthesisBoundary = activeSynthesis
+    ? firstUserFacingBoundary(activeSynthesis.applicability_boundaries.map((item) => item.statement))
+    : ''
   const allResultsMissingPreviews = results.length > 0 && results.every(
     (result) => !availablePreviewUrl(result, failedPreviewUrls),
   )
@@ -1442,10 +2312,10 @@ export default function App() {
   ).length
   const pendingLeadCount = Math.max(0, results.length - usableResultCount)
   const resultCountLabel = pendingLeadCount > 0
-    ? `${usableResultCount} 张可用 · ${pendingLeadCount} 条待核验线索`
-    : `${usableResultCount} 张可用参考`
-  const workspaceItems = demoMode ? demoWorkspaces : workspaces
-  const currentWorkspaceId = demoMode ? (demoWorkspaces[0]?.id ?? '') : activeWorkspaceId
+    ? `${usableResultCount} 条可用参考 · ${pendingLeadCount} 条只作线索`
+    : `${usableResultCount} 条可用参考`
+  const currentWorkspaceName = workspaces.find(({ id }) => id === activeWorkspaceId)?.name
+    ?? '未选择项目'
   const browserBridgeAvailable = preflightBridgeStatus?.connection === 'connected'
     || (preflightBridgeStatus?.paired === true && preflightBridgeStatus.connection === 'connecting')
   const browserReadinessState = browserReadinessLoading
@@ -1461,82 +2331,67 @@ export default function App() {
             : preflightBridgeStatus.researchPermission
               ? 'ready'
               : 'permission'
-  const browserReadinessSummary = {
-    loading: '正在检查 Chrome 连接与临时权限…',
-    unknown: '暂时无法读取 Chrome 连接状态',
-    disconnected: '开始默认小红书研究前需要连接 Chrome',
-    'surface-missing': '本地服务已连接；请在 Chrome 打开本页',
-    'surface-disconnected': '本地服务已连接；当前页面扩展尚未连通',
-    permission: 'Chrome 已连接；开始研究时确认临时网页权限',
-    ready: 'Chrome 已连接；本次网页读取已授权',
-  }[browserReadinessState]
-  const browserReadinessDetail = {
-    loading: '正在读取连接状态',
-    unknown: '连接状态未读取 · 请检查本地服务后重试',
-    disconnected: '未连接 · 默认小红书研究暂不可用',
-    'surface-missing': '服务已连接 · 当前页面未检测到扩展',
-    'surface-disconnected': '服务已连接 · 当前页面扩展未连通',
-    permission: '已连接 · 开始前需在 Chrome 扩展中确认临时权限',
-    ready: '已连接 · 本次网页读取已授权',
-  }[browserReadinessState]
-  const xiaohongshuReadiness = {
-    loading: '等待 Chrome 检查完成',
-    unknown: '连接状态恢复后再验证登录态',
-    disconnected: '连接 Chrome 后验证登录态',
-    'surface-missing': '请在 Chrome 打开本页后验证登录态',
-    'surface-disconnected': '请等待当前页面扩展连通后验证登录态',
-    permission: '登录态待可见页面验证',
-    ready: '登录态待可见页面验证',
+  const researchEnvironmentReady = xiaohongshuSearchAvailable || browserReadinessState === 'ready'
+  const researchEnvironmentTitle = browserReadinessState === 'loading'
+    ? '正在检查研究环境'
+    : researchEnvironmentReady
+      ? '研究环境已就绪'
+      : browserReadinessState === 'unknown'
+        ? '研究环境状态未知'
+        : '研究环境待连接'
+  const researchEnvironmentDetail = xiaohongshuSearchAvailable
+    ? browserReadinessState === 'ready'
+      ? '小红书可用 · 可读取当前页面高清图纸'
+      : browserReadinessState === 'permission'
+        ? '小红书可用 · 读取页面高清图纸需授权'
+        : browserReadinessState === 'loading'
+          ? '小红书可用 · 正在检查页面图纸读取'
+          : '小红书可用 · 未启用页面高清图纸读取'
+    : {
+    loading: '正在检查 Chrome 与网页权限',
+    unknown: '连接状态未读取，请稍后刷新',
+    disconnected: '连接 Chrome 后可读取小红书和当前页面高清图纸',
+    'surface-missing': '当前页面未检测到扩展',
+    'surface-disconnected': '当前页面扩展未连通',
+    permission: '读取页面高清图纸需授权',
+    ready: '可读取当前页面高清图纸 · 可检查小红书登录页面',
   }[browserReadinessState]
   const showBrowserConnectAction = !browserReadinessLoading
     && (browserConnected !== true || !browserBridgeAvailable)
 
   return (
-    <main className="research-desk" data-view={resultViewOpen ? 'results' : 'home'} aria-label="建筑研究画板">
+    <main className="research-desk" data-view={dataManagementOpen ? 'data' : collectionOpen ? 'collection' : resultViewOpen ? 'results' : 'home'} aria-label="建筑研究画板">
       <StudioBackdrop view={resultViewOpen ? 'results' : 'home'} />
       <header className="app-header">
         <div className="app-brand">
           <span className="brand-mark" aria-hidden="true"><LayoutGrid /></span>
           <div><strong>ArchResearch</strong><span>{demoMode ? `演示数据 · ${modeLabels[mode]}研究` : '本地研究工具'}</span></div>
         </div>
-        <div className="workspace-switcher">
-          <label htmlFor="workspace-switcher">
-            <span>工作区</span>
-            <select
-              id="workspace-switcher"
-              value={currentWorkspaceId}
-              disabled={demoMode}
-              onChange={(event) => handleWorkspaceChange(event.target.value)}
+        <div className="header-actions">
+          {homeViewOpen && !demoMode && (
+            <button
+              className="icon-text-button"
+              type="button"
+              onClick={() => {
+                setActionError('')
+                setDataStatus('')
+                setDataManagementOpen(true)
+              }}
             >
-              {workspaceItems.map((workspace) => (
-                <option key={workspace.id} value={workspace.id}>
-                  {'title' in workspace ? workspace.title : workspace.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          {!demoMode && (
-            <button className="icon-text-button" type="button" onClick={() => setWorkspaceCreateOpen((current) => !current)}>
-              {workspaceCreateOpen ? <X aria-hidden="true" /> : <FolderPlus aria-hidden="true" />}
-              {workspaceCreateOpen ? '取消' : '新建'}
+              <HardDriveDownload aria-hidden="true" />数据管理
             </button>
           )}
-          {workspaceCreateOpen && !demoMode && (
-            <form className="workspace-create" onSubmit={(event) => void handleCreateWorkspace(event)}>
-              <label htmlFor="workspace-name">工作区名称</label>
-              <input
-                id="workspace-name"
-                value={newWorkspaceName}
-                onChange={(event) => setNewWorkspaceName(event.target.value)}
-                placeholder="例如：毕业设计 / 城市更新"
-                autoFocus
-              />
-              <button type="submit" disabled={!newWorkspaceName.trim()}>创建</button>
-            </form>
+          {homeViewOpen && !demoMode && (
+            <button
+              className="icon-text-button"
+              type="button"
+              disabled={!activeWorkspaceId}
+              onClick={(event) => void openPersonalCollections(event.currentTarget)}
+            >
+              <Bookmark aria-hidden="true" />个人收藏
+            </button>
           )}
-        </div>
-        <div className="header-actions">
-          {(recentRuns.length > 0 || (demoMode && results.length > 0)) && composerOpen && (
+          {(recentRuns.length > 0 || (demoMode && results.length > 0)) && homeViewOpen && (
             <button
               className="icon-text-button"
               type="button"
@@ -1548,16 +2403,98 @@ export default function App() {
               <LayoutGrid aria-hidden="true" />查看上次结果
             </button>
           )}
-          {!composerOpen && !isRunActive && (
-            <button className="result-new-research" type="button" onClick={showNewResearch}>
-              <Plus aria-hidden="true" />发起新研究
+          {(dataManagementOpen || collectionOpen || (resultViewOpen && !isRunActive)) && (
+            <button className="result-new-research" type="button" onClick={returnHome}>
+              <ArrowLeft aria-hidden="true" />返回主页
             </button>
           )}
         </div>
       </header>
 
       <section className="board-workspace" aria-label="研究工作区">
-        {composerOpen && (
+        {dataManagementOpen && (
+          <section className="data-management-page" aria-labelledby="data-management-title">
+            <header className="data-management-heading">
+              <div>
+                <h1 id="data-management-title">工作区数据</h1>
+                <p>备份项目、研究记录、收藏图片、任务书和导出文件。服务配置与登录凭据不会进入备份。</p>
+              </div>
+              <ShieldCheck aria-hidden="true" />
+            </header>
+
+            <section className="data-management-section" aria-labelledby="backup-heading">
+              <div className="data-management-copy">
+                <h2 id="backup-heading">完整备份</h2>
+                <p>生成一个带文件清单和 SHA-256 校验的 ZIP，可用于迁移或故障恢复。</p>
+              </div>
+              <button
+                className="primary-action"
+                type="button"
+                disabled={Boolean(dataOperation) || isRunActive}
+                onClick={() => void handleDownloadBackup()}
+              >
+                <HardDriveDownload aria-hidden="true" />
+                {dataOperation === 'backup' ? '正在生成…' : '下载完整备份'}
+              </button>
+            </section>
+
+            <section className="data-management-section data-restore-section" aria-labelledby="restore-heading">
+              <div className="data-management-copy">
+                <h2 id="restore-heading">校验并恢复</h2>
+                <p>先检查格式、版本、路径、文件哈希和 SQLite；预检失败不会修改当前数据。</p>
+              </div>
+              <div className="data-restore-controls">
+                <label htmlFor="workspace-backup-file">选择 ArchResearch 备份包</label>
+                <input
+                  id="workspace-backup-file"
+                  type="file"
+                  accept=".zip,application/zip"
+                  disabled={Boolean(dataOperation)}
+                  onChange={(event) => {
+                    setBackupFile(event.target.files?.[0] ?? null)
+                    setBackupPreflight(null)
+                    setDataStatus('')
+                    setActionError('')
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={!backupFile || Boolean(dataOperation) || isRunActive}
+                  onClick={() => void handleBackupPreflight()}
+                >
+                  <Upload aria-hidden="true" />
+                  {dataOperation === 'preflight' ? '正在检查…' : '预检备份'}
+                </button>
+              </div>
+
+              {backupPreflight?.ready && (
+                <section className="backup-preflight-result" aria-label="备份预检通过">
+                  <header><Check aria-hidden="true" /><strong>备份完整，可以恢复</strong></header>
+                  <ul>
+                    <li><strong>{backupPreflight.workspace_count} 个项目</strong></li>
+                    <li><strong>{backupPreflight.run_count} 条研究记录</strong></li>
+                    <li><strong>{backupPreflight.collection_count} 项个人收藏</strong></li>
+                    <li><strong>{backupPreflight.input_artifact_count} 份任务书或附件</strong></li>
+                  </ul>
+                  <p>恢复时会先为当前数据生成回滚备份；只有全部文件交换成功后才会启用新数据。</p>
+                  <button
+                    className="danger-action"
+                    type="button"
+                    disabled={Boolean(dataOperation) || isRunActive}
+                    onClick={() => void handleRestoreBackup()}
+                  >
+                    <Upload aria-hidden="true" />
+                    {dataOperation === 'restore' ? '正在恢复…' : '确认恢复'}
+                  </button>
+                </section>
+              )}
+            </section>
+
+            {dataStatus && <p className="data-operation-status" aria-live="polite"><Check aria-hidden="true" />{dataStatus}</p>}
+          </section>
+        )}
+
+        {homeViewOpen && (
           <section className="research-composer" aria-label="新建研究">
             <header>
               <div>
@@ -1566,6 +2503,24 @@ export default function App() {
               </div>
             </header>
             <form className="research-form" onSubmit={(event) => void handleResearchSubmit(event)}>
+              <div className="research-entry-switch" role="group" aria-label="功能入口">
+                <button
+                  type="button"
+                  aria-pressed={goal !== 'visual_reference_search'}
+                  onClick={() => selectResearchGoal('precedent_research')}
+                >
+                  <LayoutGrid aria-hidden="true" />
+                  <span><strong>建筑设计研究</strong><small>项目案例与设计策略</small></span>
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={goal === 'visual_reference_search'}
+                  onClick={() => selectResearchGoal('visual_reference_search')}
+                >
+                  <Eye aria-hidden="true" />
+                  <span><strong>图纸灵感</strong><small>配色、线型、版式与分析图</small></span>
+                </button>
+              </div>
               <div className="research-prompt">
                 <Search className="research-prompt-icon" aria-hidden="true" />
                 <label htmlFor="research-question">研究问题</label>
@@ -1578,148 +2533,127 @@ export default function App() {
                   required
                 />
               </div>
-              <div className="research-form-footer">
-                <div className="research-goals" role="group" aria-label="研究方式">
-                  <button type="button" aria-label="设计策略" aria-pressed={goal === 'precedent_research'} onClick={() => setGoal('precedent_research')}>
-                    <LayoutGrid aria-hidden="true" /><span>设计策略</span>
-                  </button>
-                  <button type="button" aria-label="来源反查" aria-pressed={goal === 'source_lookup'} onClick={() => setGoal('source_lookup')}>
-                    <ShieldCheck aria-hidden="true" /><span>来源反查</span>
-                  </button>
-                  <button type="button" aria-label="视觉参考" aria-pressed={goal === 'visual_reference_search'} onClick={() => setGoal('visual_reference_search')}>
-                    <Eye aria-hidden="true" /><span>视觉参考</span>
-                  </button>
+              {goal === 'precedent_research' && (
+                <div className="research-method">
+                  <fieldset className="segmented-control research-depth-options">
+                    <legend>研究方式</legend>
+                    <p className="research-source-note">案例会轮换检索多家建筑媒体，只有正文证据完整的项目进入结果。</p>
+                    {(Object.keys(modeLabels) as ResearchMode[]).map((value) => (
+                      <label key={value}>
+                        <input
+                          type="radio"
+                          name="mode"
+                          value={value}
+                          checked={mode === value}
+                          onChange={() => setMode(value)}
+                        />
+                        <strong>{modeLabels[value]}</strong>
+                        <span>{researchDepthOptions[value].coverage}</span>
+                      </label>
+                    ))}
+                  </fieldset>
+                  <p className="research-depth-selection-note" aria-live="polite">
+                    {researchDepthOptions[mode].target}
+                  </p>
                 </div>
+              )}
+              <div className="research-form-footer">
                 <div className="research-quick-actions">
-                  <button
-                    type="button"
-                    aria-expanded={researchOptionsOpen}
-                    onClick={() => setResearchOptionsOpen((current) => !current)}
-                  >
-                    <Paperclip aria-hidden="true" />添加资料和研究设置
-                  </button>
-                  {files.length > 0 && <span>{files.length} 个文件待上传</span>}
+                  {goal === 'precedent_research' && (
+                    <button
+                      type="button"
+                      aria-expanded={researchOptionsOpen}
+                      onClick={() => setResearchOptionsOpen((current) => !current)}
+                    >
+                      <Paperclip aria-hidden="true" />添加任务书或案例页（可选）
+                    </button>
+                  )}
+                  {goal !== 'visual_reference_search' && files.length > 0 && (
+                    <span>{files.length} 个文件待上传</span>
+                  )}
                   <ClickSpark className="research-submit-spark" duration={300} sparkRadius={12} sparkSize={6}>
-                    <button className="research-submit" type="submit" disabled={isRunActive || loading || (!demoMode && !activeWorkspaceId)}>
-                      {isRunActive ? '研究进行中…' : <><span>开始研究</span><ArrowUp aria-hidden="true" /></>}
+                    <button
+                      className="research-submit"
+                      type="submit"
+                      disabled={briefReviewLoading || isRunActive || loading || (!demoMode && !activeWorkspaceId)}
+                    >
+                      {isRunActive
+                        ? '研究进行中…'
+                        : briefReviewLoading
+                          ? '正在准备研究…'
+                        : <><span>{goal === 'visual_reference_search'
+                          ? '查找灵感'
+                          : '开始研究'}</span><ArrowUp aria-hidden="true" /></>}
                     </button>
                   </ClickSpark>
                 </div>
               </div>
-              {researchOptionsOpen && (
-                <div className="research-options">
+              {goal === 'precedent_research' && researchOptionsOpen && (
+                <section className="research-options" aria-label="可选项目资料">
+                  <p className="research-options-intro">
+                    任务书用于收束研究范围，案例页用于补充参考线索；都不填也可以继续。
+                  </p>
                   <div className="research-field">
-                    <label htmlFor="reference-url">参考网页</label>
+                    <label htmlFor="project-brief-files">项目任务书（PDF）</label>
+                    <p className="research-field-help" id="project-brief-files-help">
+                      系统会先读取场地、功能与限制，把它们作为问题拆解和案例检索的边界。
+                    </p>
                     <input
-                      id="reference-url"
+                      id="project-brief-files"
+                      type="file"
+                      aria-describedby="project-brief-files-help"
+                      accept=".pdf,application/pdf"
+                      onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
+                    />
+                  </div>
+                  <div className="research-field">
+                    <label htmlFor="project-reference-url">指定案例或项目网页</label>
+                    <p className="research-field-help" id="project-reference-url-help">
+                      把已有页面作为研究线索；系统仍会继续检索其他案例。
+                    </p>
+                    <input
+                      id="project-reference-url"
                       type="url"
+                      aria-describedby="project-reference-url-help"
                       value={referenceUrl}
                       onChange={(event) => setReferenceUrl(event.target.value)}
                       placeholder="https://"
                     />
                   </div>
-                  <div className="research-field">
-                    <label htmlFor="research-files">上传草图、图片或 PDF</label>
-                    <input
-                      id="research-files"
-                      type="file"
-                      accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
-                      multiple
-                      onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
-                    />
-                    {files.length > 0 && (
-                      <ul className="pending-files" aria-label="待上传文件">
-                        {files.map((file) => <li key={`${file.name}-${file.size}`}>{file.name}</li>)}
-                      </ul>
-                    )}
-                  </div>
-                  <fieldset className="research-source-options">
-                    <legend>灵感来源（可选）</legend>
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={researchSources.includes('xiaohongshu')}
-                        onChange={(event) => setResearchSources((current) => (
-                          event.target.checked
-                            ? [...current, 'xiaohongshu']
-                            : current.filter((source) => source !== 'xiaohongshu')
-                        ))}
-                      />
-                      <span>
-                        <strong>小红书灵感</strong>
-                        <small>图纸风格、形体与分析图；需在 Chrome 登录</small>
-                      </span>
-                    </label>
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={researchSources.includes('pinterest')}
-                        onChange={(event) => setResearchSources((current) => (
-                          event.target.checked
-                            ? [...current, 'pinterest']
-                            : current.filter((source) => source !== 'pinterest')
-                        ))}
-                      />
-                      <span>
-                        <strong>Pinterest 图像线索</strong>
-                        <small>通过网页搜索保留原 Pin 链接，不直接抓取</small>
-                      </span>
-                    </label>
-                  </fieldset>
-                  <fieldset className="segmented-control research-depth-options">
-                    <legend>研究深度</legend>
-                    {(Object.keys(modeLabels) as ResearchMode[]).map((value) => (
-                      <label key={value}>
-                        <input type="radio" name="mode" value={value} checked={mode === value} onChange={() => setMode(value)} />
-                        <strong>{modeLabels[value]}</strong>
-                        <span>{researchDepthOptions[value].coverage}</span>
-                        <small>{researchDepthOptions[value].target}</small>
-                      </label>
-                    ))}
-                  </fieldset>
-                </div>
+                </section>
               )}
-              {!demoMode && (
-                <section className="research-preflight" aria-label="运行前检查">
+              {!demoMode && goal === 'visual_reference_search' && (
+                <section className="research-preflight" aria-label="研究环境">
                   <header className="research-preflight-header">
                     <div className="research-preflight-title">
-                      <ShieldCheck aria-hidden="true" />
+                      {researchEnvironmentReady ? <Check aria-hidden="true" /> : <CircleDashed aria-hidden="true" />}
                       <div>
-                        <strong>运行前检查</strong>
-                        <span aria-live="polite">{browserReadinessSummary}</span>
+                        <strong>{researchEnvironmentTitle}</strong>
+                        <span aria-live="polite">{researchEnvironmentDetail}</span>
                       </div>
                     </div>
                     <div className="research-preflight-actions">
                       {showBrowserConnectAction && (
                         <button type="button" disabled={browserConnecting} onClick={() => void handleConnectBrowser()}>
-                          <MonitorUp aria-hidden="true" />{browserConnecting ? '正在打开 Chrome…' : '在 Chrome 中启用精确提取'}
+                          <MonitorUp aria-hidden="true" />{browserConnecting ? '正在打开…' : '读取页面高清图纸'}
                         </button>
                       )}
-                      <button type="button" disabled={browserReadinessLoading} onClick={() => void refreshBrowserReadiness()}>
-                        <RefreshCw aria-hidden="true" />{browserReadinessLoading ? '检查中…' : '检查连接'}
+                      <button
+                        className="research-preflight-refresh"
+                        type="button"
+                        aria-label="刷新环境状态"
+                        disabled={browserReadinessLoading}
+                        onClick={() => void refreshBrowserReadiness()}
+                      >
+                        <RefreshCw aria-hidden="true" /><span aria-hidden="true">{browserReadinessLoading ? '检查中…' : '刷新'}</span>
                       </button>
                     </div>
                   </header>
-                  <div className="research-preflight-list">
-                    <div className="research-preflight-row" data-state={browserReadinessState}>
-                      {browserReadinessState === 'ready' ? <Check aria-hidden="true" /> : <CircleDashed aria-hidden="true" />}
-                      <strong>Chrome 图纸提取</strong>
-                      <span>{browserReadinessDetail}</span>
-                    </div>
-                    <div className="research-preflight-row" data-state="pending">
-                      <CircleDashed aria-hidden="true" />
-                      <strong>小红书</strong>
-                      <span>{xiaohongshuReadiness}</span>
-                    </div>
-                  </div>
-                  <footer className="research-preflight-footer">
-                    <span>这里只检查 Chrome 连接与临时权限，不会开始研究。</span>
-                    {(browserReadinessError || browserPairingStatus) && (
-                      <span aria-live="polite">
-                        {browserReadinessError ? '连接状态未读取，请检查本地服务后重试。' : browserPairingStatus}
-                      </span>
-                    )}
-                  </footer>
+                  {(browserReadinessError || browserPairingStatus) && (
+                    <p className="research-preflight-message" aria-live="polite">
+                      {browserReadinessError ? '连接状态未读取，请检查本地服务后重试。' : browserPairingStatus}
+                    </p>
+                  )}
                 </section>
               )}
               <div className="research-run-actions">
@@ -1732,7 +2666,7 @@ export default function App() {
           </section>
         )}
 
-        {composerOpen && (
+        {homeViewOpen && (
           <section className="home-sections" aria-label="研究起点与最近任务">
             <section className="home-panel starter-panel" aria-labelledby="starter-heading">
               <header>
@@ -1762,33 +2696,42 @@ export default function App() {
               <header>
                 <div>
                   <h2 id="recent-heading">最近研究</h2>
-                  <p>继续当前工作区里尚未结束或已经完成的任务。</p>
+                  <p>{demoMode ? '继续尚未结束或已经完成的任务。' : '按问题查看尚未结束或已经完成的研究记录。'}</p>
                 </div>
+                {!demoMode && (
+                  <div className="workspace-actions">
+                    <span className="visually-hidden" aria-hidden="true">{currentWorkspaceName}</span>
+                    <button className="icon-text-button" type="button" onClick={() => {
+                      setWorkspaceCreateOpen((current) => !current)
+                    }}>
+                      {workspaceCreateOpen ? <X aria-hidden="true" /> : <FolderPlus aria-hidden="true" />}
+                      {workspaceCreateOpen ? '取消新建' : '新建项目'}
+                    </button>
+                    {workspaceCreateOpen && (
+                      <form className="workspace-create" onSubmit={(event) => void handleCreateWorkspace(event)}>
+                        <label htmlFor="workspace-name">项目名称</label>
+                        <input
+                          id="workspace-name"
+                          value={newWorkspaceName}
+                          onChange={(event) => setNewWorkspaceName(event.target.value)}
+                          placeholder="例如：毕业设计 / 城市更新"
+                          autoFocus
+                        />
+                        <button type="submit" disabled={!newWorkspaceName.trim()}>创建项目</button>
+                      </form>
+                    )}
+                  </div>
+                )}
               </header>
               {recentRuns.length > 0 ? (
-                <ul className="recent-list">
-                  {recentRuns.slice(0, 3).map((run) => {
-                    const runDate = formatRunDate(run.updatedAt ?? run.createdAt)
-                    const usableAssets = run.coverageReport?.usable_assets
-                    return (
-                      <li key={run.id}>
-                        <button type="button" aria-label={`打开研究：${run.question}`} onClick={() => void openRun(run)}>
-                          <span className="recent-question">{run.question}</span>
-                          <span className="recent-meta">
-                            {[
-                              goalLabels[run.goal] ?? '研究任务',
-                              modeLabels[run.mode],
-                              usableAssets === undefined ? null : `${usableAssets} 张参考`,
-                              runDate || null,
-                            ].filter(Boolean).join(' · ')}
-                          </span>
-                          <span className="recent-status">{recentRunAnnouncement(run)}</span>
-                          <ArrowRight aria-hidden="true" />
-                        </button>
-                      </li>
-                    )
-                  })}
-                </ul>
+                <div className="recent-history" role="region" aria-label="研究记录" tabIndex={0}>
+                  <RunHistoryList
+                    runs={recentRuns}
+                    onOpen={(run) => void openRun(run)}
+                    onRetentionChange={(run) => void handleRunRetention(run)}
+                    retentionUpdatingId={retentionUpdatingId}
+                  />
+                </div>
               ) : (
                 <p className="recent-empty">{loading ? '正在读取最近任务…' : '完成第一次研究后，最近任务会保留在这里。'}</p>
               )}
@@ -1797,6 +2740,8 @@ export default function App() {
         )}
 
         {resultViewOpen && (announcement || activeRun) && (
+          isVisualResearch || isRunActive || activeRun?.status !== 'completed'
+        ) && (
           <section className="run-status-strip" role="status">
             <div>
               <span className="status-dot" data-active={isRunActive || undefined} aria-hidden="true" />
@@ -1808,14 +2753,14 @@ export default function App() {
               {activeRun && ['partial', 'blocked', 'failed', 'cancelled'].includes(activeRun.status) && (
                 <button className="research-retry" type="button" onClick={() => void handleRetry()}>{retryActionLabel(activeRun)}</button>
               )}
-              <details>
+              {isRunActive && <details>
                 <summary>查看研究进度</summary>
                 <ol className="stage-list">
-                  {stageLabels.map((stage) => (
+                  {currentStageLabels.map((stage) => (
                     <li key={stage.status} aria-current={activeStatus === stage.status ? 'step' : undefined}>{stage.label}</li>
                   ))}
                 </ol>
-              </details>
+              </details>}
             </div>
           </section>
         )}
@@ -1838,7 +2783,7 @@ export default function App() {
           </section>
         )}
 
-        {!demoMode && resultViewOpen && allResultsMissingPreviews && (
+        {!demoMode && resultViewOpen && isVisualResearch && allResultsMissingPreviews && (
           <section className="drawing-recovery" aria-labelledby="drawing-recovery-title">
             <MonitorUp aria-hidden="true" />
             <div className="drawing-recovery-copy">
@@ -1880,12 +2825,12 @@ export default function App() {
           activeRun && isRunActive ? (
             <section className="active-research-canvas" aria-label="研究正在进行">
               <header>
-                <span>正在研究这个问题</span>
+                <span>{isVisualResearch ? '正在寻找图纸灵感' : '正在研究这个问题'}</span>
                 <h1>{activeRun.question}</h1>
-                <p>{activeStatus ? activeStageDescriptions[activeStatus] : '正在准备研究任务'}</p>
+                <p>{activeStatus ? currentStageDescriptions[activeStatus] : isVisualResearch ? '正在准备灵感检索' : '正在准备研究任务'}</p>
               </header>
               <ol className="active-stage-track" aria-label="研究阶段">
-                {stageLabels.slice(0, -1).map((stage, index) => (
+                {currentStageLabels.slice(0, -1).map((stage, index) => (
                   <li
                     key={stage.status}
                     data-state={index < activeStageIndex ? 'complete' : index === activeStageIndex ? 'active' : 'upcoming'}
@@ -1898,7 +2843,11 @@ export default function App() {
               </ol>
               {activeRun.subquestions.length > 0 && (
                 <section className="active-subquestions" aria-labelledby="active-subquestions-title">
-                  <h2 id="active-subquestions-title">已经拆成 {activeRun.subquestions.length} 个证据问题</h2>
+                  <h2 id="active-subquestions-title">
+                    {isVisualResearch
+                      ? `正在探索 ${activeRun.subquestions.length} 个灵感方向`
+                      : `已经拆成 ${activeRun.subquestions.length} 个证据问题`}
+                  </h2>
                   <ol>
                     {activeRun.subquestions.map((subquestion) => (
                       <li key={subquestion.id}>{subquestion.question}</li>
@@ -1909,54 +2858,12 @@ export default function App() {
             </section>
           ) : (
             <section className="board-empty" aria-label="尚无研究结果">
-              <h2>从一个具体设计问题开始</h2>
-              <p>描述需要解决的空间、流线、更新或图纸表达问题，研究结果会按证据等级进入这里。</p>
+              <h2>{isVisualResearch ? '换一种图纸类型或风格描述再找' : '从一个具体设计问题开始'}</h2>
+              <p>{isVisualResearch
+                ? '可以写“剖面图风格”“效果图怎么出”，也可以补充线稿、拼贴、材质或配色偏好。'
+                : '描述需要解决的空间、流线、更新或图纸表达问题，研究结果会按来源依据整理到这里。'}</p>
             </section>
           )
-        )}
-
-        {resultViewOpen && results.length > 0 && (
-          <section className="result-workbench" aria-label="结果工作台">
-            <div className="result-workbench-intro">
-              <SlidersHorizontal aria-hidden="true" />
-              <div>
-                <h2 id="result-workbench-title">把研究结果继续变成设计材料</h2>
-                <p>选中图纸后，对照设计方法、整理表达规范，或导出继续使用。</p>
-              </div>
-              <button aria-label={traceOpen ? '关闭研究过程' : '查看研究过程'} aria-describedby="tool-trace-help" type="button" onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setTraceOpen((current) => !current) }}>
-                <Activity aria-hidden="true" />
-                <span><strong>{traceOpen ? '关闭研究过程' : '查看研究过程'}</strong><small id="tool-trace-help">查看搜索、网页读取、图纸识别与来源核验记录</small></span>
-              </button>
-            </div>
-            <div className="result-workbench-actions">
-              <button aria-label="对照设计方法" aria-describedby="tool-compare-help" type="button" disabled={comparisonIds.length < 2} onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setComparisonOpen(true) }}>
-                <Columns3 aria-hidden="true" />
-                <span><strong>对照设计方法</strong><small id="tool-compare-help">{comparisonIds.length < 2 ? `已选 ${comparisonIds.length} 张，还需选择 ${2 - comparisonIds.length} 张图纸` : `已选 ${comparisonIds.length} 张，按方法、观察与边界逐项比较`}</small></span>
-              </button>
-              <button aria-label="编辑图纸表达规范" aria-describedby="tool-style-help" type="button" onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setStyleProfileOpen(true) }}>
-                <Palette aria-hidden="true" />
-                <span><strong>编辑图纸表达规范</strong><small id="tool-style-help">手动设定配色、线型与字体，保存到本研究板</small></span>
-              </button>
-              <button aria-label="导出个人研究板" aria-describedby="tool-private-export-help" type="button" disabled={comparisonIds.length === 0} onClick={() => void handleExport('private')}>
-                <Download aria-hidden="true" />
-                <span><strong>导出个人研究板</strong><small id="tool-private-export-help">{comparisonIds.length === 0 ? '选择图纸后，可导出包含完整图片的个人研究板' : `导出已选 ${comparisonIds.length} 张图纸，包含完整图片`}</small></span>
-              </button>
-              <button aria-label="生成可分享来源板" aria-describedby="tool-share-export-help" type="button" disabled={comparisonIds.length === 0} onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setShareSummaryOpen(true) }}>
-                <Share2 aria-hidden="true" />
-                <span><strong>生成可分享来源板</strong><small id="tool-share-export-help">受限图片只保留署名、来源与链接</small></span>
-              </button>
-            </div>
-            {lastExport && (
-              <div className="result-export-ready">
-                <Check aria-hidden="true" />
-                <span>{lastExport.mode === 'private' ? '个人研究板已生成' : '分享来源板已生成'}</span>
-                <a href={lastExport.browser_url} target="_blank" rel="noreferrer">
-                  {lastExport.mode === 'private' ? '打开个人研究板' : '打开分享来源板'}
-                  <ExternalLink aria-hidden="true" />
-                </a>
-              </div>
-            )}
-          </section>
         )}
 
         {resultViewOpen && results.length > 0 && (
@@ -1964,27 +2871,111 @@ export default function App() {
             <header className="result-task-heading">
               <span>{demoMode ? `${modeLabels[mode]}研究演示` : '本次研究任务'}</span>
               <h1>{researchQuestion}</h1>
-              <p>Agent 先把总问题拆成可检索的证据问题，再用具体项目的多张图纸回答。结论和来源不会混在一起。</p>
+              {isVisualResearch && <p>这次只比较图纸的画面表达，并保留每张图的原笔记来源。</p>}
               {demoMode && (
                 <div className="demo-depth-contract" role="group" aria-label={`${modeLabels[mode]}研究深度说明`}>
                   <strong>{modeLabels[mode]}研究</strong>
                   <span>{researchDepthOptions[mode].coverage}</span>
                   <span>{researchDepthOptions[mode].target}</span>
-                  <small>固定回放 · 不消耗网页研究额度</small>
+                  <small>固定回放 · 展示完整结果结构</small>
                 </div>
               )}
             </header>
 
-            <section className="question-decomposition" aria-label="子问题清单">
-              <h2 className="visually-hidden">研究给出的方向</h2>
+            {activeSynthesis && (
+              <section className="research-synthesis" aria-label="研究结论">
+                <header>
+                  <span>{isVisualResearch ? `${modeLabels[activeRun?.mode ?? mode]}研究结论` : '研究结论'}</span>
+                  <h2 id="research-synthesis-title">{synthesisOverview?.headline}</h2>
+                  {isVisualResearch && <small>
+                    {synthesisOverview?.isFallback && '已核对原文的本地整理 · '}
+                    {!synthesisOverview?.isFallback && synthesisOverview?.isProjected && '已从完整综合中提炼主要结论 · '}
+                    {activeSynthesis.answer.evidence_asset_ids.length} 条原文引文直接支撑
+                  </small>}
+                </header>
+                <div className="synthesis-primary" data-answer-only={!isVisualResearch || undefined}>
+                  {isVisualResearch && <section>
+                    <h3>关键推演</h3>
+                    <ul>
+                      {activeSynthesis.causal_chains.map((finding) => (
+                        <li key={finding.statement}>
+                          <span>{finding.statement}</span>
+                          <small>{finding.evidence_asset_ids.length} 条证据</small>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>}
+                  <section>
+                    <h3>{isVisualResearch ? '落地建议' : '优先做法'}</h3>
+                    <ol>
+                      {synthesisOverview?.actions.map((finding) => (
+                        <li key={finding.statement}>
+                          <span>{finding.statement}</span>
+                          {isVisualResearch && <small>{finding.evidence_asset_ids.length} 条证据</small>}
+                        </li>
+                      ))}
+                    </ol>
+                  </section>
+                  {!isVisualResearch && synthesisBoundary && (
+                    <p className="synthesis-boundary">
+                      <strong>适用条件</strong>
+                      <span>{synthesisBoundary}</span>
+                    </p>
+                  )}
+                </div>
+                {isVisualResearch && (synthesisOverview?.isProjected
+                  || activeSynthesis.comparisons.length > 0
+                  || activeSynthesis.conflicts.length > 0
+                  || activeSynthesis.applicability_boundaries.length > 0) && (
+                  <details className="synthesis-audit">
+                    <summary>
+                      {synthesisOverview?.isProjected
+                        ? '查看完整综合、比较与适用边界'
+                        : '查看比较、冲突与适用边界'}
+                    </summary>
+                    <div>
+                      {synthesisOverview?.isProjected && (
+                        <section className="synthesis-original">
+                          <h3>完整综合原文</h3>
+                          <p>{synthesisOverview.rawStatement}</p>
+                        </section>
+                      )}
+                      {activeSynthesis.comparisons.length > 0 && (
+                        <section>
+                          <h3>跨案例比较</h3>
+                          <ul>{activeSynthesis.comparisons.map((item) => <li key={item.statement}>{item.statement}</li>)}</ul>
+                        </section>
+                      )}
+                      {activeSynthesis.conflicts.length > 0 && (
+                        <section>
+                          <h3>冲突与不确定性</h3>
+                          <ul>{activeSynthesis.conflicts.map((item) => <li key={item.statement}>{item.statement}</li>)}</ul>
+                        </section>
+                      )}
+                      {activeSynthesis.applicability_boundaries.length > 0 && (
+                        <section>
+                          <h3>适用与失效边界</h3>
+                          <ul>{activeSynthesis.applicability_boundaries.map((item) => <li key={item.statement}>{item.statement}</li>)}</ul>
+                        </section>
+                      )}
+                    </div>
+                  </details>
+                )}
+              </section>
+            )}
+
+            {isVisualResearch && <section className="question-decomposition" aria-label="灵感方向">
+              <h2 className="visually-hidden">{isVisualResearch ? '图纸灵感方向' : '研究给出的方向'}</h2>
               <header className="section-heading">
                 <div>
-                  <h2>问题拆解</h2>
-                  <p>{subquestionSummaries.every((item) => item.assetCount > 0)
-                    ? '每个子问题都有自己的项目和图纸证据；先判断哪一项最接近你当前卡住的地方。'
-                    : '完整结果会覆盖每个子问题；当前没有证据的分支会明确保留，方便继续补研。'}</p>
+                  <h2>{isVisualResearch ? '灵感方向' : '问题拆解'}</h2>
+                  <p>{isVisualResearch
+                    ? '围绕你指定的图纸类型整理不同风格，方便比较哪种画法更适合当前任务。'
+                    : subquestionSummaries.every((item) => item.caseAssetCount + item.inspirationCount > 0)
+                      ? '每个子问题都已找到方案证据或制图灵感；两类结果分开整理，按当前任务选择使用。'
+                      : '完整结果会覆盖每个子问题；当前没有证据的分支会明确保留，方便继续补研。'}</p>
                 </div>
-                <span>{researchSubquestions.length} 个子问题</span>
+                <span>{researchSubquestions.length} 个{isVisualResearch ? '方向' : '子问题'}</span>
               </header>
               <ol className="subquestion-list">
                 {subquestionSummaries.map((subquestion, index) => (
@@ -1996,18 +2987,155 @@ export default function App() {
                     </div>
                     <span className="subquestion-coverage">
                       {subquestion.passCount !== undefined && `已调研 ${subquestion.passCount} 轮 · `}
-                      {subquestion.projectCount} 个项目 · {subquestion.assetCount} 张图纸
+                      {isVisualResearch
+                        ? subquestion.inspirationCount > 0
+                          ? `${subquestion.inspirationCount} 张灵感图`
+                          : '暂未找到可用灵感'
+                        : <>
+                            {subquestion.projectCount} 个方案项目
+                            {subquestion.caseAssetCount > 0 && ` · ${subquestion.caseAssetCount} 条案例证据`}
+                            {subquestion.inspirationCount > 0 && ` · ${subquestion.inspirationCount} 张灵感图`}
+                          </>}
                     </span>
                   </li>
                 ))}
               </ol>
-            </section>
+            </section>}
 
-            <section className="case-analysis" aria-label="案例分析">
+            {visualInspirationResults.length > 0 && (
+              <section className="visual-inspiration-board" aria-label="视觉灵感板">
+                <header className="visual-inspiration-heading section-heading">
+                  <div>
+                    <h2>小红书制图灵感</h2>
+                    <p>{isVisualResearch
+                      ? '按灵感方向和帖子整理，每篇集中展示多张图；只比较画面表达，不用于确认项目事实或图纸权利。'
+                      : '只作视觉参考：按问题和图纸类型整理可见表达，帮助判断“图怎么出”，不用于确认项目事实或图纸权利。'}</p>
+                  </div>
+                  <span>{visualInspirationNoteCount} 篇帖子 · {visualInspirationResults.length} 张灵感图</span>
+                </header>
+
+                <div className="inspiration-question-groups">
+                  {inspirationGroups.map((group) => (
+                    <section
+                      className="inspiration-question"
+                      key={group.subquestion.id}
+                      aria-labelledby={`inspiration-question-${group.subquestion.id}`}
+                    >
+                      <header className="inspiration-question-heading">
+                        <div>
+                          <h3 id={`inspiration-question-${group.subquestion.id}`}>{group.subquestion.question}</h3>
+                          <p>{group.subquestion.rationale}</p>
+                        </div>
+                        <span>{group.noteGroups.length} 篇 · {group.assets.length} 张</span>
+                      </header>
+
+                      <div className="inspiration-type-index" aria-label="图纸类型">
+                        {group.typeGroups.map((typeGroup) => (
+                          <span key={typeGroup.assetType}>
+                            {assetLabels[typeGroup.assetType]} · {typeGroup.assets.length} 张
+                          </span>
+                        ))}
+                      </div>
+                      <div className="inspiration-note-list">
+                        {group.noteGroups.map((note) => (
+                          <article
+                            className="inspiration-note"
+                            key={note.sourceUrl}
+                            aria-label={`灵感帖子 ${note.primary.project}`}
+                          >
+                            <header className="inspiration-note-heading">
+                              <div>
+                                <span>
+                                  {visualPlatformName(note.sourceUrl) ?? '视觉平台'} · {questionRelevanceLabel(note.relevance)}
+                                </span>
+                                <h4>{note.primary.project}</h4>
+                                {note.observation && <p>{note.observation}</p>}
+                              </div>
+                              <span>{note.assets.length} 张</span>
+                            </header>
+                            <div className="inspiration-note-grid">
+                              {note.assets.map((result) => {
+                                const resultIndex = results.findIndex((item) => item.id === result.id)
+                                const selectedForCollection = comparisonIds.includes(result.id)
+                                const previewUrl = availablePreviewUrl(result, failedPreviewUrls)
+                                const previewLoadFailed = Boolean(
+                                  result.previewUrl && failedPreviewUrls[result.id] === result.previewUrl,
+                                )
+                                return (
+                                  <div className="inspiration-note-image" key={result.id}>
+                                    <button
+                                      className="inspiration-note-preview"
+                                      type="button"
+                                      aria-label={`查看制图灵感 ${result.project} ${assetLabels[result.assetType]}`}
+                                      onClick={(event) => {
+                                        overlayTriggerRef.current = event.currentTarget
+                                        setSelectedResultId(result.id)
+                                        setSelectedSubquestionId(group.subquestion.id)
+                                        setInspectorOpen(true)
+                                      }}
+                                    >
+                                      <figure>
+                                        <div className="evidence-image" data-drawing={result.drawing}>
+                                          {previewUrl ? (
+                                            <img
+                                              src={previewUrl}
+                                              alt={`${result.project} ${assetLabels[result.assetType]}`}
+                                              loading={resultIndex < 6 ? 'eager' : 'lazy'}
+                                              decoding="async"
+                                              fetchPriority={resultIndex < 3 ? 'high' : 'auto'}
+                                              onError={() => markPreviewFailed(result.id, previewUrl)}
+                                            />
+                                          ) : (
+                                            <div className="preview-unavailable">
+                                              <ImageOff aria-hidden="true" />
+                                              <strong>{previewLoadFailed ? '灵感图加载失败' : '未提取到灵感图'}</strong>
+                                              <p>打开原笔记查看图片，并核对图片与文字的对应关系。</p>
+                                            </div>
+                                          )}
+                                          <div className="evidence-image-labels">
+                                            <span>{assetLabels[result.assetType]}</span>
+                                          </div>
+                                        </div>
+                                      </figure>
+                                    </button>
+                                    <button
+                                      className="inspiration-note-select"
+                                      type="button"
+                                      aria-label={selectedForCollection ? '取消收藏选择' : '选择此图用于收藏'}
+                                      title={`${selectedForCollection ? '取消收藏选择' : '选择此图用于收藏'} · ${assetLabels[result.assetType]}`}
+                                      aria-pressed={selectedForCollection}
+                                      disabled={comparisonIds.length >= 6 && !selectedForCollection}
+                                      onClick={() => void toggleComparison(result.id)}
+                                    >
+                                      {selectedForCollection ? <Check aria-hidden="true" /> : <Plus aria-hidden="true" />}
+                                    </button>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                            <footer className="inspiration-note-footer">
+                              <p>
+                                {publicationTierLabels[note.primary.publicationTier]} · 权利 {rightsStatusLabels[note.primary.rightsStatus]}
+                              </p>
+                              <a href={note.sourceUrl} target="_blank" rel="noreferrer">
+                                <ExternalLink aria-hidden="true" />
+                                打开原笔记
+                              </a>
+                            </footer>
+                          </article>
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {(caseResults.length > 0 || activeRun?.goal === 'precedent_research' || demoMode) && (
+            <section className="case-analysis" aria-label="案例研究结果">
               <header className="results-header section-heading">
                 <div>
-                  <h2>案例分析</h2>
-                  <p>{visibleResults.length} 张图纸按子问题和项目归组。每个项目先解释空间机制，再给出可转译步骤和使用边界。</p>
+                  <h2>案例研究结果</h2>
                 </div>
                 <label htmlFor="asset-filter">
                   <span>图纸类型</span>
@@ -2021,71 +3149,107 @@ export default function App() {
               </header>
 
               <div className="case-chapters">
-                {caseGroups.map((group) => (
+                {caseGroups.filter((group) => !group.unassigned).map((group) => (
                   <section className="case-chapter" key={group.subquestion.id} aria-labelledby={`case-chapter-${group.subquestion.id}`}>
                     <header className="case-chapter-heading">
                       <span aria-hidden="true">{group.unassigned ? '?' : group.index + 1}</span>
                       <div>
                         <h3 id={`case-chapter-${group.subquestion.id}`}>{group.subquestion.question}</h3>
-                        <p>{group.unassigned
-                          ? group.subquestion.rationale
-                          : `${group.dossiers.length} 个项目 · ${group.assets.length} 张支撑图纸`}</p>
+                        {group.questionSummary && (
+                          <p className="case-chapter-conclusion">{group.questionSummary.statement}</p>
+                        )}
                       </div>
                     </header>
 
                     {group.assets.length === 0 ? (
                       <div className="case-chapter-empty">
-                        <strong>这一分支还没有完整证据</strong>
-                        <p>已经完成检索，但还没有找到可用且有来源证据的图纸。</p>
+                        <strong>这一问题暂时没有可用结果</strong>
+                        <p>可以换一个更具体的空间条件后重新研究。</p>
                       </div>
-                    ) : <div className="dossier-list">
-                      {group.dossiers.map((dossier) => (
-                        <article className="project-dossier" aria-label={`案例分析 ${dossier.project}`} key={dossier.project}>
-                          <header className="dossier-heading">
+                    ) : <>
+                      <ol className="case-answer-list" aria-label={`${group.subquestion.question}的案例结论`}>
+                      {group.dossiers.map((dossier) => {
+                        const caseSubquestionId = group.unassigned ? undefined : group.subquestion.id
+                        const selectionKey = collectionSelectionKey(dossier.primary.id, caseSubquestionId)
+                        const caseSelected = collectionSelections.some((item) => item.key === selectionKey)
+                        const displayProject = userFacingProjectName(dossier.project)
+                        const actions = uniqueSummaryItems(dossier.analysis.transferStrategy, 3)
+                        const previewResult = dossier.assets.find((result) => (
+                          Boolean(availablePreviewUrl(result, failedPreviewUrls))
+                        ))
+                        const previewUrl = previewResult
+                          ? availablePreviewUrl(previewResult, failedPreviewUrls)
+                          : null
+                        const identityLine = [dossier.primary.location, dossier.primary.year]
+                          .filter((item) => item && !/实时网页研究|待核对|未知|未记录/.test(item))
+                          .join(' · ')
+                        return (
+                        <li className="case-answer-item" key={dossier.project}>
+                        <article className="project-dossier case-answer" aria-label={`代表案例 ${displayProject}`}>
+                          <header className="dossier-heading case-answer-heading">
                             <div>
-                              <span>项目案例</span>
-                              <h4>{dossier.project}</h4>
-                              <p>{dossier.primary.location} · {dossier.primary.year}</p>
+                              <h4 className="case-answer-title">{displayProject}</h4>
+                              {identityLine && <p>{identityLine}</p>}
                             </div>
-                            <div className="dossier-verification" data-tier={dossier.primary.tier}>
-                              {dossier.primary.tier === 'verified' && <ShieldCheck aria-hidden="true" />}
-                              {dossier.primary.tier === 'partial' && <CircleDashed aria-hidden="true" />}
-                              {dossier.primary.tier === 'visual_lead' && <Eye aria-hidden="true" />}
-                              <span>{tierLabels[dossier.primary.tier]}</span>
-                            </div>
+                            <button
+                              className="dossier-select"
+                              type="button"
+                              aria-pressed={caseSelected}
+                              aria-label={`${caseSelected ? '取消选择案例' : '选择案例'} ${displayProject}`}
+                              disabled={collectionSelections.length >= 6 && !caseSelected}
+                              onClick={() => void toggleCaseCollection(dossier.primary.id, caseSubquestionId)}
+                            >
+                              {caseSelected ? <Check aria-hidden="true" /> : <Plus aria-hidden="true" />}
+                              <span>{caseSelected ? '已选择案例' : '选择案例'}</span>
+                            </button>
                           </header>
 
-                          <div className="dossier-analysis-grid">
-                            <section>
-                              <h5>项目条件</h5>
-                              <p>{dossier.analysis.projectContext}</p>
+                          <div className="case-answer-layout" data-has-image={Boolean(previewUrl) || undefined}>
+                            <section className="case-answer-copy" aria-label={`${displayProject} 的研究结果`}>
+                              <p className="case-answer-mechanism">{dossier.analysis.designMechanism}</p>
+                              {actions.length > 0 && <div className="case-answer-actions">
+                                <h5>可直接采用</h5>
+                                <ol>{actions.map((step) => <li key={step}>{step}</li>)}</ol>
+                              </div>}
+                              {dossier.analysis.limitation && (
+                                <p className="case-answer-boundary">
+                                  <strong>适用条件</strong>
+                                  <span>{dossier.analysis.limitation}</span>
+                                </p>
+                              )}
                             </section>
-                            <section>
-                              <h5>空间机制</h5>
-                              <p>{dossier.analysis.designMechanism}</p>
-                            </section>
-                            <section>
-                              <h5>怎么转译</h5>
-                              <ol>
-                                {dossier.analysis.transferStrategy.map((step) => <li key={step}>{step}</li>)}
-                              </ol>
-                            </section>
-                            <section>
-                              <h5>适用边界</h5>
-                              <p>{dossier.analysis.limitation}</p>
-                            </section>
+                            {previewResult && previewUrl && (
+                              <figure className="case-answer-image">
+                                <img
+                                  src={previewUrl}
+                                alt={`${displayProject} ${assetLabels[previewResult.assetType]}`}
+                                  loading="lazy"
+                                  decoding="async"
+                                  onError={() => markPreviewFailed(previewResult.id, previewUrl)}
+                                />
+                                <figcaption>{assetLabels[previewResult.assetType]}</figcaption>
+                              </figure>
+                            )}
                           </div>
 
-                          <section className="dossier-evidence-set" aria-label={`${dossier.project} 图纸证据`}>
+                          {isVisualResearch && <section className="dossier-evidence-set" aria-label={`${dossier.project} 项目预览`}>
                             <header>
-                              <h5>支撑图纸</h5>
-                              <span>{dossier.assets.length} 张 · 点击图纸查看来源和证据定位</span>
+                              <h5>项目预览</h5>
+                              <span>{dossier.assets.length} 项 · 图片仅用于定位来源，机制以正文引文为准</span>
                             </header>
-                            <div className="dossier-gallery">
+                            {dossier.previewCopy.shared.length > 0 && (
+                              <div className="dossier-preview-copy">
+                                <span>共同图面说明</span>
+                                {dossier.previewCopy.shared.map((item) => <p key={item}>{item}</p>)}
+                              </div>
+                            )}
+                            <div
+                              className="dossier-gallery"
+                              data-layout={dossier.assets.length === 1 ? 'single' : 'grid'}
+                            >
                               {dossier.assets.map((result) => {
                                 const resultIndex = results.findIndex((item) => item.id === result.id)
-                                const compared = comparisonIds.includes(result.id)
-                                const resultAnalysis = analysisFor(result, group.subquestion.id)
+                                const previewCopy = dossier.previewCopy.assetCopy.get(result.id)
                                 const previewUrl = availablePreviewUrl(result, failedPreviewUrls)
                                 const previewLoadFailed = Boolean(
                                   result.previewUrl && failedPreviewUrls[result.id] === result.previewUrl,
@@ -2133,31 +3297,35 @@ export default function App() {
                                             <div className="preview-unavailable">
                                               <ImageOff aria-hidden="true" />
                                               <strong>
-                                                {previewLoadFailed
-                                                  ? '图纸预览加载失败'
+                                                {activeRun?.goal === 'precedent_research'
+                                                  ? '暂无项目预览'
+                                                  : previewLoadFailed
+                                                  ? '项目预览加载失败'
                                                   : browserWasUnavailable
-                                                  ? '此次未连接浏览器扩展，未能提取图纸'
-                                                  : '未提取到图纸'}
+                                                  ? '此次未连接浏览器扩展，暂无项目预览'
+                                                  : '暂无项目预览'}
                                               </strong>
-                                              <p>打开原始页面查看图纸，并核对图纸与项目的对应关系。</p>
+                                              <p>打开原始来源查看完整项目；设计机制以正文引文为准。</p>
                                             </div>
                                           )}
                                           <div className="evidence-image-labels">
                                             <span>{assetLabels[result.assetType]}</span>
                                             {previewUrl && result.previewSource && (
-                                              <span>{result.previewSource === 'chrome' ? 'Chrome 精确裁图' : '公开网页图片'}</span>
+                                              <span>{result.previewSource === 'chrome' ? 'Chrome 项目预览' : '公开网页预览'}</span>
                                             )}
                                             {previewLoadFailed && <span>来源链接</span>}
                                           </div>
                                         </div>
-                                        <figcaption>
-                                          <strong>{result.title}</strong>
-                                          <p>{resultAnalysis.observation}</p>
-                                        </figcaption>
+                                        {(previewCopy?.title || previewCopy?.observation) && (
+                                          <figcaption>
+                                            {previewCopy.title && <strong>{previewCopy.title}</strong>}
+                                            {previewCopy.observation && <p>{previewCopy.observation}</p>}
+                                          </figcaption>
+                                        )}
                                       </figure>
                                     </button>
                                     <footer className="evidence-sheet-actions">
-                                      <span>问题匹配 {result.relevance} / 4</span>
+                                      <span>{questionRelevanceLabel(result.relevance)}</span>
                                       {!previewUrl && (
                                         <a
                                           className="evidence-source-action"
@@ -2166,50 +3334,122 @@ export default function App() {
                                           rel="noreferrer"
                                         >
                                           <ExternalLink aria-hidden="true" />
-                                          <span>打开原始图纸页</span>
+                                          <span>打开原始来源</span>
                                         </a>
                                       )}
-                                      <button
-                                        type="button"
-                                        aria-pressed={compared}
-                                        aria-label={`${compared ? '移出方法对照' : '加入方法对照'} ${result.project} ${assetLabels[result.assetType]}`}
-                                        title={compared ? '移出方法对照' : '加入方法对照'}
-                                        disabled={comparisonIds.length >= 6 && !compared}
-                                        onClick={() => void toggleComparison(result.id)}
-                                      >
-                                        {compared ? <Check aria-hidden="true" /> : <Plus aria-hidden="true" />}
-                                        <span>{compared ? '已加入对照' : '加入对照'}</span>
-                                      </button>
                                     </footer>
                                   </div>
                                 )
                               })}
                             </div>
-                          </section>
+                          </section>}
 
-                          <footer className="dossier-source">
+                          {isVisualResearch && <footer className="dossier-source">
                             <span>来源与权利分开记录</span>
                             <p>{publicationTierLabels[dossier.primary.publicationTier]} · 权利 {rightsStatusLabels[dossier.primary.rightsStatus]}</p>
                             <a href={dossier.primary.sourceUrl} target="_blank" rel="noreferrer">打开项目来源</a>
-                          </footer>
+                          </footer>}
                         </article>
-                      ))}
-                    </div>}
+                        </li>
+                        )
+                      })}
+                      </ol>
+                    </>}
                   </section>
                 ))}
               </div>
             </section>
+            )}
           </section>
         )}
 
         {resultViewOpen && results.length > 0 && visibleResults.length === 0 && (
-          <section className="empty-filter"><h2>当前筛选没有图纸</h2><p>切换图纸类型，或继续研究补齐这个证据缺口。</p></section>
+          <section className="empty-filter"><h2>当前筛选没有图纸</h2><p>切换图纸类型查看其他结果。</p></section>
         )}
 
-        {resultViewOpen && comparisonIds.length > 0 && (
-          <section className="comparison-dock" aria-label="方法对照选择">
-            <p>已选 {comparisonIds.length} 个参考</p>
-            <button type="button" disabled={comparisonIds.length < 2} onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setComparisonOpen(true) }}>对照方法与边界</button>
+        {resultViewOpen && results.length > 0 && (
+          <section className="result-workbench" aria-label="结果工作台">
+            <div className="result-workbench-intro">
+              <SlidersHorizontal aria-hidden="true" />
+              <div>
+                <h2 id="result-workbench-title">{isVisualResearch ? '把图纸灵感带回表达' : '把案例研究带回方案'}</h2>
+                <p>{isVisualResearch
+                  ? '整理图纸的画面语言与自己的表达规范，把真正能用的图纸加入收藏。'
+                  : '比较案例的设计策略，整理方案依据，或导出结果继续使用。'}</p>
+              </div>
+            </div>
+            <div className={`result-workbench-actions result-workbench-actions--${isVisualResearch ? 'visual' : 'precedent'}`}>
+              {!isVisualResearch && <button aria-label="对照案例策略" aria-describedby="tool-compare-help" type="button" disabled={selectedProjectCount < 2} onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setComparisonOpen(true) }}>
+                <Columns3 aria-hidden="true" />
+                <span><strong>对照案例策略</strong><small id="tool-compare-help">{selectedProjectCount < 2 ? `已选 ${selectedProjectCount} 个案例，还需选择 ${2 - selectedProjectCount} 个不同案例` : `对照 ${selectedProjectCount} 个案例的策略与适用条件`}</small></span>
+              </button>}
+              {isVisualResearch && <button aria-label="编辑图纸表达规范" aria-describedby="tool-style-help" type="button" onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setStyleProfileOpen(true) }}>
+                <Palette aria-hidden="true" />
+                <span><strong>编辑图纸表达规范</strong><small id="tool-style-help">手动设定配色、线型与字体，保存到本研究板</small></span>
+              </button>}
+              {isVisualResearch ? (
+                <button aria-label="查看个人收藏" aria-describedby="tool-collection-help" type="button" onClick={(event) => void openPersonalCollections(event.currentTarget)}>
+                  <Bookmark aria-hidden="true" />
+                  <span><strong>查看个人收藏</strong><small id="tool-collection-help">按题目整理已收藏的图纸灵感</small></span>
+                </button>
+              ) : (
+                <button aria-label="导出策略矩阵" aria-describedby="tool-private-export-help" type="button" disabled={privateExportDisabled} onClick={() => void handleExport('private')}>
+                  <Download aria-hidden="true" />
+                  <span><strong>导出策略矩阵</strong><small id="tool-private-export-help">{selectedProjectCount < 2 ? `已选 ${selectedProjectCount} 个案例，还需选择 ${2 - selectedProjectCount} 个不同案例` : `比较 ${selectedProjectCount} 个案例的机制与边界`}</small></span>
+                </button>
+              )}
+              <button aria-label={isVisualResearch ? '生成可分享来源板' : '生成可分享结果板'} aria-describedby="tool-share-export-help" type="button" disabled={comparisonIds.length === 0} onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setShareSummaryOpen(true) }}>
+                <Share2 aria-hidden="true" />
+                <span><strong>{isVisualResearch ? '生成可分享来源板' : '生成可分享结果板'}</strong><small id="tool-share-export-help">{isVisualResearch ? '受限图片只保留署名、来源与链接' : '整理已选案例的机制与做法'}</small></span>
+              </button>
+            </div>
+            {lastExport && (
+              <div className="result-export-ready">
+                <Check aria-hidden="true" />
+                <span>{lastExport.mode === 'private'
+                  ? `${isVisualResearch ? '图纸整理版' : '策略矩阵'}已生成`
+                  : `${isVisualResearch ? '分享来源板' : '分享结果板'}已生成`}</span>
+                <a href={lastExport.browser_url} target="_blank" rel="noreferrer">
+                  {lastExport.mode === 'private'
+                    ? `打开${isVisualResearch ? '图纸整理版' : '策略矩阵'}`
+                    : `打开${isVisualResearch ? '分享来源板' : '分享结果板'}`}
+                  <ExternalLink aria-hidden="true" />
+                </a>
+              </div>
+            )}
+          </section>
+        )}
+
+        {resultViewOpen
+          && (selectedPendingCollectionCount > 0 || collectionSaveSucceeded) && (
+          <section className="collection-dock" aria-label="收藏选择">
+            {collectionSaveSucceeded && selectedPendingCollectionCount === 0 ? (
+              <div className="collection-dock-success" role="status">
+                <Check aria-hidden="true" /><strong>加入成功</strong>
+              </div>
+            ) : (
+              <>
+                <div className="collection-dock-summary">
+                  <strong>{isVisualResearch ? `已选 ${selectedPendingCollectionCount} 张图纸` : `已选 ${selectedPendingCollectionCount} 个项目案例`}</strong>
+                  <span>把真正能用的参考留到主页收藏</span>
+                </div>
+                <div className="collection-dock-actions">
+                  <button type="button" onClick={() => void clearResultSelection()}>清空选择</button>
+                  {!isVisualResearch && (
+                    <button type="button" disabled={selectedProjectCount < 2} onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setComparisonOpen(true) }}>对照方法与边界</button>
+                  )}
+                  <button
+                    className="collection-add"
+                    type="button"
+                    aria-label={`添加 ${selectedPendingCollectionCount} 项到个人收藏`}
+                    disabled={collectionSaving}
+                    onClick={() => void addSelectionToCollection()}
+                  >
+                    <Bookmark aria-hidden="true" />{collectionSaving ? '正在添加…' : '添加到个人收藏'}
+                  </button>
+                </div>
+              </>
+            )}
           </section>
         )}
 
@@ -2226,12 +3466,18 @@ export default function App() {
             <select id="style-font-category" value={styleProfile.fontCategory} onChange={(event) => setStyleProfile((current) => ({ ...current, fontCategory: event.target.value as StyleDraft['fontCategory'] }))}>
               <option value="sans">无衬线</option><option value="serif">衬线</option><option value="mono">等宽</option>
             </select>
+            <label htmlFor="style-texture">纹理</label>
+            <select id="style-texture" value={styleProfile.texture} onChange={(event) => setStyleProfile((current) => ({ ...current, texture: event.target.value as StyleDraft['texture'] }))}>
+              <option value="none">无纹理</option><option value="vellum">硫酸纸颗粒</option><option value="grain">细颗粒纸张</option>
+            </select>
+            <label htmlFor="style-layout-notes">版式备注</label>
+            <textarea id="style-layout-notes" value={styleProfile.layoutNotes} onChange={(event) => setStyleProfile((current) => ({ ...current, layoutNotes: event.target.value }))} placeholder="例如：证据栏靠右，图组留白更大" />
             <button type="button" onClick={() => void handleStyleSave()}>保存表达规范</button>
             {styleStatus && <p role="status">{styleStatus}</p>}
           </section>
         )}
 
-        {comparisonOpen && (
+        {!isVisualResearch && comparisonOpen && (
           <section className="floating-panel comparison-panel" role="dialog" aria-modal="true" aria-label="方法对照">
             <header className="panel-heading">
               <div><h2>方法对照</h2><p>比较这些参考怎样回答你的设计问题</p></div>
@@ -2266,9 +3512,9 @@ export default function App() {
                               ? <img src={previewUrl} alt="" onError={() => markPreviewFailed(result.id, previewUrl)} />
                               : <span>预览不可用</span>}
                           </div>
-                          <span className="comparison-column-meta">{assetLabels[result.assetType]} · {tierLabels[result.tier]}</span>
+                          <span className="comparison-column-meta">{assetLabels[result.assetType]}</span>
                           <strong>{result.title}</strong>
-                          <small>{result.project} · 问题匹配 {result.relevance} / 4</small>
+                          <small>{userFacingProjectName(result.project)}</small>
                         </th>
                       )
                     })}
@@ -2278,8 +3524,7 @@ export default function App() {
                   <tr><th scope="row">解决什么</th>{selectedComparisonResults.map((result) => <td key={result.id}>{comparisonFocusLabels[result.assetType]}</td>)}</tr>
                   <tr><th scope="row">可借鉴方法</th>{selectedComparisonResults.map((result) => <td key={result.id}>{result.inference}</td>)}</tr>
                   <tr><th scope="row">图中看到</th>{selectedComparisonResults.map((result) => <td key={result.id}>{result.observation}</td>)}</tr>
-                  <tr><th scope="row">证据状态</th>{selectedComparisonResults.map((result) => <td key={result.id}>{tierLabels[result.tier]} · {result.sourceName}</td>)}</tr>
-                  <tr><th scope="row">使用边界</th>{selectedComparisonResults.map((result) => <td key={result.id}>{result.limitation}</td>)}</tr>
+                  <tr><th scope="row">使用边界</th>{selectedComparisonResults.map((result) => <td key={result.id}>{firstUserFacingBoundary([result.limitation]) || '未列出'}</td>)}</tr>
                 </tbody>
               </table>
             </div>
@@ -2288,105 +3533,349 @@ export default function App() {
 
         {shareSummaryOpen && (
           <section className="floating-panel share-panel" role="dialog" aria-modal="true" aria-label="分享版导出摘要">
-            <h2>分享版权利检查</h2>
+            <h2>{isVisualResearch ? '分享版权利检查' : '生成分享结果'}</h2>
             <p>{shareableCount} 张图片可嵌入</p>
-            <p>{comparisonIds.length - shareableCount} 项将改为来源卡</p>
-            <p>来源卡保留项目、发布者、署名和原始链接，不复制受限图片。</p>
+            {isVisualResearch ? <>
+              <p>{comparisonIds.length - shareableCount} 项将改为来源卡</p>
+              <p>来源卡保留项目、发布者、署名和原始链接，不复制受限图片。</p>
+            </> : (
+              <p>{comparisonIds.length - shareableCount} 项只保留研究文字</p>
+            )}
             <button type="button" onClick={() => void handleExport('share')}>确认生成分享版</button>
             <button type="button" autoFocus onClick={closeOverlays}>返回画板</button>
           </section>
         )}
+
+        {collectionOpen && (
+          <section className="collection-page" aria-label="个人收藏">
+            <header className="panel-heading">
+              <div>
+                <h1>个人收藏</h1>
+                <p>当前项目 · 按类型回看</p>
+              </div>
+            </header>
+            {collectionsLoading ? (
+              <p className="collection-empty" role="status">正在读取收藏…</p>
+            ) : (
+              <>
+                <div className="research-entry-switch collection-entry-switch" role="group" aria-label="收藏类型">
+                  {collectionSections.map((section) => (
+                    <button
+                      type="button"
+                      key={section.key}
+                      aria-pressed={collectionView === section.key}
+                      onClick={() => {
+                        setCollectionView(section.key === 'visual' ? 'visual' : 'precedent')
+                        setSelectedCollectionSubquestion(null)
+                      }}
+                    >
+                      {section.key === 'visual' ? <Eye aria-hidden="true" /> : <LayoutGrid aria-hidden="true" />}
+                      <span>
+                        <strong>{section.title}</strong>
+                        <small>{section.items.length} 项 · {section.key === 'visual' ? '收藏图片' : '项目与研究文字'}</small>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                {!activeCollectionSection || activeCollectionSection.items.length === 0 ? (
+                  <p className="collection-mode-empty">
+                    {collectionView === 'visual'
+                      ? '还没有图纸灵感收藏。去图纸灵感结果中选择图片。'
+                      : '还没有建筑方案收藏。去建筑研究结果中选择案例。'}
+                  </p>
+                ) : collectionView === 'precedent' ? (
+                  <div className="collection-architecture">
+                    {!activeCollectionSubquestion ? (
+                      <section className="collection-question-directory" aria-label="建筑问题目录">
+                        <header className="collection-directory-heading">
+                          <span>建筑方案</span>
+                          <h2>问题目录</h2>
+                          <p>按具体设计问题查看收藏案例，以及它们如何解决问题。</p>
+                        </header>
+                        <ul className="collection-directory-list">
+                          {collectionQuestionDirectory.map(({ collectionQuestion, group }) => (
+                            <li key={`${collectionQuestion}:${group.id}`}>
+                              <button
+                                type="button"
+                                aria-label={`查看子问题：${group.question}`}
+                                onClick={() => setSelectedCollectionSubquestion({
+                                  collectionQuestion,
+                                  subquestionId: group.id,
+                                })}
+                              >
+                                <span className="collection-directory-copy">
+                                  <small>案例子问题</small>
+                                  <strong>{group.question}</strong>
+                                  <span>{collectionQuestion}</span>
+                                </span>
+                                <span className="collection-directory-count">{group.entries.length} 个已收藏案例</span>
+                                <ChevronRight aria-hidden="true" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    ) : (
+                      <>
+                        <button
+                          className="collection-directory-back"
+                          type="button"
+                          onClick={() => setSelectedCollectionSubquestion(null)}
+                        >
+                          <ArrowLeft aria-hidden="true" />返回问题目录
+                        </button>
+                    {activeCollectionSection.groups
+                      .filter(([collectionQuestion]) => (
+                        collectionQuestion === activeCollectionSubquestion.collectionQuestion
+                      ))
+                      .map(([collectionQuestion, items]) => (
+                      <section
+                        className="collection-question"
+                        key={collectionQuestion}
+                        aria-label={`原研究题目：${collectionQuestion}`}
+                      >
+                        <div className="collection-subquestions">
+                          {collectionCaseGroups(items)
+                            .filter((group) => group.id === activeCollectionSubquestion.group.id)
+                            .map((group) => (
+                            <section
+                              className="collection-subquestion"
+                              key={group.id}
+                              aria-label={`案例子问题：${group.question}`}
+                            >
+                              <header className="collection-subquestion-heading">
+                                <span>案例子问题</span>
+                                <h3>{group.question}</h3>
+                                <small>{group.entries.length} 个已收藏案例</small>
+                              </header>
+                              <ul className="collection-architecture-list">
+                                {group.entries.map(({ item, analysis }) => {
+                                  const snapshot = item.snapshot
+                                  const projectName = userFacingProjectName(snapshot.project_name || '未命名项目')
+                                  const designMechanism = analysis.design_mechanism.trim()
+                                  const solutionSteps = uniqueSummaryItems(analysis.transfer_strategy, 3)
+                                  const boundary = firstUserFacingBoundary(analysis.limitations)
+                                  const caseImages = collectionCaseImages(item)
+                                  const hasSolution = Boolean(designMechanism || solutionSteps.length)
+                                  return (
+                                    <li className="collection-architecture-item" key={`${item.id}:${analysis.id}`}>
+                                      <article className="collection-case" aria-label={`收藏案例 ${projectName}`}>
+                                        <header className="collection-case-heading">
+                                          <div className="collection-case-title">
+                                            <h4>{projectName}</h4>
+                                          </div>
+                                          <div className="collection-text-actions">
+                                            <button type="button" aria-label={`删除收藏：${projectName}`} title="删除收藏" onClick={() => void deletePersonalCollection(item.id)}>
+                                              <Trash2 aria-hidden="true" />
+                                            </button>
+                                          </div>
+                                        </header>
+                                        <div className="collection-case-layout">
+                                          {hasSolution ? (
+                                            <section
+                                              className="collection-case-solution"
+                                              aria-label={`${projectName} 的解法`}
+                                            >
+                                              {designMechanism && <div className="collection-case-core">
+                                                <h5>核心解法</h5>
+                                                <p>{designMechanism}</p>
+                                              </div>}
+                                              {solutionSteps.length > 0 && <div className="collection-case-steps">
+                                                <h5>怎么做</h5>
+                                                <ol>{solutionSteps.map((step) => <li key={step}>{step}</li>)}</ol>
+                                              </div>}
+                                              {boundary && (
+                                                <p className="collection-case-boundary">
+                                                  <strong>适用时注意</strong>
+                                                  <span>{boundary}</span>
+                                                </p>
+                                              )}
+                                            </section>
+                                          ) : (
+                                            <p className="collection-case-missing">这条收藏还没有形成可复用解法。</p>
+                                          )}
+                                          {caseImages.length > 0 && (
+                                            <div
+                                              className="collection-case-media"
+                                              role="group"
+                                              aria-label={`${projectName} 案例图片`}
+                                            >
+                                              <div className="collection-case-image-grid">
+                                                {caseImages.map((image) => {
+                                                  const imageType = assetLabels[image.asset_type]
+                                                  const previewUrl = collectionCaseImageUrl(item, image)
+                                                  return (
+                                                    <figure className="collection-case-image" key={image.asset_id}>
+                                                      <a
+                                                        aria-label={`打开案例图片：${projectName} · ${imageType}`}
+                                                        href={previewUrl}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                      >
+                                                        <img src={previewUrl} alt={`${projectName} · ${imageType}`} />
+                                                      </a>
+                                                      <figcaption>{imageType}</figcaption>
+                                                    </figure>
+                                                  )
+                                                })}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </article>
+                                    </li>
+                                  )
+                                })}
+                              </ul>
+                            </section>
+                          ))}
+                        </div>
+                      </section>
+                    ))}
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <ul className="collection-visual-grid" aria-label="图纸灵感收藏">
+                    {activeCollectionSection.items.map((item) => {
+                      const snapshot = item.snapshot
+                      const itemName = snapshot.project_name || '收藏图纸'
+                      const previewUrl = snapshot.collection_file
+                        ? `/v1/collections/${item.id}/content`
+                        : snapshot.image_url
+                      return (
+                        <li className="collection-visual-item" key={item.id}>
+                          <div className="collection-visual-media">
+                            {previewUrl ? (
+                              <a
+                                className="collection-visual-open"
+                                aria-label={`打开高清图片：${itemName}`}
+                                title="打开高清图片"
+                                href={previewUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                <img src={previewUrl} alt={itemName} loading="lazy" />
+                              </a>
+                            ) : (
+                              <span className="collection-visual-placeholder" role="img" aria-label={`${itemName} 图片不可用`}>
+                                <ImageOff aria-hidden="true" />
+                              </span>
+                            )}
+                            <div className="collection-visual-actions">
+                              <a aria-label={`打开来源：${itemName}`} title="打开来源" href={item.source_url} target="_blank" rel="noreferrer">
+                                <ExternalLink aria-hidden="true" />
+                              </a>
+                              <button type="button" aria-label={`删除收藏：${itemName}`} title="删除收藏" onClick={() => void deletePersonalCollection(item.id)}>
+                                <Trash2 aria-hidden="true" />
+                              </button>
+                            </div>
+                          </div>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </>
+            )}
+          </section>
+        )}
+
       </section>
 
-      {inspectorOpen && selectedResult && selectedAnalysis && (
+      {inspectorOpen && selectedResult && (
         <>
           <button className="drawer-backdrop" type="button" tabIndex={-1} aria-hidden="true" onClick={closeOverlays} />
           <aside className="source-inspector" role="dialog" aria-modal="true" aria-label="来源检视器">
             <header className="inspector-heading">
-              <div><span>来源与证据</span><h2>{assetLabels[selectedResult.assetType]}</h2></div>
+              <div><span>来源检视器</span><h2>核对原文证据</h2></div>
               <button type="button" autoFocus onClick={closeOverlays}>关闭</button>
             </header>
             <div className="inspector-content">
-              <strong className="inspector-project">{selectedResult.project}</strong>
-              <p className="inspector-location">{selectedResult.location} · {selectedResult.year}</p>
-              <section className="inspector-project-context">
-                <h3>项目条件</h3>
-                <p>{selectedAnalysis.projectContext}</p>
+              <section className="inspector-preview-pane" aria-label="项目预览">
+                <figure aria-label={`${selectedResult.project} 项目预览`}>
+                  <div className="inspector-preview" data-drawing={selectedResult.drawing}>
+                    {selectedPreviewUrl ? (
+                      <img
+                        src={selectedPreviewUrl}
+                        alt={`${selectedResult.project} ${assetLabels[selectedResult.assetType]}`}
+                        onError={() => markPreviewFailed(selectedResult.id, selectedPreviewUrl)}
+                      />
+                    ) : (
+                      <div className="preview-unavailable">
+                        <ImageOff aria-hidden="true" />
+                        <strong>{selectedPreviewLoadFailed ? '项目预览加载失败' : '暂无项目预览'}</strong>
+                        <p>打开原始来源查看完整项目；设计机制以正文引文为准。</p>
+                      </div>
+                    )}
+                    <div className="evidence-image-labels">
+                      <span>{assetLabels[selectedResult.assetType]}</span>
+                      {selectedPreviewUrl && selectedResult.previewSource && (
+                        <span>{selectedResult.previewSource === 'chrome' ? 'Chrome 项目预览' : '公开网页预览'}</span>
+                      )}
+                    </div>
+                  </div>
+                  <figcaption>
+                    <strong>{selectedResult.project}</strong>
+                    <span>{selectedResult.location} · {selectedResult.year}</span>
+                  </figcaption>
+                </figure>
+                <a className="source-link" href={selectedResult.sourceUrl} target="_blank" rel="noreferrer">
+                  打开原始来源 <ExternalLink aria-hidden="true" />
+                </a>
               </section>
-              <section className="inspector-mechanism">
-                <h3>空间机制</h3>
-                <p>{selectedAnalysis.designMechanism}</p>
+
+              <section className="inspector-analysis-pane" aria-label="来源证据">
+                <strong className="inspector-project">{selectedResult.project}</strong>
+                <p className="inspector-location">{selectedResult.location} · {selectedResult.year}</p>
+                <section
+                  className="inspector-source-evidence"
+                  aria-labelledby={`source-evidence-${selectedResult.id}`}
+                >
+                  <header>
+                    <h3 id={`source-evidence-${selectedResult.id}`}>逐字原文证据</h3>
+                    <span>{selectedResult.evidenceClaims.length} 条</span>
+                  </header>
+                  {selectedResult.evidenceClaims.map((claim) => (
+                    <section className="evidence-locator" key={claim.id}>
+                      <h4>{claim.claim_type === 'fact' ? '来源事实' : '补充来源'}</h4>
+                      <p>{claim.statement}</p>
+                      {claim.text_excerpt && <blockquote>{claim.text_excerpt}</blockquote>}
+                      {claim.pdf_page && <p>PDF 第 {claim.pdf_page} 页</p>}
+                      {claim.source_url && <a href={claim.source_url} target="_blank" rel="noreferrer">打开证据定位</a>}
+                    </section>
+                  ))}
+                </section>
+                <section
+                  className="inspector-verification"
+                  aria-labelledby={`source-verification-${selectedResult.id}`}
+                >
+                  <h3 id={`source-verification-${selectedResult.id}`}>核验与权利</h3>
+                  <dl className="evidence-matrix">
+                    <div><dt>发布来源</dt><dd>{publicationTierLabels[selectedResult.publicationTier]}</dd></div>
+                    <div><dt>项目身份</dt><dd>{associationLabels[selectedResult.projectIdentity]}</dd></div>
+                    <div><dt>图片归属</dt><dd>{associationLabels[selectedResult.assetAssociation]}</dd></div>
+                    <div><dt>权利状态</dt><dd>{rightsStatusLabels[selectedResult.rightsStatus]}</dd></div>
+                  </dl>
+                </section>
+                <div className="inspector-actions">
+                  <button type="button" aria-pressed={savedIds.includes(selectedResult.id)} onClick={() => void toggleSaved(selectedResult.id)}>{savedIds.includes(selectedResult.id) ? '取消收藏' : '收藏参考'}</button>
+                  <button type="button" aria-pressed={rejectedIds.includes(selectedResult.id)} onClick={() => void toggleRejected(selectedResult.id)}>{rejectedIds.includes(selectedResult.id) ? '撤销拒绝' : '拒绝参考'}</button>
+                </div>
+                <label htmlFor={`note-${selectedResult.id}`}>研究备注</label>
+                <textarea
+                  id={`note-${selectedResult.id}`}
+                  value={notes[selectedResult.id] ?? ''}
+                  onChange={(event) => setNotes((current) => ({ ...current, [selectedResult.id]: event.target.value }))}
+                  onBlur={(event) => void saveNote(selectedResult.id, event.target.value)}
+                  placeholder="记录为何有用、还要核验什么。"
+                />
               </section>
-              <section className="inspector-highlight">
-                <h3>怎么转译</h3>
-                <ol>{selectedAnalysis.transferStrategy.map((step) => <li key={step}>{step}</li>)}</ol>
-              </section>
-              <section className="inspector-observation">
-                <h3>图中直接可见</h3>
-                <p>{selectedAnalysis.observation}</p>
-              </section>
-              <section className="inspector-inference">
-                <h3>设计方法推断</h3>
-                <p>{selectedResult.inference}</p>
-              </section>
-              <details className="inspector-details" open>
-                <summary>来源与核验</summary>
-                <dl className="evidence-matrix">
-                  <div><dt>发布来源</dt><dd>{publicationTierLabels[selectedResult.publicationTier]}</dd></div>
-                  <div><dt>项目身份</dt><dd>{associationLabels[selectedResult.projectIdentity]}</dd></div>
-                  <div><dt>图纸归属</dt><dd>{associationLabels[selectedResult.assetAssociation]}</dd></div>
-                  <div><dt>权利状态</dt><dd>{rightsStatusLabels[selectedResult.rightsStatus]}</dd></div>
-                </dl>
-                <section className="claim-block"><h3>来源支持的事实</h3><p>{selectedResult.fact}</p></section>
-                {selectedResult.evidenceClaims.map((claim) => (
-                  <section className="evidence-locator" key={claim.id}>
-                    <h3>{claim.claim_type === 'fact' ? '事实证据定位' : '补充证据定位'}</h3>
-                    <p>{claim.statement}</p>
-                    {claim.pdf_page && <p>PDF 第 {claim.pdf_page} 页</p>}
-                    {claim.text_excerpt && <blockquote>{claim.text_excerpt}</blockquote>}
-                    {claim.source_url && <a href={claim.source_url} target="_blank" rel="noreferrer">打开证据定位</a>}
-                  </section>
-                ))}
-                <a className="source-link" href={selectedResult.sourceUrl} target="_blank" rel="noreferrer">打开原始来源</a>
-              </details>
-              <details className="inspector-details">
-                <summary>适用边界</summary>
-                <p>{selectedAnalysis.limitation}</p>
-              </details>
-              <div className="inspector-actions">
-                <button type="button" aria-pressed={savedIds.includes(selectedResult.id)} onClick={() => void toggleSaved(selectedResult.id)}>{savedIds.includes(selectedResult.id) ? '取消收藏' : '收藏参考'}</button>
-                <button type="button" aria-pressed={rejectedIds.includes(selectedResult.id)} onClick={() => void toggleRejected(selectedResult.id)}>{rejectedIds.includes(selectedResult.id) ? '撤销拒绝' : '拒绝参考'}</button>
-              </div>
-              <label htmlFor={`note-${selectedResult.id}`}>研究备注</label>
-              <textarea
-                id={`note-${selectedResult.id}`}
-                value={notes[selectedResult.id] ?? ''}
-                onChange={(event) => setNotes((current) => ({ ...current, [selectedResult.id]: event.target.value }))}
-                onBlur={(event) => void saveNote(selectedResult.id, event.target.value)}
-                placeholder="记录为何有用、还要核验什么。"
-              />
             </div>
           </aside>
         </>
       )}
 
-      {traceOpen && (
-        <>
-          <button className="drawer-backdrop" type="button" tabIndex={-1} aria-hidden="true" onClick={closeOverlays} />
-          <section className="trace-panel" role="dialog" aria-modal="true" aria-label="研究过程记录">
-            <header><div><span>运行记录</span><h3>研究过程记录</h3></div><button type="button" autoFocus onClick={closeOverlays}>关闭</button></header>
-            <ol className="trace-list">
-              {(demoMode ? traceItems : traceEvents).map((item) => (
-                <li key={item.id}>
-                  <strong>{item.tool}</strong><span>{item.stage}</span>
-                  <p>{'duration' in item ? item.summary : traceSummary(item.summary)}</p>
-                  <small>{'duration' in item ? `${item.duration} · ${item.cost}` : `${item.duration_ms} ms · $${item.cost_usd.toFixed(4)}`}</small>
-                </li>
-              ))}
-            </ol>
-          </section>
-        </>
-      )}
     </main>
   )
 }

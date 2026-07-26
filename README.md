@@ -1,6 +1,6 @@
 # ArchResearch V2.1
 
-面向建筑学生和青年设计师的本地优先实时研究 Agent。用户输入具体设计问题，并可附加图片、PDF 或 URL；系统进行有预算的多轮网页研究，定位平面、剖面、分析图和效果图，核验图片与项目来源关系，最后编排成可筛选、比较和导出的图纸参考板。
+面向建筑学生和青年设计师的本地优先实时研究 Agent。用户输入具体设计问题，并可附加任务书 PDF 或案例 URL；系统进行有预算的多轮网页研究，定位平面、剖面、分析图和效果图，核验图片与项目来源关系，最后编排成可筛选、比较和导出的图纸参考板。
 
 本项目不建设平台案例库，不维护全局图片索引，也不跨工作区复用第三方图像语料。
 
@@ -9,11 +9,12 @@
 ```mermaid
 flowchart LR
     B["React 图纸参考板"] -->|HTTP / SSE| A["FastAPI 本地研究执行器"]
-    A -->|Responses API| O["OpenAI 网页搜索与视觉分类"]
-    A -->|反向图片搜索| T["TinEye API"]
-    A -->|公开页结构化解析| F["Firecrawl API（可选）"]
+    A -->|Responses API| O["问题拆解、页面分析与视觉分类"]
+    A -->|隔离系统 Chrome| P["Playwright 公开网页搜索与解析"]
+    A -->|只读站点命令| X["OpenCLI 小红书搜索与多图下载"]
+    X <-->|Browser Bridge| W["用户登录态 Chrome"]
     A <-->|白名单 WebSocket 动作| E["Chrome MV3 扩展"]
-    E -->|用户现有登录态| W["实时项目网页"]
+    E -->|通用页面读取 / 故障回退| W
     A --> S["SQLite + 本地工作区"]
 ```
 
@@ -38,6 +39,14 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/start.ps1
 - API：`http://127.0.0.1:8000`
 - 扩展目录：`apps/extension/dist`
 
+要让 Windows 重启并登录后自动恢复本地页面，执行一次：
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/configure-autostart.ps1
+```
+
+它只为当前用户创建隐藏启动入口，仍复用上面的健康检查与进程状态。要移除该入口，执行同一脚本并增加 `-Disable`。
+
 停止本地服务：
 
 ```powershell
@@ -49,64 +58,70 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/stop.ps1
 1. 打开 `chrome://extensions`，启用开发者模式。
 2. 选择“加载已解压的扩展程序”，使用 `apps/extension/dist`。
 3. 在参考板点击“一键连接浏览器”；手动地址和配对码只作为故障恢复入口。
-4. 开始研究时由 Chrome 确认临时网页读取权限；终止、失败或断线后自动撤销。
+4. 首次使用时由 Chrome 确认网页读取权限；授权会保留，直到用户在扩展中主动撤销或卸载扩展。
 
-Chrome 的 `captureVisibleTab` 只接受用户手势产生的 `activeTab` 或 `<all_urls>` host permission。连续研究无法要求用户逐页点击，因此扩展只在任务期间请求可选的 `<all_urls>`，并在终态立即撤销；实际导航、脚本注入和最终 URL 复核仍严格限制为公网 HTTP/HTTPS，不接受 `file:`、扩展页、回环或私网地址。
+### 启用小红书登录态研究
+
+1. 从 [Chrome Web Store](https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk) 安装一次 **OpenCLI Browser Bridge**。
+2. 在同一个 Chrome 中登录小红书。OpenCLI daemon 会在研究时按需启动，不需要每次配对。
+3. 可用 `pnpm opencli -- doctor` 检查 Bridge；项目已锁定 `@jackwener/opencli@1.8.6`，无需全局安装 CLI。
+
+ArchResearch 扩展与 OpenCLI Bridge 职责不同：前者负责通用登录页面裁图和故障回退，后者是小红书的主搜索/轮播多图路径。两者都不会替用户点赞、收藏、评论或发布。
+
+Chrome 的 `captureVisibleTab` 只接受用户手势产生的 `activeTab` 或 `<all_urls>` host permission。连续研究无法要求用户逐页点击，因此扩展从自身弹窗的直接用户手势请求可选的 `<all_urls>`，并保留到用户主动撤销或卸载扩展；实际导航、脚本注入和最终 URL 复核仍严格限制为公网 HTTP/HTTPS，不接受 `file:`、扩展页、回环或私网地址。研究终态仍会关闭扩展打开的标签页。
+
+动态页面读取只作用于扩展创建的受管标签：扩展先创建空白标签并写入 `chrome.storage.session`，再监听该 tab 的 `loading` 事件、立即注入随包发布的固定读取器，确认监听器就绪后才向本地 API 返回 tab id。后续页面命令不重复注入；关闭、终态、断线、撤权或工作线程重启都会清理受管标签和监听器。系统不使用按域名全局注册的内容脚本，因此不会把研究读取器注入用户其他同域标签。
+
+本地首版一次只执行一个研究。新建或重试时若已有研究在运行，界面会要求先等待完成或取消；这避免两个任务共用同一个 Chrome 连接时互相关闭标签。研究终态先送达扩展并完成标签清理，运行槽位才释放给下一次研究。
 
 ## 模型与密钥
 
 默认 `ARCHRESEARCH_PROVIDER_MODE=mock`，不需要任何 Key，适合开发、测试和作品集演示。
 
-梭子蟹中转站使用下面的安全配置命令。命令会隐藏输入，先执行一次可能产生费用的 Responses + `web_search` 能力测试；只有测试通过后，才把 Key 保存到 Windows 凭据管理器，并将不含密钥的 `gpt-5.5` 配置写入本地工作区。已经启动 ArchResearch 时，配置完成后需要重启服务。
+梭子蟹中转站使用下面的安全配置命令。命令会隐藏输入，先执行一次小型、可能产生费用的 `gpt-5.6-sol + medium` 结构化输出测试；只有测试通过后，才把 Key 保存到 Windows 凭据管理器，并将不含密钥的模型配置写入本地工作区。已经启动 ArchResearch 时，配置完成后需要重启服务。
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/configure-provider.ps1
 ```
 
-Firecrawl 是可选的公开网页研究器：配置后，每个子问题会先用一条简短的中英文图纸查询实时发现公网来源，再在页面预算内解析最新 Markdown、链接和图片。已知投放尺寸与跨 CDN 的同图会在当前页面内合并；明确标注类型的图片可作为低置信线索保留。每次付费搜索或解析前，客户端会通过官方额度接口检查余额；默认至少保留 100 credits，余额无法核验或调用后会跌破保留线时不会发送付费请求。Chrome 扩展同时负责登录态、动态交互和精确裁图；Firecrawl 线索在完成视觉分类和来源绑定前始终标为未核验，不会自动升级事实、归属或版权。Key 通过隐藏输入保存到 Windows 凭据管理器：
+公开建筑网站由 Direct Playwright 在不落盘的隔离上下文中提取正文、项目链接、图片 URL 和图注；图片、媒体和字体请求默认拦截以降低流量。小红书默认由 OpenCLI Browser Bridge 使用用户已登录的 Chrome 执行只读搜索和多图下载。每个灵感方向按 rank 最多尝试四篇笔记，累计三篇产生可用图的帖子后停止；每篇等距选取最多四图并合并为一次视觉分类。图纸灵感共享 48 个逐图检查槽位 / 48 MiB 预览预算。OpenCLI 不可用或返回空结果时回退 ArchResearch 扩展；两条小红书路径都不可用时诚实终止，不降级为通用网页素材。
 
-```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/configure-firecrawl.ps1
-```
-
-也可以通过本地 `.env` 启用其他 OpenAI 兼容配置。研究规划、网页研究和视觉分类默认统一使用 `gpt-5.5`，模型名仍可分别覆盖。不要把 `.env` 或任何 Key 提交到 Git。
+也可以通过本地 `.env` 启用其他 OpenAI 兼容配置。研究规划、已抓页面分析和视觉分类默认统一使用 `gpt-5.6-sol`，推理强度统一为 `medium`；模型名仍可分别覆盖。不要把 `.env` 或任何 Key 提交到 Git。
 
 ```dotenv
 ARCHRESEARCH_PROVIDER_MODE=openai
 OPENAI_API_KEY=
-OPENAI_RESEARCH_MODEL=gpt-5.5
-OPENAI_VISION_MODEL=gpt-5.5
-TINEYE_API_KEY=
-FIRECRAWL_API_KEY=
-FIRECRAWL_API_URL=https://api.firecrawl.dev/v2
-FIRECRAWL_CREDIT_RESERVE=100
+OPENAI_RESEARCH_MODEL=gpt-5.6-sol
+OPENAI_VISION_MODEL=gpt-5.6-sol
 ```
 
 ## 研究行为
 
-支持三类研究目标：
+支持两类研究目标：
 
-- `precedent_research`：设计策略与具体图纸研究。
-- `source_lookup`：截图或上传图片的来源反查。
-- `visual_reference_search`：按可见表达特征搜索并重排。
+- `precedent_research`：按查询轮换 ArchDaily、Designboom、Dezeen、Divisare、ArchDaily China，并继续核对事务所官网等落地项目正文；只有逐字引文支持的项目条件与空间机制进入结果。一个项目可聚合主文章和最多两个定向补充文字来源，转译策略明确属于 ArchResearch 分析。图片只作为可选预览和原站入口。
+- `visual_reference_search`：接受“我想出一张轴测图，帮我找风格”“效果图怎么出”这类宽泛提问；用户点名图纸类型时固定该类型，只规划线稿、拼贴、材质渲染、氛围等互不重复的表达方向，再从小红书分类与重排。
 
-概览、标准、深入都必须覆盖各自拆解出的全部子问题，才会把建筑先例研究标记为 `completed`。三种深度共用 30 分钟的单次执行安全上限；差异只在子问题数量、每题研究轮数、目标案例数量和分析要求。常规研究后还有三轮只补空白分支的恢复查询；主动续研会保留已有证据并跳过已经覆盖的分支。网站阻塞、来源不存在、供应商故障或额度保留线触发时，运行进入可继续的 `blocked`，不会把不完整结果伪装成成品。
+建筑设计研究的概览、标准、深入仍以覆盖各自拆解出的全部子问题作为 `completed` 标准。三种深度共用 30 分钟的单次执行安全上限；差异只在子问题数量、每题研究轮数、目标案例数量和分析要求。图纸灵感不显示三档深度，使用固定视觉配置并以各灵感方向获得可用图片为覆盖标准；若 48 个逐图检查槽位耗尽时仍有方向未达到三篇 usable 帖子，结果诚实保留为 `partial`，停止原因为 `visual_budget_exhausted`。局部分支不完整时保留已有结果并明确缺口，不会把不完整结果伪装成全覆盖，也不会丢弃已经有用的答案。
 
-作品集演示使用纯本地固定回放数据，不调用 OpenAI、Firecrawl、TinEye 或 Chrome 扩展：`?demo=quick`、`?demo=balanced`、`?demo=deep`。三页分别展示 3、4、6 个完整子问题，并在首屏标明深度合同与零额度消耗。
+作品集演示使用固定回放数据：`?demo=quick`、`?demo=balanced`、`?demo=deep`。三页分别展示 3、4、6 个完整子问题，并在首屏标明各自的研究深度合同。
 
-设计策略研究会先把总问题拆成 3–6 个可检索子问题，再分别召回项目和图纸。结果不是单张图片墙，而是按“子问题 → 项目档案 → 多张互补图纸”组织；每个档案交代项目条件、空间机制、可转译步骤和适用边界。同一图纸支持多个子问题时，各关联保留自己的分析，不把第一个结论复制到其他章节。
+设计策略研究会先把总问题拆成 3–6 个可检索子问题，再分别召回并读取项目正文。结果按“子问题 → 项目档案 → 正文证据”组织；事实完整性在声明级校验，每条事实分别保留 URL 和逐字引文。同一项目的一篇文章只有背景或局部机制时，系统最多执行一次项目名与缺失主题的定向补查、读取两个可信文字页，再把可核验证据合并到项目档案；不同项目绝不合并。转译步骤和适用边界是基于这些证据的研究分析。同源图片可以作为预览，但不参与证明机制，也不要求精准对应当前问题；文字覆盖未完成时不执行图片批次。
 
-每张图纸分别记录来源等级、项目身份、图片归属、首发来源、版权状态和结果等级。只有供应商明确返回的事实才生成正式证据声明，并绑定 URL 或 PDF 定位；项目背景、图像观察、设计推断和适用边界分开显示。
+来源不是一条固定高低链：项目官网和可信建筑媒体主要回答“方案怎么成立”，小红书主要回答“图怎么出”。视觉平台图片按“灵感方向 → 图纸类型 → 可见观察”进入独立灵感板，不计入方案项目数量，也不能单独确认项目事实、图纸归属或使用权。工作流会随研究目标切换网页检查优先级。
+
+每张预览图片分别记录来源等级、项目身份、图片归属、首发来源、版权状态和结果等级。只有正文逐字证据支持的事实才生成正式证据声明，并绑定 URL 或 PDF 定位；正文事实、图片可见观察、设计推断和适用边界分开显示。`visual_reference_search` 或明确找图任务仍按图片与问题的视觉相关性筛选。
 
 ## 安全边界
 
 - API 仅监听回环地址；扩展令牌保存在本地，API 落盘只保存摘要。
 - 扩展只接受枚举 JSON 动作，不接收任意 JavaScript、选择器或远程代码。
-- `<all_urls>` 只用于 Chrome 可见页裁图能力，必须由用户手势临时授予；它不会扩大动作 DSL 的公网 HTTP/HTTPS 范围。
+- `<all_urls>` 只用于 Chrome 可见页裁图能力，必须由用户从扩展界面明确授予，并可随时撤销；它不会扩大动作 DSL 的公网 HTTP/HTTPS 范围。
 - 禁止读取 Cookie、LocalStorage、密码框、私信和账号页面。
 - 通用网页 `safe_click` 保留协议但默认不执行不可信页面点击。
 - 截图前后验证目标标签；竞态时丢弃图像。
 - API 与扩展共同拦截私网、保留地址和不安全 URL。
+- OpenCLI 适配器只允许小红书 `search`、`note`、`download` 三种只读命令；当前研究闭环只调用 `search` 与 `download`。子进程不经 shell，Trace 不保存查询、签名参数、stderr 或完整登录页。
 - 分享版导出由确定性代码执行版权门禁；未知或受限图片只输出来源卡和链接。
 
 ## 验证
@@ -115,7 +130,7 @@ FIRECRAWL_CREDIT_RESERVE=100
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1
 ```
 
-该命令运行 PowerShell 安全与进程生命周期测试、评测夹具验证、Python 单元/集成测试、Ruff、Mypy、两个 TypeScript 应用的 lint/类型检查/测试/生产构建，以及打包后 Chrome 扩展 E2E。所有默认测试均使用 Mock，不调用真实 OpenAI、TinEye 或 Firecrawl。
+该命令运行 PowerShell 安全与进程生命周期测试、评测夹具验证、Python 单元/集成测试、Ruff、Mypy、两个 TypeScript 应用的 lint/类型检查/测试/生产构建，以及打包后 Chrome 扩展 E2E。所有默认测试均使用 Mock/本地 fixture，不调用真实模型或公开搜索网页。
 
 只验证版本化评测集：
 
@@ -136,7 +151,7 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/validate-evaluation-fixtur
 - [系统架构与数据流](docs/architecture.md)
 - [失败案例与恢复策略](docs/failure-cases.md)
 - [三条完整演示流程](docs/demo-flows.md)
-- [gpt-5.5 实时研究 Smoke 记录](docs/evaluation/live-smoke-2026-07-11.md)
+- [历史 gpt-5.5 实时研究 Smoke 记录](docs/evaluation/live-smoke-2026-07-11.md)
 - [30 条版本化研究任务](fixtures/queries/README.md)
 - [九类图纸分类评测集](fixtures/evaluation/README.md)
 

@@ -8,17 +8,146 @@ from sqlalchemy import select
 from archresearch_api.models import AssetCandidate
 
 
-def _run_with_results(client: TestClient, workspace_id: str) -> tuple[str, list[dict[str, object]]]:
+def _run_with_results(
+    client: TestClient,
+    workspace_id: str,
+    *,
+    goal: str = "visual_reference_search",
+) -> tuple[str, list[dict[str, object]]]:
     run = client.post(
         f"/v1/workspaces/{workspace_id}/runs",
         json={
             "question": "寻找人车分流分析图与清晰平面",
-            "goal": "visual_reference_search",
+            "goal": goal,
             "budget_mode": "balanced",
+            "research_sources": [],
         },
     ).json()
     results = client.get(f"/v1/runs/{run['id']}/results").json()
     return str(run["id"]), list(results)
+
+
+def _ids_from_distinct_projects(
+    results: list[dict[str, object]],
+    count: int = 2,
+) -> list[str]:
+    selected: list[str] = []
+    projects: set[str] = set()
+    for result in results:
+        project_name = str(result["project_name"])
+        if project_name in projects:
+            continue
+        projects.add(project_name)
+        selected.append(str(result["id"]))
+        if len(selected) == count:
+            break
+    assert len(selected) == count
+    return selected
+
+
+def test_architectural_case_export_has_strategy_and_evidence_sections(
+    client: TestClient, workspace_id: str
+) -> None:
+    run_id, results = _run_with_results(
+        client,
+        workspace_id,
+        goal="precedent_research",
+    )
+    board = client.patch(
+        f"/v1/runs/{run_id}/board",
+        json={"selected_asset_ids": _ids_from_distinct_projects(results)},
+    ).json()
+
+    export = client.post(f"/v1/boards/{board['id']}/exports", json={"mode": "private"}).json()
+    manifest = json.loads(Path(export["manifest_path"]).read_text(encoding="utf-8"))
+    html = Path(export["path"]).read_text(encoding="utf-8")
+
+    assert manifest["artifact_kind"] == "case_strategy_matrix"
+    assert "案例策略矩阵" in html
+    assert "跨案例策略矩阵" in html
+    assert "设计问题" in html
+    assert "可迁移动作" in html
+    assert "适用边界" in html
+    assert "证据来源" in html
+    assert "设计动作清单" in html
+    assert "<img" not in html
+    assert "帖子组" not in html
+    assert "视觉表达" not in html
+
+
+def test_private_strategy_matrix_requires_two_distinct_projects(
+    client: TestClient, workspace_id: str
+) -> None:
+    run_id, results = _run_with_results(
+        client,
+        workspace_id,
+        goal="precedent_research",
+    )
+    project_name = results[0]["project_name"]
+    same_project_ids = [
+        result["id"] for result in results if result["project_name"] == project_name
+    ][:2]
+    board = client.patch(
+        f"/v1/runs/{run_id}/board",
+        json={"selected_asset_ids": same_project_ids},
+    ).json()
+
+    response = client.post(f"/v1/boards/{board['id']}/exports", json={"mode": "private"})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "策略矩阵至少需要两个不同案例"
+
+
+def test_visual_inspiration_export_groups_posts_and_avoids_case_analysis(
+    client: TestClient, workspace_id: str
+) -> None:
+    run_id, results = _run_with_results(client, workspace_id)
+    board = client.patch(
+        f"/v1/runs/{run_id}/board",
+        json={"selected_asset_ids": [result["id"] for result in results[:4]]},
+    ).json()
+
+    export = client.post(f"/v1/boards/{board['id']}/exports", json={"mode": "private"}).json()
+    manifest = json.loads(Path(export["manifest_path"]).read_text(encoding="utf-8"))
+    html = Path(export["path"]).read_text(encoding="utf-8")
+
+    assert manifest["artifact_kind"] == "visual_inspiration_board"
+    assert "图纸灵感板" in html
+    assert "帖子组" in html
+    assert "视觉表达" in html
+    assert "项目条件" not in html
+    assert "设计机制" not in html
+    assert "适用边界" not in html
+
+
+def test_visual_inspiration_export_carries_saved_expression_spec(
+    client: TestClient, workspace_id: str
+) -> None:
+    run_id, results = _run_with_results(client, workspace_id)
+    board = client.patch(
+        f"/v1/runs/{run_id}/board",
+        json={"selected_asset_ids": [results[0]["id"]]},
+    ).json()
+    profile = client.post(
+        f"/v1/boards/{board['id']}/style-profile",
+        json={
+            "palette": ["#2D846B", "#171B19"],
+            "line_weights": {"primary": 1.2, "secondary": 0.25},
+            "texture": "vellum",
+            "font_category": "serif",
+            "layout_notes": "证据栏保持在图纸侧边",
+        },
+    )
+    assert profile.status_code == 201
+
+    export = client.post(f"/v1/boards/{board['id']}/exports", json={"mode": "private"}).json()
+    manifest = json.loads(Path(export["manifest_path"]).read_text(encoding="utf-8"))
+    html = Path(export["path"]).read_text(encoding="utf-8")
+
+    assert manifest["style_profile"]["texture"] == "vellum"
+    assert "表达规范" in html
+    assert "#2D846B" in html
+    assert "证据栏保持在图纸侧边" in html
 
 
 def test_board_patch_allows_zero_through_six_draft_items(
@@ -131,6 +260,11 @@ def test_private_export_renders_every_selected_image_and_a_separate_source_manif
     manifest = json.loads(Path(export["manifest_path"]).read_text(encoding="utf-8"))
     assert all(item["embed_full_image"] for item in manifest["items"])
     assert all(result["image_url"] in html for result in selected)
+    assert "/v1/results/" not in html
+    assert all(
+        item["image_url"] is not None or f"/v1/assets/{item['asset_id']}/content" in html
+        for item in manifest["items"]
+    )
     assert export["path"] != export["manifest_path"]
 
 

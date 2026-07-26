@@ -14,6 +14,12 @@ import { PairingStore } from "./pairing-store";
 import { BrowserPermissionService } from "./permissions";
 
 type BackgroundChromeApi = ConstructorParameters<typeof ChromeBrowserPort>[0] & {
+  alarms: {
+    create(name: string, alarmInfo: { periodInMinutes: number }): void;
+    onAlarm: {
+      addListener(listener: (alarm: { name: string }) => void): void;
+    };
+  };
   storage: {
     local: ConstructorParameters<typeof PairingStore>[0];
   };
@@ -34,12 +40,15 @@ type BackgroundChromeApi = ConstructorParameters<typeof ChromeBrowserPort>[0] & 
   };
 };
 
+const RECONNECT_ALARM = "archresearch.reconnect";
+
 export function startBackground(
   api: BackgroundChromeApi,
   socketFactory: SocketFactory = createSocket,
 ): void {
   const permissions = new BrowserPermissionService(api.permissions);
-  const executor = new BrowserCommandExecutor(new ChromeBrowserPort(api));
+  const browserPort = new ChromeBrowserPort(api);
+  const executor = new BrowserCommandExecutor(browserPort);
   const store = new PairingStore(api.storage.local);
   const controller = new ExtensionController(
     store,
@@ -49,10 +58,10 @@ export function startBackground(
         pairing,
         socketFactory,
         executor,
-        permissions,
         undefined,
         onPairingToken,
       ),
+    browserPort.recoverOrphanedTabs(),
   );
   const handleUiMessage = createUiMessageHandler(controller);
 
@@ -60,6 +69,12 @@ export function startBackground(
     handleUiMessage(message, sendResponse),
   );
   api.tabs.onRemoved.addListener(createManagedTabRemovalHandler(executor));
+  api.alarms.create(RECONNECT_ALARM, { periodInMinutes: 1 });
+  api.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === RECONNECT_ALARM) {
+      void controller.restore().catch(() => undefined);
+    }
+  });
   void controller.restore().catch(() => undefined);
 }
 

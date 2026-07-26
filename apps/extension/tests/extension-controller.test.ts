@@ -12,7 +12,6 @@ function makeController(initialPairing: Pairing | null = null) {
     }),
   };
   const permissions = {
-    requestForResearch: vi.fn().mockResolvedValue(true),
     revokeAfterResearch: vi.fn().mockResolvedValue(true),
     hasResearchAccess: vi.fn().mockResolvedValue(false),
   };
@@ -20,7 +19,7 @@ function makeController(initialPairing: Pairing | null = null) {
     connect: vi.fn(),
     disconnect: vi.fn(),
     getStatus: vi.fn().mockReturnValue("connected"),
-    setResearchPermission: vi.fn(),
+    setResearchPermission: vi.fn().mockResolvedValue(undefined),
   };
   const clientFactory = vi.fn<
     (
@@ -87,16 +86,17 @@ describe("extension background controller", () => {
     expect(client.connect).toHaveBeenCalledOnce();
   });
 
-  it("requests broad web access only while paired and connected", async () => {
+  it("synchronizes already-granted web access while paired and connected", async () => {
     const pairing = {
       endpoint: "ws://127.0.0.1:8000/v1/browser",
       token: "saved-token",
     };
     const { controller, permissions, client } = makeController(pairing);
+    permissions.hasResearchAccess.mockResolvedValue(true);
 
     await controller.handle({ type: "ui.permissions.request" });
 
-    expect(permissions.requestForResearch).toHaveBeenCalledOnce();
+    expect(permissions.hasResearchAccess).toHaveBeenCalled();
     expect(client.setResearchPermission).toHaveBeenCalledWith(true);
   });
 
@@ -106,7 +106,7 @@ describe("extension background controller", () => {
     await expect(
       controller.handle({ type: "ui.permissions.request" }),
     ).rejects.toThrow(/paired and connected/i);
-    expect(permissions.requestForResearch).not.toHaveBeenCalled();
+    expect(permissions.hasResearchAccess).not.toHaveBeenCalled();
   });
 
   it("rejects a permission request while the local connection is down", async () => {
@@ -120,7 +120,7 @@ describe("extension background controller", () => {
     await expect(
       controller.handle({ type: "ui.permissions.request" }),
     ).rejects.toThrow(/paired and connected/i);
-    expect(permissions.requestForResearch).not.toHaveBeenCalled();
+    expect(permissions.hasResearchAccess).toHaveBeenCalledOnce();
   });
 
   it("persists a server-rotated token after one-time pairing", async () => {
@@ -140,6 +140,34 @@ describe("extension background controller", () => {
     });
   });
 
+  it("waits for managed-tab cleanup before revoking host permission", async () => {
+    const pairing = {
+      endpoint: "ws://127.0.0.1:8000/v1/browser",
+      token: "saved-token",
+    };
+    const { controller, client, permissions } = makeController(pairing);
+    let finishCleanup!: () => void;
+    client.setResearchPermission.mockImplementation(
+      (granted: boolean) =>
+        granted
+          ? Promise.resolve()
+          : new Promise<void>((resolve) => {
+              finishCleanup = resolve;
+            }),
+    );
+    await controller.restore();
+
+    const revoking = controller.handle({ type: "ui.permissions.revoke" });
+    await vi.waitFor(() =>
+      expect(client.setResearchPermission).toHaveBeenLastCalledWith(false),
+    );
+    expect(permissions.revokeAfterResearch).not.toHaveBeenCalled();
+
+    finishCleanup();
+    await revoking;
+    expect(permissions.revokeAfterResearch).toHaveBeenCalledOnce();
+  });
+
   it("waits for startup restoration before reporting UI status", async () => {
     let resolveLoad!: (pairing: Pairing | null) => void;
     const load = vi.fn(
@@ -150,7 +178,6 @@ describe("extension background controller", () => {
     );
     const store = { load, save: vi.fn() };
     const permissions = {
-      requestForResearch: vi.fn(),
       revokeAfterResearch: vi.fn(),
       hasResearchAccess: vi.fn().mockResolvedValue(false),
     };
@@ -158,7 +185,7 @@ describe("extension background controller", () => {
       connect: vi.fn(),
       disconnect: vi.fn(),
       getStatus: vi.fn().mockReturnValue("connected" as const),
-      setResearchPermission: vi.fn(),
+      setResearchPermission: vi.fn().mockResolvedValue(undefined),
     };
     const controller = new ExtensionController(
       store,
@@ -172,6 +199,7 @@ describe("extension background controller", () => {
 
     const restoring = controller.restore();
     const status = controller.handle({ type: "ui.status" });
+    await Promise.resolve();
     resolveLoad(restoredPairing);
 
     await restoring;

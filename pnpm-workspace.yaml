@@ -2,4 +2,5 @@ packages:
   - "apps/board"
   - "apps/extension"
 allowBuilds:
+  '@jackwener/opencli': true
   esbuild: true

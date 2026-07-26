@@ -24,18 +24,34 @@ const SENSITIVE_CONTEXT =
   /(?:password|passcode|sign[ -]?in|log[ -]?in|auth|private[ -]?messages?|direct[ -]?messages?|inbox|chat|checkout|payment|credit[ -]?card|account|comment)/iu;
 const SENSITIVE_PAGE_PATH =
   /(?:^|\/)(?:messages?|inbox|chat|account|login|sign-in|signin|settings)(?:\/|$)/iu;
+const MAX_SCANNED_MEDIA_NODES = 500;
+const MAX_MEDIA_CANDIDATES = 100;
+const MAX_MEDIA_COLLECTION_MILLISECONDS = 1_500;
 
 export function collectMedia(root: Document): MediaCandidate[] {
   if (isSensitivePage(root)) {
     return [];
   }
   const candidates: MediaCandidate[] = [];
-  root.querySelectorAll("img, canvas, svg").forEach((element) => {
-    if (isSensitive(element) || !isVisible(element)) {
-      return;
+  const startedAt = mediaClock(root);
+  let scannedNodes = 0;
+  for (const element of boundedMediaElements(root)) {
+    if (
+      mediaClock(root) - startedAt >= MAX_MEDIA_COLLECTION_MILLISECONDS ||
+      scannedNodes >= MAX_SCANNED_MEDIA_NODES ||
+      candidates.length >= MAX_MEDIA_CANDIDATES
+    ) {
+      break;
+    }
+    scannedNodes += 1;
+    if (isSensitive(element)) {
+      continue;
     }
 
     const rect = element.getBoundingClientRect();
+    if (!isVisible(element, rect)) {
+      continue;
+    }
     const dimensions = getIntrinsicDimensions(element, rect);
     if (
       rect.width < 120 ||
@@ -43,7 +59,7 @@ export function collectMedia(root: Document): MediaCandidate[] {
       dimensions.width < 240 ||
       dimensions.height < 160
     ) {
-      return;
+      continue;
     }
 
     const mediaType =
@@ -77,8 +93,28 @@ export function collectMedia(root: Document): MediaCandidate[] {
         height: Math.round(rect.height),
       },
     });
-  });
+  }
   return candidates;
+}
+
+function* boundedMediaElements(root: Document): Generator<Element> {
+  let yielded = 0;
+  for (const tagName of ["img", "canvas", "svg"] as const) {
+    const elements = root.getElementsByTagName(tagName);
+    const limit = Math.min(elements.length, MAX_SCANNED_MEDIA_NODES - yielded);
+    for (let index = 0; index < limit; index += 1) {
+      const element = elements.item(index);
+      if (element) {
+        yielded += 1;
+        yield element;
+      }
+    }
+    if (yielded >= MAX_SCANNED_MEDIA_NODES) return;
+  }
+}
+
+function mediaClock(root: Document): number {
+  return root.defaultView?.performance.now() ?? Date.now();
 }
 
 export function executeContentCommand(
@@ -222,11 +258,13 @@ function getIntrinsicDimensions(
   };
 }
 
-function isVisible(element: Element): boolean {
+function isVisible(
+  element: Element,
+  rect = element.getBoundingClientRect(),
+): boolean {
   if (element.closest('[hidden], [aria-hidden="true"]')) {
     return false;
   }
-  const rect = element.getBoundingClientRect();
   const view = element.ownerDocument.defaultView;
   return (
     view !== null &&
@@ -268,17 +306,84 @@ function findAdjacentText(element: Element): string {
   const figure = element.closest("figure");
   const caption = figure?.querySelector("figcaption");
   if (caption && !isSensitive(caption)) {
-    return normalizeText(caption.textContent ?? "", 500);
+    const captionText = normalizeText(caption.textContent ?? "", 500);
+    if (captionText) return captionText;
   }
   const link = element.closest("a[href]");
   if (link && !isSensitive(link)) {
-    return normalizeText(link.textContent ?? "", 500);
+    const linkText = normalizeText(link.textContent ?? "", 500);
+    if (linkText) return linkText;
+  }
+  for (const cardLink of boundedSemanticCardLinks(element, element.ownerDocument)) {
+    if (isSensitive(cardLink)) continue;
+    const cardText = normalizeText(cardLink.textContent ?? "", 500);
+    if (cardText) return cardText;
   }
   return "";
 }
 
 function findSourceLink(element: Element, root: Document): string | null {
-  const link = element.closest<HTMLAnchorElement>("a[href]");
+  const directLink = samePageLink(
+    element.closest<HTMLAnchorElement>("a[href]"),
+    root,
+  );
+  if (directLink) return directLink;
+
+  for (const link of boundedSemanticCardLinks(element, root)) {
+    const source = samePageLink(link, root);
+    if (source) return source;
+  }
+
+  let container = element.parentElement;
+  for (let depth = 0; container && depth < 4; depth += 1) {
+    if (
+      container === root.body ||
+      container === root.documentElement ||
+      container.matches("main, section, article, li, figure")
+    ) {
+      break;
+    }
+    const links = container.getElementsByTagName("a");
+    if (links.length <= 8) {
+      for (let index = 0; index < links.length; index += 1) {
+        const link = links.item(index);
+        if (!link || !link.hasAttribute("href")) continue;
+        const source = samePageLink(link, root);
+        if (source) return source;
+      }
+    }
+    container = container.parentElement;
+  }
+  return null;
+}
+
+function boundedSemanticCardLinks(
+  element: Element,
+  root: Document,
+): HTMLAnchorElement[] {
+  const card = element.closest("figure, article, li, section.note-item");
+  if (
+    !card ||
+    card === root.body ||
+    card === root.documentElement ||
+    card.matches("main")
+  ) {
+    return [];
+  }
+  const links = card.getElementsByTagName("a");
+  if (links.length > 8) return [];
+  const bounded: HTMLAnchorElement[] = [];
+  for (let index = 0; index < links.length; index += 1) {
+    const link = links.item(index);
+    if (link?.hasAttribute("href")) bounded.push(link);
+  }
+  return bounded;
+}
+
+function samePageLink(
+  link: HTMLAnchorElement | null,
+  root: Document,
+): string | null {
   if (!link || isSensitive(link)) return null;
   try {
     const source = new URL(link.href, root.location.href);

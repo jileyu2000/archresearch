@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
@@ -29,6 +29,10 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def default_run_retention_expiry() -> datetime:
+    return utc_now() + timedelta(days=14)
+
+
 class TimestampMixin:
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
@@ -43,6 +47,7 @@ class Workspace(TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(200))
     brief: Mapped[str] = mapped_column(Text, default="")
     constraints: Mapped[list[str]] = mapped_column(JSON, default=list)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     inputs: Mapped[list[InputArtifact]] = relationship(cascade="all, delete-orphan")
     runs: Mapped[list[ResearchRun]] = relationship(cascade="all, delete-orphan")
@@ -91,6 +96,10 @@ class ResearchRun(TimestampMixin, Base):
     visual_byte_limit_reached: Mapped[bool] = mapped_column(Boolean, default=False)
     browser_pages_attempted: Mapped[int] = mapped_column(Integer, default=0)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    keep_forever: Mapped[bool] = mapped_column(Boolean, default=False)
+    retention_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=default_run_retention_expiry, index=True
+    )
 
     queries: Mapped[list[QueryAttempt]] = relationship(cascade="all, delete-orphan")
     pages: Mapped[list[SourcePage]] = relationship(cascade="all, delete-orphan")

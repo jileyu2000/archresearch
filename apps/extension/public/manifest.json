@@ -4,7 +4,7 @@
   "name": "ArchResearch Browser Bridge",
   "version": "0.1.0",
   "description": "Local browser bridge for evidence-based architecture research.",
-  "permissions": ["storage", "tabs", "scripting", "activeTab", "sidePanel"],
+  "permissions": ["storage", "tabs", "scripting", "activeTab", "sidePanel", "alarms"],
   "optional_host_permissions": ["<all_urls>"],
   "content_scripts": [
     {

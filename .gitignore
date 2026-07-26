@@ -23,6 +23,16 @@ data/workspaces/
 # Browser test output
 playwright-report/
 test-results/
+.playwright-cli/
+
+# Local verification output
+.artifacts/api-test-results.xml
+apps/api/.artifacts/
+.impeccable/
+apps/extension/.impeccable/
+
+# Local data backups (workspace ZIPs contain the live SQLite database)
+.artifacts/*.zip
 
 # Planning companion
 .superpowers/

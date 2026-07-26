@@ -187,6 +187,66 @@ function Stop-WorkspaceTcpListeners {
     }
 }
 
+function Test-HttpEndpointReady {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Url
+    )
+
+    try {
+        $response = Invoke-WebRequest `
+            -UseBasicParsing `
+            -SkipHttpErrorCheck `
+            -Uri $Url `
+            -TimeoutSec 1
+        return $response.StatusCode -ge 200 -and $response.StatusCode -lt 500
+    }
+    catch {
+        return $false
+    }
+}
+
+function Test-WorkspaceDevelopmentServicesReady {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$WorkspaceRoot,
+        [Parameter(Mandatory = $true)]
+        [object]$State
+    )
+
+    try {
+        $apiPort = [int]$State.api.port
+        $boardPort = [int]$State.board.port
+    }
+    catch {
+        return $false
+    }
+
+    if ($apiPort -lt 1 -or $apiPort -gt 65535 -or
+        $boardPort -lt 1 -or $boardPort -gt 65535 -or
+        $apiPort -eq $boardPort) {
+        return $false
+    }
+
+    $services = @(
+        @{ Port = $apiPort; Url = "http://127.0.0.1:$apiPort/health" }
+        @{ Port = $boardPort; Url = "http://127.0.0.1:$boardPort" }
+    )
+    foreach ($service in $services) {
+        $listenerIds = @(
+            Get-WorkspaceListeningProcessIds `
+                -WorkspaceRoot $WorkspaceRoot `
+                -Port $service.Port
+        )
+        if ($listenerIds.Count -ne 1 -or
+            -not (Test-HttpEndpointReady -Url $service.Url)) {
+            return $false
+        }
+    }
+
+    return $true
+}
+
 function Wait-HttpReady {
     param(
         [Parameter(Mandatory = $true)]

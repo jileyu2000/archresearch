@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
@@ -11,7 +11,14 @@ from typing import Any, Literal, Protocol
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, ConfigDict, Field
 
-from .visual import ArchitectureAssetType, VisualClassification, VisualClassifier
+from .visual import (
+    ArchitectureAssetType,
+    RemoteVisualCandidate,
+    RemoteVisualClassification,
+    RemoteVisualClassifier,
+    VisualClassification,
+    VisualClassifier,
+)
 
 MAX_MEDIA_PER_PAGE = 6
 MAX_CROP_BYTES = 20 * 1024 * 1024
@@ -21,6 +28,8 @@ MAX_PREVIEW_DIMENSION = 1_600
 MAX_SCROLL_PASSES = 2
 SCROLL_DISTANCE = 1_200
 SCROLL_WAIT_MILLISECONDS = 350
+LOCAL_IMAGE_BATCH_LIMIT = 4
+LOCAL_IMAGE_MIN_RELEVANCE = 2
 
 
 class StrictModel(BaseModel):
@@ -213,6 +222,160 @@ def inspect_source_page(
     finally:
         if tab_id is not None:
             browser.send_command_sync("close_tab", {"tab_id": tab_id})
+
+
+@dataclass(frozen=True)
+class _PreparedLocalImage:
+    candidate_id: str
+    image_bytes: bytes
+    perceptual_hash: str
+    preview_data_url: str
+
+
+def inspect_local_images(
+    classifier: VisualClassifier,
+    *,
+    run_id: str,
+    source_url: str,
+    image_paths: Sequence[Path],
+    question: str,
+    caption: str,
+    candidate_root: Path,
+    budget: InspectionBudget,
+) -> list[InspectedVisual]:
+    bounded_question = _bounded_text(question, 1_000)
+    bounded_caption = _bounded_text(caption, 500)
+    selected_paths = _evenly_sampled_paths(list(image_paths), LOCAL_IMAGE_BATCH_LIMIT)
+    prepared: list[_PreparedLocalImage] = []
+    seen_hashes: set[str] = set()
+    for path in selected_paths:
+        if not budget.reserve_capture():
+            break
+        try:
+            image_bytes = path.read_bytes()
+            if not image_bytes or len(image_bytes) > MAX_CROP_BYTES:
+                continue
+            perceptual_hash = difference_hash(image_bytes)
+            if perceptual_hash in seen_hashes:
+                continue
+            seen_hashes.add(perceptual_hash)
+            budget.seen_perceptual_hashes.add(perceptual_hash)
+            preview_data_url, preview_size = _classifier_preview(image_bytes)
+            if not budget.reserve_preview(preview_size):
+                break
+            prepared.append(
+                _PreparedLocalImage(
+                    candidate_id=f"image_{len(prepared) + 1}",
+                    image_bytes=image_bytes,
+                    perceptual_hash=perceptual_hash,
+                    preview_data_url=preview_data_url,
+                )
+            )
+        except (OSError, ValueError):
+            continue
+    if not prepared:
+        return []
+
+    candidates = [
+        RemoteVisualCandidate(
+            candidate_id=item.candidate_id,
+            image_url=item.preview_data_url,
+            caption=bounded_caption,
+        )
+        for item in prepared
+    ]
+    if isinstance(classifier, RemoteVisualClassifier):
+        classifications = classifier.classify_remote_batch(
+            candidates,
+            question=bounded_question,
+            project_text=bounded_caption,
+        ).classifications
+    else:
+        classifications = [
+            _classify_local_candidate(
+                classifier,
+                candidate,
+                question=bounded_question,
+                project_text=bounded_caption,
+            )
+            for candidate in candidates
+        ]
+
+    prepared_by_id = {item.candidate_id: item for item in prepared}
+    results: list[InspectedVisual] = []
+    for classification in classifications:
+        prepared_item = prepared_by_id.get(classification.candidate_id)
+        if (
+            prepared_item is None
+            or classification.asset_type is None
+            or classification.relevance < LOCAL_IMAGE_MIN_RELEVANCE
+            or not classification.observations
+        ):
+            continue
+        visual_classification = VisualClassification(
+            asset_type=classification.asset_type,
+            relevance=classification.relevance,
+            observations=classification.observations,
+        )
+        classification_key = (prepared_item.perceptual_hash, bounded_question)
+        budget.accepted_classifications[classification_key] = visual_classification
+        budget.accepted_source_urls[classification_key] = {source_url}
+        content_digest = hashlib.sha256(prepared_item.image_bytes).hexdigest()
+        storage_path = candidate_root / run_id / "candidates" / f"{content_digest}.png"
+        storage_path.parent.mkdir(parents=True, exist_ok=True)
+        storage_path.write_bytes(_normalized_png(prepared_item.image_bytes))
+        results.append(
+            InspectedVisual(
+                source_url=source_url,
+                image_url=None,
+                storage_path=storage_path,
+                perceptual_hash=prepared_item.perceptual_hash,
+                asset_type=classification.asset_type,
+                relevance=classification.relevance,
+                observations=classification.observations,
+            )
+        )
+    return results
+
+
+def _classify_local_candidate(
+    classifier: VisualClassifier,
+    candidate: RemoteVisualCandidate,
+    *,
+    question: str,
+    project_text: str,
+) -> RemoteVisualClassification:
+    result = classifier.classify(
+        candidate.image_url,
+        question=question,
+        caption=candidate.caption,
+        project_text=project_text,
+    )
+    return RemoteVisualClassification(
+        candidate_id=candidate.candidate_id,
+        asset_type=result.asset_type,
+        relevance=result.relevance,
+        observations=result.observations[:4],
+    )
+
+
+def _evenly_sampled_paths(paths: list[Path], limit: int) -> list[Path]:
+    if len(paths) <= limit:
+        return paths
+    last_index = len(paths) - 1
+    return [paths[round(position * last_index / (limit - 1))] for position in range(limit)]
+
+
+def _normalized_png(image_bytes: bytes) -> bytes:
+    try:
+        with Image.open(BytesIO(image_bytes)) as image:
+            image.load()
+            normalized = image.convert("RGB")
+            buffer = BytesIO()
+            normalized.save(buffer, format="PNG", optimize=True)
+            return buffer.getvalue()
+    except (Image.DecompressionBombError, OSError, UnidentifiedImageError) as exc:
+        raise ValueError("Local image could not be normalized") from exc
 
 
 def _capture_candidates(

@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import shutil
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from .database import Database
 from .models import (
     AssetCandidate,
     EvidenceClaim,
     QueryAttempt,
+    ReferenceBoard,
+    RejectedFeedback,
     ResearchRun,
     SourcePage,
     TraceEvent,
@@ -20,6 +23,7 @@ from .schemas import RunStatus
 
 @dataclass(frozen=True)
 class CleanupReport:
+    runs: int = 0
     assets: int = 0
     sources: int = 0
     evidence_claims: int = 0
@@ -37,6 +41,18 @@ def cleanup_expired_data(
 ) -> CleanupReport:
     cutoff_time = now or datetime.now(UTC)
     metadata_cutoff = cutoff_time - timedelta(days=metadata_ttl_days)
+    with database.session_factory() as session:
+        expired_run_ids = list(
+            session.scalars(
+                select(ResearchRun.id).where(
+                    ResearchRun.keep_forever.is_(False),
+                    ResearchRun.retention_expires_at.is_not(None),
+                    ResearchRun.retention_expires_at <= cutoff_time,
+                )
+            )
+        )
+    expired_runs = delete_runs(database, data_dir=data_dir, run_ids=expired_run_ids)
+
     with database.session_factory() as session:
         expired_assets = list(
             session.scalars(
@@ -84,6 +100,7 @@ def cleanup_expired_data(
 
     orphan_files = _remove_orphan_candidate_files(data_dir, referenced_storage_paths)
     return CleanupReport(
+        runs=expired_runs,
         assets=len(expired_assets),
         sources=len(expired_sources),
         evidence_claims=len(expired_claims),
@@ -91,6 +108,49 @@ def cleanup_expired_data(
         queries=len(old_queries),
         orphan_files=orphan_files,
     )
+
+
+def delete_runs(
+    database: Database,
+    *,
+    data_dir: Path,
+    run_ids: list[str],
+) -> int:
+    if not run_ids:
+        return 0
+    with database.session_factory() as session:
+        runs = list(session.scalars(select(ResearchRun).where(ResearchRun.id.in_(run_ids))))
+        if not runs:
+            return 0
+        concrete_ids = [run.id for run in runs]
+        assets = list(
+            session.execute(
+                select(AssetCandidate.id, AssetCandidate.storage_path).where(
+                    AssetCandidate.run_id.in_(concrete_ids)
+                )
+            )
+        )
+        asset_ids = [asset_id for asset_id, _storage_path in assets]
+        board_ids = list(
+            session.scalars(
+                select(ReferenceBoard.id).where(ReferenceBoard.run_id.in_(concrete_ids))
+            )
+        )
+        if asset_ids:
+            session.execute(
+                delete(RejectedFeedback).where(RejectedFeedback.asset_candidate_id.in_(asset_ids))
+            )
+        for run in runs:
+            session.delete(run)
+        session.commit()
+
+    for _asset_id, storage_path in assets:
+        _remove_candidate_file(storage_path, data_dir)
+    for run_id in concrete_ids:
+        _remove_storage_tree(data_dir / "runs" / run_id, data_dir)
+    for board_id in board_ids:
+        _remove_storage_tree(data_dir / "exports" / board_id, data_dir)
+    return len(concrete_ids)
 
 
 def incomplete_run_ids(database: Database) -> list[str]:
@@ -123,6 +183,15 @@ def _remove_candidate_file(storage_path: str | None, data_dir: Path) -> None:
         return
     if candidate.is_file():
         candidate.unlink()
+
+
+def _remove_storage_tree(target: Path, data_dir: Path) -> None:
+    root = data_dir.resolve()
+    resolved_target = target.resolve()
+    if resolved_target == root or root not in resolved_target.parents:
+        return
+    if resolved_target.is_dir():
+        shutil.rmtree(resolved_target)
 
 
 def _remove_orphan_candidate_files(

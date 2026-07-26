@@ -137,6 +137,99 @@ def test_cleanup_removes_expired_temporary_data_but_keeps_saved_snapshots(
         assert [query.query for query in session.scalars(select(QueryAttempt))] == ["fresh"]
 
 
+def test_cleanup_removes_expired_runs_and_files_but_keeps_permanent_runs(
+    tmp_path: Path,
+) -> None:
+    data_dir = tmp_path / "runtime"
+    database = Database(f"sqlite:///{(tmp_path / 'run-retention.db').as_posix()}")
+    database.create_all()
+    now = datetime.now(UTC)
+    with database.session_factory() as session:
+        workspace = Workspace(name="Run retention")
+        session.add(workspace)
+        session.flush()
+        expired_run = ResearchRun(
+            workspace_id=workspace.id,
+            question="expire this run",
+            goal=ResearchGoal.precedent_research.value,
+            budget_mode=BudgetMode.quick.value,
+            budget=BUDGETS[BudgetMode.quick].model_dump(),
+            allowed_domains=[],
+            status=RunStatus.completed.value,
+            coverage_report={},
+            keep_forever=False,
+            retention_expires_at=now - timedelta(seconds=1),
+        )
+        permanent_run = ResearchRun(
+            workspace_id=workspace.id,
+            question="keep this run",
+            goal=ResearchGoal.precedent_research.value,
+            budget_mode=BudgetMode.quick.value,
+            budget=BUDGETS[BudgetMode.quick].model_dump(),
+            allowed_domains=[],
+            status=RunStatus.completed.value,
+            coverage_report={},
+            keep_forever=True,
+            retention_expires_at=None,
+        )
+        session.add_all([expired_run, permanent_run])
+        session.flush()
+        expired_board = ReferenceBoard(run_id=expired_run.id)
+        permanent_board = ReferenceBoard(run_id=permanent_run.id)
+        session.add_all([expired_board, permanent_board])
+        session.flush()
+        expired_file = data_dir / "runs" / expired_run.id / "candidates" / "expired.png"
+        expired_file.parent.mkdir(parents=True)
+        expired_file.write_bytes(b"expired")
+        expired_asset = AssetCandidate(
+            run_id=expired_run.id,
+            project_name="Expired",
+            asset_type="section",
+            source_url="https://example.com/expired-run",
+            storage_path=str(expired_file),
+        )
+        session.add(expired_asset)
+        session.flush()
+        session.add(
+            SavedReference(
+                workspace_id=workspace.id,
+                asset_candidate_id=expired_asset.id,
+                source_url=expired_asset.source_url,
+                snapshot={
+                    "project_name": "Expired",
+                    "question": expired_run.question,
+                    "goal": expired_run.goal,
+                    "collection_file": "saved-expired.png",
+                },
+            )
+        )
+        session.commit()
+        expired_run_id = expired_run.id
+        permanent_run_id = permanent_run.id
+        expired_board_id = expired_board.id
+
+    expired_export = data_dir / "exports" / expired_board_id / "old.html"
+    expired_export.parent.mkdir(parents=True)
+    expired_export.write_text("expired", encoding="utf-8")
+    collection_file = data_dir / "collections" / "saved-expired.png"
+    collection_file.parent.mkdir(parents=True)
+    collection_file.write_bytes(b"saved")
+
+    report = cleanup_expired_data(database, data_dir=data_dir, now=now)
+
+    assert report.runs == 1
+    assert not expired_file.exists()
+    assert not expired_export.exists()
+    assert collection_file.exists()
+    with database.session_factory() as session:
+        assert session.get(ResearchRun, expired_run_id) is None
+        assert session.get(ResearchRun, permanent_run_id) is not None
+        saved_questions = [
+            saved.snapshot["question"] for saved in session.scalars(select(SavedReference))
+        ]
+        assert saved_questions == ["expire this run"]
+
+
 def test_cleanup_removes_only_unreferenced_pngs_from_run_candidate_directories(
     tmp_path: Path,
 ) -> None:

@@ -9,7 +9,7 @@ $classificationRoot = Join-Path $repoRoot "fixtures/evaluation/classification"
 $datasetPath = Join-Path $classificationRoot "dataset.json"
 $generatorPath = Join-Path $classificationRoot "generate.ps1"
 $generatedRoot = Join-Path $classificationRoot "generated"
-$allowedGoals = @("precedent_research", "source_lookup", "visual_reference_search")
+$allowedGoals = @("precedent_research", "visual_reference_search")
 $allowedModes = @("quick", "balanced", "deep")
 $allowedAssetTypes = @("plan", "section", "elevation", "site_plan", "axonometric", "circulation", "analysis_diagram", "render", "photograph")
 
@@ -20,8 +20,8 @@ function Assert-Condition {
 
 $taskLines = @(Get-Content -LiteralPath $taskPath | Where-Object { $_.Trim().Length -gt 0 })
 $tasks = @($taskLines | ForEach-Object { $_ | ConvertFrom-Json })
-Assert-Condition ($tasks.Count -eq 30) "Expected exactly 30 research tasks; found $($tasks.Count)."
-Assert-Condition ((@($tasks.id | Sort-Object -Unique)).Count -eq 30) "Research task IDs must be unique."
+Assert-Condition ($tasks.Count -eq 25) "Expected exactly 25 research tasks; found $($tasks.Count)."
+Assert-Condition ((@($tasks.id | Sort-Object -Unique)).Count -eq 25) "Research task IDs must be unique."
 
 foreach ($task in $tasks) {
     Assert-Condition ($task.schema_version -eq "1.0.0") "Task $($task.id) has an unsupported schema version."
@@ -40,9 +40,6 @@ foreach ($task in $tasks) {
     Assert-Condition ([int]$task.expected_coverage.min_projects -ge 1) "Task $($task.id) needs a positive project target."
     Assert-Condition ([int]$task.expected_coverage.min_verified_or_partial -ge 1) "Task $($task.id) needs a positive evidence target."
     Assert-Condition (@($task.expected_coverage.expected_gaps).Count -ge 1) "Task $($task.id) must name at least one evidence boundary."
-    if ($task.goal -eq "source_lookup") {
-        Assert-Condition ([bool]$task.requires_user_artifact) "Source lookup task $($task.id) must require a user artifact."
-    }
 }
 
 $goalCounts = $tasks | Group-Object goal -AsHashTable -AsString

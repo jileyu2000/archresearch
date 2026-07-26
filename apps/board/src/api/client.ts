@@ -1,6 +1,6 @@
-export type ResearchGoal = 'precedent_research' | 'source_lookup' | 'visual_reference_search'
+export type ResearchGoal = 'precedent_research' | 'visual_reference_search'
 export type ResearchMode = 'quick' | 'balanced' | 'deep'
-export type ResearchSource = 'xiaohongshu' | 'pinterest'
+export type ResearchSource = 'xiaohongshu'
 export type RunStatus =
   | 'created'
   | 'planning'
@@ -32,6 +32,7 @@ export interface Workspace {
   name: string
   brief?: string
   constraints?: string[]
+  archived_at?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -50,6 +51,22 @@ export interface StartResearchInput {
   goal: ResearchGoal
   mode: ResearchMode
   researchSources?: ResearchSource[]
+  subquestions?: ResearchSubquestion[]
+}
+
+export interface ProjectBriefReviewInput {
+  workspaceId: string
+  question: string
+  mode: ResearchMode
+  file: File
+}
+
+export interface ProjectBriefReview {
+  filename: string
+  page_count: number
+  project_summary: string
+  project_boundaries: string[]
+  subquestions: ResearchSubquestion[]
 }
 
 export interface CoverageReport {
@@ -62,6 +79,22 @@ export interface CoverageReport {
   subquestion_passes?: Record<string, number>
   gaps?: string[]
   enrichment_gaps?: string[]
+  synthesis?: ResearchSynthesis
+}
+
+export interface ResearchSynthesisFinding {
+  statement: string
+  evidence_asset_ids: string[]
+}
+
+export interface ResearchSynthesis {
+  answer: ResearchSynthesisFinding
+  causal_chains: ResearchSynthesisFinding[]
+  comparisons: ResearchSynthesisFinding[]
+  conflicts: ResearchSynthesisFinding[]
+  applicability_boundaries: ResearchSynthesisFinding[]
+  recommendations: ResearchSynthesisFinding[]
+  generation_mode?: string
 }
 
 export interface ResearchSubquestion {
@@ -74,6 +107,7 @@ export interface ResearchRun {
   id: string
   workspaceId?: string
   question: string
+  title?: string
   goal: ResearchGoal
   status: RunStatus
   mode: ResearchMode
@@ -84,6 +118,8 @@ export interface ResearchRun {
   coverageReport?: CoverageReport
   stopReason?: string | null
   attempt?: number
+  keepForever?: boolean
+  retentionExpiresAt?: string | null
   createdAt?: string
   updatedAt?: string
 }
@@ -92,6 +128,7 @@ interface ApiResearchRun {
   id: string
   workspace_id?: string
   question: string
+  title?: string
   goal: ResearchGoal
   status: RunStatus
   budget_mode: ResearchMode
@@ -102,6 +139,8 @@ interface ApiResearchRun {
   coverage_report?: CoverageReport
   stop_reason?: string | null
   attempt?: number
+  keep_forever?: boolean
+  retention_expires_at?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -177,6 +216,57 @@ export interface RunUserState {
   rejected: RejectedReferenceState[]
 }
 
+export interface PersonalCollectionSnapshot {
+  question?: string
+  goal?: ResearchGoal
+  project_name?: string
+  asset_type?: ArchitectureAssetType
+  image_url?: string | null
+  collection_file?: string
+  result_tier?: ApiAssetCandidate['result_tier']
+  visual_observation?: string
+  project_context?: string
+  design_mechanism?: string
+  transfer_strategy?: string[]
+  limitations?: string[]
+  case_images?: PersonalCollectionCaseImage[]
+  case_subquestions?: PersonalCollectionCaseSubquestion[]
+  rights_status?: ApiAssetCandidate['rights_status']
+}
+
+export interface PersonalCollectionCaseImage {
+  asset_id: string
+  asset_type: ArchitectureAssetType
+  image_url: string
+  source_url: string
+}
+
+export interface PersonalCollectionCaseEvidence {
+  statement: string
+  text_excerpt: string
+  source_url: string | null
+}
+
+export interface PersonalCollectionCaseSubquestion {
+  id: string
+  question: string
+  project_context: string
+  design_mechanism: string
+  transfer_strategy: string[]
+  limitations: string[]
+  evidence?: PersonalCollectionCaseEvidence
+}
+
+export interface PersonalCollection {
+  id: string
+  workspace_id: string
+  asset_candidate_id: string
+  source_url: string
+  note: string
+  snapshot: PersonalCollectionSnapshot
+  created_at: string
+}
+
 export interface TraceEvent {
   id: string
   sequence: number
@@ -214,8 +304,27 @@ export interface BoardExport {
   item_count: number
 }
 
+export interface WorkspaceBackupPreflight {
+  ready: boolean
+  format_version: number
+  schema_revision: string
+  file_count: number
+  total_bytes: number
+  categories: Record<string, number>
+  workspace_count: number
+  run_count: number
+  collection_count: number
+  input_artifact_count: number
+}
+
+export interface WorkspaceRestoreResult extends WorkspaceBackupPreflight {
+  restored: boolean
+  rollback_backup: string
+}
+
 export interface BrowserStatus {
   connected: boolean
+  xiaohongshu_search_available: boolean
 }
 
 export interface BrowserPairingCode {
@@ -242,6 +351,7 @@ function normalizeRun(run: ApiResearchRun): ResearchRun {
     id: run.id,
     workspaceId: run.workspace_id,
     question: run.question,
+    title: run.title?.trim() || run.question,
     goal: run.goal,
     status: run.status,
     mode: run.budget_mode,
@@ -252,6 +362,8 @@ function normalizeRun(run: ApiResearchRun): ResearchRun {
     coverageReport: run.coverage_report,
     stopReason: run.stop_reason,
     attempt: run.attempt,
+    keepForever: run.keep_forever ?? false,
+    retentionExpiresAt: run.retention_expires_at,
     createdAt: run.created_at,
     updatedAt: run.updated_at,
   }
@@ -269,6 +381,12 @@ async function errorFromResponse(response: Response) {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await requestResponse(path, init)
+  if (response.status === 204) return undefined as T
+  return response.json() as Promise<T>
+}
+
+async function requestResponse(path: string, init?: RequestInit): Promise<Response> {
   let response: Response
   try {
     response = await fetch(path, init)
@@ -276,8 +394,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError('无法连接本地 ArchResearch 服务。', null, { cause: error })
   }
   if (!response.ok) throw await errorFromResponse(response)
-  if (response.status === 204) return undefined as T
-  return response.json() as Promise<T>
+  return response
 }
 
 export function createApiClient(baseUrl = '/v1') {
@@ -295,6 +412,33 @@ export function createApiClient(baseUrl = '/v1') {
     openChromeBoard() {
       return request<ChromeLaunchResult>(`${baseUrl}/browser/open-chrome`, {
         method: 'POST',
+      })
+    },
+
+    async downloadWorkspaceBackup() {
+      const response = await requestResponse(`${baseUrl}/data-backups`, { method: 'POST' })
+      const disposition = response.headers.get('content-disposition') ?? ''
+      const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1]
+        ?? 'archresearch-backup.zip'
+      return { blob: await response.blob(), filename }
+    },
+
+    preflightWorkspaceBackup(file: File) {
+      const body = new FormData()
+      body.append('file', file)
+      return request<WorkspaceBackupPreflight>(`${baseUrl}/data-backups/preflight`, {
+        method: 'POST',
+        body,
+      })
+    },
+
+    restoreWorkspaceBackup(file: File) {
+      const body = new FormData()
+      body.append('file', file)
+      body.append('confirmation', 'restore-verified-backup')
+      return request<WorkspaceRestoreResult>(`${baseUrl}/data-backups/restore`, {
+        method: 'POST',
+        body,
       })
     },
 
@@ -343,14 +487,39 @@ export function createApiClient(baseUrl = '/v1') {
             goal: input.goal,
             budget_mode: input.mode,
             research_sources: input.researchSources ?? [],
+            subquestions: input.subquestions,
           }),
         },
       )
       return normalizeRun(run)
     },
 
+    reviewProjectBrief(input: ProjectBriefReviewInput) {
+      const form = new FormData()
+      form.append('question', input.question)
+      form.append('budget_mode', input.mode)
+      form.append('file', input.file)
+      return request<ProjectBriefReview>(
+        `${baseUrl}/workspaces/${input.workspaceId}/brief-review`,
+        {
+          method: 'POST',
+          body: form,
+        },
+      )
+    },
+
     async getRun(runId: string) {
       return normalizeRun(await request<ApiResearchRun>(`${baseUrl}/runs/${runId}`))
+    },
+
+    async updateRunRetention(runId: string, permanent: boolean) {
+      return normalizeRun(
+        await request<ApiResearchRun>(`${baseUrl}/runs/${runId}/retention`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ permanent }),
+        }),
+      )
     },
 
     async cancelRun(runId: string) {
@@ -400,16 +569,27 @@ export function createApiClient(baseUrl = '/v1') {
       return request<RunUserState>(`${baseUrl}/runs/${runId}/user-state`)
     },
 
-    saveResult(resultId: string, note: string) {
-      return request(`${baseUrl}/results/${resultId}/save`, {
+    listPersonalCollections(workspaceId: string) {
+      return request<PersonalCollection[]>(`${baseUrl}/workspaces/${workspaceId}/collections`)
+    },
+
+    saveResult(resultId: string, note: string, subquestionIds?: string[]) {
+      return request<PersonalCollection>(`${baseUrl}/results/${resultId}/save`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ note }),
+        body: JSON.stringify({
+          note,
+          ...(subquestionIds ? { subquestion_ids: subquestionIds } : {}),
+        }),
       })
     },
 
     unsaveResult(resultId: string) {
       return request<void>(`${baseUrl}/results/${resultId}/save`, { method: 'DELETE' })
+    },
+
+    deletePersonalCollection(collectionId: string) {
+      return request<void>(`${baseUrl}/collections/${collectionId}`, { method: 'DELETE' })
     },
 
     rejectResult(resultId: string, reason: string) {

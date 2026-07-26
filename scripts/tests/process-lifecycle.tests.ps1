@@ -33,11 +33,13 @@ $workspace = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $python = Resolve-PythonRuntime -WorkspaceRoot $workspace
 $pwsh = (Get-Command pwsh -ErrorAction Stop).Source
 $workspacePort = Get-AvailableTcpPort -PreferredPort 49200
-$outsidePort = Get-AvailableTcpPort -PreferredPort ($workspacePort + 1)
+$workspaceBoardPort = Get-AvailableTcpPort -PreferredPort ($workspacePort + 1)
+$outsidePort = Get-AvailableTcpPort -PreferredPort ($workspaceBoardPort + 1)
 $testRuntime = Join-Path $workspace ".archresearch\process-lifecycle-test"
 $launcherScript = Join-Path $testRuntime "launch-child.ps1"
 $outsideScript = Join-Path ([System.IO.Path]::GetTempPath()) "archresearch-outside-listener-$([guid]::NewGuid().ToString('N')).ps1"
 $launcher = $null
+$boardLauncher = $null
 $outsideProcess = $null
 
 New-Item -ItemType Directory -Force -Path $testRuntime | Out-Null
@@ -65,12 +67,43 @@ try {
         "-Port", "$workspacePort",
         "-Workspace", $workspace
     ) -WindowStyle Hidden -PassThru
+    $boardLauncher = Start-Process -FilePath $pwsh -ArgumentList @(
+        "-NoProfile", "-File", $launcherScript,
+        "-Python", $python,
+        "-Port", "$workspaceBoardPort",
+        "-Workspace", $workspace
+    ) -WindowStyle Hidden -PassThru
     $outsideProcess = Start-Process -FilePath $pwsh -ArgumentList @(
         "-NoProfile", "-File", $outsideScript, "-Port", "$outsidePort"
     ) -WindowStyle Hidden -PassThru
 
     Wait-Listener -Port $workspacePort
+    Wait-Listener -Port $workspaceBoardPort
     Wait-Listener -Port $outsidePort
+
+    $healthyState = [PSCustomObject]@{
+        api = [PSCustomObject]@{ port = $workspacePort }
+        board = [PSCustomObject]@{ port = $workspaceBoardPort }
+    }
+    if (-not (Test-WorkspaceDevelopmentServicesReady `
+        -WorkspaceRoot $workspace `
+        -State $healthyState)) {
+        throw "Expected the recorded workspace HTTP services to be reusable."
+    }
+
+    Stop-TestListener -Port $workspaceBoardPort
+    if (Test-WorkspaceDevelopmentServicesReady -WorkspaceRoot $workspace -State $healthyState) {
+        throw "A partial recorded service pair must be treated as stale."
+    }
+
+    $stalePort = Get-AvailableTcpPort -PreferredPort ($outsidePort + 1)
+    $staleState = [PSCustomObject]@{
+        api = [PSCustomObject]@{ port = $stalePort }
+        board = [PSCustomObject]@{ port = ($stalePort + 1) }
+    }
+    if (Test-WorkspaceDevelopmentServicesReady -WorkspaceRoot $workspace -State $staleState) {
+        throw "Recorded ports without listeners must be treated as stale."
+    }
 
     $listenerIds = @(Get-WorkspaceListeningProcessIds -WorkspaceRoot $workspace -Port $workspacePort)
     if ($listenerIds.Count -ne 1) {
@@ -108,6 +141,15 @@ try {
         $startScript -notmatch 'launcher_pid') {
         throw "start.ps1 must record both the launcher and verified listener PID."
     }
+    if ($startScript -notmatch 'Test-WorkspaceDevelopmentServicesReady') {
+        throw "start.ps1 must reuse a fully healthy recorded service pair."
+    }
+    if ($startScript -notmatch 'already running') {
+        throw "start.ps1 must report when it reuses healthy services."
+    }
+    if ($startScript -notmatch 'Remove-Item.+\$statePath') {
+        throw "start.ps1 must remove stale process state before relaunching."
+    }
 
     $stopScript = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot "..\stop.ps1")
     if ($stopScript -notmatch 'Stop-WorkspaceTcpListeners') {
@@ -122,9 +164,13 @@ try {
 }
 finally {
     Stop-TestListener -Port $workspacePort
+    Stop-TestListener -Port $workspaceBoardPort
     Stop-TestListener -Port $outsidePort
     if ($null -ne $launcher) {
         Stop-Process -Id $launcher.Id -Force -ErrorAction SilentlyContinue
+    }
+    if ($null -ne $boardLauncher) {
+        Stop-Process -Id $boardLauncher.Id -Force -ErrorAction SilentlyContinue
     }
     if ($null -ne $outsideProcess) {
         Stop-Process -Id $outsideProcess.Id -Force -ErrorAction SilentlyContinue

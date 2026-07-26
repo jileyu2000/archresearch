@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from time import monotonic
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 from urllib.parse import urlparse
 
 import fitz  # type: ignore[import-untyped]
@@ -17,6 +19,7 @@ from .inspection import (
     BrowserCommandClient,
     InspectedVisual,
     InspectionBudget,
+    inspect_local_images,
     inspect_source_page,
 )
 from .models import (
@@ -30,20 +33,35 @@ from .models import (
     Workspace,
 )
 from .providers import (
+    PUBLIC_PAGE_ANALYSIS_TEXT_LIMIT,
     CallBudgetAwareResearchProvider,
     ProviderAsset,
     ProviderSearchResult,
     ProviderSource,
+    PublicPageAnalysis,
+    PublicPageAnalysisProvider,
+    PublicPageDrawing,
+    PublicPageSupportedFact,
     ResearchPlanningProvider,
     ResearchProvider,
-    ReverseImageProvider,
-    TinEyeMatch,
+    ResearchSynthesis,
+    ResearchSynthesisBranchAnalysis,
+    ResearchSynthesisCase,
+    ResearchSynthesisFinding,
+    ResearchSynthesisProvider,
+    requested_visual_drawing_type,
+    visual_style_directions,
 )
 from .public_pages import (
+    ParsedPageImage,
     ParsedPublicPage,
     PublicPageParser,
     PublicSearchProvider,
     infer_architecture_asset_type,
+    infer_research_issue_intent,
+    is_concrete_project_page,
+    project_image_identity_score,
+    public_search_relevance_score,
     select_project_page_links,
 )
 from .schemas import (
@@ -67,7 +85,11 @@ from .visual import (
     RemoteVisualClassifier,
     VisualClassifier,
 )
-from .xiaohongshu import XiaohongshuBrowserSearch
+from .xiaohongshu import (
+    XiaohongshuAssetDownloader,
+    XiaohongshuBrowserSearch,
+    XiaohongshuSearch,
+)
 
 ACTIVE_STAGES = (
     RunStatus.planning,
@@ -84,9 +106,42 @@ VISUAL_INSPECTION_LIMITS: dict[BudgetMode, tuple[int, int]] = {
     BudgetMode.balanced: (36, 72 * 1024 * 1024),
     BudgetMode.deep: (72, 144 * 1024 * 1024),
 }
+VISUAL_REFERENCE_INSPECTION_LIMIT = (48, 48 * 1024 * 1024)
+
+_VISUAL_ASSET_TYPE_BY_DRAWING_LABEL = {
+    "总平面图": ArchitectureAssetType.site_plan,
+    "平面图": ArchitectureAssetType.plan,
+    "剖面图": ArchitectureAssetType.section,
+    "爆炸图": ArchitectureAssetType.axonometric,
+    "轴测图": ArchitectureAssetType.axonometric,
+    "分析图": ArchitectureAssetType.analysis_diagram,
+    "立面图": ArchitectureAssetType.elevation,
+    "流线图": ArchitectureAssetType.circulation,
+    "效果图": ArchitectureAssetType.render,
+}
 
 REMOTE_VISUAL_BATCH_LIMIT = 4
 REMOTE_VISUAL_MIN_RELEVANCE = 2
+XIAOHONGSHU_VISUAL_NOTE_LIMIT = 4
+XIAOHONGSHU_VISUAL_NOTE_TARGET = 3
+UNCOVERED_BRANCH_PAGE_ANALYSIS_LIMIT = 3
+UNCOVERED_BRANCH_FOLLOWUP_PAGE_ANALYSIS_LIMIT = 1
+PROJECT_TEXT_SUPPLEMENT_PAGE_LIMIT = 2
+
+TRUSTED_ARCHITECTURE_PUBLICATION_DOMAINS = (
+    "archdaily.com",
+    "archdaily.cn",
+    "designboom.com",
+    "dezeen.com",
+    "divisare.com",
+)
+PRECEDENT_PUBLIC_SEARCH_DOMAIN_ROTATION = (
+    "archdaily.com",
+    "designboom.com",
+    "dezeen.com",
+    "divisare.com",
+    "archdaily.cn",
+)
 
 NON_PRECEDENT_COVERAGE_TARGETS: dict[BudgetMode, tuple[int, int, int]] = {
     BudgetMode.quick: (4, 2, 2),
@@ -117,6 +172,14 @@ class CoverageData(TypedDict):
     subquestion_passes: dict[str, int]
     gaps: list[str]
     enrichment_gaps: list[str]
+    synthesis: NotRequired[dict[str, object]]
+
+
+class RemotePublicPageBatchItem(TypedDict):
+    source: ProviderSource
+    page: ParsedPublicPage
+    exact_project_evidence: bool
+    article_analysis_eligible: bool
 
 
 def execute_research_run(
@@ -125,11 +188,11 @@ def execute_research_run(
     provider: ResearchProvider,
     on_terminal: Callable[[str], None] | None = None,
     *,
-    source_lookup_provider: ReverseImageProvider | None = None,
     browser_client: BrowserCommandClient | None = None,
     visual_classifier: VisualClassifier | None = None,
     candidate_root: Path | None = None,
     public_page_parser: PublicPageParser | None = None,
+    xiaohongshu_search: XiaohongshuSearch | None = None,
     clock: Callable[[], float] = monotonic,
 ) -> None:
     terminal_state: str | None = None
@@ -195,57 +258,49 @@ def execute_research_run(
             analysis_requirements=DEPTH_TARGETS[budget_mode].analysis_requirements,
             research_context=research_context,
         )
+        last_query_round_by_subquestion: dict[str, int] = {}
+        for query_round, _, query_subquestion_id, _ in queries:
+            last_query_round_by_subquestion[query_subquestion_id] = query_round
+        require_article_analysis = (
+            goal is ResearchGoal.precedent_research
+            and public_page_parser is not None
+            and isinstance(provider, PublicPageAnalysisProvider)
+        )
+        require_research_synthesis = (
+            goal is ResearchGoal.precedent_research
+            and public_page_parser is not None
+            and isinstance(provider, ResearchSynthesisProvider)
+        )
         completed_query_keys = _completed_query_keys_for_resume(db, run_id)
-        initial_coverage = _coverage(db, run_id)
+        initial_coverage = _coverage(
+            db,
+            run_id,
+            require_article_analysis=require_article_analysis,
+        )
         completion_continuation = (
             goal is ResearchGoal.precedent_research
             and run_attempt > 0
             and not _completion_satisfied(initial_coverage)
         )
 
-        source_lookup_error: Exception | None = None
-        if goal is ResearchGoal.source_lookup and source_lookup_provider is not None:
-            image_path = _latest_uploaded_image(db, workspace_id)
-            if image_path is not None:
-                try:
-                    matches = source_lookup_provider.search_file(image_path)
-                    _raise_if_cancelled(db, run_id)
-                    lookup_result = _tineye_result(matches)
-                    _persist_sources(db, run_id, lookup_result)
-                    added = _persist_assets(
-                        db,
-                        run_id,
-                        lookup_result,
-                        subquestion_id=plan.subquestions[0].id,
-                    )
-                    _checkpoint(
-                        db,
-                        run_id,
-                        RunStatus.verifying,
-                        {"method": "reverse_image", "match_count": len(matches), "added": added},
-                    )
-                except Exception as exc:
-                    source_lookup_error = exc
-                    _checkpoint(
-                        db,
-                        run_id,
-                        RunStatus.verifying,
-                        {
-                            "method": "reverse_image",
-                            "status": "failed",
-                            "error_type": type(exc).__name__,
-                        },
-                    )
-
         round_added_usable_assets = 0
         resumed_rounds = {round_number for round_number, _, _ in completed_query_keys}
         inspected_urls: set[str] = set()
         parsed_pages: dict[str, ParsedPublicPage | None] = {}
+        project_text_supplement_attempted: set[str] = set()
+        project_text_supplement_pages: dict[str, list[tuple[ProviderSource, ParsedPublicPage]]] = {}
+        analyzed_public_page_branches: set[tuple[str, str]] = set()
+        reused_article_ready_branches: set[str] = set()
+        remote_public_pages_by_subquestion: dict[str, list[RemotePublicPageBatchItem]] = {}
         public_page_attempts = 0
         public_recovery_page_attempts: dict[str, int] = {}
         browser_page_attempts = browser_pages_attempted
         browser_recovery_page_attempts: dict[str, int] = {}
-        visual_call_limit, visual_byte_limit = VISUAL_INSPECTION_LIMITS[budget_mode]
+        visual_call_limit, visual_byte_limit = (
+            VISUAL_REFERENCE_INSPECTION_LIMIT
+            if goal is ResearchGoal.visual_reference_search
+            else VISUAL_INSPECTION_LIMITS[budget_mode]
+        )
         inspection_budget = InspectionBudget(
             max_calls=visual_call_limit,
             max_bytes=visual_byte_limit,
@@ -259,6 +314,21 @@ def execute_research_run(
             if isinstance(provider, CallBudgetAwareResearchProvider)
             else 0.0
         )
+        synthesis_call_reserve = provider_call_reserve
+        if require_research_synthesis:
+            synthesis_worst_case_seconds = getattr(
+                provider,
+                "synthesis_worst_case_seconds",
+                None,
+            )
+            if callable(synthesis_worst_case_seconds):
+                synthesis_call_reserve = max(
+                    provider_call_reserve,
+                    float(synthesis_worst_case_seconds(budget_mode)),
+                )
+        research_deadline = (
+            deadline - synthesis_call_reserve if require_research_synthesis else deadline
+        )
         public_search_provider = (
             public_page_parser if isinstance(public_page_parser, PublicSearchProvider) else None
         )
@@ -267,20 +337,30 @@ def execute_research_run(
             if public_search_provider is not None
             else 0.0
         )
-        xiaohongshu_search = (
-            XiaohongshuBrowserSearch(browser_client)
-            if ResearchSource.xiaohongshu in research_sources
-            and browser_client is not None
-            and bool(getattr(browser_client, "connected", True))
-            else None
-        )
+        xiaohongshu_searchers: list[XiaohongshuSearch] = []
+        if ResearchSource.xiaohongshu in research_sources:
+            if xiaohongshu_search is not None:
+                xiaohongshu_searchers.append(xiaohongshu_search)
+            if browser_client is not None and bool(getattr(browser_client, "connected", True)):
+                xiaohongshu_searchers.append(XiaohongshuBrowserSearch(browser_client))
         xiaohongshu_searched_subquestions: set[str] = set()
+        xiaohongshu_note_attempts: dict[str, int] = {}
+        xiaohongshu_usable_notes: dict[str, int] = {}
+        public_search_attempts_by_round: dict[int, int] = {}
         stop_reason = "budget_exhausted"
         model_search_timed_out = False
-        browser_inspection_failed = (
-            ResearchSource.xiaohongshu in research_sources and xiaohongshu_search is None
+        model_timeout_recovery_attempted = False
+        xiaohongshu_required = goal is ResearchGoal.visual_reference_search
+        xiaohongshu_only_visual = xiaohongshu_required and research_sources == {
+            ResearchSource.xiaohongshu
+        }
+        xiaohongshu_unavailable = (
+            ResearchSource.xiaohongshu in research_sources and not xiaohongshu_searchers
         )
-        if browser_inspection_failed:
+        browser_inspection_failed = xiaohongshu_required and xiaohongshu_unavailable
+        public_page_inspection_failed = False
+        public_page_inspection_succeeded = False
+        if xiaohongshu_unavailable:
             _checkpoint(
                 db,
                 run_id,
@@ -291,23 +371,55 @@ def execute_research_run(
         for query_index, (round_number, language, subquestion_id, query) in enumerate(
             queries, start=1
         ):
-            if completion_continuation or round_number > normal_rounds:
-                current_coverage = _coverage(db, run_id)
-                if subquestion_id in current_coverage["covered_subquestion_ids"]:
+            coverage_incomplete = False
+            if goal is ResearchGoal.precedent_research:
+                current_coverage = _coverage(
+                    db,
+                    run_id,
+                    require_article_analysis=require_article_analysis,
+                )
+                coverage_incomplete = (
+                    current_coverage["covered_subquestions"] < current_coverage["subquestion_count"]
+                )
+                if subquestion_id in current_coverage["covered_subquestion_ids"] and (
+                    coverage_incomplete or completion_continuation
+                ):
                     continue
             query_key = (round_number, language, subquestion_id)
             if query_key in completed_query_keys:
                 continue
             _raise_if_cancelled(db, run_id)
-            remaining_seconds = deadline - clock()
+            page_analysis_attempts_before_query = sum(
+                attempted_subquestion_id == subquestion_id
+                for _, attempted_subquestion_id in analyzed_public_page_branches
+            )
+            page_analysis_attempt_limit = (
+                (
+                    UNCOVERED_BRANCH_PAGE_ANALYSIS_LIMIT
+                    if round_number == 1
+                    else UNCOVERED_BRANCH_FOLLOWUP_PAGE_ANALYSIS_LIMIT
+                )
+                if require_article_analysis and coverage_incomplete
+                else None
+            )
+            remaining_seconds = research_deadline - clock()
             can_search_publicly = (
                 public_search_provider is not None and remaining_seconds >= public_search_reserve
             )
-            can_search_with_model = (
-                not model_search_timed_out and remaining_seconds >= provider_call_reserve
+            is_model_timeout_recovery = (
+                model_search_timed_out
+                and not model_timeout_recovery_attempted
+                and round_number > normal_rounds
             )
+            can_search_with_model = (
+                public_search_provider is None
+                and (not model_search_timed_out or is_model_timeout_recovery)
+            ) and remaining_seconds >= provider_call_reserve
+            if xiaohongshu_only_visual:
+                can_search_publicly = False
+                can_search_with_model = False
             can_search_xiaohongshu = (
-                xiaohongshu_search is not None
+                bool(xiaohongshu_searchers)
                 and subquestion_id not in xiaohongshu_searched_subquestions
                 and _page_budget_available(
                     round_number=round_number,
@@ -319,15 +431,18 @@ def execute_research_run(
                     recovery_limit=recovery_pages_per_subquestion,
                 )
             )
-            if remaining_seconds <= 0 or not (
-                can_search_publicly or can_search_with_model or can_search_xiaohongshu
-            ):
+            if remaining_seconds <= 0:
+                stop_reason = "time_budget_exhausted"
+                break
+            if goal is ResearchGoal.visual_reference_search and inspection_budget.exhausted:
+                stop_reason = "visual_budget_exhausted"
+                break
+            if not (can_search_publicly or can_search_with_model or can_search_xiaohongshu):
                 stop_reason = "time_budget_exhausted"
                 break
             provider_query = _query_with_source_preferences(
                 query,
                 goal=goal,
-                research_sources=research_sources,
             )
             query_attempt_id = _record_query(
                 db,
@@ -337,7 +452,11 @@ def execute_research_run(
                 subquestion_id=subquestion_id,
                 query=provider_query,
                 purpose=goal.value,
-                provider_name=provider.name,
+                provider_name=(
+                    public_search_provider.name
+                    if public_search_provider is not None
+                    else provider.name
+                ),
             )
             _checkpoint(
                 db,
@@ -351,8 +470,17 @@ def execute_research_run(
                 },
             )
             public_sources: list[ProviderSource] = []
+            trusted_public_recovery = False
+            selected_xiaohongshu_source = False
+            public_relevance_context = _public_search_query(
+                goal,
+                "en",
+                subquestion_text[subquestion_id],
+                round_number,
+                research_question=question,
+                research_context=research_context,
+            )
             if can_search_xiaohongshu:
-                assert xiaohongshu_search is not None
                 xiaohongshu_searched_subquestions.add(subquestion_id)
                 browser_page_attempts += 1
                 if round_number > normal_rounds:
@@ -363,24 +491,48 @@ def execute_research_run(
                 xiaohongshu_sources, search_failed = _try_xiaohongshu_search(
                     db,
                     run_id,
-                    xiaohongshu_search,
+                    xiaohongshu_searchers,
                     subquestion_text[subquestion_id],
                 )
-                browser_inspection_failed = browser_inspection_failed or search_failed
+                if xiaohongshu_required:
+                    browser_inspection_failed = browser_inspection_failed or search_failed
                 public_sources.extend(xiaohongshu_sources)
+                selected_xiaohongshu_source = bool(xiaohongshu_sources)
+                if goal is ResearchGoal.visual_reference_search and selected_xiaohongshu_source:
+                    can_search_publicly = False
+                    can_search_with_model = False
             if can_search_publicly and public_search_provider is not None:
+                public_search_index = public_search_attempts_by_round.get(round_number, 0) + 1
+                public_search_attempts_by_round[round_number] = public_search_index
+                public_search_domains = _public_search_domains(
+                    goal,
+                    allowed_domains,
+                    round_number=round_number,
+                    round_query_index=public_search_index,
+                )
+                public_query = _public_search_query(
+                    goal,
+                    language,
+                    subquestion_text[subquestion_id],
+                    round_number,
+                    research_question=question,
+                    research_context=research_context,
+                    trusted_domain=(
+                        public_search_domains[0]
+                        if goal is ResearchGoal.precedent_research
+                        and not allowed_domains
+                        and len(public_search_domains) == 1
+                        else None
+                    ),
+                )
                 public_sources = _merge_source_lists(
                     public_sources,
                     _try_public_search(
                         db,
                         run_id,
                         public_search_provider,
-                        _public_search_query(
-                            goal,
-                            language,
-                            subquestion_text[subquestion_id],
-                        ),
-                        allowed_domains,
+                        public_query,
+                        public_search_domains,
                     ),
                 )
                 if public_sources:
@@ -389,6 +541,18 @@ def execute_research_run(
                         run_id,
                         ProviderSearchResult(sources=public_sources, assets=[]),
                     )
+                trusted_public_recovery = (
+                    goal is ResearchGoal.precedent_research
+                    and round_number > normal_rounds
+                    and any(
+                        source.publication_tier
+                        in {PublicationTier.primary, PublicationTier.trusted_secondary}
+                        and _source_relevance_score(source, public_relevance_context) > 0
+                        for source in public_sources
+                    )
+                )
+                if trusted_public_recovery:
+                    can_search_with_model = False
             if not can_search_with_model:
                 provider_result = ProviderSearchResult(sources=public_sources, assets=[])
                 _checkpoint(
@@ -398,21 +562,36 @@ def execute_research_run(
                     {
                         "status": "skipped",
                         "reason": (
-                            "previous_timeout"
-                            if model_search_timed_out
-                            else "insufficient_time_reserve"
+                            "selected_xiaohongshu_note"
+                            if selected_xiaohongshu_source
+                            else (
+                                "local_browser_search"
+                                if public_search_provider is not None
+                                else (
+                                    "trusted_public_sources"
+                                    if trusted_public_recovery
+                                    else (
+                                        "previous_timeout"
+                                        if model_search_timed_out
+                                        else "insufficient_time_reserve"
+                                    )
+                                )
+                            )
                         ),
                         "retained_source_count": len(public_sources),
                     },
                     tool=provider.name,
                 )
             else:
+                if is_model_timeout_recovery:
+                    model_timeout_recovery_attempted = True
                 try:
                     provider_result = provider.search(provider_query, goal, allowed_domains)
                 except Exception as exc:
-                    if not public_sources:
+                    timed_out = _is_timeout_error(exc)
+                    if not public_sources and not timed_out:
                         raise
-                    model_search_timed_out = _is_timeout_error(exc)
+                    model_search_timed_out = model_search_timed_out or timed_out
                     provider_result = ProviderSearchResult(sources=public_sources, assets=[])
                     _checkpoint(
                         db,
@@ -444,18 +623,178 @@ def execute_research_run(
                 {"page_count": len(provider_result.sources)},
             )
             browser_added = 0
+            remote_public_pages = remote_public_pages_by_subquestion.setdefault(subquestion_id, [])
+            if (
+                require_article_analysis
+                and subquestion_id not in reused_article_ready_branches
+                and isinstance(provider, PublicPageAnalysisProvider)
+                and _public_page_branch_analysis_budget_available(
+                    analyzed_public_page_branches,
+                    subquestion_id=subquestion_id,
+                    attempts_before_query=page_analysis_attempts_before_query,
+                    attempt_limit=page_analysis_attempt_limit,
+                )
+                and research_deadline - clock() >= provider.worst_case_page_analysis_seconds
+            ):
+                reused, reused_added = _try_article_ready_page_branch_reuse(
+                    db,
+                    run_id,
+                    provider,
+                    parsed_pages,
+                    question=subquestion_text[subquestion_id],
+                    subquestion_id=subquestion_id,
+                    analysis_requirements=DEPTH_TARGETS[budget_mode].analysis_requirements,
+                    attempted_branches=analyzed_public_page_branches,
+                    public_search_provider=public_search_provider,
+                    public_page_parser=public_page_parser,
+                    supplement_attempted=project_text_supplement_attempted,
+                    supplement_pages=project_text_supplement_pages,
+                    remaining_seconds=lambda: research_deadline - clock(),
+                )
+                if reused:
+                    reused_article_ready_branches.add(subquestion_id)
+                    browser_added += reused_added
             inspection_sources = sorted(
                 provider_result.sources,
-                key=lambda source: PUBLICATION_TIER_STRENGTH[source.publication_tier.value],
+                key=lambda source: _inspection_source_sort_key(
+                    source,
+                    goal,
+                    public_relevance_context,
+                ),
                 reverse=True,
             )
             for source in inspection_sources:
+                if _is_xiaohongshu_url(source.url):
+                    note_limit = (
+                        XIAOHONGSHU_VISUAL_NOTE_LIMIT
+                        if goal is ResearchGoal.visual_reference_search
+                        else 1
+                    )
+                    note_target = (
+                        XIAOHONGSHU_VISUAL_NOTE_TARGET
+                        if goal is ResearchGoal.visual_reference_search
+                        else 1
+                    )
+                    if (
+                        xiaohongshu_usable_notes.get(subquestion_id, 0) >= note_target
+                        or xiaohongshu_note_attempts.get(subquestion_id, 0) >= note_limit
+                    ):
+                        continue
+                if (
+                    _is_xiaohongshu_url(source.url)
+                    and isinstance(xiaohongshu_search, XiaohongshuAssetDownloader)
+                    and visual_classifier is not None
+                    and candidate_root is not None
+                    and not inspection_budget.exhausted
+                ):
+                    xiaohongshu_note_attempts[subquestion_id] = (
+                        xiaohongshu_note_attempts.get(subquestion_id, 0) + 1
+                    )
+                    temporary_root = candidate_root / run_id / "temporary"
+                    temporary_root.mkdir(parents=True, exist_ok=True)
+                    try:
+                        with TemporaryDirectory(prefix="xiaohongshu-", dir=temporary_root) as temp:
+                            image_paths = xiaohongshu_search.download(
+                                source.url,
+                                Path(temp),
+                                limit=REMOTE_VISUAL_BATCH_LIMIT,
+                            )
+                            inspected = inspect_local_images(
+                                visual_classifier,
+                                run_id=run_id,
+                                source_url=source.url,
+                                image_paths=image_paths,
+                                question=subquestion_text[subquestion_id],
+                                caption=source.title,
+                                candidate_root=candidate_root,
+                                budget=inspection_budget,
+                            )
+                            requested_drawing_label = (
+                                requested_visual_drawing_type(subquestion_text[subquestion_id])
+                                if goal is ResearchGoal.visual_reference_search
+                                else None
+                            )
+                            requested_asset_type = _VISUAL_ASSET_TYPE_BY_DRAWING_LABEL.get(
+                                requested_drawing_label or ""
+                            )
+                            type_mismatches = [
+                                item
+                                for item in inspected
+                                if requested_asset_type is not None
+                                and item.asset_type is not requested_asset_type
+                            ]
+                            for item in type_mismatches:
+                                if item.storage_path is not None:
+                                    item.storage_path.unlink(missing_ok=True)
+                            accepted_inspected = [
+                                item for item in inspected if item not in type_mismatches
+                            ]
+                            added = _persist_inspected_assets(
+                                db,
+                                run_id,
+                                source,
+                                accepted_inspected,
+                                subquestion_id=subquestion_id,
+                            )
+                        inspected_urls.add(source.url)
+                        browser_added += added
+                        if added > 0:
+                            xiaohongshu_usable_notes[subquestion_id] = (
+                                xiaohongshu_usable_notes.get(subquestion_id, 0) + 1
+                            )
+                        _checkpoint(
+                            db,
+                            run_id,
+                            RunStatus.inspecting,
+                            {
+                                "source_url": _redacted_trace_url(source.url),
+                                "status": "completed",
+                                "downloaded_count": len(image_paths),
+                                "candidate_count": len(inspected),
+                                "accepted_type_count": len(accepted_inspected),
+                                "type_mismatch_count": len(type_mismatches),
+                                "added": added,
+                                "note_attempt": xiaohongshu_note_attempts[subquestion_id],
+                                "usable_note_count": xiaohongshu_usable_notes.get(
+                                    subquestion_id, 0
+                                ),
+                                "visual_calls_used": inspection_budget.used_calls,
+                                "preview_bytes_used": inspection_budget.used_bytes,
+                            },
+                            tool="xiaohongshu_assets",
+                        )
+                    except Exception as exc:
+                        if xiaohongshu_required and (
+                            browser_client is None
+                            or not bool(getattr(browser_client, "connected", True))
+                        ):
+                            browser_inspection_failed = True
+                        _checkpoint(
+                            db,
+                            run_id,
+                            RunStatus.inspecting,
+                            {
+                                "source_url": _redacted_trace_url(source.url),
+                                "status": "failed",
+                                "error_type": type(exc).__name__,
+                                "note_attempt": xiaohongshu_note_attempts[subquestion_id],
+                            },
+                            tool="xiaohongshu_assets",
+                        )
                 parsed_page = parsed_pages.get(source.url)
                 parsed_now = False
                 if (
                     public_page_parser is not None
                     and not _is_sparse_visual_platform_url(source.url)
                     and source.url not in parsed_pages
+                    and _public_page_branch_analysis_budget_available(
+                        analyzed_public_page_branches,
+                        subquestion_id=subquestion_id,
+                        attempts_before_query=page_analysis_attempts_before_query,
+                        attempt_limit=page_analysis_attempt_limit,
+                    )
+                    and research_deadline - clock()
+                    >= float(getattr(public_page_parser, "worst_case_call_seconds", 0.0))
                     and _page_budget_available(
                         round_number=round_number,
                         normal_rounds=normal_rounds,
@@ -478,6 +817,9 @@ def execute_research_run(
                         public_page_parser,
                     )
                     parsed_pages[source.url] = parsed_page
+                    public_page_inspection_succeeded = (
+                        public_page_inspection_succeeded or parsed_page is not None
+                    )
                     parsed_now = True
 
                 can_inspect = (
@@ -485,7 +827,6 @@ def execute_research_run(
                     and visual_classifier is not None
                     and candidate_root is not None
                     and bool(getattr(browser_client, "connected", True))
-                    and not _is_pinterest_url(source.url)
                     and source.url not in inspected_urls
                     and _page_budget_available(
                         round_number=round_number,
@@ -502,6 +843,13 @@ def execute_research_run(
                     assert browser_client is not None
                     assert visual_classifier is not None
                     assert candidate_root is not None
+                    xiaohongshu_browser_source = _is_xiaohongshu_url(source.url) and not isinstance(
+                        xiaohongshu_search, XiaohongshuAssetDownloader
+                    )
+                    if xiaohongshu_browser_source:
+                        xiaohongshu_note_attempts[subquestion_id] = (
+                            xiaohongshu_note_attempts.get(subquestion_id, 0) + 1
+                        )
                     inspected_urls.add(source.url)
                     browser_page_attempts += 1
                     if round_number > normal_rounds:
@@ -528,28 +876,46 @@ def execute_research_run(
                             subquestion_id=subquestion_id,
                         )
                         browser_added += added
+                        if xiaohongshu_browser_source and added > 0:
+                            xiaohongshu_usable_notes[subquestion_id] = (
+                                xiaohongshu_usable_notes.get(subquestion_id, 0) + 1
+                            )
                         _checkpoint(
                             db,
                             run_id,
                             RunStatus.inspecting,
                             {
-                                "source_url": source.url,
+                                "source_url": _redacted_trace_url(source.url),
                                 "status": "completed",
                                 "candidate_count": len(inspected),
                                 "added": added,
+                                "note_attempt": (
+                                    xiaohongshu_note_attempts[subquestion_id]
+                                    if xiaohongshu_browser_source
+                                    else None
+                                ),
+                                "usable_note_count": (
+                                    xiaohongshu_usable_notes.get(subquestion_id, 0)
+                                    if xiaohongshu_browser_source
+                                    else None
+                                ),
                                 "visual_calls_used": inspection_budget.used_calls,
                                 "preview_bytes_used": inspection_budget.used_bytes,
                             },
                             tool="browser",
                         )
                     except Exception as exc:
-                        browser_inspection_failed = True
+                        if parsed_page is None:
+                            if xiaohongshu_required and _is_sparse_visual_platform_url(source.url):
+                                browser_inspection_failed = True
+                            else:
+                                public_page_inspection_failed = True
                         _checkpoint(
                             db,
                             run_id,
                             RunStatus.inspecting,
                             {
-                                "source_url": source.url,
+                                "source_url": _redacted_trace_url(source.url),
                                 "status": "skipped",
                                 "error_type": type(exc).__name__,
                             },
@@ -557,6 +923,7 @@ def execute_research_run(
                         )
 
                 if parsed_now and parsed_page is not None and public_page_parser is not None:
+                    project_links = select_project_page_links(parsed_page)
                     parser_added = _persist_public_page_leads(
                         db,
                         run_id,
@@ -564,16 +931,72 @@ def execute_research_run(
                         parsed_page,
                         subquestion_id=subquestion_id,
                     )
-                    if isinstance(visual_classifier, RemoteVisualClassifier):
-                        parser_added += _classify_remote_public_images(
+                    direct_trusted_project = (
+                        not project_links
+                        and _inferred_publication_tier(source.url)
+                        is PublicationTier.trusted_secondary
+                        and is_concrete_project_page(
+                            parsed_page,
+                            source_title=source.title,
+                        )
+                    )
+                    exact_project_evidence = (
+                        not project_links
+                        and source.publication_tier
+                        in {PublicationTier.primary, PublicationTier.trusted_secondary}
+                        and is_concrete_project_page(
+                            parsed_page,
+                            source_title=source.title,
+                        )
+                    )
+                    if direct_trusted_project:
+                        parser_added += _persist_expanded_project_page(
                             db,
                             run_id,
                             source,
                             parsed_page,
-                            visual_classifier,
+                            subquestion_id=subquestion_id,
+                        )
+                    if (
+                        isinstance(visual_classifier, RemoteVisualClassifier)
+                        and not project_links
+                        and (goal is not ResearchGoal.precedent_research or exact_project_evidence)
+                    ):
+                        remote_public_pages.append(
+                            RemotePublicPageBatchItem(
+                                source=source,
+                                page=parsed_page,
+                                exact_project_evidence=exact_project_evidence,
+                                article_analysis_eligible=direct_trusted_project,
+                            )
+                        )
+                    if (
+                        direct_trusted_project
+                        and isinstance(provider, PublicPageAnalysisProvider)
+                        and _public_page_branch_analysis_budget_available(
+                            analyzed_public_page_branches,
+                            subquestion_id=subquestion_id,
+                            attempts_before_query=page_analysis_attempts_before_query,
+                            attempt_limit=page_analysis_attempt_limit,
+                        )
+                        and research_deadline - clock() >= provider.worst_case_page_analysis_seconds
+                    ):
+                        parser_added += _try_public_page_branch_analysis(
+                            db,
+                            run_id,
+                            provider,
+                            source,
+                            parsed_page,
                             question=subquestion_text[subquestion_id],
                             subquestion_id=subquestion_id,
-                            remaining_seconds=deadline - clock(),
+                            analysis_requirements=DEPTH_TARGETS[budget_mode].analysis_requirements,
+                            attempted_branches=analyzed_public_page_branches,
+                            public_search_provider=public_search_provider,
+                            public_page_parser=public_page_parser,
+                            parsed_pages=parsed_pages,
+                            supplement_attempted=project_text_supplement_attempted,
+                            supplement_pages=project_text_supplement_pages,
+                            remaining_seconds=lambda: research_deadline - clock(),
                         )
                     browser_added += parser_added
                     _checkpoint(
@@ -581,7 +1004,7 @@ def execute_research_run(
                         run_id,
                         RunStatus.inspecting,
                         {
-                            "source_url": source.url,
+                            "source_url": _redacted_trace_url(source.url),
                             "status": "completed",
                             "markdown_chars": len(parsed_page.markdown),
                             "image_leads": len(parsed_page.images),
@@ -590,7 +1013,7 @@ def execute_research_run(
                         },
                         tool=public_page_parser.name,
                     )
-                    for project_url in select_project_page_links(parsed_page):
+                    for project_url in project_links:
                         parser_reserve = float(
                             getattr(public_page_parser, "worst_case_call_seconds", 0.0)
                         )
@@ -605,7 +1028,13 @@ def execute_research_run(
                                 recovery_attempts=public_recovery_page_attempts,
                                 recovery_limit=recovery_pages_per_subquestion,
                             )
-                            or deadline - clock() < parser_reserve
+                            or not _public_page_branch_analysis_budget_available(
+                                analyzed_public_page_branches,
+                                subquestion_id=subquestion_id,
+                                attempts_before_query=page_analysis_attempts_before_query,
+                                attempt_limit=page_analysis_attempt_limit,
+                            )
+                            or research_deadline - clock() < parser_reserve
                         ):
                             continue
                         public_page_attempts += 1
@@ -625,6 +1054,9 @@ def execute_research_run(
                             public_page_parser,
                         )
                         parsed_pages[project_url] = project_page
+                        public_page_inspection_succeeded = (
+                            public_page_inspection_succeeded or project_page is not None
+                        )
                         if project_page is None:
                             continue
                         project_source = project_source.model_copy(
@@ -642,6 +1074,62 @@ def execute_research_run(
                             project_page,
                             subquestion_id=subquestion_id,
                         )
+                        exact_project_evidence = project_source.publication_tier in {
+                            PublicationTier.primary,
+                            PublicationTier.trusted_secondary,
+                        } and is_concrete_project_page(
+                            project_page,
+                            source_title=project_source.title,
+                        )
+                        if isinstance(visual_classifier, RemoteVisualClassifier) and (
+                            goal is not ResearchGoal.precedent_research or exact_project_evidence
+                        ):
+                            remote_public_pages.append(
+                                RemotePublicPageBatchItem(
+                                    source=project_source,
+                                    page=project_page,
+                                    exact_project_evidence=exact_project_evidence,
+                                    article_analysis_eligible=(
+                                        project_source.publication_tier
+                                        in {
+                                            PublicationTier.primary,
+                                            PublicationTier.trusted_secondary,
+                                        }
+                                    ),
+                                )
+                            )
+                        if (
+                            isinstance(provider, PublicPageAnalysisProvider)
+                            and project_source.publication_tier
+                            in {PublicationTier.primary, PublicationTier.trusted_secondary}
+                            and _public_page_branch_analysis_budget_available(
+                                analyzed_public_page_branches,
+                                subquestion_id=subquestion_id,
+                                attempts_before_query=page_analysis_attempts_before_query,
+                                attempt_limit=page_analysis_attempt_limit,
+                            )
+                            and research_deadline - clock()
+                            >= provider.worst_case_page_analysis_seconds
+                        ):
+                            promoted += _try_public_page_branch_analysis(
+                                db,
+                                run_id,
+                                provider,
+                                project_source,
+                                project_page,
+                                question=subquestion_text[subquestion_id],
+                                subquestion_id=subquestion_id,
+                                analysis_requirements=DEPTH_TARGETS[
+                                    budget_mode
+                                ].analysis_requirements,
+                                attempted_branches=analyzed_public_page_branches,
+                                public_search_provider=public_search_provider,
+                                public_page_parser=public_page_parser,
+                                parsed_pages=parsed_pages,
+                                supplement_attempted=project_text_supplement_attempted,
+                                supplement_pages=project_text_supplement_pages,
+                                remaining_seconds=lambda: research_deadline - clock(),
+                            )
                         browser_added += promoted
                         _checkpoint(
                             db,
@@ -655,8 +1143,46 @@ def execute_research_run(
                             tool=f"{public_page_parser.name}_expand",
                         )
                 elif parsed_page is not None and public_page_parser is not None:
+                    project_links = select_project_page_links(parsed_page)
                     reassociated = 0
-                    for project_url in select_project_page_links(parsed_page):
+                    direct_trusted_project = (
+                        not project_links
+                        and _inferred_publication_tier(source.url)
+                        is PublicationTier.trusted_secondary
+                        and is_concrete_project_page(
+                            parsed_page,
+                            source_title=source.title,
+                        )
+                    )
+                    if (
+                        direct_trusted_project
+                        and isinstance(provider, PublicPageAnalysisProvider)
+                        and _public_page_branch_analysis_budget_available(
+                            analyzed_public_page_branches,
+                            subquestion_id=subquestion_id,
+                            attempts_before_query=page_analysis_attempts_before_query,
+                            attempt_limit=page_analysis_attempt_limit,
+                        )
+                        and research_deadline - clock() >= provider.worst_case_page_analysis_seconds
+                    ):
+                        reassociated += _try_public_page_branch_analysis(
+                            db,
+                            run_id,
+                            provider,
+                            source,
+                            parsed_page,
+                            question=subquestion_text[subquestion_id],
+                            subquestion_id=subquestion_id,
+                            analysis_requirements=DEPTH_TARGETS[budget_mode].analysis_requirements,
+                            attempted_branches=analyzed_public_page_branches,
+                            public_search_provider=public_search_provider,
+                            public_page_parser=public_page_parser,
+                            parsed_pages=parsed_pages,
+                            supplement_attempted=project_text_supplement_attempted,
+                            supplement_pages=project_text_supplement_pages,
+                            remaining_seconds=lambda: research_deadline - clock(),
+                        )
+                    for project_url in project_links:
                         project_page = parsed_pages.get(project_url)
                         if project_page is None:
                             continue
@@ -680,12 +1206,78 @@ def execute_research_run(
                             run_id,
                             RunStatus.inspecting,
                             {
-                                "source_url": source.url,
+                                "source_url": _redacted_trace_url(source.url),
                                 "status": "reused",
                                 "reassociated": reassociated,
                             },
                             tool=f"{public_page_parser.name}_expand",
                         )
+            defer_remote_batch = (
+                goal is ResearchGoal.precedent_research
+                and require_article_analysis
+                and recovery_rounds > 0
+            )
+            remote_batch_due = (
+                not defer_remote_batch
+                or round_number == last_query_round_by_subquestion[subquestion_id]
+            )
+            text_coverage_complete = True
+            if goal is ResearchGoal.precedent_research and require_article_analysis:
+                text_coverage = _coverage(
+                    db,
+                    run_id,
+                    require_article_analysis=True,
+                )
+                text_coverage_complete = (
+                    text_coverage["covered_subquestions"] == text_coverage["subquestion_count"]
+                )
+            if (
+                remote_public_pages
+                and remote_batch_due
+                and text_coverage_complete
+                and isinstance(visual_classifier, RemoteVisualClassifier)
+            ):
+                browser_added += _classify_remote_public_images(
+                    db,
+                    run_id,
+                    remote_public_pages,
+                    visual_classifier,
+                    question=subquestion_text[subquestion_id],
+                    subquestion_id=subquestion_id,
+                    remaining_seconds=research_deadline - clock(),
+                )
+                if isinstance(provider, PublicPageAnalysisProvider):
+                    for item in remote_public_pages:
+                        if (
+                            not item["article_analysis_eligible"]
+                            or not _public_page_branch_analysis_budget_available(
+                                analyzed_public_page_branches,
+                                subquestion_id=subquestion_id,
+                                attempts_before_query=page_analysis_attempts_before_query,
+                                attempt_limit=page_analysis_attempt_limit,
+                            )
+                            or research_deadline - clock()
+                            < provider.worst_case_page_analysis_seconds
+                        ):
+                            continue
+                        browser_added += _try_public_page_branch_analysis(
+                            db,
+                            run_id,
+                            provider,
+                            item["source"],
+                            item["page"],
+                            question=subquestion_text[subquestion_id],
+                            subquestion_id=subquestion_id,
+                            analysis_requirements=DEPTH_TARGETS[budget_mode].analysis_requirements,
+                            attempted_branches=analyzed_public_page_branches,
+                            public_search_provider=public_search_provider,
+                            public_page_parser=public_page_parser,
+                            parsed_pages=parsed_pages,
+                            supplement_attempted=project_text_supplement_attempted,
+                            supplement_pages=project_text_supplement_pages,
+                            remaining_seconds=lambda: research_deadline - clock(),
+                        )
+                remote_public_pages.clear()
             _checkpoint(
                 db,
                 run_id,
@@ -697,15 +1289,25 @@ def execute_research_run(
             round_added_usable_assets += added_usable_assets
 
             _checkpoint(db, run_id, RunStatus.verifying, {"method": "source_binding"})
-            coverage = _coverage(db, run_id)
+            coverage = _coverage(
+                db,
+                run_id,
+                require_article_analysis=require_article_analysis,
+            )
             _checkpoint(db, run_id, RunStatus.gap_check, dict(coverage))
-            if _enrichment_satisfied(coverage):
+            visual_note_target_satisfied = not xiaohongshu_only_visual or all(
+                xiaohongshu_usable_notes.get(item.id, 0) >= XIAOHONGSHU_VISUAL_NOTE_TARGET
+                for item in plan.subquestions
+            )
+            visual_completion_allowed = not (
+                xiaohongshu_only_visual
+                and inspection_budget.exhausted
+                and not visual_note_target_satisfied
+            )
+            if _enrichment_satisfied(coverage) and visual_completion_allowed:
                 stop_reason = "coverage_satisfied"
                 break
             round_finished = query_index == len(queries) or queries[query_index][0] != round_number
-            if round_finished and round_number >= normal_rounds and _completion_satisfied(coverage):
-                stop_reason = "completion_satisfied"
-                break
             if (
                 round_finished
                 and round_number >= normal_rounds + recovery_rounds
@@ -718,8 +1320,45 @@ def execute_research_run(
                 round_added_usable_assets = 0
 
         _raise_if_cancelled(db, run_id)
-        coverage = _coverage(db, run_id)
-        if browser_inspection_failed and "browser_inspection_incomplete" not in coverage["gaps"]:
+        coverage = _coverage(
+            db,
+            run_id,
+            require_article_analysis=require_article_analysis,
+        )
+        visual_note_target_satisfied = not xiaohongshu_only_visual or all(
+            xiaohongshu_usable_notes.get(item.id, 0) >= XIAOHONGSHU_VISUAL_NOTE_TARGET
+            for item in plan.subquestions
+        )
+        visual_completion_allowed = not (
+            xiaohongshu_only_visual
+            and inspection_budget.exhausted
+            and not visual_note_target_satisfied
+        )
+        if not visual_completion_allowed:
+            stop_reason = "visual_budget_exhausted"
+        if require_research_synthesis:
+            assert isinstance(provider, ResearchSynthesisProvider)
+            synthesis = None
+            if deadline - clock() >= synthesis_call_reserve:
+                synthesis = _try_research_synthesis(
+                    db,
+                    run_id,
+                    provider,
+                    question=question,
+                    budget_mode=budget_mode,
+                )
+            if synthesis is None:
+                coverage["gaps"].append("research_synthesis_incomplete")
+                stop_reason = "research_synthesis_incomplete"
+            else:
+                coverage["synthesis"] = synthesis
+        run_browser_inspection_failed = browser_inspection_failed or (
+            public_page_inspection_failed and not public_page_inspection_succeeded
+        )
+        if (
+            run_browser_inspection_failed
+            and "browser_inspection_incomplete" not in coverage["gaps"]
+        ):
             coverage["gaps"].append("browser_inspection_incomplete")
             stop_reason = "browser_inspection_incomplete"
         _checkpoint(db, run_id, RunStatus.composing, {"coverage": coverage})
@@ -731,14 +1370,16 @@ def execute_research_run(
                 .where(AssetCandidate.run_id == run_id)
             )
             run.coverage_report = dict(coverage)
-            if source_lookup_error is not None:
-                run.status = RunStatus.partial.value
-                run.stop_reason = f"source_lookup_error:{type(source_lookup_error).__name__}"
-            elif _completion_satisfied(coverage):
+            if _enrichment_satisfied(coverage) and visual_completion_allowed:
                 run.status = RunStatus.completed.value
-                run.stop_reason = (
-                    "coverage_satisfied" if _enrichment_satisfied(coverage) else stop_reason
-                )
+                run.stop_reason = "coverage_satisfied"
+            elif (
+                goal is ResearchGoal.precedent_research
+                and coverage["covered_subquestions"] > 0
+                and "browser_inspection_incomplete" not in coverage["gaps"]
+            ):
+                run.status = RunStatus.partial.value
+                run.stop_reason = stop_reason
             elif goal is ResearchGoal.precedent_research:
                 run.status = RunStatus.blocked.value
                 run.stop_reason = stop_reason
@@ -750,7 +1391,9 @@ def execute_research_run(
                 run.stop_reason = "unverified_visual_leads"
             else:
                 run.status = RunStatus.blocked.value
-                run.stop_reason = "no_usable_assets"
+                run.stop_reason = (
+                    stop_reason if stop_reason == "visual_budget_exhausted" else "no_usable_assets"
+                )
             run.finished_at = datetime.now(UTC)
             session.commit()
             terminal_state = run.status
@@ -791,64 +1434,6 @@ def _page_budget_available(
     if round_number <= normal_rounds:
         return normal_attempts < normal_limit
     return recovery_attempts.get(subquestion_id, 0) < recovery_limit
-
-
-def _latest_uploaded_image(db: Database, workspace_id: str) -> Path | None:
-    with db.session_factory() as session:
-        artifact = session.scalar(
-            select(InputArtifact)
-            .where(
-                InputArtifact.workspace_id == workspace_id,
-                InputArtifact.kind == "image",
-                InputArtifact.storage_path.is_not(None),
-            )
-            .order_by(InputArtifact.created_at.desc(), InputArtifact.id.desc())
-        )
-    return Path(artifact.storage_path) if artifact is not None and artifact.storage_path else None
-
-
-def _tineye_result(matches: list[TinEyeMatch]) -> ProviderSearchResult:
-    assets: list[ProviderAsset] = []
-    sources: list[ProviderSource] = []
-    seen: set[tuple[str, str | None]] = set()
-    for match in matches:
-        for backlink in match.backlinks:
-            image_url = backlink.image_url or match.image_url
-            identity = (backlink.page_url, image_url)
-            if identity in seen:
-                continue
-            seen.add(identity)
-            domain = match.domain or (urlparse(backlink.page_url).hostname or "")
-            sources.append(
-                ProviderSource(
-                    url=backlink.page_url,
-                    publisher=domain,
-                    title=f"TinEye match on {domain}" if domain else "TinEye match",
-                    publication_tier=PublicationTier.unknown,
-                )
-            )
-            assets.append(
-                ProviderAsset(
-                    project_name="待核验项目",
-                    asset_type=ArchitectureAssetType.photograph,
-                    source_url=backlink.page_url,
-                    image_url=image_url,
-                    publisher=domain,
-                    publication_tier=PublicationTier.unknown,
-                    project_identity=AssociationStatus.unknown,
-                    asset_association=AssociationStatus.unknown,
-                    primary_source=PrimarySourceStatus.unknown,
-                    rights_status=RightsStatus.unknown,
-                    result_tier=ResultTier.visual_lead,
-                    relevance=3,
-                    facts=["TinEye 返回该网页为用户上传图片的反向图片匹配结果。"],
-                    limitations=[
-                        "photograph 仅是未分类图片占位，不代表内容被识别为建筑照片；"
-                        "需视觉分类后改写。"
-                    ],
-                )
-            )
-    return ProviderSearchResult(assets=assets, sources=sources)
 
 
 def _checkpoint(
@@ -896,20 +1481,29 @@ def _research_plan(
     if existing_subquestions:
         try:
             existing = ResearchPlan.model_validate({"subquestions": existing_subquestions})
-            return _normalize_plan(existing, goal, target_count), "checkpoint", None
+            return _normalize_plan(existing, goal, target_count, question), "checkpoint", None
         except ValueError:
             pass
 
     if isinstance(provider, ResearchPlanningProvider):
         try:
             planned = provider.plan(question, goal, budget_mode, research_context)
-            return _normalize_plan(planned, goal, target_count), provider.name, None
+            return _normalize_plan(planned, goal, target_count, question), provider.name, None
         except Exception as exc:
-            return _fallback_plan(goal, target_count), "deterministic_fallback", type(exc).__name__
-    return _fallback_plan(goal, target_count), "deterministic_fallback", None
+            return (
+                _fallback_plan(goal, target_count, question),
+                "deterministic_fallback",
+                type(exc).__name__,
+            )
+    return _fallback_plan(goal, target_count, question), "deterministic_fallback", None
 
 
-def _normalize_plan(plan: ResearchPlan, goal: ResearchGoal, target_count: int) -> ResearchPlan:
+def _normalize_plan(
+    plan: ResearchPlan,
+    goal: ResearchGoal,
+    target_count: int,
+    question: str = "",
+) -> ResearchPlan:
     normalized: list[ResearchSubquestion] = []
     seen_ids: set[str] = set()
     for item in plan.subquestions:
@@ -919,7 +1513,7 @@ def _normalize_plan(plan: ResearchPlan, goal: ResearchGoal, target_count: int) -
         seen_ids.add(item.id)
         if len(normalized) == target_count:
             break
-    for item in _fallback_plan(goal, target_count).subquestions:
+    for item in _fallback_plan(goal, target_count, question).subquestions:
         if len(normalized) == target_count:
             break
         if item.id not in seen_ids:
@@ -928,7 +1522,11 @@ def _normalize_plan(plan: ResearchPlan, goal: ResearchGoal, target_count: int) -
     return ResearchPlan(subquestions=normalized)
 
 
-def _fallback_plan(goal: ResearchGoal, target_count: int) -> ResearchPlan:
+def _fallback_plan(
+    goal: ResearchGoal,
+    target_count: int,
+    question: str = "",
+) -> ResearchPlan:
     candidates = {
         ResearchGoal.precedent_research: [
             ResearchSubquestion(
@@ -962,70 +1560,9 @@ def _fallback_plan(goal: ResearchGoal, target_count: int) -> ResearchPlan:
                 rationale="确认平面、剖面、轴测与分析图之间的表达分工。",
             ),
         ],
-        ResearchGoal.source_lookup: [
-            ResearchSubquestion(
-                id="identity",
-                question="截图最可能属于哪个建筑项目与设计团队？",
-                rationale="先建立项目身份候选，避免把相似图片误认成同一项目。",
-            ),
-            ResearchSubquestion(
-                id="original-source",
-                question="哪个页面是该图最早或最可信的公开发布来源？",
-                rationale="区分原始发布、可信转载与聚合页面。",
-            ),
-            ResearchSubquestion(
-                id="association",
-                question="页面文字、图注与相邻图纸能否支持图片属于该项目？",
-                rationale="单独核验图片—项目归属，而不是只匹配视觉相似度。",
-            ),
-            ResearchSubquestion(
-                id="drawing-type",
-                question="该图片具体属于哪类建筑图纸并展示了什么？",
-                rationale="图纸类型与可见内容帮助排除错误匹配。",
-            ),
-            ResearchSubquestion(
-                id="rights",
-                question="来源页面提供了怎样的署名、许可或使用限制？",
-                rationale="为私有版和分享版导出建立权利边界。",
-            ),
-            ResearchSubquestion(
-                id="conflicts",
-                question="不同来源之间是否存在项目名、作者或发布时间冲突？",
-                rationale="显式保留冲突，避免把未知信息写成已确认事实。",
-            ),
-        ],
-        ResearchGoal.visual_reference_search: [
-            ResearchSubquestion(
-                id="composition",
-                question="参考图的版式重心、留白与图纸组合有什么可见特征？",
-                rationale="把整体视觉印象拆成可比较的构图特征。",
-            ),
-            ResearchSubquestion(
-                id="linework",
-                question="线型、层级和填充怎样形成图面信息秩序？",
-                rationale="寻找表达层级相近而非仅题材相近的图纸。",
-            ),
-            ResearchSubquestion(
-                id="palette",
-                question="色彩、材质与背景之间采用了怎样的对比关系？",
-                rationale="提取可复用的配色角色，不推断完整设计逻辑。",
-            ),
-            ResearchSubquestion(
-                id="diagram-language",
-                question="箭头、标注、图例和分析叠层采用了怎样的视觉语言？",
-                rationale="核对分析图的表达方式与信息密度。",
-            ),
-            ResearchSubquestion(
-                id="typography",
-                question="标题、正文与图注的字级和对齐关系怎样组织？",
-                rationale="补足整套图纸的文字层级参考。",
-            ),
-            ResearchSubquestion(
-                id="transfer-boundary",
-                question="哪些视觉特征可以迁移，哪些依赖原项目内容与比例？",
-                rationale="避免把表面相似误写为完整空间或平面拓扑相似。",
-            ),
-        ],
+        ResearchGoal.visual_reference_search: visual_style_directions(
+            requested_visual_drawing_type(question) or "图纸"
+        ),
     }
     return ResearchPlan(subquestions=candidates[goal][:target_count])
 
@@ -1044,7 +1581,6 @@ def _queries_for(
             "建筑 平面 剖面 分析图",
             "architecture plan section diagram",
         ),
-        ResearchGoal.source_lookup: ("建筑 图片 原项目 来源", "architecture image original source"),
         ResearchGoal.visual_reference_search: (
             "建筑 图纸 视觉表达 参考",
             "architecture drawing visual reference",
@@ -1097,26 +1633,136 @@ def _public_search_query(
     goal: ResearchGoal,
     language: str,
     subquestion: str,
+    round_number: int,
+    *,
+    research_question: str = "",
+    research_context: str = "",
+    trusted_domain: str | None = None,
 ) -> str:
     terms = {
         ResearchGoal.precedent_research: (
             "平面图 剖面图 分析图 项目页面",
             "floor plan section diagram project page",
         ),
-        ResearchGoal.source_lookup: (
-            "原项目 来源 图注",
-            "original project source caption",
-        ),
         ResearchGoal.visual_reference_search: (
             "建筑图纸 视觉表达",
             "architecture drawing visual reference",
         ),
     }
-    focus = " ".join(subquestion.split())[:320]
+    query_language = (
+        "zh" if trusted_domain == "archdaily.cn" else "en" if trusted_domain else language
+    )
+    focus = " ".join(subquestion.split())[:260]
     zh_terms, en_terms = terms[goal]
+    round_focus = (
+        ("具体项目与完整图纸", "specific built project with complete drawings"),
+        ("事务所官网与英文项目页", "architect office case study and project page"),
+        ("ArchDaily 项目页与图纸", "ArchDaily project page and drawings"),
+        ("独立入口、服务空间与交通核", "separate entrance, service space and circulation core"),
+        ("替代案例与可核验图纸", "alternative precedent with verifiable drawings"),
+    )[min(round_number - 1, 4)]
+    issue_focus = _public_issue_focus(subquestion, query_language)
+    typology_focus = _public_typology_focus(
+        f"{research_question} {subquestion} {research_context}", query_language
+    )
+    if query_language == "zh":
+        query = f"建筑项目图纸：{focus} {issue_focus} {zh_terms} {round_focus[0]}"
+    else:
+        query = (
+            f"architecture project drawings: {typology_focus} {issue_focus} "
+            f"{en_terms} {round_focus[1]}"
+        )
+    if trusted_domain:
+        suffix = f" site:{trusted_domain}"
+        return f"{query[: 500 - len(suffix)].rstrip()}{suffix}"
+    return query[:500]
+
+
+def _public_typology_focus(subquestion: str, language: str) -> str:
+    normalized = subquestion.casefold()
     if language == "zh":
-        return f"建筑项目图纸：{focus} {zh_terms}"[:500]
-    return f"architecture project drawings: {focus} {en_terms}"[:500]
+        return ""
+    terms: list[str] = []
+    if any(term in normalized for term in ("旧", "改造", "reuse", "renovation", "existing")):
+        terms.append("adaptive reuse")
+    if any(term in normalized for term in ("工业", "厂房", "factory", "industrial")):
+        terms.append("industrial building")
+    if any(term in normalized for term in ("社区", "文化", "community", "cultural")):
+        terms.append("community cultural center")
+    return " ".join(terms) or "adaptive reuse"
+
+
+def _public_issue_focus(subquestion: str, language: str) -> str:
+    normalized = subquestion.casefold()
+    intent = infer_research_issue_intent(normalized)
+
+    if intent == "interface":
+        return (
+            "新旧构造界面 柱网 楼板 桁架 开洞 退让 跨接 加固 节点图 剖面图"
+            if language == "zh"
+            else (
+                "old new structural interface retained frame slab truss opening setback "
+                "bridge reinforcement connection detail section"
+            )
+        )
+    if intent == "flow":
+        return (
+            "公众与后勤分流 独立入口 服务廊道 平面图"
+            if language == "zh"
+            else (
+                "visitor circulation staff circulation back-of-house service entrance "
+                "loading dock floor plan"
+            )
+        )
+    if intent == "daylight":
+        return (
+            "天窗 高侧窗 庭院 采光 剖面图"
+            if language == "zh"
+            else "skylight clerestory courtyard daylight section drawings"
+        )
+    if intent == "program":
+        return (
+            "功能植入 盒中盒 独立结构 展览 工作坊 平面图 剖面图"
+            if language == "zh"
+            else (
+                "program insertion box-in-box inserted volume independent structure "
+                "exhibition workshop public activity floor plan section"
+            )
+        )
+    if intent == "section":
+        return (
+            "剖面层次 层高 挑空 夹层 下沉 屋顶加建 垂直交通 剖面图"
+            if language == "zh"
+            else (
+                "sectional hierarchy floor-to-floor double-height mezzanine "
+                "sunken space roof extension vertical circulation section drawings"
+            )
+        )
+    if any(term in normalized for term in ("功能", "展览", "工作坊", "program", "workshop")):
+        return (
+            "功能植入 展览 工作坊 公共活动 平面图"
+            if language == "zh"
+            else "program insertion exhibition workshop public activity floor plan"
+        )
+    return "建筑改造案例" if language == "zh" else "adaptive reuse precedent"
+
+
+def _public_search_domains(
+    goal: ResearchGoal,
+    allowed_domains: list[str],
+    *,
+    round_number: int,
+    round_query_index: int,
+) -> list[str]:
+    if allowed_domains:
+        return allowed_domains
+    if goal is ResearchGoal.precedent_research:
+        recovery_index = round_number + round_query_index - 2
+        domain = PRECEDENT_PUBLIC_SEARCH_DOMAIN_ROTATION[
+            recovery_index % len(PRECEDENT_PUBLIC_SEARCH_DOMAIN_ROTATION)
+        ]
+        return [domain]
+    return []
 
 
 def _research_context(session: Session, workspace_id: str) -> str:
@@ -1279,7 +1925,7 @@ def _try_parse_public_page(
             run_id,
             RunStatus.inspecting,
             {
-                "source_url": source.url,
+                "source_url": _redacted_trace_url(source.url),
                 "status": "skipped",
                 "error_type": type(exc).__name__,
             },
@@ -1294,27 +1940,38 @@ def _try_public_search(
     provider: PublicSearchProvider,
     query: str,
     allowed_domains: list[str],
+    *,
+    limit: int = 4,
+    purpose: str | None = None,
 ) -> list[ProviderSource]:
     tool_name = f"{provider.name}_search"
     try:
         leads = provider.search(
             query,
-            limit=4,
+            limit=limit,
             include_domains=allowed_domains,
         )
-        sources = [
-            ProviderSource(
+        sources: list[ProviderSource] = []
+        for lead in leads[:limit]:
+            source = ProviderSource(
                 url=lead.url,
                 title=lead.title,
                 publisher=urlparse(lead.url).hostname or "",
+                publication_tier=_inferred_publication_tier(lead.url),
             )
-            for lead in leads
-        ]
+            source._search_description = lead.description
+            sources.append(source)
+        summary: dict[str, object] = {
+            "status": "completed",
+            "result_count": len(sources),
+        }
+        if purpose is not None:
+            summary["purpose"] = purpose
         _checkpoint(
             db,
             run_id,
             RunStatus.searching,
-            {"status": "completed", "result_count": len(sources)},
+            summary,
             tool=tool_name,
         )
         return sources
@@ -1329,48 +1986,84 @@ def _try_public_search(
         return []
 
 
+def _inferred_publication_tier(url: str) -> PublicationTier:
+    hostname = (urlparse(url).hostname or "").casefold().rstrip(".")
+    if hostname.startswith("www."):
+        hostname = hostname[4:]
+    if any(
+        hostname == domain or hostname.endswith(f".{domain}")
+        for domain in TRUSTED_ARCHITECTURE_PUBLICATION_DOMAINS
+    ):
+        return PublicationTier.trusted_secondary
+    return PublicationTier.unknown
+
+
 def _try_xiaohongshu_search(
     db: Database,
     run_id: str,
-    search: XiaohongshuBrowserSearch,
+    searches: list[XiaohongshuSearch],
     query: str,
 ) -> tuple[list[ProviderSource], bool]:
-    try:
-        sources = search.search(query, limit=4)
-        _checkpoint(
-            db,
-            run_id,
-            RunStatus.searching,
-            {"status": "completed", "result_count": len(sources)},
-            tool="xiaohongshu_search",
-        )
-        return sources, False
-    except Exception as exc:
-        _checkpoint(
-            db,
-            run_id,
-            RunStatus.searching,
-            {"status": "skipped", "error_type": type(exc).__name__},
-            tool="xiaohongshu_search",
-        )
-        return [], True
+    failed_backends = 0
+    while searches:
+        search = searches[0]
+        try:
+            sources = search.search(query, limit=4)
+            if not sources and len(searches) > 1:
+                searches.pop(0)
+                failed_backends += 1
+                _checkpoint(
+                    db,
+                    run_id,
+                    RunStatus.searching,
+                    {
+                        "status": "retrying",
+                        "backend": search.name,
+                        "reason": "empty_result",
+                    },
+                    tool="xiaohongshu_search",
+                )
+                continue
+            _checkpoint(
+                db,
+                run_id,
+                RunStatus.searching,
+                {
+                    "status": "completed",
+                    "backend": search.name,
+                    "result_count": len(sources),
+                    "fallback": failed_backends > 0,
+                },
+                tool="xiaohongshu_search",
+            )
+            return sources, False
+        except Exception as exc:
+            searches.pop(0)
+            failed_backends += 1
+            _checkpoint(
+                db,
+                run_id,
+                RunStatus.searching,
+                {
+                    "status": "retrying" if searches else "skipped",
+                    "backend": search.name,
+                    "error_type": type(exc).__name__,
+                },
+                tool="xiaohongshu_search",
+            )
+    return [], True
 
 
 def _query_with_source_preferences(
     query: str,
     *,
     goal: ResearchGoal,
-    research_sources: set[ResearchSource],
 ) -> str:
     preferences: list[str] = []
     if goal is ResearchGoal.precedent_research:
         preferences.append("优先项目官网、ArchDaily 等完整建筑项目页；视觉平台只能作为灵感线索。")
     elif goal is ResearchGoal.visual_reference_search:
         preferences.append("优先图纸风格、建筑形体推演与分析图表达的可见特征。")
-    if ResearchSource.pinterest in research_sources:
-        preferences.append(
-            "可返回 pinterest.com 的原 Pin 链接作为视觉线索，但不得据此确认项目事实。"
-        )
     if not preferences:
         return query
     return f"{query} 来源分工：{' '.join(preferences)}"[:8_000]
@@ -1515,35 +2208,32 @@ def _persist_public_page_leads(
 def _classify_remote_public_images(
     db: Database,
     run_id: str,
-    source: ProviderSource,
-    page: ParsedPublicPage,
+    pages: Sequence[RemotePublicPageBatchItem],
     classifier: RemoteVisualClassifier,
     *,
     question: str,
     subquestion_id: str | None,
     remaining_seconds: float,
 ) -> int:
-    untyped_images = [
-        image for image in page.images if infer_architecture_asset_type(image) is None
-    ][:REMOTE_VISUAL_BATCH_LIMIT]
-    if (
-        not untyped_images
-        or remaining_seconds < classifier.worst_case_remote_batch_seconds
-        or _remote_visual_batch_started(db, run_id)
-    ):
+    selected = _remote_public_image_batch(pages, question)
+    if not selected or remaining_seconds < classifier.worst_case_remote_batch_seconds:
         return 0
 
     candidates = [
         RemoteVisualCandidate(
             candidate_id=f"image_{index}",
             image_url=image.url,
-            caption=image.alt,
+            caption=" — ".join(
+                part for part in (item["page"].title.strip(), image.alt.strip()) if part
+            ),
         )
-        for index, image in enumerate(untyped_images, start=1)
+        for index, (item, image) in enumerate(selected, start=1)
     ]
     batch_fingerprint = hashlib.sha256(
         "\n".join(candidate.image_url for candidate in candidates).encode("utf-8")
     ).hexdigest()
+    if _remote_visual_batch_started(db, run_id, batch_fingerprint, subquestion_id):
+        return 0
     _checkpoint(
         db,
         run_id,
@@ -1551,15 +2241,23 @@ def _classify_remote_public_images(
         {
             "status": "started",
             "batch_fingerprint": batch_fingerprint,
+            "subquestion_id": subquestion_id,
             "candidate_count": len(candidates),
+            "page_count": len({item["source"].url for item, _ in selected}),
         },
         tool="remote_visual_batch",
     )
+    selected_pages = list(dict.fromkeys(item["source"].url for item, _ in selected))
+    context_limit = max(1_000, PUBLIC_PAGE_ANALYSIS_TEXT_LIMIT // len(selected_pages))
+    page_contexts: list[str] = []
+    for source_url in selected_pages:
+        item = next(item for item, _ in selected if item["source"].url == source_url)
+        page_contexts.append(_public_page_context(item["page"])[:context_limit])
     try:
         result = classifier.classify_remote_batch(
             candidates,
             question=question,
-            project_text=_public_page_context(page),
+            project_text="\n\n".join(page_contexts)[:PUBLIC_PAGE_ANALYSIS_TEXT_LIMIT],
         )
     except Exception as exc:
         _checkpoint(
@@ -1569,21 +2267,36 @@ def _classify_remote_public_images(
             {
                 "status": "failed",
                 "batch_fingerprint": batch_fingerprint,
+                "subquestion_id": subquestion_id,
                 "error_type": type(exc).__name__,
             },
             tool="remote_visual_batch",
         )
         return 0
 
-    added = _persist_remote_visual_leads(
-        db,
-        run_id,
-        source,
-        page,
-        candidates,
-        result.classifications,
-        subquestion_id=subquestion_id,
-    )
+    added = 0
+    for source_url in selected_pages:
+        item = next(item for item, _ in selected if item["source"].url == source_url)
+        page_candidates = [
+            candidate
+            for candidate, (candidate_item, _) in zip(candidates, selected, strict=True)
+            if candidate_item["source"].url == source_url
+        ]
+        candidate_ids = {candidate.candidate_id for candidate in page_candidates}
+        added += _persist_remote_visual_leads(
+            db,
+            run_id,
+            item["source"],
+            item["page"],
+            page_candidates,
+            [
+                classification
+                for classification in result.classifications
+                if classification.candidate_id in candidate_ids
+            ],
+            subquestion_id=subquestion_id,
+            exact_project_evidence=item["exact_project_evidence"],
+        )
     _checkpoint(
         db,
         run_id,
@@ -1591,6 +2304,7 @@ def _classify_remote_public_images(
         {
             "status": "completed",
             "batch_fingerprint": batch_fingerprint,
+            "subquestion_id": subquestion_id,
             "classified_count": len(result.classifications),
             "added": added,
         },
@@ -1599,15 +2313,148 @@ def _classify_remote_public_images(
     return added
 
 
-def _remote_visual_batch_started(db: Database, run_id: str) -> bool:
+def _remote_public_image_batch(
+    pages: Sequence[RemotePublicPageBatchItem],
+    question: str,
+) -> list[tuple[RemotePublicPageBatchItem, ParsedPageImage]]:
+    unique_pages = list({item["source"].url: item for item in pages}.values())
+    ranked_pages = sorted(
+        unique_pages,
+        key=lambda item: _remote_public_page_sort_key(item, question),
+        reverse=True,
+    )
+    page_images = [
+        (
+            item,
+            sorted(
+                _remote_visual_candidate_images(item["page"]),
+                key=lambda image: project_image_identity_score(
+                    item["page"].title,
+                    image.url,
+                    image.alt,
+                ),
+                reverse=True,
+            ),
+        )
+        for item in ranked_pages
+    ]
+    if len(page_images) == 1:
+        item, images = page_images[0]
+        return [(item, image) for image in images]
+
+    selected: list[tuple[RemotePublicPageBatchItem, ParsedPageImage]] = []
+    selected_urls: set[str] = set()
+    max_page_images = max((len(images) for _, images in page_images), default=0)
+    for image_index in range(max_page_images):
+        for item, images in page_images:
+            if image_index >= len(images):
+                continue
+            image = images[image_index]
+            if image.url in selected_urls:
+                continue
+            selected.append((item, image))
+            selected_urls.add(image.url)
+            if len(selected) == REMOTE_VISUAL_BATCH_LIMIT:
+                return selected
+    return selected
+
+
+def _remote_public_page_sort_key(
+    item: RemotePublicPageBatchItem,
+    question: str,
+) -> tuple[int, int, int, int, int]:
+    source = item["source"]
+    page = item["page"]
+    page_text = " ".join((page.title, page.description, _public_page_analysis_text(page)))
+    return (
+        int(item["exact_project_evidence"]),
+        public_search_relevance_score(
+            question,
+            title=page.title,
+            description=page.description,
+            url=source.url,
+        ),
+        len(_relevance_tokens(page_text) & _relevance_tokens(question)),
+        sum(infer_architecture_asset_type(image) is not None for image in page.images),
+        PUBLICATION_TIER_STRENGTH[source.publication_tier.value],
+    )
+
+
+def _remote_visual_candidate_images(page: ParsedPublicPage) -> list[ParsedPageImage]:
+    type_priority: dict[ArchitectureAssetType | None, int] = {
+        ArchitectureAssetType.circulation: 0,
+        ArchitectureAssetType.plan: 1,
+        ArchitectureAssetType.section: 2,
+        ArchitectureAssetType.axonometric: 3,
+        ArchitectureAssetType.analysis_diagram: 4,
+        ArchitectureAssetType.site_plan: 5,
+        ArchitectureAssetType.elevation: 6,
+        ArchitectureAssetType.render: 7,
+        ArchitectureAssetType.photograph: 8,
+        None: 9,
+    }
+    indexed_images = list(enumerate(page.images))
+    typed = sorted(
+        (
+            (index, image)
+            for index, image in indexed_images
+            if infer_architecture_asset_type(image) is not None
+        ),
+        key=lambda item: (
+            type_priority[infer_architecture_asset_type(item[1])],
+            item[0],
+        ),
+    )
+    selected = [image for _, image in typed[:REMOTE_VISUAL_BATCH_LIMIT]]
+    remaining = REMOTE_VISUAL_BATCH_LIMIT - len(selected)
+    untyped = [image for _, image in indexed_images if infer_architecture_asset_type(image) is None]
+    sample_count = min(remaining, len(untyped))
+    if sample_count == 1:
+        selected.append(untyped[0])
+    elif sample_count > 1:
+        last_index = len(untyped) - 1
+        selected.extend(
+            untyped[round(position * last_index / (sample_count - 1))]
+            for position in range(sample_count)
+        )
+    return selected
+
+
+def _remote_visual_batch_started(
+    db: Database,
+    run_id: str,
+    batch_fingerprint: str,
+    subquestion_id: str | None,
+) -> bool:
     with db.session_factory() as session:
-        events = session.scalars(
-            select(TraceEvent).where(
-                TraceEvent.run_id == run_id,
-                TraceEvent.tool == "remote_visual_batch",
+        run = _get_run(session, run_id)
+        events = list(
+            session.scalars(
+                select(TraceEvent)
+                .where(
+                    TraceEvent.run_id == run_id,
+                    TraceEvent.tool == "remote_visual_batch",
+                )
+                .order_by(TraceEvent.sequence)
             )
         )
-        return any(event.summary.get("status") == "started" for event in events)
+        if any(
+            event.retry_count == run.attempt
+            and event.summary.get("status") == "started"
+            and event.summary.get("subquestion_id") == subquestion_id
+            for event in events
+        ):
+            return True
+        matching = [
+            event for event in events if event.summary.get("batch_fingerprint") == batch_fingerprint
+        ]
+        if not matching:
+            return False
+        latest = matching[-1]
+        status = latest.summary.get("status")
+        if status in {"started", "completed"}:
+            return True
+        return status == "failed" and latest.retry_count == run.attempt
 
 
 def _persist_remote_visual_leads(
@@ -1619,6 +2466,7 @@ def _persist_remote_visual_leads(
     classifications: list[RemoteVisualClassification],
     *,
     subquestion_id: str | None,
+    exact_project_evidence: bool,
 ) -> int:
     candidate_by_id = {candidate.candidate_id: candidate for candidate in candidates}
     accepted = [
@@ -1632,12 +2480,15 @@ def _persist_remote_visual_leads(
         return 0
 
     with db.session_factory() as session:
-        existing_urls = {
-            value
-            for value in session.scalars(
-                select(AssetCandidate.image_url).where(AssetCandidate.run_id == run_id)
+        existing_by_url = {
+            candidate.image_url: candidate
+            for candidate in session.scalars(
+                select(AssetCandidate).where(
+                    AssetCandidate.run_id == run_id,
+                    AssetCandidate.image_url.is_not(None),
+                )
             )
-            if value is not None
+            if candidate.image_url is not None
         }
         source_page_id = session.scalar(
             select(SourcePage.id).where(
@@ -1647,14 +2498,22 @@ def _persist_remote_visual_leads(
         )
         expires_at = datetime.now(UTC) + timedelta(days=7)
         project_name = page.title.strip() or source.title.strip() or "待核验项目"
+        visual_limitation = "该类型与观察来自低细节远程视觉分类；图片—项目归属和来源仍待核验。"
+        project_limitation = (
+            "图纸类型与可见观察来自远程视觉分类；项目页仅支持图片归属，首发来源与使用权仍待核验。"
+        )
         added = 0
         for classification in accepted:
             candidate = candidate_by_id.get(classification.candidate_id)
             asset_type = classification.asset_type
-            if candidate is None or asset_type is None or candidate.image_url in existing_urls:
+            if candidate is None or asset_type is None:
                 continue
-            session.add(
-                AssetCandidate(
+            record = existing_by_url.get(candidate.image_url)
+            changed = record is None
+            limitation = project_limitation if exact_project_evidence else visual_limitation
+            statement = f"{project_name} 项目页直接列出了这张{_asset_type_label(asset_type)}图。"
+            if record is None:
+                record = AssetCandidate(
                     run_id=run_id,
                     source_page_id=source_page_id,
                     project_name=project_name,
@@ -1663,35 +2522,1045 @@ def _persist_remote_visual_leads(
                     image_url=candidate.image_url,
                     storage_path=None,
                     perceptual_hash=None,
-                    publication_tier=PublicationTier.unknown.value,
-                    project_identity=AssociationStatus.unknown.value,
-                    asset_association=AssociationStatus.unknown.value,
+                    publication_tier=(
+                        source.publication_tier.value
+                        if exact_project_evidence
+                        else PublicationTier.unknown.value
+                    ),
+                    project_identity=(
+                        AssociationStatus.probable.value
+                        if exact_project_evidence
+                        else AssociationStatus.unknown.value
+                    ),
+                    asset_association=(
+                        AssociationStatus.confirmed.value
+                        if exact_project_evidence
+                        else AssociationStatus.unknown.value
+                    ),
                     primary_source=PrimarySourceStatus.unknown.value,
                     rights_status=RightsStatus.unknown.value,
-                    result_tier=ResultTier.visual_lead.value,
+                    result_tier=(
+                        ResultTier.partial.value
+                        if exact_project_evidence
+                        else ResultTier.visual_lead.value
+                    ),
                     relevance=classification.relevance,
                     subquestion_ids=[subquestion_id] if subquestion_id is not None else [],
                     project_context="",
                     design_mechanism="",
                     transfer_strategy=[],
-                    subquestion_analysis={},
-                    facts=[],
+                    subquestion_analysis=(
+                        {
+                            subquestion_id: {
+                                "project_context": "",
+                                "design_mechanism": "",
+                                "transfer_strategy": [],
+                                "observations": classification.observations,
+                                "limitations": [limitation],
+                            }
+                        }
+                        if subquestion_id is not None
+                        else {}
+                    ),
+                    facts=[statement] if exact_project_evidence else [],
                     observations=classification.observations,
                     inferences=[],
-                    limitations=[
-                        "该类型与观察来自低细节远程视觉分类；图片—项目归属和来源仍待核验。"
-                    ],
+                    limitations=[limitation],
                     rank_index=0,
                     expires_at=expires_at,
                 )
-            )
-            existing_urls.add(candidate.image_url)
-            added += 1
+                session.add(record)
+                existing_by_url[candidate.image_url] = record
+            else:
+                observations = list(
+                    dict.fromkeys([*record.observations, *classification.observations])
+                )
+                changed = changed or observations != record.observations
+                record.observations = observations
+                relevance = max(record.relevance, classification.relevance)
+                changed = changed or relevance != record.relevance
+                record.relevance = relevance
+                if record.result_tier == ResultTier.visual_lead.value:
+                    changed = changed or record.asset_type != asset_type.value
+                    record.asset_type = asset_type.value
+                associations = list(record.subquestion_ids or [])
+                if subquestion_id is not None and subquestion_id not in associations:
+                    record.subquestion_ids = [*associations, subquestion_id]
+                    changed = True
+
+            if subquestion_id is not None:
+                analyses = dict(record.subquestion_analysis or {})
+                branch = dict(analyses.get(subquestion_id, {}))
+                branch_observations = branch.get("observations")
+                branch["project_context"] = (
+                    branch.get("project_context")
+                    if isinstance(branch.get("project_context"), str)
+                    else ""
+                )
+                branch["design_mechanism"] = (
+                    branch.get("design_mechanism")
+                    if isinstance(branch.get("design_mechanism"), str)
+                    else ""
+                )
+                branch["transfer_strategy"] = (
+                    branch.get("transfer_strategy")
+                    if isinstance(branch.get("transfer_strategy"), list)
+                    else []
+                )
+                branch["observations"] = list(
+                    dict.fromkeys(
+                        [
+                            *(branch_observations if isinstance(branch_observations, list) else []),
+                            *classification.observations,
+                        ]
+                    )
+                )
+                branch["limitations"] = [limitation]
+                analyses[subquestion_id] = branch
+                record.subquestion_analysis = analyses
+
+            if exact_project_evidence:
+                previous = (
+                    record.source_page_id,
+                    record.project_name,
+                    record.source_url,
+                    record.publication_tier,
+                    record.project_identity,
+                    record.asset_association,
+                    record.result_tier,
+                    tuple(record.facts),
+                    tuple(record.limitations),
+                )
+                record.source_page_id = source_page_id
+                record.project_name = project_name
+                record.source_url = source.url
+                if PUBLICATION_TIER_STRENGTH[source.publication_tier.value] > (
+                    PUBLICATION_TIER_STRENGTH.get(record.publication_tier, 0)
+                ):
+                    record.publication_tier = source.publication_tier.value
+                if record.project_identity == AssociationStatus.unknown.value:
+                    record.project_identity = AssociationStatus.probable.value
+                if record.asset_association != AssociationStatus.conflict.value:
+                    record.asset_association = AssociationStatus.confirmed.value
+                if record.result_tier == ResultTier.visual_lead.value:
+                    record.result_tier = ResultTier.partial.value
+                record.facts = list(dict.fromkeys([*record.facts, statement]))
+                record.limitations = [project_limitation]
+                current = (
+                    record.source_page_id,
+                    record.project_name,
+                    record.source_url,
+                    record.publication_tier,
+                    record.project_identity,
+                    record.asset_association,
+                    record.result_tier,
+                    tuple(record.facts),
+                    tuple(record.limitations),
+                )
+                changed = changed or current != previous
+                session.flush()
+                claim_exists = session.scalar(
+                    select(EvidenceClaim.id).where(
+                        EvidenceClaim.asset_candidate_id == record.id,
+                        EvidenceClaim.claim_type == "fact",
+                        EvidenceClaim.statement == statement,
+                        EvidenceClaim.source_url == source.url,
+                    )
+                )
+                if claim_exists is None:
+                    session.add(
+                        EvidenceClaim(
+                            asset_candidate_id=record.id,
+                            claim_type="fact",
+                            statement=statement,
+                            source_url=source.url,
+                            text_excerpt=candidate.caption or page.title or None,
+                            expires_at=datetime.now(UTC) + timedelta(days=30),
+                        )
+                    )
+                    changed = True
+            added += int(changed)
         if added:
             session.flush()
             _rerank_assets(session, run_id)
         session.commit()
         return added
+
+
+def _public_page_drawings(
+    db: Database,
+    run_id: str,
+    source_url: str,
+    page: ParsedPublicPage,
+) -> list[PublicPageDrawing]:
+    candidate_images = _remote_visual_candidate_images(page)
+    image_urls = [image.url for image in candidate_images]
+    if not image_urls:
+        return []
+    with db.session_factory() as session:
+        stored_types = {
+            candidate.image_url: ArchitectureAssetType(candidate.asset_type)
+            for candidate in session.scalars(
+                select(AssetCandidate).where(
+                    AssetCandidate.run_id == run_id,
+                    AssetCandidate.source_url == source_url,
+                    AssetCandidate.image_url.in_(image_urls),
+                )
+            )
+            if candidate.image_url is not None
+        }
+    drawings: list[PublicPageDrawing] = []
+    for image in candidate_images:
+        asset_type = (
+            stored_types.get(image.url)
+            or infer_architecture_asset_type(image)
+            or ArchitectureAssetType.photograph
+        )
+        drawings.append(
+            PublicPageDrawing(
+                drawing_id=f"drawing_{len(drawings) + 1}",
+                asset_type=asset_type,
+                image_url=image.url,
+                caption=image.alt,
+            )
+        )
+    return drawings
+
+
+def _public_page_branch_analysis_budget_available(
+    attempted_branches: set[tuple[str, str]],
+    *,
+    subquestion_id: str,
+    attempts_before_query: int,
+    attempt_limit: int | None,
+) -> bool:
+    if attempt_limit is None:
+        return True
+    current_attempts = sum(
+        attempted_subquestion_id == subquestion_id
+        for _, attempted_subquestion_id in attempted_branches
+    )
+    return current_attempts - attempts_before_query < attempt_limit
+
+
+def _try_public_page_branch_analysis(
+    db: Database,
+    run_id: str,
+    provider: PublicPageAnalysisProvider,
+    source: ProviderSource,
+    page: ParsedPublicPage,
+    *,
+    question: str,
+    subquestion_id: str,
+    analysis_requirements: Sequence[str],
+    attempted_branches: set[tuple[str, str]],
+    public_search_provider: PublicSearchProvider | None = None,
+    public_page_parser: PublicPageParser | None = None,
+    parsed_pages: dict[str, ParsedPublicPage | None] | None = None,
+    supplement_attempted: set[str] | None = None,
+    supplement_pages: dict[str, list[tuple[ProviderSource, ParsedPublicPage]]] | None = None,
+    remaining_seconds: Callable[[], float] | None = None,
+) -> int:
+    analysis_key = (source.url, subquestion_id)
+    if analysis_key in attempted_branches:
+        return 0
+    drawings = _public_page_drawings(db, run_id, source.url, page)
+    attempted_branches.add(analysis_key)
+    added = _try_public_page_analysis(
+        db,
+        run_id,
+        provider,
+        source,
+        page,
+        drawings,
+        question=question,
+        subquestion_id=subquestion_id,
+        analysis_requirements=analysis_requirements,
+    )
+    if (
+        public_search_provider is None
+        or public_page_parser is None
+        or parsed_pages is None
+        or supplement_attempted is None
+        or supplement_pages is None
+        or remaining_seconds is None
+    ):
+        return added
+    return added + _try_project_text_supplement(
+        db,
+        run_id,
+        provider,
+        source,
+        page,
+        question=question,
+        subquestion_id=subquestion_id,
+        analysis_requirements=analysis_requirements,
+        public_search_provider=public_search_provider,
+        public_page_parser=public_page_parser,
+        parsed_pages=parsed_pages,
+        supplement_attempted=supplement_attempted,
+        supplement_pages=supplement_pages,
+        remaining_seconds=remaining_seconds,
+    )
+
+
+def _try_project_text_supplement(
+    db: Database,
+    run_id: str,
+    provider: PublicPageAnalysisProvider,
+    source: ProviderSource,
+    page: ParsedPublicPage,
+    *,
+    question: str,
+    subquestion_id: str,
+    analysis_requirements: Sequence[str],
+    public_search_provider: PublicSearchProvider,
+    public_page_parser: PublicPageParser,
+    parsed_pages: dict[str, ParsedPublicPage | None],
+    supplement_attempted: set[str],
+    supplement_pages: dict[str, list[tuple[ProviderSource, ParsedPublicPage]]],
+    remaining_seconds: Callable[[], float],
+) -> int:
+    project_identity = _project_identity_key(source.title or page.title)
+    if not project_identity:
+        return 0
+    project_identities = {
+        identity
+        for identity in (
+            _project_identity_key(source.title),
+            _project_identity_key(page.title),
+        )
+        if identity
+    }
+    with db.session_factory() as session:
+        candidates = list(
+            session.scalars(
+                select(AssetCandidate)
+                .where(
+                    AssetCandidate.run_id == run_id,
+                    AssetCandidate.result_tier.in_(
+                        [ResultTier.verified.value, ResultTier.partial.value]
+                    ),
+                )
+                .order_by(AssetCandidate.rank_index, AssetCandidate.created_at)
+            )
+        )
+        project_candidates = [
+            item
+            for item in candidates
+            if _project_identity_key(item.project_name) in project_identities
+        ]
+        if not project_candidates:
+            return 0
+        project_context = ""
+        design_mechanism = ""
+        has_transfer_strategy = False
+        has_project_mechanism = False
+        for candidate in project_candidates:
+            analyses = candidate.subquestion_analysis or {}
+            has_project_mechanism = has_project_mechanism or bool(
+                candidate.design_mechanism.strip()
+            )
+            for candidate_branch in analyses.values():
+                if not isinstance(candidate_branch, dict):
+                    continue
+                mechanism = candidate_branch.get("design_mechanism")
+                has_project_mechanism = has_project_mechanism or bool(
+                    isinstance(mechanism, str) and mechanism.strip()
+                )
+            branch = analyses.get(subquestion_id, {})
+            if not isinstance(branch, dict):
+                continue
+            context = branch.get("project_context")
+            mechanism = branch.get("design_mechanism")
+            transfer = branch.get("transfer_strategy")
+            if not project_context and isinstance(context, str):
+                project_context = context.strip()
+            if not design_mechanism and isinstance(mechanism, str):
+                design_mechanism = mechanism.strip()
+            has_transfer_strategy = has_transfer_strategy or bool(
+                isinstance(transfer, list) and transfer
+            )
+        if project_context and design_mechanism and has_transfer_strategy:
+            return 0
+        if not project_context and not design_mechanism and not has_project_mechanism:
+            return 0
+
+    supporting_pages = next(
+        (
+            supplement_pages[identity]
+            for identity in project_identities
+            if identity in supplement_pages
+        ),
+        None,
+    )
+    if supporting_pages is None:
+        if project_identities & supplement_attempted:
+            return 0
+        search_reserve = float(getattr(public_search_provider, "worst_case_call_seconds", 0.0))
+        parser_reserve = float(getattr(public_page_parser, "worst_case_call_seconds", 0.0))
+        required_seconds = (
+            search_reserve
+            + parser_reserve * PROJECT_TEXT_SUPPLEMENT_PAGE_LIMIT
+            + provider.worst_case_page_analysis_seconds
+        )
+        if remaining_seconds() < required_seconds:
+            return 0
+        supplement_attempted.update(project_identities)
+        project_name = _project_display_name(source.title or page.title)
+        supplement_sources = _try_public_search(
+            db,
+            run_id,
+            public_search_provider,
+            _project_text_supplement_query(project_name, question),
+            list(TRUSTED_ARCHITECTURE_PUBLICATION_DOMAINS),
+            limit=PROJECT_TEXT_SUPPLEMENT_PAGE_LIMIT,
+            purpose="project_text_supplement",
+        )
+        _persist_sources(
+            db,
+            run_id,
+            ProviderSearchResult(sources=supplement_sources, assets=[]),
+        )
+        supporting_pages = []
+        for supplement_source in supplement_sources:
+            if supplement_source.url == source.url:
+                continue
+            lead_identity = _project_identity_key(supplement_source.title)
+            if lead_identity and lead_identity != project_identity:
+                continue
+            if supplement_source.url in parsed_pages:
+                supplement_page = parsed_pages[supplement_source.url]
+            else:
+                try:
+                    supplement_page = public_page_parser.parse(supplement_source.url)
+                except Exception as exc:
+                    parsed_pages[supplement_source.url] = None
+                    _checkpoint(
+                        db,
+                        run_id,
+                        RunStatus.inspecting,
+                        {
+                            "source_url": _redacted_trace_url(supplement_source.url),
+                            "status": "failed",
+                            "error_type": type(exc).__name__,
+                            "purpose": "project_text_supplement",
+                        },
+                        tool=public_page_parser.name,
+                    )
+                    continue
+                parsed_pages[supplement_source.url] = supplement_page
+            if supplement_page is None:
+                continue
+            if _project_identity_key(supplement_page.title) != project_identity:
+                continue
+            if supplement_source.publication_tier not in {
+                PublicationTier.primary,
+                PublicationTier.trusted_secondary,
+            } or not is_concrete_project_page(
+                supplement_page,
+                source_title=supplement_source.title,
+            ):
+                continue
+            supporting_pages.append((supplement_source, supplement_page))
+            _checkpoint(
+                db,
+                run_id,
+                RunStatus.inspecting,
+                {
+                    "source_url": _redacted_trace_url(supplement_source.url),
+                    "status": "completed",
+                    "markdown_chars": len(supplement_page.markdown),
+                    "purpose": "project_text_supplement",
+                },
+                tool=public_page_parser.name,
+            )
+        for identity in project_identities:
+            supplement_pages[identity] = supporting_pages
+
+    if not supporting_pages or remaining_seconds() < provider.worst_case_page_analysis_seconds:
+        return 0
+    evidence_pages = [(source, page), *supporting_pages]
+    bundled_page = ParsedPublicPage(
+        source_url=source.url,
+        title=page.title,
+        markdown=_project_evidence_bundle_text(evidence_pages),
+        images=[],
+    )
+    return _try_public_page_analysis(
+        db,
+        run_id,
+        provider,
+        source,
+        bundled_page,
+        [],
+        question=question,
+        subquestion_id=subquestion_id,
+        analysis_requirements=analysis_requirements,
+        evidence_pages=evidence_pages,
+    )
+
+
+def _project_text_supplement_query(project_name: str, question: str) -> str:
+    safe_project_name = project_name.replace('"', "").strip()[:200]
+    normalized_question = question.casefold()
+    if any(
+        term in normalized_question
+        for term in (
+            "公共界面",
+            "共享大厅",
+            "室内外连续",
+            "public interface",
+            "shared lobby",
+            "indoor-outdoor",
+        )
+    ):
+        focus = "public interface shared lobby"
+    else:
+        focus = {
+            "interface": "structure detail",
+            "program": "program insertion",
+            "flow": "public service circulation",
+            "daylight": "daylight skylight",
+            "section": "section mezzanine",
+        }.get(infer_research_issue_intent(question), "design mechanism")
+    return f'"{safe_project_name}" {focus}'[:500]
+
+
+def _project_evidence_bundle_text(
+    evidence_pages: Sequence[tuple[ProviderSource, ParsedPublicPage]],
+) -> str:
+    page_limit = max(1_000, PUBLIC_PAGE_ANALYSIS_TEXT_LIMIT // len(evidence_pages) - 300)
+    chunks = []
+    for index, (source, page) in enumerate(evidence_pages, start=1):
+        chunks.append(
+            "\n".join(
+                (
+                    f"[SOURCE {index}]",
+                    f"URL: {source.url}",
+                    f"TITLE: {page.title}",
+                    _public_page_analysis_text(page)[:page_limit],
+                )
+            )
+        )
+    return "\n\n".join(chunks)[:PUBLIC_PAGE_ANALYSIS_TEXT_LIMIT]
+
+
+def _try_article_ready_page_branch_reuse(
+    db: Database,
+    run_id: str,
+    provider: PublicPageAnalysisProvider,
+    parsed_pages: dict[str, ParsedPublicPage | None],
+    *,
+    question: str,
+    subquestion_id: str,
+    analysis_requirements: Sequence[str],
+    attempted_branches: set[tuple[str, str]],
+    public_search_provider: PublicSearchProvider | None,
+    public_page_parser: PublicPageParser | None,
+    supplement_attempted: set[str],
+    supplement_pages: dict[str, list[tuple[ProviderSource, ParsedPublicPage]]],
+    remaining_seconds: Callable[[], float],
+) -> tuple[bool, int]:
+    seen_sources: set[str] = set()
+    preferred_types = _preferred_public_page_drawing_types(question)
+    options: list[tuple[tuple[int, int, int], ResearchSynthesisCase, ParsedPublicPage]] = []
+    for case_index, case in enumerate(_research_synthesis_cases(db, run_id)):
+        if case.source_url in seen_sources:
+            continue
+        seen_sources.add(case.source_url)
+        page = parsed_pages.get(case.source_url)
+        if page is None or (case.source_url, subquestion_id) in attempted_branches:
+            continue
+        drawings = _public_page_drawings(db, run_id, case.source_url, page)
+        options.append(
+            (
+                (
+                    sum(drawing.asset_type in preferred_types for drawing in drawings),
+                    len(drawings),
+                    -case_index,
+                ),
+                case,
+                page,
+            )
+        )
+    if not options:
+        return False, 0
+    _, case, page = max(options, key=lambda item: item[0])
+    source = ProviderSource(
+        url=case.source_url,
+        title=case.project_name,
+        publisher=urlparse(case.source_url).hostname or "",
+        publication_tier=_inferred_publication_tier(case.source_url),
+    )
+    added = _try_public_page_branch_analysis(
+        db,
+        run_id,
+        provider,
+        source,
+        page,
+        question=question,
+        subquestion_id=subquestion_id,
+        analysis_requirements=analysis_requirements,
+        attempted_branches=attempted_branches,
+        public_search_provider=public_search_provider,
+        public_page_parser=public_page_parser,
+        parsed_pages=parsed_pages,
+        supplement_attempted=supplement_attempted,
+        supplement_pages=supplement_pages,
+        remaining_seconds=remaining_seconds,
+    )
+    return True, added
+
+
+def _preferred_public_page_drawing_types(
+    question: str,
+) -> set[ArchitectureAssetType]:
+    return {
+        "interface": {
+            ArchitectureAssetType.section,
+            ArchitectureAssetType.axonometric,
+            ArchitectureAssetType.elevation,
+        },
+        "flow": {
+            ArchitectureAssetType.circulation,
+            ArchitectureAssetType.plan,
+            ArchitectureAssetType.site_plan,
+            ArchitectureAssetType.section,
+        },
+        "daylight": {
+            ArchitectureAssetType.section,
+            ArchitectureAssetType.plan,
+            ArchitectureAssetType.axonometric,
+        },
+        "program": {
+            ArchitectureAssetType.plan,
+            ArchitectureAssetType.section,
+            ArchitectureAssetType.axonometric,
+        },
+        "section": {
+            ArchitectureAssetType.section,
+            ArchitectureAssetType.axonometric,
+        },
+    }.get(infer_research_issue_intent(question), set())
+
+
+def _project_display_name(value: str) -> str:
+    normalized = " ".join(value.split()).strip()
+    if not normalized:
+        return "项目正文案例"
+    return re.split(r"\s+(?:/|\||—|–)\s+", normalized, maxsplit=1)[0].strip()
+
+
+def _project_identity_key(value: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9\u4e00-\u9fff]+", _project_display_name(value).casefold()))
+
+
+def _supported_project_facts(
+    evidence_pages: Sequence[tuple[ProviderSource, ParsedPublicPage]],
+    facts: Sequence[PublicPageSupportedFact],
+) -> list[tuple[PublicPageSupportedFact, str]]:
+    normalized_pages = [
+        (source.url, " ".join(_public_page_analysis_text(page).split()))
+        for source, page in evidence_pages
+    ]
+    supported: list[tuple[PublicPageSupportedFact, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for fact in facts:
+        excerpt = " ".join(fact.text_excerpt.split())
+        source_url = next(
+            (url for url, normalized_text in normalized_pages if excerpt in normalized_text),
+            None,
+        )
+        key = (fact.statement, source_url or "")
+        if source_url is None or key in seen:
+            continue
+        seen.add(key)
+        supported.append((fact, source_url))
+    return supported
+
+
+def _try_public_page_analysis(
+    db: Database,
+    run_id: str,
+    provider: PublicPageAnalysisProvider,
+    source: ProviderSource,
+    page: ParsedPublicPage,
+    drawings: list[PublicPageDrawing],
+    *,
+    question: str,
+    subquestion_id: str,
+    analysis_requirements: Sequence[str],
+    evidence_pages: Sequence[tuple[ProviderSource, ParsedPublicPage]] | None = None,
+) -> int:
+    try:
+        analysis = provider.analyze_public_page(
+            question=_public_page_analysis_question(question),
+            source_url=source.url,
+            title=page.title,
+            page_text=_public_page_analysis_text(page),
+            drawings=drawings,
+            analysis_requirements=analysis_requirements,
+        )
+    except Exception as exc:
+        _checkpoint(
+            db,
+            run_id,
+            RunStatus.analyzing,
+            {
+                "source_url": _redacted_trace_url(source.url),
+                "subquestion_id": subquestion_id,
+                "status": "failed",
+                "error_type": type(exc).__name__,
+            },
+            tool="public_page_analysis",
+        )
+        return 0
+    added = _persist_public_page_analysis(
+        db,
+        run_id,
+        source,
+        page,
+        drawings,
+        analysis,
+        question=question,
+        subquestion_id=subquestion_id,
+        evidence_pages=evidence_pages,
+    )
+    _checkpoint(
+        db,
+        run_id,
+        RunStatus.analyzing,
+        {
+            "source_url": _redacted_trace_url(source.url),
+            "subquestion_id": subquestion_id,
+            "status": "completed",
+            "relevance": analysis.relevance,
+            "drawing_count": len(analysis.drawing_ids),
+            "enriched": added,
+            "source_count": len(evidence_pages or [(source, page)]),
+        },
+        tool="public_page_analysis",
+    )
+    return added
+
+
+def _persist_public_page_analysis(
+    db: Database,
+    run_id: str,
+    source: ProviderSource,
+    page: ParsedPublicPage,
+    drawings: list[PublicPageDrawing],
+    analysis: PublicPageAnalysis,
+    *,
+    question: str,
+    subquestion_id: str,
+    evidence_pages: Sequence[tuple[ProviderSource, ParsedPublicPage]] | None = None,
+) -> int:
+    drawing_by_id = {drawing.drawing_id: drawing for drawing in drawings}
+    selected_urls = {
+        drawing_by_id[drawing_id].image_url
+        for drawing_id in analysis.drawing_ids
+        if drawing_id in drawing_by_id
+    }
+    project_pages = list(evidence_pages or [(source, page)])
+    supported_facts = _supported_project_facts(project_pages, analysis.facts)
+    supported_statements = list(dict.fromkeys(fact.statement for fact, _ in supported_facts))
+    supported_statement_set = set(supported_statements)
+    supported_context = (
+        analysis.project_context if analysis.project_context in supported_statement_set else ""
+    )
+    supported_mechanism = (
+        analysis.design_mechanism if analysis.design_mechanism in supported_statement_set else ""
+    )
+    supported_transfer = analysis.transfer_strategy if supported_mechanism else []
+    has_supported_analysis = bool(supported_context or supported_mechanism)
+    effective_relevance = (
+        max(analysis.relevance, 2) if has_supported_analysis else analysis.relevance
+    )
+    if effective_relevance < 2:
+        return 0
+    if not selected_urls and supported_context and supported_mechanism and supported_transfer:
+        preferred_types = _preferred_public_page_drawing_types(question)
+        audit_drawing = next(
+            (drawing for drawing in drawings if drawing.asset_type in preferred_types),
+            drawings[0] if drawings else None,
+        )
+        if audit_drawing is not None:
+            selected_urls = {audit_drawing.image_url}
+    if not selected_urls and not has_supported_analysis:
+        return 0
+
+    with db.session_factory() as session:
+        source_candidates = list(
+            session.scalars(
+                select(AssetCandidate)
+                .where(
+                    AssetCandidate.run_id == run_id,
+                    AssetCandidate.source_url == source.url,
+                )
+                .order_by(AssetCandidate.rank_index, AssetCandidate.created_at)
+            )
+        )
+        candidates = [
+            candidate for candidate in source_candidates if candidate.image_url in selected_urls
+        ]
+        if has_supported_analysis and selected_urls:
+            existing_urls = {candidate.image_url for candidate in source_candidates}
+            missing_drawings = [
+                drawing
+                for drawing in drawings
+                if drawing.image_url in selected_urls and drawing.image_url not in existing_urls
+            ]
+            if missing_drawings:
+                source_page_id = session.scalar(
+                    select(SourcePage.id).where(
+                        SourcePage.run_id == run_id,
+                        SourcePage.url == source.url,
+                    )
+                )
+                project_name = (
+                    source_candidates[0].project_name
+                    if source_candidates
+                    else _project_display_name(
+                        page.title.strip() or source.title.strip() or "项目正文案例"
+                    )
+                )
+                missing_candidates = [
+                    AssetCandidate(
+                        run_id=run_id,
+                        source_page_id=source_page_id,
+                        project_name=project_name,
+                        asset_type=drawing.asset_type.value,
+                        source_url=source.url,
+                        image_url=drawing.image_url,
+                        storage_path=None,
+                        perceptual_hash=None,
+                        publication_tier=source.publication_tier.value,
+                        project_identity=AssociationStatus.confirmed.value,
+                        asset_association=AssociationStatus.unknown.value,
+                        primary_source=PrimarySourceStatus.unknown.value,
+                        rights_status=RightsStatus.unknown.value,
+                        result_tier=ResultTier.partial.value,
+                        relevance=effective_relevance,
+                        subquestion_ids=[],
+                        project_context="",
+                        design_mechanism="",
+                        transfer_strategy=[],
+                        subquestion_analysis={},
+                        facts=[],
+                        observations=[],
+                        inferences=[],
+                        limitations=["该案例由项目正文支持；图片仅作为同源项目预览。"],
+                        rank_index=len(source_candidates) + index,
+                        expires_at=datetime.now(UTC) + timedelta(days=7),
+                    )
+                    for index, drawing in enumerate(missing_drawings)
+                ]
+                session.add_all(missing_candidates)
+                session.flush()
+                candidates.extend(missing_candidates)
+        if not candidates and has_supported_analysis and source_candidates:
+            candidates = [source_candidates[0]]
+        if not candidates and has_supported_analysis:
+            project_identity = _project_identity_key(page.title or source.title)
+            project_candidates = list(
+                session.scalars(
+                    select(AssetCandidate)
+                    .where(
+                        AssetCandidate.run_id == run_id,
+                        AssetCandidate.result_tier.in_(
+                            [ResultTier.verified.value, ResultTier.partial.value]
+                        ),
+                        AssetCandidate.project_identity == AssociationStatus.confirmed.value,
+                    )
+                    .order_by(AssetCandidate.rank_index, AssetCandidate.created_at)
+                )
+            )
+            candidates = [
+                candidate
+                for candidate in project_candidates
+                if _project_identity_key(candidate.project_name) == project_identity
+            ][:1]
+        if not candidates and has_supported_analysis:
+            source_page_id = session.scalar(
+                select(SourcePage.id).where(
+                    SourcePage.run_id == run_id,
+                    SourcePage.url == source.url,
+                )
+            )
+            preview_drawings: list[PublicPageDrawing | None] = [
+                drawing for drawing in drawings if drawing.image_url in selected_urls
+            ] or [None]
+            text_cases = [
+                AssetCandidate(
+                    run_id=run_id,
+                    source_page_id=source_page_id,
+                    project_name=_project_display_name(
+                        page.title.strip() or source.title.strip() or "项目正文案例"
+                    ),
+                    asset_type=(
+                        preview_drawing.asset_type.value
+                        if preview_drawing is not None
+                        else ArchitectureAssetType.photograph.value
+                    ),
+                    source_url=source.url,
+                    image_url=(preview_drawing.image_url if preview_drawing is not None else None),
+                    storage_path=None,
+                    perceptual_hash=None,
+                    publication_tier=source.publication_tier.value,
+                    project_identity=AssociationStatus.confirmed.value,
+                    asset_association=AssociationStatus.unknown.value,
+                    primary_source=PrimarySourceStatus.unknown.value,
+                    rights_status=RightsStatus.unknown.value,
+                    result_tier=ResultTier.partial.value,
+                    relevance=effective_relevance,
+                    subquestion_ids=[],
+                    project_context="",
+                    design_mechanism="",
+                    transfer_strategy=[],
+                    subquestion_analysis={},
+                    facts=[],
+                    observations=[],
+                    inferences=[],
+                    limitations=[
+                        "该案例由项目正文支持；图片仅作为同源项目预览。"
+                        if preview_drawing is not None
+                        else "该案例由项目正文支持；当前未保存项目预览图。"
+                    ],
+                    rank_index=rank_index,
+                    expires_at=datetime.now(UTC) + timedelta(days=7),
+                )
+                for rank_index, preview_drawing in enumerate(preview_drawings)
+            ]
+            session.add_all(text_cases)
+            session.flush()
+            candidates = text_cases
+        changed = 0
+        for candidate in candidates:
+            before = (
+                candidate.project_context,
+                candidate.design_mechanism,
+                tuple(candidate.transfer_strategy or []),
+                tuple(candidate.facts or []),
+                tuple(candidate.inferences or []),
+                tuple(candidate.limitations or []),
+                tuple(candidate.subquestion_ids or []),
+                dict((candidate.subquestion_analysis or {}).get(subquestion_id, {})),
+            )
+            if supported_context and not candidate.project_context:
+                candidate.project_context = supported_context
+            if supported_mechanism and not candidate.design_mechanism:
+                candidate.design_mechanism = supported_mechanism
+            candidate.relevance = max(candidate.relevance, effective_relevance)
+            candidate.transfer_strategy = list(
+                dict.fromkeys([*(candidate.transfer_strategy or []), *supported_transfer])
+            )
+            candidate.facts = list(dict.fromkeys([*(candidate.facts or []), *supported_statements]))
+            candidate.inferences = list(
+                dict.fromkeys(
+                    [
+                        *(candidate.inferences or []),
+                        *([supported_mechanism] if supported_mechanism else []),
+                    ]
+                )
+            )
+            candidate.limitations = list(
+                dict.fromkeys([*(candidate.limitations or []), *analysis.limitations])
+            )
+            branch_analyses = dict(candidate.subquestion_analysis or {})
+            branch = dict(branch_analyses.get(subquestion_id, {}))
+            branch["project_context"] = supported_context or (
+                branch.get("project_context")
+                if isinstance(branch.get("project_context"), str)
+                else ""
+            )
+            branch["design_mechanism"] = supported_mechanism or (
+                branch.get("design_mechanism")
+                if isinstance(branch.get("design_mechanism"), str)
+                else ""
+            )
+            for field, incoming in (
+                ("transfer_strategy", supported_transfer),
+                ("limitations", analysis.limitations),
+            ):
+                existing = branch.get(field)
+                branch[field] = list(
+                    dict.fromkeys([*(existing if isinstance(existing, list) else []), *incoming])
+                )
+            observations = branch.get("observations")
+            branch["observations"] = observations if isinstance(observations, list) else []
+            branch_analyses[subquestion_id] = branch
+            candidate.subquestion_analysis = branch_analyses
+            branch_complete = bool(
+                branch["project_context"]
+                and branch["design_mechanism"]
+                and branch["transfer_strategy"]
+            )
+            if branch_complete and subquestion_id not in (candidate.subquestion_ids or []):
+                candidate.subquestion_ids = [
+                    *(candidate.subquestion_ids or []),
+                    subquestion_id,
+                ]
+
+            for fact, fact_source_url in supported_facts:
+                existing_claim = session.scalar(
+                    select(EvidenceClaim.id).where(
+                        EvidenceClaim.asset_candidate_id == candidate.id,
+                        EvidenceClaim.claim_type == "fact",
+                        EvidenceClaim.statement == fact.statement,
+                        EvidenceClaim.source_url == fact_source_url,
+                    )
+                )
+                if existing_claim is None:
+                    session.add(
+                        EvidenceClaim(
+                            asset_candidate_id=candidate.id,
+                            claim_type="fact",
+                            statement=fact.statement,
+                            source_url=fact_source_url,
+                            text_excerpt=fact.text_excerpt,
+                            expires_at=datetime.now(UTC) + timedelta(days=30),
+                        )
+                    )
+            after = (
+                candidate.project_context,
+                candidate.design_mechanism,
+                tuple(candidate.transfer_strategy or []),
+                tuple(candidate.facts or []),
+                tuple(candidate.inferences or []),
+                tuple(candidate.limitations or []),
+                tuple(candidate.subquestion_ids or []),
+                dict((candidate.subquestion_analysis or {}).get(subquestion_id, {})),
+            )
+            changed += int(after != before)
+        if changed:
+            _rerank_assets(session, run_id)
+        session.commit()
+        return changed
+
+
+def _public_page_analysis_text(page: ParsedPublicPage) -> str:
+    return "\n".join(
+        value
+        for value in (page.title.strip(), page.description.strip(), page.markdown.strip())
+        if value
+    )[:PUBLIC_PAGE_ANALYSIS_TEXT_LIMIT]
+
+
+def _public_page_analysis_question(question: str) -> str:
+    focus = {
+        "interface": (
+            "保留柱网、楼板、桁架、围护和设备遗存与新介入通过脱开、开洞、退让、"
+            "跨接或加固形成可核验的构造界面。"
+        ),
+        "program": "新功能通过空间、结构或构造介入，并在平面与剖面中形成可辨识的新旧关系。",
+        "flow": "公众、员工、后勤、设备与消防流线通过入口、通道、核心筒和节点组织分离或交叉。",
+        "daylight": "天窗、高侧窗、庭院与挑空如何形成可核验的采光机制。",
+        "section": "原有层高、夹层、挑空、地下空间、屋顶介入与竖向交通共同组织剖面层次。",
+    }.get(infer_research_issue_intent(question))
+    bounded = question.strip()
+    return bounded if focus is None else f"{bounded}\n稳定分析焦点：{focus}"
 
 
 def _public_page_context(page: ParsedPublicPage | None) -> str:
@@ -1737,10 +3606,19 @@ def _persist_expanded_project_page(
             if existing_candidate.image_url is None:
                 continue
             current = existing_by_image.get(existing_candidate.image_url)
-            if current is None or (
-                current.result_tier != ResultTier.visual_lead.value
-                and existing_candidate.result_tier == ResultTier.visual_lead.value
-            ):
+            current_priority = (
+                (
+                    current.source_url == source.url,
+                    current.result_tier == ResultTier.visual_lead.value,
+                )
+                if current is not None
+                else (False, False)
+            )
+            candidate_priority = (
+                existing_candidate.source_url == source.url,
+                existing_candidate.result_tier == ResultTier.visual_lead.value,
+            )
+            if current is None or candidate_priority > current_priority:
                 existing_by_image[existing_candidate.image_url] = existing_candidate
 
         expires_at = datetime.now(UTC) + timedelta(days=7)
@@ -1852,9 +3730,12 @@ def _constrain_sparse_visual_platform_result(
             else source
         )
         for source in result.sources
+        if not _is_removed_visual_source_url(source.url)
     ]
     assets: list[ProviderAsset] = []
     for item in result.assets:
+        if _is_removed_visual_source_url(item.source_url):
+            continue
         if not _is_sparse_visual_platform_url(item.source_url):
             assets.append(item)
             continue
@@ -1886,18 +3767,15 @@ def _constrain_sparse_visual_platform_result(
 
 
 def _is_sparse_visual_platform_url(value: str) -> bool:
+    return _is_xiaohongshu_url(value)
+
+
+def _is_xiaohongshu_url(value: str) -> bool:
     hostname = (urlparse(value).hostname or "").rstrip(".").lower()
-    return (
-        hostname == "xiaohongshu.com"
-        or hostname.endswith(".xiaohongshu.com")
-        or hostname == "pinterest.com"
-        or hostname.endswith(".pinterest.com")
-        or hostname == "pin.it"
-        or hostname.endswith(".pin.it")
-    )
+    return hostname == "xiaohongshu.com" or hostname.endswith(".xiaohongshu.com")
 
 
-def _is_pinterest_url(value: str) -> bool:
+def _is_removed_visual_source_url(value: str) -> bool:
     hostname = (urlparse(value).hostname or "").rstrip(".").lower()
     return (
         hostname == "pinterest.com"
@@ -1905,6 +3783,86 @@ def _is_pinterest_url(value: str) -> bool:
         or hostname == "pin.it"
         or hostname.endswith(".pin.it")
     )
+
+
+def _redacted_trace_url(value: str) -> str:
+    parsed = urlparse(value)
+    if not _is_xiaohongshu_url(value):
+        return value
+    return parsed._replace(params="", query="", fragment="").geturl()
+
+
+def _inspection_source_sort_key(
+    source: ProviderSource,
+    goal: ResearchGoal,
+    relevance_context: str = "",
+) -> tuple[int, int, int, int, int]:
+    is_visual_platform = _is_sparse_visual_platform_url(source.url)
+    discovery_priority = (
+        _architecture_discovery_priority(source) if goal is ResearchGoal.precedent_research else 0
+    )
+    purpose_priority = (
+        int(is_visual_platform)
+        if goal is ResearchGoal.visual_reference_search
+        else int(not is_visual_platform)
+    )
+    return (
+        purpose_priority,
+        int(discovery_priority > 0),
+        _source_relevance_score(source, relevance_context),
+        PUBLICATION_TIER_STRENGTH[source.publication_tier.value],
+        discovery_priority,
+    )
+
+
+def _source_relevance_score(source: ProviderSource, context: str) -> int:
+    if not context:
+        return 0
+    return public_search_relevance_score(
+        context,
+        title=source.title,
+        description=source._search_description,
+        url=source.url,
+    )
+
+
+def _relevance_tokens(value: str) -> set[str]:
+    stop_words = {
+        "architecture",
+        "building",
+        "drawing",
+        "drawings",
+        "floor",
+        "house",
+        "page",
+        "plan",
+        "project",
+        "section",
+        "site",
+        "with",
+    }
+    normalized = value.casefold()
+    latin_tokens = {
+        token
+        for token in re.findall(r"[a-z0-9]+", normalized)
+        if len(token) >= 3 and token not in stop_words
+    }
+    cjk_tokens: set[str] = set()
+    for sequence in re.findall(r"[\u4e00-\u9fff]+", normalized):
+        if len(sequence) == 1:
+            continue
+        cjk_tokens.add(sequence)
+        cjk_tokens.update(sequence[index : index + 2] for index in range(len(sequence) - 1))
+    return latin_tokens | cjk_tokens
+
+
+def _architecture_discovery_priority(source: ProviderSource) -> int:
+    if " / " in source.title:
+        return 2
+    segments = {segment.casefold() for segment in urlparse(source.url).path.split("/") if segment}
+    if segments & {"category", "projects", "search", "tag"}:
+        return 1
+    return 0
 
 
 def _persist_sources(db: Database, run_id: str, result: ProviderSearchResult) -> None:
@@ -2114,6 +4072,10 @@ def _persist_inspected_assets(
     subquestion_id: str | None = None,
 ) -> int:
     expires_at = datetime.now(UTC) + timedelta(days=7)
+    is_visual_platform = _is_sparse_visual_platform_url(source.url)
+    visual_platform_limitation = (
+        "视觉平台帖子只支持可见图像观察，不能单独确认完整项目事实、图纸归属或使用权。"
+    )
     with db.session_factory() as session:
         page_id = session.scalar(
             select(SourcePage.id).where(
@@ -2267,7 +4229,9 @@ def _persist_inspected_assets(
             candidate = AssetCandidate(
                 run_id=run_id,
                 source_page_id=page_id,
-                project_name="待核验项目",
+                project_name=(
+                    source.title.strip() or "视觉平台参考" if is_visual_platform else "待核验项目"
+                ),
                 asset_type=item.asset_type.value,
                 source_url=item.source_url,
                 image_url=item.image_url,
@@ -2291,7 +4255,9 @@ def _persist_inspected_assets(
                             "design_mechanism": "",
                             "transfer_strategy": [],
                             "observations": item.observations,
-                            "limitations": [],
+                            "limitations": (
+                                [visual_platform_limitation] if is_visual_platform else []
+                            ),
                         }
                     }
                     if subquestion_id is not None
@@ -2300,7 +4266,7 @@ def _persist_inspected_assets(
                 facts=[],
                 observations=item.observations,
                 inferences=[],
-                limitations=[],
+                limitations=([visual_platform_limitation] if is_visual_platform else []),
                 rank_index=0,
                 expires_at=expires_at,
             )
@@ -2331,6 +4297,443 @@ def _supported_project_context(item: ProviderAsset) -> str:
     return context if context and context in supported_facts else ""
 
 
+def _try_research_synthesis(
+    db: Database,
+    run_id: str,
+    provider: ResearchSynthesisProvider,
+    *,
+    question: str,
+    budget_mode: BudgetMode,
+) -> dict[str, object] | None:
+    cases = _research_synthesis_cases(db, run_id)
+    if not cases:
+        return None
+    with db.session_factory() as session:
+        run = _get_run(session, run_id)
+        subquestions = [ResearchSubquestion.model_validate(item) for item in run.subquestions or []]
+    try:
+        synthesis = provider.synthesize_research(
+            question=question,
+            budget_mode=budget_mode,
+            subquestions=subquestions,
+            cases=cases,
+        )
+    except Exception as exc:
+        fallback = (
+            _deterministic_research_synthesis(budget_mode, subquestions, cases)
+            if _is_recoverable_research_synthesis_error(exc)
+            else None
+        )
+        if fallback is not None:
+            _checkpoint(
+                db,
+                run_id,
+                RunStatus.composing,
+                {
+                    "status": "completed",
+                    "generation_mode": "deterministic_fallback",
+                    "provider_error_type": type(exc).__name__,
+                    "case_count": len(cases),
+                    "comparison_count": len(fallback.comparisons),
+                    "conflict_count": len(fallback.conflicts),
+                },
+                tool="research_synthesis",
+            )
+            result = fallback.model_dump(mode="json")
+            result["generation_mode"] = "deterministic_fallback"
+            return result
+        _checkpoint(
+            db,
+            run_id,
+            RunStatus.composing,
+            {"status": "failed", "error_type": type(exc).__name__},
+            tool="research_synthesis",
+        )
+        return None
+    _checkpoint(
+        db,
+        run_id,
+        RunStatus.composing,
+        {
+            "status": "completed",
+            "case_count": len(cases),
+            "comparison_count": len(synthesis.comparisons),
+            "conflict_count": len(synthesis.conflicts),
+        },
+        tool="research_synthesis",
+    )
+    return synthesis.model_dump(mode="json")
+
+
+def _is_recoverable_research_synthesis_error(error: Exception) -> bool:
+    error_type = type(error).__name__
+    if error_type == "ValidationError":
+        return True
+    if isinstance(error, ValueError):
+        return any(
+            message in str(error)
+            for message in (
+                "OpenAI response did not contain a structured research synthesis",
+                "Research synthesis referenced evidence outside the supplied cases",
+                "quick synthesis requires a causal chain and recommendation",
+                "balanced synthesis requires comparison and applicability boundary",
+                "deep synthesis requires multiple causal chains",
+            )
+        )
+    return isinstance(error, (TimeoutError, ConnectionError)) or error_type in {
+        "APIConnectionError",
+        "APITimeoutError",
+        "ConnectError",
+        "ConnectTimeout",
+        "InternalServerError",
+        "RateLimitError",
+        "ReadError",
+        "ReadTimeout",
+        "RemoteProtocolError",
+        "TimeoutException",
+    }
+
+
+def _deterministic_research_synthesis(
+    budget_mode: BudgetMode,
+    subquestions: Sequence[ResearchSubquestion],
+    cases: Sequence[ResearchSynthesisCase],
+) -> ResearchSynthesis | None:
+    branches: list[
+        tuple[ResearchSubquestion, ResearchSynthesisCase, ResearchSynthesisBranchAnalysis]
+    ] = []
+    branches_by_subquestion: dict[
+        str,
+        list[
+            tuple[
+                ResearchSubquestion,
+                ResearchSynthesisCase,
+                ResearchSynthesisBranchAnalysis,
+            ]
+        ],
+    ] = {}
+    seen_branches: set[tuple[object, ...]] = set()
+    for subquestion in subquestions:
+        for case in cases:
+            branch = case.subquestion_analysis.get(subquestion.id)
+            if branch is None or not branch.transfer_strategy:
+                continue
+            supported_statements = {
+                item.split("｜原文：", 1)[0].strip()
+                for item in branch.evidence
+                if "｜原文：" in item
+            }
+            if (
+                not {
+                    branch.project_context.strip(),
+                    branch.design_mechanism.strip(),
+                }
+                <= supported_statements
+            ):
+                continue
+            identity = (
+                subquestion.id,
+                case.project_name,
+                branch.project_context,
+                branch.design_mechanism,
+                tuple(branch.transfer_strategy),
+                tuple(branch.limitations),
+            )
+            if identity in seen_branches:
+                continue
+            seen_branches.add(identity)
+            item = (subquestion, case, branch)
+            branches.append(item)
+            branches_by_subquestion.setdefault(subquestion.id, []).append(item)
+
+    primary_branches = [
+        branches_by_subquestion[subquestion.id][0]
+        for subquestion in subquestions
+        if branches_by_subquestion.get(subquestion.id)
+    ]
+    causal_count = 1 if budget_mode is BudgetMode.quick else 2
+    if len(primary_branches) < causal_count:
+        return None
+
+    comparison_pairs: list[
+        tuple[
+            tuple[ResearchSubquestion, ResearchSynthesisCase, ResearchSynthesisBranchAnalysis],
+            tuple[ResearchSubquestion, ResearchSynthesisCase, ResearchSynthesisBranchAnalysis],
+        ]
+    ] = []
+    for subquestion in subquestions:
+        distinct_projects: list[
+            tuple[ResearchSubquestion, ResearchSynthesisCase, ResearchSynthesisBranchAnalysis]
+        ] = []
+        seen_projects: set[str] = set()
+        for item in branches_by_subquestion.get(subquestion.id, []):
+            project_name = item[1].project_name
+            if project_name in seen_projects:
+                continue
+            seen_projects.add(project_name)
+            distinct_projects.append(item)
+        if len(distinct_projects) >= 2:
+            comparison_pairs.append((distinct_projects[0], distinct_projects[1]))
+
+    comparative_mode = budget_mode in {BudgetMode.balanced, BudgetMode.deep}
+    if comparative_mode and len(comparison_pairs) < 2:
+        return None
+    limited_comparison_pairs = [
+        pair for pair in comparison_pairs if pair[0][2].limitations and pair[1][2].limitations
+    ]
+    if comparative_mode and not limited_comparison_pairs:
+        return None
+    boundary_branches: list[
+        tuple[ResearchSubquestion, ResearchSynthesisCase, ResearchSynthesisBranchAnalysis]
+    ] = []
+    for subquestion in subquestions:
+        boundary_branch = next(
+            (
+                item
+                for item in branches_by_subquestion.get(subquestion.id, [])
+                if item[2].limitations
+            ),
+            None,
+        )
+        if boundary_branch is not None:
+            boundary_branches.append(boundary_branch)
+    if comparative_mode and len(boundary_branches) < 2:
+        return None
+
+    causal_branches = primary_branches[:causal_count]
+    answer = _deterministic_synthesis_finding(
+        [
+            "【本地证据汇总】",
+            *[
+                f"{case.project_name}：{branch.design_mechanism}"
+                for _, case, branch in causal_branches
+            ],
+        ],
+        [case.asset_id for _, case, _ in causal_branches],
+    )
+    causal_chains = [
+        _deterministic_synthesis_finding(
+            [
+                f"条件：{branch.project_context}",
+                f"机制：{branch.design_mechanism}",
+                f"转译：{branch.transfer_strategy[0]}",
+            ],
+            [case.asset_id],
+        )
+        for _, case, branch in causal_branches
+    ]
+    comparisons = (
+        [
+            _deterministic_synthesis_finding(
+                [
+                    "同一子问题并列比较",
+                    f"{first_case.project_name}采用“{first_branch.design_mechanism}”",
+                    f"{second_case.project_name}采用“{second_branch.design_mechanism}”",
+                ],
+                [first_case.asset_id, second_case.asset_id],
+            )
+            for (
+                (_, first_case, first_branch),
+                (_, second_case, second_branch),
+            ) in comparison_pairs[:2]
+        ]
+        if comparative_mode
+        else []
+    )
+    conflicts: list[ResearchSynthesisFinding] = []
+    applicability_boundaries: list[ResearchSynthesisFinding] = []
+    if comparative_mode:
+        (_, first_case, first_branch), (_, second_case, second_branch) = limited_comparison_pairs[0]
+        conflicts = [
+            _deterministic_synthesis_finding(
+                [
+                    "证据不确定性并列",
+                    f"{first_case.project_name}：{first_branch.limitations[0]}",
+                    f"{second_case.project_name}：{second_branch.limitations[0]}",
+                ],
+                [first_case.asset_id, second_case.asset_id],
+            )
+        ]
+        applicability_boundaries = [
+            _deterministic_synthesis_finding(
+                [f"适用边界（{case.project_name}）：{branch.limitations[0]}"],
+                [case.asset_id],
+            )
+            for _, case, branch in boundary_branches[:2]
+        ]
+    recommendations = [
+        _deterministic_synthesis_finding(
+            [f"转译步骤（{case.project_name}）：{branch.transfer_strategy[0]}"],
+            [case.asset_id],
+        )
+        for _, case, branch in causal_branches
+    ]
+    return ResearchSynthesis(
+        answer=answer,
+        causal_chains=causal_chains,
+        comparisons=comparisons,
+        conflicts=conflicts,
+        applicability_boundaries=applicability_boundaries,
+        recommendations=recommendations,
+    )
+
+
+def _deterministic_synthesis_finding(
+    statement_parts: Sequence[str],
+    evidence_asset_ids: Sequence[str],
+) -> ResearchSynthesisFinding:
+    statement = "；".join(part.strip() for part in statement_parts if part.strip())[:2_000]
+    return ResearchSynthesisFinding(
+        statement=statement,
+        evidence_asset_ids=list(dict.fromkeys(evidence_asset_ids)),
+    )
+
+
+def _research_synthesis_cases(db: Database, run_id: str) -> list[ResearchSynthesisCase]:
+    with db.session_factory() as session:
+        assets = list(
+            session.scalars(
+                select(AssetCandidate)
+                .where(AssetCandidate.run_id == run_id)
+                .order_by(AssetCandidate.rank_index)
+            )
+        )
+        evidence_rows = session.execute(
+            select(
+                EvidenceClaim.asset_candidate_id,
+                EvidenceClaim.source_url,
+                EvidenceClaim.statement,
+                EvidenceClaim.text_excerpt,
+            )
+            .join(
+                AssetCandidate,
+                EvidenceClaim.asset_candidate_id == AssetCandidate.id,
+            )
+            .where(AssetCandidate.run_id == run_id)
+        ).all()
+    analysis_statements_by_asset: dict[str, set[str]] = {}
+    for asset in assets:
+        statements = {asset.project_context.strip(), asset.design_mechanism.strip()}
+        for branch in (asset.subquestion_analysis or {}).values():
+            if not isinstance(branch, dict):
+                continue
+            for field in ("project_context", "design_mechanism"):
+                value = branch.get(field)
+                if isinstance(value, str) and value.strip():
+                    statements.add(value.strip())
+        analysis_statements_by_asset[asset.id] = statements
+    evidence_by_asset: dict[str, list[str]] = {}
+    evidence_by_statement: dict[tuple[str, str], list[str]] = {}
+    evidence_asset_ids: set[str] = set()
+    for asset_id, _source_url, statement, text_excerpt in evidence_rows:
+        if (
+            text_excerpt is None
+            or not text_excerpt.strip()
+            or statement.strip() not in analysis_statements_by_asset.get(asset_id, set())
+        ):
+            continue
+        evidence_asset_ids.add(asset_id)
+        rendered = f"{statement}｜原文：{text_excerpt.strip()}"
+        evidence_by_asset.setdefault(asset_id, []).append(rendered)
+        evidence_by_statement.setdefault((asset_id, statement.strip()), []).append(rendered)
+    cases: list[ResearchSynthesisCase] = []
+    seen_case_identities: set[tuple[object, ...]] = set()
+    for asset in assets:
+        if (
+            asset.relevance < 2
+            or asset.result_tier not in {ResultTier.verified.value, ResultTier.partial.value}
+            or not asset.project_context.strip()
+            or not asset.design_mechanism.strip()
+            or not asset.transfer_strategy
+            or asset.id not in evidence_asset_ids
+        ):
+            continue
+        branch_analysis = _research_synthesis_branch_analysis(
+            asset,
+            evidence_by_statement,
+        )
+        case = ResearchSynthesisCase(
+            asset_id=asset.id,
+            project_name=asset.project_name,
+            asset_type=ArchitectureAssetType(asset.asset_type),
+            source_url=asset.source_url,
+            subquestion_ids=(
+                list(branch_analysis) if branch_analysis else list(asset.subquestion_ids or [])
+            ),
+            project_context=asset.project_context,
+            design_mechanism=asset.design_mechanism,
+            transfer_strategy=list(asset.transfer_strategy or []),
+            limitations=list(asset.limitations or []),
+            evidence=evidence_by_asset.get(asset.id, [])[:6],
+            subquestion_analysis=branch_analysis,
+        )
+        identity = _research_synthesis_case_identity(case)
+        if identity in seen_case_identities:
+            continue
+        seen_case_identities.add(identity)
+        cases.append(case)
+    return cases
+
+
+def _research_synthesis_case_identity(case: ResearchSynthesisCase) -> tuple[object, ...]:
+    branch_analysis = tuple(
+        (
+            subquestion_id,
+            analysis.project_context,
+            analysis.design_mechanism,
+            tuple(analysis.transfer_strategy),
+            tuple(analysis.limitations),
+            tuple(sorted(analysis.evidence)),
+        )
+        for subquestion_id, analysis in sorted(case.subquestion_analysis.items())
+    )
+    return (
+        case.source_url,
+        case.asset_type,
+        tuple(sorted(case.subquestion_ids)),
+        case.project_context,
+        case.design_mechanism,
+        tuple(case.transfer_strategy),
+        tuple(case.limitations),
+        tuple(sorted(case.evidence)),
+        branch_analysis,
+    )
+
+
+def _research_synthesis_branch_analysis(
+    asset: AssetCandidate,
+    evidence_by_statement: dict[tuple[str, str], list[str]],
+) -> dict[str, ResearchSynthesisBranchAnalysis]:
+    result: dict[str, ResearchSynthesisBranchAnalysis] = {}
+    for subquestion_id, branch in (asset.subquestion_analysis or {}).items():
+        if not isinstance(branch, dict):
+            continue
+        project_context = branch.get("project_context")
+        design_mechanism = branch.get("design_mechanism")
+        transfer_strategy = branch.get("transfer_strategy")
+        if (
+            not isinstance(project_context, str)
+            or not project_context.strip()
+            or not isinstance(design_mechanism, str)
+            or not design_mechanism.strip()
+            or not isinstance(transfer_strategy, list)
+            or not transfer_strategy
+        ):
+            continue
+        evidence: list[str] = []
+        for statement in (project_context.strip(), design_mechanism.strip()):
+            evidence.extend(evidence_by_statement.get((asset.id, statement), []))
+        limitations = branch.get("limitations")
+        result[subquestion_id] = ResearchSynthesisBranchAnalysis(
+            project_context=project_context,
+            design_mechanism=design_mechanism,
+            transfer_strategy=transfer_strategy,
+            limitations=limitations if isinstance(limitations, list) else [],
+            evidence=list(dict.fromkeys(evidence))[:6],
+        )
+    return result
+
+
 def _rerank_assets(session: Session, run_id: str) -> None:
     assets = list(session.scalars(select(AssetCandidate).where(AssetCandidate.run_id == run_id)))
     ordered: list[AssetCandidate] = []
@@ -2352,7 +4755,12 @@ def _rerank_assets(session: Session, run_id: str) -> None:
         asset.rank_index = rank
 
 
-def _coverage(db: Database, run_id: str) -> CoverageData:
+def _coverage(
+    db: Database,
+    run_id: str,
+    *,
+    require_article_analysis: bool = False,
+) -> CoverageData:
     with db.session_factory() as session:
         run = _get_run(session, run_id)
         assets = list(
@@ -2366,16 +4774,26 @@ def _coverage(db: Database, run_id: str) -> CoverageData:
                 )
             )
         )
-        evidence_bindings = set(
-            session.execute(
-                select(EvidenceClaim.asset_candidate_id, EvidenceClaim.source_url)
-                .join(
-                    AssetCandidate,
-                    EvidenceClaim.asset_candidate_id == AssetCandidate.id,
+        evidence_rows = session.execute(
+            select(
+                EvidenceClaim.asset_candidate_id,
+                EvidenceClaim.source_url,
+                EvidenceClaim.statement,
+                EvidenceClaim.text_excerpt,
+            )
+            .join(
+                AssetCandidate,
+                EvidenceClaim.asset_candidate_id == AssetCandidate.id,
+            )
+            .where(AssetCandidate.run_id == run_id)
+        ).all()
+        evidence_asset_ids = {asset_candidate_id for asset_candidate_id, _, _, _ in evidence_rows}
+        article_evidence_statements: dict[str, set[str]] = {}
+        for asset_candidate_id, _, statement, text_excerpt in evidence_rows:
+            if text_excerpt is not None and text_excerpt.strip():
+                article_evidence_statements.setdefault(asset_candidate_id, set()).add(
+                    statement.strip()
                 )
-                .where(AssetCandidate.run_id == run_id)
-            ).all()
-        )
     usable = [
         asset
         for asset in assets
@@ -2383,14 +4801,33 @@ def _coverage(db: Database, run_id: str) -> CoverageData:
     ]
     verified_or_partial = [
         asset
-        for asset in usable
-        if asset.result_tier in {ResultTier.verified.value, ResultTier.partial.value}
+        for asset in assets
+        if asset.relevance >= 2
+        and asset.result_tier in {ResultTier.verified.value, ResultTier.partial.value}
     ]
-    evidence_backed = [
-        asset for asset in verified_or_partial if (asset.id, asset.source_url) in evidence_bindings
+    evidence_backed = [asset for asset in verified_or_partial if asset.id in evidence_asset_ids]
+    article_ready = [
+        asset
+        for asset in verified_or_partial
+        if asset.project_context.strip()
+        and asset.design_mechanism.strip()
+        and bool(asset.transfer_strategy)
+        and {
+            asset.project_context.strip(),
+            asset.design_mechanism.strip(),
+        }
+        <= article_evidence_statements.get(asset.id, set())
     ]
-    is_precedent = ResearchGoal(run.goal) is ResearchGoal.precedent_research
-    coverage_assets = verified_or_partial if is_precedent else usable
+    run_goal = ResearchGoal(run.goal)
+    is_precedent = run_goal is ResearchGoal.precedent_research
+    is_visual_reference = run_goal is ResearchGoal.visual_reference_search
+    coverage_assets = (
+        article_ready
+        if is_precedent and require_article_analysis
+        else verified_or_partial
+        if is_precedent
+        else usable
+    )
     projects = {asset.project_name for asset in coverage_assets}
     project_asset_ids: dict[str, set[str]] = {}
     project_asset_types: dict[str, set[str]] = {}
@@ -2398,13 +4835,34 @@ def _coverage(db: Database, run_id: str) -> CoverageData:
     for asset in coverage_assets:
         project_asset_ids.setdefault(asset.project_name, set()).add(asset.id)
         project_asset_types.setdefault(asset.project_name, set()).add(asset.asset_type)
-    for asset in evidence_backed:
-        for subquestion_id in asset.subquestion_ids or []:
-            subquestion_asset_ids.setdefault(subquestion_id, set()).add(asset.id)
     subquestions = list(run.subquestions or [])
     planned_subquestion_ids = {
         str(item.get("id")) for item in subquestions if isinstance(item, dict) and item.get("id")
     }
+    if require_article_analysis:
+        for asset in article_ready:
+            for subquestion_id, branch in (asset.subquestion_analysis or {}).items():
+                if not isinstance(branch, dict):
+                    continue
+                project_context = branch.get("project_context")
+                design_mechanism = branch.get("design_mechanism")
+                transfer_strategy = branch.get("transfer_strategy")
+                if (
+                    isinstance(project_context, str)
+                    and project_context.strip()
+                    and isinstance(design_mechanism, str)
+                    and design_mechanism.strip()
+                    and isinstance(transfer_strategy, list)
+                    and bool(transfer_strategy)
+                    and {project_context.strip(), design_mechanism.strip()}
+                    <= article_evidence_statements.get(asset.id, set())
+                ):
+                    subquestion_asset_ids.setdefault(subquestion_id, set()).add(asset.id)
+    else:
+        relationship_assets = coverage_assets if is_visual_reference else evidence_backed
+        for asset in relationship_assets:
+            for subquestion_id in asset.subquestion_ids or []:
+                subquestion_asset_ids.setdefault(subquestion_id, set()).add(asset.id)
     depth_target = DEPTH_TARGETS[BudgetMode(run.budget_mode)] if is_precedent else None
     minimum_assets_per_subquestion = (
         depth_target.assets_per_subquestion if depth_target is not None else 1
@@ -2448,13 +4906,16 @@ def _coverage(db: Database, run_id: str) -> CoverageData:
     gaps: list[str] = []
     if covered_subquestions < target_subquestions:
         gaps.append("uncovered_subquestions")
+    if require_article_analysis and covered_subquestions < target_subquestions:
+        gaps.append("article_analysis_incomplete")
 
     enrichment_gaps: list[str] = []
     if len(usable) < target_assets:
         enrichment_gaps.append("insufficient_usable_assets")
     if len(projects) < target_projects:
         enrichment_gaps.append("insufficient_project_diversity")
-    if len(verified_or_partial) < target_verified:
+    enrichment_quality_assets = usable if is_visual_reference else verified_or_partial
+    if len(enrichment_quality_assets) < target_verified:
         enrichment_gaps.append("insufficient_verified_or_partial")
     if enriched_subquestions < target_subquestions:
         enrichment_gaps.append("insufficient_subquestion_assets")

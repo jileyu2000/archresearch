@@ -56,14 +56,14 @@ def test_startup_uses_stored_suoxie_config_for_both_model_clients(tmp_path: Path
     )
 
     assert app.state.research_provider.name == "openai"
-    assert app.state.research_provider.model == "gpt-5.5"
+    assert app.state.research_provider.model == "gpt-5.6-sol"
     assert app.state.visual_classifier.name == "openai-vision"
-    assert app.state.visual_classifier.model == "gpt-5.5"
+    assert app.state.visual_classifier.model == "gpt-5.6-sol"
     assert factory_calls == [
         {
             "api_key": "sk-stored",
             "base_url": "https://suoxie.codes/v1",
-            "timeout": 30.0,
+            "timeout": 45.0,
             "max_retries": 0,
         }
     ]
@@ -73,7 +73,7 @@ def test_startup_uses_stored_suoxie_config_for_both_model_clients(tmp_path: Path
         "status": "ok",
         "provider_mode": "openai",
         "provider": "梭子蟹 API",
-        "model": "gpt-5.5",
+        "model": "gpt-5.6-sol",
     }
     assert "sk-stored" not in str(health)
 

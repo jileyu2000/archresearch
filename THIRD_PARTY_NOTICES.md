@@ -1,5 +1,14 @@
 # Third-party notices
 
+## OpenCLI
+
+The local authenticated Xiaohongshu adapter uses [@jackwener/opencli](https://github.com/jackwener/opencli), version 1.8.6.
+
+Apache License 2.0
+Copyright (c) Jack Wener and OpenCLI contributors
+
+The complete license text is distributed with the npm package at `node_modules/@jackwener/opencli/LICENSE` and at <https://www.apache.org/licenses/LICENSE-2.0>.
+
 ## React Bits ClickSpark
 
 The Board's click-spark feedback is adapted from `ClickSpark` in [DavidHDev/react-bits](https://github.com/DavidHDev/react-bits).

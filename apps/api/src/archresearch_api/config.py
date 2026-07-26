@@ -22,7 +22,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("OPENAI_API_KEY", "ARCHRESEARCH_OPENAI_API_KEY"),
     )
     openai_model: str = Field(
-        default="gpt-5.5",
+        default="gpt-5.6-sol",
         validation_alias=AliasChoices(
             "OPENAI_RESEARCH_MODEL",
             "ARCHRESEARCH_OPENAI_MODEL",
@@ -30,35 +30,11 @@ class Settings(BaseSettings):
         ),
     )
     vision_model: str = Field(
-        default="gpt-5.5",
+        default="gpt-5.6-sol",
         validation_alias=AliasChoices(
             "OPENAI_VISION_MODEL",
             "ARCHRESEARCH_VISION_MODEL",
             "ARCHRESEARCH_OPENAI_VISION_MODEL",
-        ),
-    )
-    tineye_api_key: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("TINEYE_API_KEY", "ARCHRESEARCH_TINEYE_API_KEY"),
-    )
-    tineye_api_url: str = Field(
-        default="https://api.tineye.com/rest/",
-        validation_alias=AliasChoices("TINEYE_API_URL", "ARCHRESEARCH_TINEYE_API_URL"),
-    )
-    firecrawl_api_key: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("FIRECRAWL_API_KEY", "ARCHRESEARCH_FIRECRAWL_API_KEY"),
-    )
-    firecrawl_api_url: str = Field(
-        default="https://api.firecrawl.dev/v2",
-        validation_alias=AliasChoices("FIRECRAWL_API_URL", "ARCHRESEARCH_FIRECRAWL_API_URL"),
-    )
-    firecrawl_credit_reserve: int = Field(
-        default=100,
-        ge=0,
-        validation_alias=AliasChoices(
-            "FIRECRAWL_CREDIT_RESERVE",
-            "ARCHRESEARCH_FIRECRAWL_CREDIT_RESERVE",
         ),
     )
     max_upload_bytes: int = 30 * 1024 * 1024

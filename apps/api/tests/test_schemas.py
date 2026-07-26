@@ -14,7 +14,35 @@ from archresearch_api.schemas import (
     ResearchSubquestion,
     RunStatus,
     UrlInputCreate,
+    research_record_title,
 )
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        (
+            "人车在入口冲突，如何重组落客和步行路径？",
+            "人车在入口冲突：重组落客和步行路径",
+        ),
+        (
+            "新增构件怎样与旧结构脱开，并保留未来调整的可能？",
+            "新增构件：与旧结构脱开，并保留未来调整的可能",
+        ),
+        (
+            "请问  采光不足怎么通过中庭和高侧窗改善？",
+            "采光不足：通过中庭和高侧窗改善",
+        ),
+        ("旧厂房改造：如何植入公共功能？", "旧厂房改造：植入公共功能"),
+        ("旧厂房社区文化中心", "旧厂房社区文化中心"),
+        (
+            "这是一个没有问句标记而且明显超过历史记录标题长度限制的建筑研究描述文本",
+            "这是一个没有问句标记而且明显超过历史记录标题长度限制…",
+        ),
+    ],
+)
+def test_research_record_title_handles_future_question_shapes(question: str, expected: str) -> None:
+    assert research_record_title(question) == expected
 
 
 def test_research_modes_bound_fair_per_subquestion_passes() -> None:
@@ -42,6 +70,15 @@ def test_research_modes_bound_fair_per_subquestion_passes() -> None:
         "max_pages": 60,
         "max_seconds": 1800,
     }
+
+
+def test_current_product_contract_excludes_source_lookup() -> None:
+    assert {goal.value for goal in ResearchGoal} == {
+        "precedent_research",
+        "visual_reference_search",
+    }
+    with pytest.raises(ValidationError):
+        ResearchSpec(question="这张图来自哪里？", goal="source_lookup")
 
 
 def test_research_modes_have_distinct_evidence_obligations() -> None:
@@ -129,21 +166,53 @@ def test_research_spec_accepts_only_the_three_routing_goals() -> None:
         ResearchSpec(question="提取风格", goal="style_extraction")
 
 
-def test_research_spec_accepts_only_explicit_supported_research_sources() -> None:
+def test_research_spec_accepts_only_a_complete_confirmed_question_directory() -> None:
+    confirmed = [
+        ResearchSubquestion(
+            id=f"brief_question_{index}",
+            question=f"任务书问题 {index} 如何转化为空间？",
+            rationale="由用户确认后作为本次研究目录。",
+        )
+        for index in range(1, 5)
+    ]
+
     spec = ResearchSpec(
-        question="从小红书寻找旧建筑改造的剖面表达灵感",
-        research_sources=[ResearchSource.xiaohongshu, ResearchSource.pinterest],
+        question="二维叙事如何转译为三维空间？",
+        budget_mode=BudgetMode.balanced,
+        subquestions=confirmed,
     )
 
-    assert spec.research_sources == [
-        ResearchSource.xiaohongshu,
-        ResearchSource.pinterest,
-    ]
+    assert spec.subquestions == confirmed
+    with pytest.raises(ValidationError, match="exactly 4"):
+        ResearchSpec(
+            question="二维叙事如何转译为三维空间？",
+            budget_mode=BudgetMode.balanced,
+            subquestions=confirmed[:3],
+        )
+
+
+def test_research_spec_accepts_only_explicit_supported_research_sources() -> None:
+    default_spec = ResearchSpec(question="旧建筑改造如何组织新功能？")
+    assert default_spec.research_sources == [ResearchSource.xiaohongshu]
+    assert [source.value for source in ResearchSource] == ["xiaohongshu"]
+
+    spec = ResearchSpec(
+        question="从小红书寻找旧建筑改造的剖面表达灵感",
+        research_sources=[ResearchSource.xiaohongshu],
+    )
+
+    assert spec.research_sources == [ResearchSource.xiaohongshu]
+
+    disabled = ResearchSpec(
+        question="只研究指定公开建筑网站",
+        research_sources=[],
+    )
+    assert disabled.research_sources == []
 
     with pytest.raises(ValidationError):
         ResearchSpec(
-            question="从未知平台寻找灵感",
-            research_sources=["unknown_platform"],
+            question="从已移除的平台寻找灵感",
+            research_sources=["pinterest"],
         )
 
 

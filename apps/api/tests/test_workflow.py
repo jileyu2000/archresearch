@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -5,6 +6,7 @@ from typing import Any
 import fitz
 from sqlalchemy import func, select
 
+import archresearch_api.workflow as workflow_module
 from archresearch_api.database import Database
 from archresearch_api.inspection import InspectedVisual
 from archresearch_api.models import (
@@ -21,9 +23,14 @@ from archresearch_api.providers import (
     ProviderAsset,
     ProviderSearchResult,
     ProviderSource,
-    TinEyeBacklink,
-    TinEyeMatch,
+    PublicPageAnalysis,
+    PublicPageDrawing,
+    PublicPageSupportedFact,
+    ResearchSynthesis,
+    ResearchSynthesisCase,
+    ResearchSynthesisFinding,
 )
+from archresearch_api.public_pages import ParsedPageImage, ParsedPublicPage, PublicSearchLead
 from archresearch_api.schemas import (
     BUDGETS,
     DEPTH_TARGETS,
@@ -40,10 +47,14 @@ from archresearch_api.schemas import (
 )
 from archresearch_api.visual import ArchitectureAssetType
 from archresearch_api.workflow import (
+    _inspection_source_sort_key,
     _persist_assets,
     _persist_inspected_assets,
     _persist_sources,
+    _public_page_analysis_text,
+    _public_search_query,
     _queries_for,
+    _try_xiaohongshu_search,
     execute_research_run,
 )
 
@@ -129,6 +140,8 @@ def _database_with_run(
     tmp_path: Path,
     mode: BudgetMode,
     goal: ResearchGoal = ResearchGoal.precedent_research,
+    *,
+    question: str = "旧建筑中如何植入新功能并形成有层次的剖面？",
 ) -> tuple[Database, str]:
     database = Database(f"sqlite:///{(tmp_path / 'workflow.db').as_posix()}")
     database.create_all()
@@ -138,7 +151,7 @@ def _database_with_run(
         session.flush()
         run = ResearchRun(
             workspace_id=workspace.id,
-            question="旧建筑中如何植入新功能并形成有层次的剖面？",
+            question=question,
             goal=goal.value,
             budget_mode=mode.value,
             budget=BUDGETS[mode].model_dump(),
@@ -151,37 +164,273 @@ def _database_with_run(
         return database, run.id
 
 
-def _database_with_source_lookup_run(tmp_path: Path) -> tuple[Database, str, Path]:
-    database = Database(f"sqlite:///{(tmp_path / 'source-lookup.db').as_posix()}")
-    database.create_all()
-    image_path = tmp_path / "uploaded-section.png"
-    image_path.write_bytes(b"\x89PNG\r\n\x1a\nfixture")
-    with database.session_factory() as session:
-        workspace = Workspace(name="截图反查")
-        session.add(workspace)
-        session.flush()
-        session.add(
-            InputArtifact(
-                workspace_id=workspace.id,
-                kind="image",
-                filename=image_path.name,
-                mime_type="image/png",
-                storage_path=str(image_path),
+def test_three_depths_complete_across_distinct_question_families(tmp_path: Path) -> None:
+    question_families = {
+        "library_climate": (
+            "高密度社区图书馆如何通过中庭、采光井和剖面层次改善自然采光与通风？",
+            [
+                "solar_orientation",
+                "daylight",
+                "thermal_buffer",
+                "natural_ventilation",
+                "public_program",
+                "section",
+            ],
+        ),
+        "mountain_campus": (
+            "山地校园如何组织高差交通、无障碍路径、人车分流和紧急疏散？",
+            [
+                "arrival",
+                "accessible_gradient",
+                "pedestrian_vehicle",
+                "vertical_core",
+                "evacuation",
+                "landscape",
+            ],
+        ),
+        "waterfront_reuse": (
+            "滨水工业遗址更新如何兼顾防洪、公共开放、结构保留和分期运营？",
+            [
+                "flood_level",
+                "public_edge",
+                "retained_structure",
+                "service_access",
+                "adaptive_program",
+                "phasing",
+            ],
+        ),
+    }
+
+    class CrossQuestionProvider:
+        name = "cross_question"
+        worst_case_call_seconds = 0.0
+        worst_case_page_analysis_seconds = 0.0
+
+        def __init__(self, question: str, dimensions: list[str]) -> None:
+            self.question = question
+            self.dimensions = dimensions
+            self.mode: BudgetMode | None = None
+            self.queries: list[str] = []
+
+        def synthesis_worst_case_seconds(self, budget_mode: BudgetMode) -> float:
+            assert budget_mode is self.mode
+            return 0.0
+
+        def plan(
+            self,
+            question: str,
+            goal: ResearchGoal,
+            budget_mode: BudgetMode,
+            research_context: str,
+        ) -> ResearchPlan:
+            del research_context
+            assert question == self.question
+            assert goal is ResearchGoal.precedent_research
+            self.mode = budget_mode
+            target = DEPTH_TARGETS[budget_mode].subquestions
+            return ResearchPlan(
+                subquestions=[
+                    ResearchSubquestion(
+                        id=dimension,
+                        question=f"{question}：重点核验 {dimension} 的案例机制？",
+                        rationale=f"比较 {dimension} 的项目条件、设计操作和适用边界。",
+                    )
+                    for dimension in self.dimensions[:target]
+                ]
             )
-        )
-        run = ResearchRun(
-            workspace_id=workspace.id,
-            question="找到这张剖面截图的原项目与来源",
-            goal=ResearchGoal.source_lookup.value,
-            budget_mode=BudgetMode.quick.value,
-            budget=BUDGETS[BudgetMode.quick].model_dump(),
-            allowed_domains=[],
-            status=RunStatus.created.value,
-            coverage_report={},
-        )
-        session.add(run)
-        session.commit()
-        return database, run.id, image_path
+
+        def search(
+            self,
+            query: str,
+            goal: ResearchGoal,
+            allowed_domains: list[str] | None = None,
+        ) -> ProviderSearchResult:
+            del allowed_domains
+            assert goal is ResearchGoal.precedent_research
+            assert self.question in query
+            self.queries.append(query)
+            query_index = len(self.queries)
+            project = f"case-{query_index}"
+            source_url = f"https://www.archdaily.com/{100000 + query_index}/{project}"
+            first_asset_index = (query_index - 1) * 3 + 1
+            assets = [
+                _asset(project, first_asset_index + offset).model_copy(
+                    update={
+                        "source_url": source_url,
+                        "image_url": f"https://images.example/{project}/{offset + 1}.jpg",
+                    }
+                )
+                for offset in range(3)
+            ]
+            return ProviderSearchResult(
+                assets=assets,
+                sources=[
+                    ProviderSource(
+                        url=source_url,
+                        publisher="Studio",
+                        title=project,
+                        publication_tier=PublicationTier.primary,
+                    )
+                ],
+            )
+
+        def analyze_public_page(
+            self,
+            *,
+            question: str,
+            source_url: str,
+            title: str,
+            page_text: str,
+            drawings: list[PublicPageDrawing],
+            analysis_requirements: Sequence[str],
+        ) -> PublicPageAnalysis:
+            del source_url, analysis_requirements
+            assert question
+            context = f"{title}回应了场地与使用条件。"
+            mechanism = f"{title}以清晰空间机制组织交通、气候与结构。"
+            context_excerpt = "The project responds to its site and program constraints."
+            mechanism_excerpt = "A clear spatial mechanism organizes access, climate and structure."
+            assert context_excerpt in page_text
+            assert mechanism_excerpt in page_text
+            return PublicPageAnalysis(
+                relevance=4,
+                drawing_ids=[drawing.drawing_id for drawing in drawings[:3]],
+                project_context=context,
+                design_mechanism=mechanism,
+                transfer_strategy=[f"先核验 {title} 的适用条件，再转译其空间机制。"],
+                facts=[
+                    PublicPageSupportedFact(
+                        statement=context,
+                        text_excerpt=context_excerpt,
+                    ),
+                    PublicPageSupportedFact(
+                        statement=mechanism,
+                        text_excerpt=mechanism_excerpt,
+                    ),
+                ],
+                limitations=[f"{title} 的尺度和技术条件仍需逐项核对。"],
+            )
+
+        def synthesize_research(
+            self,
+            *,
+            question: str,
+            budget_mode: BudgetMode,
+            subquestions: Sequence[ResearchSubquestion],
+            cases: Sequence[ResearchSynthesisCase],
+        ) -> ResearchSynthesis:
+            assert question == self.question
+            assert budget_mode is self.mode
+            assert len(subquestions) == DEPTH_TARGETS[budget_mode].subquestions
+            asset_ids = [case.asset_id for case in cases]
+            assert asset_ids
+
+            def finding(label: str, offset: int = 0) -> ResearchSynthesisFinding:
+                return ResearchSynthesisFinding(
+                    statement=f"{label}：{question}",
+                    evidence_asset_ids=[asset_ids[offset % len(asset_ids)]],
+                )
+
+            if budget_mode is BudgetMode.quick:
+                return ResearchSynthesis(
+                    answer=finding("快速结论"),
+                    causal_chains=[finding("因果链")],
+                    recommendations=[finding("建议")],
+                )
+            return ResearchSynthesis(
+                answer=finding("综合结论"),
+                causal_chains=[finding("因果链一"), finding("因果链二", 1)],
+                comparisons=[finding("比较一"), finding("比较二", 1)],
+                conflicts=[finding("证据冲突")],
+                applicability_boundaries=[finding("边界一"), finding("边界二", 1)],
+                recommendations=[finding("建议一"), finding("建议二", 1)],
+            )
+
+    class MatrixPublicPageParser:
+        name = "matrix_public_pages"
+        worst_case_call_seconds = 0.0
+
+        def __init__(self) -> None:
+            self.search_count = 0
+
+        def search(
+            self,
+            query: str,
+            *,
+            limit: int,
+            include_domains: list[str],
+        ) -> list[PublicSearchLead]:
+            del query, limit, include_domains
+            self.search_count += 1
+            project = f"matrix-case-{self.search_count}"
+            return [
+                PublicSearchLead(
+                    url=(f"https://www.archdaily.com/{200000 + self.search_count}/{project}"),
+                    title=f"{project} / Matrix Studio",
+                    description="Deterministic article-ready architecture case",
+                )
+            ]
+
+        def parse(self, url: str) -> ParsedPublicPage:
+            project = url.rstrip("/").rsplit("/", 1)[-1]
+            return ParsedPublicPage(
+                source_url=url,
+                title=f"{project} / Matrix Studio",
+                markdown=(
+                    "The project responds to its site and program constraints. "
+                    "A clear spatial mechanism organizes access, climate and structure."
+                ),
+                images=[
+                    ParsedPageImage(
+                        url=f"https://images.example/{project}/{index}.jpg",
+                        alt=f"{project} {'plan' if index % 2 else 'section'} {index}",
+                    )
+                    for index in range(1, 4)
+                ],
+            )
+
+    for family, (question, dimensions) in question_families.items():
+        for mode in BudgetMode:
+            case_root = tmp_path / f"{family}-{mode.value}"
+            case_root.mkdir()
+            database, run_id = _database_with_run(
+                case_root,
+                mode,
+                question=question,
+            )
+            provider = CrossQuestionProvider(question, dimensions)
+
+            execute_research_run(
+                database,
+                run_id,
+                provider,
+                public_page_parser=MatrixPublicPageParser(),
+            )
+
+            with database.session_factory() as session:
+                run = session.get(ResearchRun, run_id)
+            assert run is not None
+            target = DEPTH_TARGETS[mode]
+            assert run.status == RunStatus.completed.value, (
+                family,
+                mode,
+                run.stop_reason,
+                run.coverage_report,
+            )
+            assert run.coverage_report["subquestion_count"] == target.subquestions
+            assert run.coverage_report["covered_subquestions"] == target.subquestions
+            assert run.coverage_report["gaps"] == []
+            assert run.coverage_report["usable_assets"] >= target.assets
+            assert run.coverage_report["project_count"] >= target.projects
+            synthesis = run.coverage_report["synthesis"]
+            expected_counts = (1, 0, 0, 0, 1) if mode is BudgetMode.quick else (2, 2, 1, 2, 2)
+            assert (
+                len(synthesis["causal_chains"]),
+                len(synthesis["comparisons"]),
+                len(synthesis["conflicts"]),
+                len(synthesis["applicability_boundaries"]),
+                len(synthesis["recommendations"]),
+            ) == expected_counts
 
 
 def _advance_retry_attempt(database: Database, run_id: str) -> None:
@@ -209,6 +458,128 @@ def test_query_plan_carries_the_selected_analysis_depth() -> None:
     assert "转译步骤" in queries[0][3]
     assert "适用边界" in queries[0][3]
     assert "多来源核验" not in queries[0][3]
+
+
+def test_public_page_analysis_text_keeps_a_mechanism_after_six_thousand_characters() -> None:
+    mechanism = "TAIL_MECHANISM: the inserted volume is detached from the old frame."
+    page = ParsedPublicPage(
+        source_url="https://studio.example/foundry",
+        title="Foundry reuse",
+        markdown=f"{'A' * 6_500}{mechanism}",
+    )
+
+    assert mechanism in _public_page_analysis_text(page)
+
+
+def test_public_page_analysis_question_stabilizes_program_intent_wording() -> None:
+    broad = "新功能如何在图纸中表达可辨识的新旧关系？"
+    narrow = "盒中盒、夹层或独立结构如何植入？"
+
+    broad_prompt = workflow_module._public_page_analysis_question(broad)
+    narrow_prompt = workflow_module._public_page_analysis_question(narrow)
+
+    stable_focus = "新功能通过空间、结构或构造介入"
+    assert broad_prompt.startswith(broad)
+    assert narrow_prompt.startswith(narrow)
+    assert stable_focus in broad_prompt
+    assert stable_focus in narrow_prompt
+
+    interface = (
+        "新植入功能与保留柱网、楼板和桁架如何通过开洞、退让、跨接形成界面，"
+        "并支持公共空间和后勤设施同时运行？"
+    )
+    interface_prompt = workflow_module._public_page_analysis_question(interface)
+    assert "保留柱网、楼板、桁架、围护和设备遗存" in interface_prompt
+    assert "公众、员工、后勤、设备与消防流线" not in interface_prompt
+
+
+def test_public_search_query_keeps_workspace_typology_for_a_generic_question() -> None:
+    query = _public_search_query(
+        ResearchGoal.precedent_research,
+        "en",
+        "公众与后勤流线如何通过独立入口和服务廊道分开？",
+        1,
+        research_question="旧建筑更新中如何组织流线？",
+        research_context="Brief: 验证旧工业建筑更新的图纸研究闭环",
+        trusted_domain="archdaily.com",
+    )
+
+    assert "adaptive reuse industrial building" in query
+    assert "visitor circulation" in query
+    assert query.endswith("site:archdaily.com")
+
+
+def test_public_search_query_prioritizes_program_insertion_over_drawing_media_words() -> None:
+    query = _public_search_query(
+        ResearchGoal.precedent_research,
+        "en",
+        "新功能通过插入、嵌套或独立盒体植入旧结构，平面图与剖面图如何表达？",
+        1,
+        research_question="旧建筑更新中如何植入新功能？",
+        research_context="Brief: 旧工业建筑更新",
+        trusted_domain="archdaily.com",
+    )
+
+    assert "program insertion" in query
+    assert "exhibition workshop public activity" in query
+    assert "old new structure daylight void section" not in query
+
+
+def test_public_search_query_routes_overlapping_words_by_primary_design_intent() -> None:
+    cases = [
+        (
+            "新功能通过插入盒体植入旧结构，剖面图如何表达新旧关系？",
+            ("program insertion", "box-in-box"),
+            ("sectional hierarchy", "skylight clerestory"),
+        ),
+        (
+            "原有大跨空间如何通过挑空、夹层、下沉和屋顶加建形成剖面层次？",
+            ("sectional hierarchy", "double-height", "vertical circulation"),
+            ("program insertion", "skylight clerestory"),
+        ),
+        (
+            "如何插入天窗和高侧窗，让庭院组织稳定的采光策略与剖面？",
+            ("skylight", "clerestory", "courtyard daylight"),
+            ("program insertion", "sectional hierarchy"),
+        ),
+        (
+            "加建区域如何通过独立入口、服务廊道和核心筒分离访客与后勤流线？",
+            ("visitor circulation", "back-of-house", "loading dock"),
+            ("program insertion", "sectional hierarchy"),
+        ),
+        (
+            "How can a roof extension, mezzanine and sunken floor create a sectional hierarchy?",
+            ("sectional hierarchy", "mezzanine", "sunken space"),
+            ("program insertion", "skylight clerestory"),
+        ),
+        (
+            "How does the section organize the vertical relationship between public levels?",
+            ("sectional hierarchy", "vertical circulation"),
+            ("program insertion", "skylight clerestory"),
+        ),
+        (
+            "How do retained columns, slabs and trusses meet new openings, setbacks and "
+            "bridges while supporting public and back-of-house uses?",
+            ("old new structural interface", "retained frame", "connection detail"),
+            ("visitor circulation", "program insertion"),
+        ),
+    ]
+
+    for subquestion, expected_terms, excluded_terms in cases:
+        query = _public_search_query(
+            ResearchGoal.precedent_research,
+            "en",
+            subquestion,
+            1,
+            research_question="How should an existing industrial building be reused?",
+            research_context="Brief: adaptive reuse research",
+            trusted_domain="archdaily.com",
+        )
+
+        for term in expected_terms:
+            assert term in query, (subquestion, query)
+        for term in excluded_terms:
+            assert term not in query, (subquestion, query)
 
 
 def test_run_persists_subquestions_and_binds_queries_and_assets_to_them(tmp_path: Path) -> None:
@@ -273,21 +644,6 @@ def test_run_persists_subquestions_and_binds_queries_and_assets_to_them(tmp_path
     assert run.status == RunStatus.completed.value
 
 
-class ReverseImageProvider:
-    name = "tineye"
-
-    def __init__(self, result: list[TinEyeMatch] | Exception) -> None:
-        self.result = result
-        self.paths: list[Path] = []
-
-    def search_file(self, image_path: Path, limit: int = 10) -> list[TinEyeMatch]:
-        del limit
-        self.paths.append(image_path)
-        if isinstance(self.result, Exception):
-            raise self.result
-        return self.result
-
-
 def test_balanced_run_stops_after_multiple_batches_satisfy_coverage(tmp_path: Path) -> None:
     database, run_id = _database_with_run(tmp_path, BudgetMode.balanced)
     provider = SequencedProvider(
@@ -316,7 +672,7 @@ def test_balanced_run_stops_after_multiple_batches_satisfy_coverage(tmp_path: Pa
     assert len(set(provider.queries)) == 4
 
 
-def test_quick_run_completes_every_answer_branch_before_depth_enrichment(
+def test_quick_run_returns_partial_when_depth_enrichment_stays_incomplete(
     tmp_path: Path,
 ) -> None:
     database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
@@ -332,14 +688,14 @@ def test_quick_run_completes_every_answer_branch_before_depth_enrichment(
             select(func.count()).select_from(AssetCandidate).where(AssetCandidate.run_id == run_id)
         )
         assert run is not None
-        assert run.status == RunStatus.completed.value
-        assert run.stop_reason == "completion_satisfied"
+        assert run.status == RunStatus.partial.value
+        assert run.stop_reason == "no_new_assets"
         assert asset_count == 4
         assert run.coverage_report["covered_subquestions"] == 3
         assert run.coverage_report["gaps"] == []
         assert "insufficient_usable_assets" in run.coverage_report["enrichment_gaps"]
         assert "insufficient_subquestion_assets" in run.coverage_report["enrichment_gaps"]
-    assert len(provider.queries) == 6
+    assert len(provider.queries) == 15
 
 
 def test_partial_asset_without_a_source_claim_does_not_complete_its_subquestion(
@@ -364,7 +720,7 @@ def test_partial_asset_without_a_source_claim_does_not_complete_its_subquestion(
         run = session.get(ResearchRun, run_id)
 
     assert run is not None
-    assert run.status == RunStatus.blocked.value
+    assert run.status == RunStatus.partial.value
     assert run.coverage_report["covered_subquestions"] == 2
     assert run.coverage_report["gaps"] == ["uncovered_subquestions"]
 
@@ -384,13 +740,18 @@ def test_run_deadline_stops_before_starting_another_provider_call(tmp_path: Path
     with database.session_factory() as session:
         run = session.get(ResearchRun, run_id)
         assert run is not None
-        assert run.status == RunStatus.blocked.value
+        assert run.status == RunStatus.partial.value
         assert run.stop_reason == "time_budget_exhausted"
     assert len(provider.queries) == 1
 
 
 def test_quick_openai_run_reserves_time_for_one_worst_case_call(tmp_path: Path) -> None:
     database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assert run is not None
+        run.budget = {**run.budget, "max_seconds": 200}
+        session.commit()
 
     class FakeResponses:
         def __init__(self) -> None:
@@ -424,7 +785,7 @@ def test_quick_openai_run_reserves_time_for_one_worst_case_call(tmp_path: Path) 
 
     class FakeClock:
         def __init__(self) -> None:
-            self._values = iter([0.0, 0.0, 31.0, 62.0, 93.0, 124.0, 155.0])
+            self._values = iter([0.0, 0.0, 31.0, 62.0, 93.0, 124.0, 155.0, 186.0])
             self.observed: list[float] = []
 
         def __call__(self) -> float:
@@ -448,11 +809,11 @@ def test_quick_openai_run_reserves_time_for_one_worst_case_call(tmp_path: Path) 
             select(func.count()).select_from(QueryAttempt).where(QueryAttempt.run_id == run_id)
         )
         assert run is not None
-        assert run.status == RunStatus.completed.value
-        assert run.stop_reason == "completion_satisfied"
+        assert run.status == RunStatus.partial.value
+        assert run.stop_reason == "time_budget_exhausted"
         assert query_count == 6
     assert responses.calls == 7
-    assert clock.observed == [0.0, 0.0, 31.0, 62.0, 93.0, 124.0, 155.0]
+    assert clock.observed == [0.0, 0.0, 31.0, 62.0, 93.0, 124.0, 155.0, 186.0]
 
 
 def test_cancellation_during_provider_call_is_not_overwritten(tmp_path: Path) -> None:
@@ -546,12 +907,12 @@ def test_repeated_asset_stops_enrichment_without_creating_duplicates(tmp_path: P
             select(func.count()).select_from(AssetCandidate).where(AssetCandidate.run_id == run_id)
         )
         assert run is not None
-        assert run.status == RunStatus.completed.value
-        assert run.stop_reason == "completion_satisfied"
+        assert run.status == RunStatus.partial.value
+        assert run.stop_reason == "no_new_assets"
         assert asset_count == 1
         assert run.coverage_report["gaps"] == []
         assert run.coverage_report["enrichment_gaps"]
-    assert len(provider.queries) == 12
+    assert len(provider.queries) == 24
 
 
 def test_empty_quick_research_exhausts_three_completion_recovery_passes_for_every_subquestion(
@@ -622,11 +983,25 @@ def test_quick_completion_recovery_can_fill_branches_missed_by_normal_depth(
         attempts = list(session.scalars(select(QueryAttempt).where(QueryAttempt.run_id == run_id)))
 
     assert run is not None
-    assert run.status == RunStatus.completed.value
+    assert run.status == RunStatus.partial.value
     assert run.coverage_report["covered_subquestions"] == 3
     assert run.coverage_report["gaps"] == []
-    assert len(provider.queries) == 8
-    assert sum(attempt.subquestion_id == "program" for attempt in attempts) == 2
+    assert run.coverage_report["enrichment_gaps"]
+    assert len(provider.queries) == 12
+    assert [attempt.subquestion_id for attempt in attempts] == [
+        "program",
+        "circulation",
+        "section",
+        "circulation",
+        "section",
+        "circulation",
+        "section",
+        "circulation",
+        "section",
+        "program",
+        "circulation",
+        "section",
+    ]
 
 
 def test_incomplete_retry_only_researches_branches_that_still_lack_evidence(
@@ -681,8 +1056,9 @@ def test_incomplete_retry_only_researches_branches_that_still_lack_evidence(
     with database.session_factory() as session:
         run = session.get(ResearchRun, run_id)
     assert run is not None
-    assert run.status == RunStatus.completed.value
+    assert run.status == RunStatus.partial.value
     assert run.coverage_report["covered_subquestions"] == 3
+    assert run.coverage_report["enrichment_gaps"]
 
 
 def test_web_search_urls_are_not_stored_as_perceptual_hashes(tmp_path: Path) -> None:
@@ -711,7 +1087,7 @@ def test_provider_asset_type_is_persisted_as_a_plain_string(tmp_path: Path) -> N
     assert asset_type == ArchitectureAssetType.section.value
 
 
-def test_sparse_visual_platform_asset_cannot_become_verified_case_evidence(
+def test_removed_pinterest_provider_result_is_not_persisted(
     tmp_path: Path,
 ) -> None:
     database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
@@ -748,17 +1124,8 @@ def test_sparse_visual_platform_asset_cannot_become_verified_case_evidence(
     with database.session_factory() as session:
         asset = session.scalar(select(AssetCandidate).where(AssetCandidate.run_id == run_id))
         page = session.scalar(select(SourcePage).where(SourcePage.run_id == run_id))
-    assert asset is not None
-    assert page is not None
-    assert page.publication_tier == PublicationTier.aggregator.value
-    assert asset.publication_tier == PublicationTier.aggregator.value
-    assert asset.project_identity == AssociationStatus.unknown.value
-    assert asset.asset_association == AssociationStatus.unknown.value
-    assert asset.primary_source == PrimarySourceStatus.unknown.value
-    assert asset.rights_status == RightsStatus.unknown.value
-    assert asset.result_tier == ResultTier.visual_lead.value
-    assert asset.facts == []
-    assert asset.observations == ["图中可见一条抬高的红色路径。"]
+    assert asset is None
+    assert page is None
 
 
 def test_selected_xiaohongshu_source_continues_after_model_search_times_out(
@@ -842,7 +1209,26 @@ def test_selected_xiaohongshu_source_continues_after_model_search_times_out(
     provider = TimeoutProvider([])
     browser = XiaohongshuBrowser()
 
-    execute_research_run(database, run_id, provider, browser_client=browser)
+    class FailingOpenCliSearch:
+        name = "failing-opencli"
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def search(self, query: str, *, limit: int = 4) -> list[ProviderSource]:
+            del query, limit
+            self.calls += 1
+            raise TimeoutError("OpenCLI Browser Bridge is unavailable")
+
+    opencli = FailingOpenCliSearch()
+
+    execute_research_run(
+        database,
+        run_id,
+        provider,
+        browser_client=browser,
+        xiaohongshu_search=opencli,
+    )
 
     search_opens = [
         payload["url"]
@@ -850,6 +1236,7 @@ def test_selected_xiaohongshu_source_continues_after_model_search_times_out(
         if action == "open_url" and "/search_result?" in payload["url"]
     ]
     assert len(search_opens) == 3
+    assert opencli.calls == 1
     with database.session_factory() as session:
         xiaohongshu_pages = list(
             session.scalars(
@@ -866,6 +1253,91 @@ def test_selected_xiaohongshu_source_continues_after_model_search_times_out(
     )
     assert run is not None
     assert run.browser_pages_attempted == 3
+
+
+def test_empty_opencli_result_falls_back_to_connected_browser_search(tmp_path: Path) -> None:
+    database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
+
+    class EmptyOpenCli:
+        name = "opencli-xiaohongshu"
+
+        def search(self, query: str, *, limit: int = 4) -> list[ProviderSource]:
+            assert query == "建筑分析图"
+            assert limit == 4
+            return []
+
+    class BrowserFallback:
+        name = "archresearch-extension-xiaohongshu"
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def search(self, query: str, *, limit: int = 4) -> list[ProviderSource]:
+            self.calls += 1
+            assert query == "建筑分析图"
+            assert limit == 4
+            return [
+                ProviderSource(
+                    url="https://www.xiaohongshu.com/explore/note-fallback",
+                    publisher="小红书",
+                    title="建筑分析图参考",
+                    publication_tier=PublicationTier.aggregator,
+                )
+            ]
+
+    browser = BrowserFallback()
+    searches = [EmptyOpenCli(), browser]
+
+    sources, failed = _try_xiaohongshu_search(database, run_id, searches, "建筑分析图")
+
+    assert failed is False
+    assert browser.calls == 1
+    assert [source.title for source in sources] == ["建筑分析图参考"]
+
+
+def test_precedent_research_completion_is_not_blocked_by_optional_xiaohongshu_failure(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assert run is not None
+        run.research_sources = ["xiaohongshu"]
+        session.commit()
+
+    class FailingXiaohongshuBrowser:
+        connected = True
+
+        def send_command_sync(
+            self,
+            action: str,
+            payload: dict[str, Any],
+            *,
+            timeout_seconds: float = 30,
+        ) -> Any:
+            del action, payload, timeout_seconds
+            raise TimeoutError("optional visual source unavailable")
+
+    execute_research_run(
+        database,
+        run_id,
+        SequencedProvider(
+            [
+                _batch(_asset("factory", 1)),
+                _batch(_asset("station", 2)),
+                _batch(_asset("dock", 3)),
+            ]
+        ),
+        browser_client=FailingXiaohongshuBrowser(),
+    )
+
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+    assert run is not None
+    assert run.status == RunStatus.partial.value
+    assert run.coverage_report["covered_subquestions"] == 3
+    assert run.coverage_report["enrichment_gaps"]
+    assert "browser_inspection_incomplete" not in run.coverage_report["gaps"]
 
 
 def test_provider_failure_preserves_assets_from_completed_batches(tmp_path: Path) -> None:
@@ -920,7 +1392,7 @@ def test_retry_skips_completed_queries_and_resumes_the_failed_subquestion(tmp_pa
             if not self.section_failed:
                 self.section_failed = True
                 raise RuntimeError("temporary provider failure")
-            return _batch(_asset("dock", 5), _asset("dock", 6))
+            return _batch(_asset("dock", 5))
 
     provider = FailsOnceOnThirdSubquestion()
     execute_research_run(database, run_id, provider)
@@ -938,7 +1410,9 @@ def test_retry_skips_completed_queries_and_resumes_the_failed_subquestion(tmp_pa
         )
 
     assert run is not None
-    assert run.status == RunStatus.completed.value
+    assert run.status == RunStatus.partial.value
+    assert run.stop_reason == "budget_exhausted"
+    assert run.coverage_report["enrichment_gaps"]
     assert sum("新功能怎样植入" in query for query in provider.queries) == 1
     assert sum("公共与后勤怎样分开" in query for query in provider.queries) == 1
     assert sum("剖面怎样形成层次" in query for query in provider.queries) == 2
@@ -950,7 +1424,7 @@ def test_retry_skips_completed_queries_and_resumes_the_failed_subquestion(tmp_pa
     ]
 
 
-def test_retry_continues_only_uncovered_queries_after_a_resumed_run_stays_blocked(
+def test_retry_continues_only_uncovered_queries_after_a_resumed_run_stays_partial(
     tmp_path: Path,
 ) -> None:
     database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
@@ -997,7 +1471,7 @@ def test_retry_continues_only_uncovered_queries_after_a_resumed_run_stays_blocke
     with database.session_factory() as session:
         run = session.get(ResearchRun, run_id)
     assert run is not None
-    assert run.status == RunStatus.blocked.value
+    assert run.status == RunStatus.partial.value
 
     _advance_retry_attempt(database, run_id)
     execute_research_run(database, run_id, provider)
@@ -1054,9 +1528,7 @@ def test_retry_resume_uses_only_the_immediately_previous_failed_execution(
     _advance_retry_attempt(database, run_id)
     execute_research_run(database, run_id, provider)
 
-    assert provider.counts["program"] == 4
-    assert provider.counts["circulation"] == 4
-    assert provider.counts["section"] == 5
+    assert provider.counts == {"program": 10, "circulation": 10, "section": 11}
 
 
 def test_service_resume_keeps_completed_keys_inherited_by_the_current_retry(
@@ -1296,6 +1768,78 @@ def test_perceptual_duplicate_preserves_both_sources_and_prefers_primary_page(
     assert not second_path.exists()
 
 
+def test_research_goal_changes_visual_platform_inspection_priority() -> None:
+    studio = ProviderSource(
+        url="https://studio.example/foundry",
+        publication_tier=PublicationTier.primary,
+    )
+    xiaohongshu = ProviderSource(
+        url="https://www.xiaohongshu.com/explore/note-42",
+        publication_tier=PublicationTier.aggregator,
+    )
+
+    visual_order = sorted(
+        [studio, xiaohongshu],
+        key=lambda source: _inspection_source_sort_key(
+            source, ResearchGoal.visual_reference_search
+        ),
+        reverse=True,
+    )
+    precedent_order = sorted(
+        [studio, xiaohongshu],
+        key=lambda source: _inspection_source_sort_key(source, ResearchGoal.precedent_research),
+        reverse=True,
+    )
+
+    assert visual_order == [xiaohongshu, studio]
+    assert precedent_order == [studio, xiaohongshu]
+
+
+def test_xiaohongshu_inspected_asset_keeps_note_identity_and_platform_boundary(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
+    source = ProviderSource(
+        url="https://www.xiaohongshu.com/explore/note-84",
+        publisher="小红书",
+        title="旧厂房剖面与蓝灰分析图",
+        publication_tier=PublicationTier.aggregator,
+    )
+    crop_path = tmp_path / "xiaohongshu-section.png"
+    crop_path.write_bytes(b"crop")
+    _persist_sources(database, run_id, ProviderSearchResult(assets=[], sources=[source]))
+
+    _persist_inspected_assets(
+        database,
+        run_id,
+        source,
+        [
+            InspectedVisual(
+                source_url=source.url,
+                image_url="https://sns-img.example/section.png",
+                storage_path=crop_path,
+                perceptual_hash="xiaohongshu-section",
+                asset_type=ArchitectureAssetType.section,
+                relevance=4,
+                observations=["剖面以蓝灰色块区分新旧空间，并用连续箭头标出公共路径。"],
+            )
+        ],
+        subquestion_id="section",
+    )
+
+    with database.session_factory() as session:
+        candidate = session.scalar(select(AssetCandidate).where(AssetCandidate.run_id == run_id))
+
+    assert candidate is not None
+    assert candidate.project_name == "旧厂房剖面与蓝灰分析图"
+    assert candidate.result_tier == ResultTier.visual_lead.value
+    assert candidate.facts == []
+    assert candidate.design_mechanism == ""
+    assert candidate.limitations == [
+        "视觉平台帖子只支持可见图像观察，不能单独确认完整项目事实、图纸归属或使用权。"
+    ]
+
+
 def test_browser_observation_enriches_provider_analysis_without_clearing_it(
     tmp_path: Path,
 ) -> None:
@@ -1510,7 +2054,7 @@ def test_source_relation_without_an_existing_asset_never_creates_a_fake_local_pa
     assert assets == []
 
 
-def test_precedent_coverage_requires_displayable_evidence_for_every_subquestion(
+def test_precedent_coverage_does_not_require_a_displayable_image_for_every_subquestion(
     tmp_path: Path,
 ) -> None:
     database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
@@ -1552,66 +2096,12 @@ def test_precedent_coverage_requires_displayable_evidence_for_every_subquestion(
         run = session.get(ResearchRun, run_id)
 
     assert run is not None
-    assert run.status == RunStatus.blocked.value
-    assert run.coverage_report["usable_assets"] == 4
-    assert run.coverage_report["covered_subquestions"] == 2
-    assert "uncovered_subquestions" in run.coverage_report["gaps"]
-
-
-def test_source_lookup_does_not_finish_before_every_planned_subquestion_has_evidence(
-    tmp_path: Path,
-) -> None:
-    database, run_id = _database_with_run(
-        tmp_path,
-        BudgetMode.quick,
-        ResearchGoal.source_lookup,
-    )
-    provider = SequencedProvider(
-        [
-            _batch(_asset("factory", 1), _asset("factory", 2), _asset("factory", 3)),
-            _batch(_asset("station", 4), _asset("station", 5), _asset("station", 6)),
-            _batch(),
-            _batch(),
-        ]
-    )
-
-    execute_research_run(database, run_id, provider)
-
-    with database.session_factory() as session:
-        run = session.get(ResearchRun, run_id)
-    assert run is not None
     assert run.status == RunStatus.partial.value
-    assert run.coverage_report["covered_subquestions"] == 2
-    assert "uncovered_subquestions" in run.coverage_report["gaps"]
-    assert len(provider.queries) >= 3
-
-
-def test_deep_source_lookup_completes_all_branches_before_asset_enrichment(
-    tmp_path: Path,
-) -> None:
-    database, run_id = _database_with_run(
-        tmp_path,
-        BudgetMode.deep,
-        ResearchGoal.source_lookup,
-    )
-    provider = SequencedProvider(
-        [
-            *[_batch(_asset(f"project-{index}", index)) for index in range(1, 7)],
-            _batch(),
-            _batch(),
-        ]
-    )
-
-    execute_research_run(database, run_id, provider)
-
-    with database.session_factory() as session:
-        run = session.get(ResearchRun, run_id)
-    assert run is not None
-    assert run.status == RunStatus.completed.value
-    assert run.coverage_report["usable_assets"] == 6
-    assert run.coverage_report["covered_subquestions"] == 6
-    assert run.coverage_report["gaps"] == []
-    assert "insufficient_usable_assets" in run.coverage_report["enrichment_gaps"]
+    assert run.coverage_report["usable_assets"] == 4
+    assert run.coverage_report["verified_or_partial"] == 6
+    assert run.coverage_report["covered_subquestions"] == 3
+    assert "uncovered_subquestions" not in run.coverage_report["gaps"]
+    assert run.coverage_report["enrichment_gaps"]
 
 
 def test_ranking_diversifies_projects_within_the_same_tier_and_relevance(
@@ -1642,100 +2132,3 @@ def test_ranking_diversifies_projects_within_the_same_tier_and_relevance(
             )
         )
     assert {asset.project_name for asset in ranked[:3]} == {"factory", "station", "dock"}
-
-
-def test_source_lookup_turns_tineye_backlinks_into_conservative_task_evidence(
-    tmp_path: Path,
-) -> None:
-    database, run_id, image_path = _database_with_source_lookup_run(tmp_path)
-    reverse_provider = ReverseImageProvider(
-        [
-            TinEyeMatch(
-                image_url="https://studio.example/images/section.jpg",
-                domain="studio.example",
-                score=93.0,
-                backlinks=[
-                    TinEyeBacklink(
-                        page_url="https://studio.example/projects/unknown",
-                        image_url="https://studio.example/images/section.jpg",
-                        crawl_date="2025-04-03",
-                    )
-                ],
-            )
-        ]
-    )
-    web_provider = SequencedProvider(
-        [ProviderSearchResult(assets=[], sources=[]), ProviderSearchResult(assets=[], sources=[])]
-    )
-
-    execute_research_run(database, run_id, web_provider, source_lookup_provider=reverse_provider)
-
-    assert reverse_provider.paths == [image_path]
-    with database.session_factory() as session:
-        run = session.get(ResearchRun, run_id)
-        asset = session.scalar(select(AssetCandidate).where(AssetCandidate.run_id == run_id))
-        source = session.scalar(select(SourcePage).where(SourcePage.run_id == run_id))
-        claims = (
-            list(
-                session.scalars(
-                    select(EvidenceClaim).where(EvidenceClaim.asset_candidate_id == asset.id)
-                )
-            )
-            if asset is not None
-            else []
-        )
-
-        assert run is not None
-        assert run.status == RunStatus.partial.value
-        assert asset is not None
-        assert source is not None
-        assert asset.source_page_id == source.id
-        assert asset.project_name == "待核验项目"
-        assert asset.asset_type == ArchitectureAssetType.photograph.value
-        assert asset.publication_tier == PublicationTier.unknown.value
-        assert asset.project_identity == AssociationStatus.unknown.value
-        assert asset.asset_association == AssociationStatus.unknown.value
-        assert asset.primary_source == PrimarySourceStatus.unknown.value
-        assert asset.rights_status == RightsStatus.unknown.value
-        assert asset.result_tier == ResultTier.visual_lead.value
-        assert asset.limitations == [
-            "photograph 仅是未分类图片占位，不代表内容被识别为建筑照片；需视觉分类后改写。"
-        ]
-        assert claims and claims[0].source_url == source.url
-        assert "crawl" not in str(asset.facts).lower()
-        assert "2025-04-03" not in str(asset.facts)
-        assert "2025-04-03" not in claims[0].statement
-
-
-def test_source_lookup_preserves_web_results_and_returns_partial_when_tineye_fails(
-    tmp_path: Path,
-) -> None:
-    database, run_id, _ = _database_with_source_lookup_run(tmp_path)
-    reverse_provider = ReverseImageProvider(RuntimeError("TinEye unavailable"))
-    web_provider = SequencedProvider(
-        [
-            _batch(
-                _asset("factory", 1),
-                _asset("factory", 2),
-                _asset("station", 3),
-                _asset("station", 4),
-                _asset("dock", 5),
-                _asset("dock", 6),
-            ),
-            _batch(),
-            _batch(),
-        ]
-    )
-
-    execute_research_run(database, run_id, web_provider, source_lookup_provider=reverse_provider)
-
-    with database.session_factory() as session:
-        run = session.get(ResearchRun, run_id)
-        asset_count = session.scalar(
-            select(func.count()).select_from(AssetCandidate).where(AssetCandidate.run_id == run_id)
-        )
-        assert run is not None
-        assert run.status == RunStatus.partial.value
-        assert run.stop_reason == "source_lookup_error:RuntimeError"
-        assert asset_count == 6
-    assert len(web_provider.queries) == 6
