@@ -1593,6 +1593,42 @@ describe('research board', () => {
     expect(await screen.findByRole('button', { name: '取消研究' })).toBeVisible()
   })
 
+  it('opens a completed record normally while background research is running', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', createLiveFetch({
+      existingRuns: [
+        {
+          id: 'run-background',
+          workspace_id: 'workspace-live',
+          question: '后台批量研究任务',
+          goal: 'precedent_research',
+          status: 'searching',
+          budget_mode: 'quick',
+          subquestions: liveSubquestions,
+          created_at: '2026-07-27T00:30:00Z',
+          updated_at: '2026-07-27T00:40:00Z',
+        },
+        {
+          id: 'run-live',
+          workspace_id: 'workspace-live',
+          question: liveQuestion,
+          subquestions: liveSubquestions,
+          goal: 'precedent_research',
+          status: 'completed',
+          budget_mode: 'balanced',
+          coverage_report: {},
+          created_at: '2026-07-13T08:30:00Z',
+        },
+      ],
+    }))
+    renderBoard()
+
+    const recentResearch = await screen.findByRole('region', { name: '最近研究' })
+    await user.click(await within(recentResearch).findByRole('button', { name: `打开研究：${liveQuestion}` }))
+    expect(await screen.findByRole('article', { name: '代表案例 Live Mill Conversion' })).toBeVisible()
+    expect(screen.queryByText('从一个具体设计问题开始')).not.toBeInTheDocument()
+  })
+
   it('restores the latest persisted run after the user opens it', async () => {
     const user = userEvent.setup()
     vi.stubGlobal('fetch', createLiveFetch({ existingRunStatus: 'completed' }))
