@@ -83,6 +83,7 @@
   /* Layout and drafting canvas */
   --layout-shell-max: 1760px;
   --layout-stage-max: 1600px;
+  --layout-doc-max: 1180px;
   --studio-grid-size: 128px;
   --research-prompt-min-height: 152px;
 
@@ -1698,10 +1699,7 @@ h3 {
 
 .collection-architecture {
   display: grid;
-  width: 100%;
-  max-width: 1180px;
   gap: var(--space-7);
-  margin: 0 auto;
 }
 
 .collection-question {
@@ -1725,6 +1723,7 @@ h3 {
 
 .collection-question-heading h2 {
   min-width: 0;
+  max-width: 40ch;
   font-size: var(--font-lg);
   line-height: var(--leading-title);
   text-wrap: balance;
@@ -1809,6 +1808,7 @@ h3 {
 
 .collection-case-heading h4 {
   min-width: 0;
+  max-width: 40ch;
   font-size: var(--font-xl);
   line-height: var(--leading-title);
   text-wrap: pretty;
@@ -1912,17 +1912,11 @@ h3 {
 }
 
 .collection-case-boundary {
-  display: grid;
-  grid-template-columns: 84px minmax(0, 1fr);
-  gap: var(--space-3);
+  max-width: 64ch;
   padding-top: var(--space-4);
   border-top: 1px solid var(--color-line);
   color: var(--color-ink-secondary) !important;
-  font-size: var(--font-sm);
-}
-
-.collection-case-boundary strong {
-  color: var(--color-ink);
+  font-size: var(--font-base);
 }
 
 .collection-case-missing {
@@ -2468,7 +2462,6 @@ h3 {
 }
 
 .result-task-heading {
-  max-width: 1100px;
   padding: var(--space-5) 0 var(--space-7);
   border-top: 1px solid var(--color-line-strong);
 }
@@ -2544,7 +2537,7 @@ h3 {
 }
 
 .research-synthesis {
-  margin: var(--space-6) 0;
+  margin-block: var(--space-6);
   padding: var(--space-6) 0;
   border-top: 1px solid var(--color-line-strong);
   border-bottom: 1px solid var(--color-line-strong);
@@ -2583,19 +2576,13 @@ h3 {
 }
 
 .synthesis-boundary {
-  display: grid;
-  grid-template-columns: 80px minmax(0, 1fr);
-  gap: var(--space-3);
+  max-width: 64ch;
   margin: 0;
   padding-top: var(--space-4);
   border-top: 1px solid var(--color-line);
   color: var(--color-ink-secondary);
-  font-size: var(--font-sm);
+  font-size: var(--font-base);
   line-height: var(--leading-body);
-}
-
-.synthesis-boundary strong {
-  color: var(--color-ink);
 }
 
 .synthesis-primary h3,
@@ -2613,8 +2600,10 @@ h3 {
 }
 
 .synthesis-primary li {
+  max-width: 64ch;
   padding-left: var(--space-1);
   line-height: var(--leading-body);
+  text-wrap: pretty;
 }
 
 .synthesis-primary li small {
@@ -2952,6 +2941,23 @@ h3 {
   margin-bottom: var(--space-6);
 }
 
+/* Global document rule: every reading surface (architectural results and
+   collections) is one centered document column. Headings, rules, controls and
+   cases share a single left and right edge, and the slack outside the column is
+   symmetric drafting field rather than a void on one side. */
+.result-task-heading,
+.research-synthesis,
+.case-analysis > .results-header,
+.case-chapter,
+.collection-page > .panel-heading,
+.collection-page > .collection-entry-switch,
+.collection-architecture,
+.collection-question-directory {
+  width: 100%;
+  max-width: var(--layout-doc-max);
+  margin-inline: auto;
+}
+
 .results-header label {
   display: grid;
   gap: var(--space-1);
@@ -2972,11 +2978,6 @@ h3 {
   gap: calc(var(--space-7) + var(--space-4));
 }
 
-.case-chapter {
-  width: 100%;
-  max-width: 1180px;
-  margin: 0 auto;
-}
 
 .case-chapter-heading {
   display: grid;
@@ -3055,6 +3056,7 @@ h3 {
 }
 
 .case-answer-heading h4 {
+  max-width: 40ch;
   margin: 0;
   font-size: var(--font-lg);
   letter-spacing: 0;
@@ -3105,20 +3107,26 @@ h3 {
 }
 
 .case-answer-boundary {
-  display: grid;
   max-width: 64ch;
-  grid-template-columns: 80px minmax(0, 1fr);
-  gap: var(--space-3);
   margin: 0;
   padding-top: var(--space-3);
   border-top: 1px solid var(--color-line);
   color: var(--color-ink-secondary);
-  font-size: var(--font-sm);
+  font-size: var(--font-base);
   line-height: var(--leading-body);
 }
 
-.case-answer-boundary strong {
-  color: var(--color-ink);
+/* The applicability label reads as a caption above its constraint. A fixed
+   label column left a dead gutter next to four-character Chinese labels and
+   made the constraint the smallest text on the page. */
+.synthesis-boundary strong,
+.case-answer-boundary strong,
+.collection-case-boundary strong {
+  display: block;
+  margin-bottom: var(--space-1);
+  color: var(--color-ink-tertiary);
+  font-size: var(--font-xs);
+  font-weight: var(--weight-semibold);
 }
 
 .case-answer-image {
@@ -4707,12 +4715,6 @@ h3 {
     min-height: 44px;
   }
 
-  .case-answer-boundary,
-  .collection-case-boundary,
-  .synthesis-boundary {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-1);
-  }
 
   .collection-visual-grid {
     grid-template-columns: minmax(0, 1fr);

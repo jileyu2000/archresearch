@@ -2511,6 +2511,47 @@ describe('research board', () => {
     expect(within(synthesis).queryByText(/原文|证据|来源/)).not.toBeInTheDocument()
   })
 
+  it('does not restate the section label inside the action and applicability text', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', createLiveFetch({
+      initialStatus: 'completed',
+      coverageReport: {
+        usable_assets: 1,
+        project_count: 1,
+        verified_or_partial: 1,
+        gaps: [],
+        synthesis: {
+          answer: {
+            statement: '先划定旧结构不可触碰区，再以独立系统植入公共功能。',
+            evidence_asset_ids: ['asset-live'],
+          },
+          causal_chains: [{
+            statement: '结构保留约束促使新增体量脱开布置。',
+            evidence_asset_ids: ['asset-live'],
+          }],
+          comparisons: [],
+          conflicts: [],
+          applicability_boundaries: [{
+            statement: '适用边界：仅当净高与结构余量足够时，独立植入才成立。',
+            evidence_asset_ids: ['asset-live'],
+          }],
+          recommendations: [{
+            statement: '转译建议：按柱网、屋架、围护分层，再布置独立公共层。',
+            evidence_asset_ids: ['asset-live'],
+          }],
+        },
+      },
+    }))
+    renderBoard()
+    await startLiveResearch(user)
+
+    const synthesis = await screen.findByRole('region', { name: '研究结论' })
+    expect(within(synthesis).getByText('按柱网、屋架、围护分层，再布置独立公共层。')).toBeVisible()
+    expect(within(synthesis).getByText('仅当净高与结构余量足够时，独立植入才成立。')).toBeVisible()
+    expect(within(synthesis).queryByText(/转译建议[：:]/)).not.toBeInTheDocument()
+    expect(within(synthesis).queryByText(/适用边界[：:]/)).not.toBeInTheDocument()
+  })
+
   it('turns machine-shaped fallback synthesis into a concise result without exposing raw text', async () => {
     const user = userEvent.setup()
     const rawStatement = '【本地证据汇总】；Instituto Moreira Salles：连续外廊组织公共到达与展厅入口；SESC 24 de Maio：竖向公共路径串联多层活动。'

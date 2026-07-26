@@ -112,4 +112,49 @@ describe('responsive design-system rules', () => {
       /\.collection-visual-grid\s*\{\s*grid-template-columns:\s*minmax\(0, 1fr\)/,
     )
   })
+
+  it('runs results and collections through one centered document column', () => {
+    expect(styles).toMatch(/--layout-doc-max:\s*1180px/)
+    const documentRule = styles.match(
+      /\.result-task-heading,[^{]*\{[^}]*max-width:\s*var\(--layout-doc-max\);[^}]*margin-inline:\s*auto;[^}]*\}/,
+    )
+    expect(documentRule).not.toBeNull()
+    const selectors = documentRule?.[0].slice(0, documentRule[0].indexOf('{')) ?? ''
+    for (const selector of [
+      '.result-task-heading',
+      '.research-synthesis',
+      '.case-analysis > .results-header',
+      '.case-chapter',
+      '.collection-page > .panel-heading',
+      '.collection-architecture',
+      '.collection-question-directory',
+    ]) {
+      expect(selectors).toContain(selector)
+    }
+    expect(styles).not.toMatch(/\.case-chapter\s*\{[^}]*max-width:\s*1180px/)
+    expect(styles).not.toMatch(/\.collection-architecture\s*\{[^}]*max-width:\s*1180px/)
+    expect(styles).not.toMatch(/\.result-task-heading\s*\{[^}]*max-width:\s*1100px/)
+  })
+
+  it('caps every conclusion block at a reading measure', () => {
+    expect(styles).toMatch(/\.synthesis-primary li\s*\{[^}]*max-width:\s*64ch/)
+    expect(styles).toMatch(/\.synthesis-boundary\s*\{[^}]*max-width:\s*64ch/)
+    expect(styles).toMatch(/\.collection-question-heading h2\s*\{[^}]*max-width:\s*40ch/)
+    expect(styles).toMatch(/\.collection-case-heading h4\s*\{[^}]*max-width:\s*40ch/)
+    expect(styles).toMatch(/\.case-answer-heading h4\s*\{[^}]*max-width:\s*40ch/)
+  })
+
+  it('stacks applicability labels above their text at body size', () => {
+    expect(styles).not.toMatch(/\.synthesis-boundary\s*\{[^}]*grid-template-columns/)
+    expect(styles).not.toMatch(/\.case-answer-boundary\s*\{[^}]*grid-template-columns/)
+    expect(styles).not.toMatch(/\.collection-case-boundary\s*\{[^}]*grid-template-columns/)
+    expect(styles).toMatch(
+      /\.synthesis-boundary strong,\s*\.case-answer-boundary strong,\s*\.collection-case-boundary strong\s*\{[^}]*display:\s*block/,
+    )
+    expect(styles).toMatch(/\.synthesis-boundary\s*\{[^}]*font-size:\s*var\(--font-base\)/)
+    expect(styles).toMatch(/\.case-answer-boundary\s*\{[^}]*font-size:\s*var\(--font-base\)/)
+    expect(styles).toMatch(
+      /\.collection-case-boundary\s*\{[^}]*font-size:\s*var\(--font-base\)/,
+    )
+  })
 })

@@ -171,7 +171,7 @@ function userFacingRecommendation(statement: string) {
   return statement
     .replace(/^【(?:转译建议|建议|操作)[^】]*】\s*/u, '')
     .replace(/^转译步骤[（(][^）)]+[）)]\s*[：:]\s*/u, '')
-    .replace(/^(?:建议|操作)\s*[：:]\s*/u, '')
+    .replace(/^(?:转译建议|转译步骤|建议|操作)\s*[：:]\s*/u, '')
     .replace(/(?:该建议转译自|后半部分属于)[^。！？]*[。！？]?/gu, '')
     .replace(/[，,]\s*(?:不能|不可)[^。！？]*(?:推定|证明|断言)[^。！？]*[。！？]?/gu, '。')
     .trim()
@@ -960,8 +960,14 @@ function uniqueSummaryItems(items: string[], limit: number) {
 
 const auditBoundaryPattern = /原文|正文|来源|源网站|证据|核对|核验|未给出|未说明|未记录|待确认|仍需确认|不详|证明|断言|实证|drawing_ids|研究子问题|页面仅支持/
 
+function userFacingBoundary(statement: string) {
+  return statement.replace(/^(?:适用边界|适用条件|适用时注意|边界)\s*[：:]\s*/u, '').trim()
+}
+
 function firstUserFacingBoundary(items: string[]) {
-  return uniqueSummaryItems(items, items.length).find((item) => !auditBoundaryPattern.test(item)) ?? ''
+  const boundary = uniqueSummaryItems(items, items.length)
+    .find((item) => !auditBoundaryPattern.test(item)) ?? ''
+  return userFacingBoundary(boundary)
 }
 
 function availablePreviewUrl(result: WorkResult, failedPreviewUrls: Record<string, string>) {
