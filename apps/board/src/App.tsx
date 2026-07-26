@@ -117,7 +117,7 @@ function questionRelevanceLabel(relevance: number) {
 const publicationTierLabels: Record<ApiAssetCandidate['publication_tier'], string> = {
   primary: '项目或设计方首发',
   trusted_secondary: '可信二手来源',
-  aggregator: '聚合来源',
+  aggregator: '转载合集（非首发）',
   unknown: '来源未知',
 }
 
@@ -132,7 +132,7 @@ const rightsStatusLabels: Record<ApiAssetCandidate['rights_status'], string> = {
   user_owned: '用户自有',
   open_license: '开放许可',
   permissioned: '已获授权',
-  unknown: '权利未知',
+  unknown: '未注明',
   restricted: '受限',
 }
 
@@ -401,7 +401,7 @@ const defaultStyle: StyleDraft = {
 }
 
 function apiMessage(error: unknown) {
-  return error instanceof ApiError || error instanceof Error ? error.message : '操作失败。'
+  return error instanceof ApiError || error instanceof Error ? error.message : '操作未完成，请重试；若反复失败，请重启 ArchResearch。'
 }
 
 function runAnnouncement(run: ResearchRun) {
@@ -423,9 +423,9 @@ function runAnnouncement(run: ResearchRun) {
       composing: '正在整理灵感',
       completed: '已完成',
       partial: '已保留部分灵感',
-      blocked: '需要检查环境',
+      blocked: '研究尚未完成，暂未找到可用图纸',
       cancelled: '已取消',
-      failed: '未完成',
+      failed: '搜索失败，已找到的图纸已保留',
     }
     return visualLabels[run.status]
   }
@@ -442,7 +442,7 @@ function runAnnouncement(run: ResearchRun) {
     partial: '已交付部分结果',
     blocked: '研究尚未完成，已有证据已保留',
     cancelled: '已取消',
-    failed: '研究失败，已有结果已保留',
+    failed: '研究失败，已有证据已保留，可重新发起研究补齐',
   }
   return labels[run.status]
 }
@@ -462,9 +462,9 @@ function retryActionLabel(run: ResearchRun) {
 }
 
 function partialReasonTitle(stopReason?: string | null) {
-  if (stopReason === 'budget_exhausted') return '当前自动补齐已到上限'
+  if (stopReason === 'budget_exhausted') return '本轮自动检索次数已用完，先交付当前可用结果'
   if (stopReason === 'time_budget_exhausted') return '本轮研究达到时间上限'
-  if (stopReason === 'visual_budget_exhausted') return '本轮图纸检查容量已用完'
+  if (stopReason === 'visual_budget_exhausted') return '本轮可检查的图纸数量已达上限'
   if (stopReason === 'no_new_assets') return '连续检索没有找到新的有效项目证据'
   if (stopReason === 'unverified_visual_leads') return '已找到图片，但还不能用它确认项目事实'
   if (stopReason === 'browser_inspection_incomplete') return 'Chrome 图纸检查未完成'
@@ -483,7 +483,7 @@ function partialDiagnosis(run: ResearchRun) {
       insufficient_usable_assets: '可用图纸参考还不够',
       fewer_than_six_usable_assets: '可用图纸参考还不够',
       insufficient_project_diversity: '不同风格的参考还不够多样',
-      insufficient_verified_or_partial: '部分图片还没有形成可用的视觉观察',
+      insufficient_verified_or_partial: '部分图片还没有整理出可用的图面观察',
       uncovered_subquestions: '仍有灵感方向没有可用图纸参考',
       browser_inspection_incomplete: '部分笔记图片未能完成读取',
     }
@@ -502,18 +502,18 @@ function partialDiagnosis(run: ResearchRun) {
   const projects = coverage?.project_count ?? 0
   const supported = coverage?.verified_or_partial ?? 0
   const gapLabels: Record<string, string> = {
-    insufficient_usable_assets: `“${modeLabels[run.mode]}”档位需要更多可用项目证据`,
-    fewer_than_six_usable_assets: `“${modeLabels[run.mode]}”档位需要更多可用项目证据`,
+    insufficient_usable_assets: `“${modeLabels[run.mode]}”研究需要更多可用项目证据`,
+    fewer_than_six_usable_assets: `“${modeLabels[run.mode]}”研究需要更多可用项目证据`,
     insufficient_project_diversity: '具体项目数量还不足，案例覆盖不够多样',
     insufficient_verified_or_partial: '已有来源依据的项目证据还不够',
     uncovered_subquestions: '仍有子问题没有足够的项目原文支撑',
     article_analysis_incomplete: '部分来源还没有同时说明项目条件、设计做法和可借鉴步骤',
-    research_synthesis_incomplete: '案例依据已经保留，但当前档位要求的结论还没整理完成',
+    research_synthesis_incomplete: '案例依据已经保留，但当前研究深度要求的结论还没整理完成',
     browser_inspection_incomplete: 'Chrome 未能完成候选页面的图纸检查，现有网页结果已保留',
     insufficient_multi_asset_projects: '部分项目还缺少平面、剖面等互补图纸',
   }
   const gaps = [...new Set((coverage?.gaps ?? []).map(
-    (gap) => gapLabels[gap] ?? '仍有研究内容未达到当前档位目标',
+    (gap) => gapLabels[gap] ?? '仍有研究内容未达到当前研究深度的目标',
   ))]
   const continuationRequired = needsCompletionContinuation(run)
   return {
@@ -521,7 +521,7 @@ function partialDiagnosis(run: ResearchRun) {
     summary: `已保留 ${usable} 条可用项目证据，覆盖 ${projects} 个项目，其中 ${supported} 条已有来源依据。`,
     gaps,
     nextStep: continuationRequired
-      ? '当前内容是续研检查点，不是完整交付；继续补齐会保留已有证据，只研究仍为空白的分支。'
+      ? '目前是中途保存的进度，还不是完整结果；点“继续补齐研究”会保留已有证据，只补齐仍空白的子问题。'
       : '可以继续查看现有结果；重试会开启新一轮研究，补找项目原文与来源依据。',
   }
 }
@@ -636,7 +636,7 @@ function legacyChineseAnalysis(candidate: ApiAssetCandidate, assetType: Architec
       '再回到原始来源确认图纸归属、尺度和适用边界。',
     ],
     observation: `当前记录未保留这张${assetLabel}的中文图面观察，请结合图纸和原始来源核对。`,
-    limitation: '该历史候选只保留了来源与图纸类型，具体机制、尺度和适用边界仍需核对。',
+    limitation: '当前记录只保留了来源与图纸类型，具体机制、尺度和适用条件仍需核对。',
   }
 }
 
@@ -1530,7 +1530,7 @@ export default function App() {
         .catch((error) => {
           if (hydrateRequestRef.current !== requestId) return
           setPollingRunId('')
-          setActionError(apiMessage(error))
+          setActionError(`进度更新已中断，研究可能仍在后台进行。请刷新页面或从“最近研究”重新打开查看。（${apiMessage(error)}）`)
         })
         .finally(() => {
           busy = false
@@ -1798,7 +1798,7 @@ export default function App() {
         setBrowserPairingStatus(
           error instanceof BrowserBridgeError && error.code === 'unavailable'
             ? '当前 Chrome 页面没有检测到 ArchResearch 扩展；公开网页研究仍可继续。'
-            : '浏览器配对未完成，可能是配对码已过期。请重新连接。',
+            : '与 Chrome 的连接没有完成。请点击“连接 Chrome 读取高清图纸”重新连接。',
         )
       }
     } finally {
@@ -1829,7 +1829,7 @@ export default function App() {
     }
     if (browserConnected !== true) {
       if (requireConnected) {
-        setActionError('小红书研究需要登录页面。请先在 Chrome 登录小红书并连接 ArchResearch，再开始研究。')
+        setActionError('小红书研究需要已登录的小红书账号。请先在 Chrome 登录小红书并连接 ArchResearch，再开始研究。')
         return false
       }
       return true
@@ -1846,7 +1846,7 @@ export default function App() {
         setBrowserConnected(false)
         setPreflightBridgeStatus(null)
         if (requireConnected) {
-          setActionError('小红书研究需要登录页面。请先在 Chrome 登录小红书并连接 ArchResearch，再开始研究。')
+          setActionError('小红书研究需要已登录的小红书账号。请先在 Chrome 登录小红书并连接 ArchResearch，再开始研究。')
           return false
         }
         setBrowserPairingStatus('当前页面未检测到 Chrome 扩展；本次将继续研究公开网页，并跳过登录页面和当前页面的高清图纸读取。')
@@ -1855,7 +1855,7 @@ export default function App() {
       setActionError('无法向扩展确认网页读取权限。请在已安装扩展的 Chrome 中打开本页。')
       return false
     }
-    setActionError('Chrome 首次使用需要你确认网页读取权限。配对已经自动完成，无需填写配对码；请点击浏览器工具栏的 ArchResearch，选择“允许网页读取”，再回来开始研究。授权后不会每次重复询问。')
+    setActionError('Chrome 首次使用需要你确认网页读取权限。连接会自动完成，无需输入任何代码；请点击浏览器工具栏的 ArchResearch，选择“允许网页读取”，再回来开始研究。授权后不会每次重复询问。')
     return false
   }
 
@@ -2022,7 +2022,7 @@ export default function App() {
       setLastExport(exported)
       setAnnouncement(exportMode === 'private'
         ? `${isVisualResearch ? '图纸整理版' : '策略矩阵'}已生成`
-        : `${isVisualResearch ? '分享来源板' : '分享证据板'}已生成`)
+        : `${isVisualResearch ? '分享来源板' : '分享结果板'}已生成`)
       setShareSummaryOpen(false)
     } catch (error) {
       setActionError(`导出失败：${apiMessage(error)}`)
@@ -2294,7 +2294,7 @@ export default function App() {
   )
   const comparisonFocuses = [...new Set(selectedComparisonResults.map((result) => comparisonFocusLabels[result.assetType]))]
   const comparisonOverview = comparisonFocuses.length === 1
-    ? `这 ${selectedComparisonResults.length} 项都在回答“${comparisonFocuses[0]}”，重点比较可借鉴方法、可见观察和使用边界。`
+    ? `这 ${selectedComparisonResults.length} 项都在回答“${comparisonFocuses[0]}”，重点比较“可借鉴方法”“图中看到”和“适用条件”这几行。`
     : `这 ${selectedComparisonResults.length} 项分别覆盖“${comparisonFocuses.join('、')}”。它们更适合组合使用，而不是选一个“赢家”。`
   const recommendedComparisonResult = selectedComparisonResults[0]
   const activeStatus = activeRun?.status
@@ -2367,8 +2367,8 @@ export default function App() {
     disconnected: '连接 Chrome 后可读取小红书和当前页面高清图纸',
     'surface-missing': '当前页面未检测到扩展',
     'surface-disconnected': '当前页面扩展未连通',
-    permission: '读取页面高清图纸需授权',
-    ready: '可读取当前页面高清图纸 · 可检查小红书登录页面',
+    permission: '读取页面高清图纸需授权：点击浏览器工具栏的 ArchResearch，选择“允许网页读取”，再点“刷新”',
+    ready: '可读取当前页面高清图纸 · 在 Chrome 登录小红书后可搜索笔记',
   }[browserReadinessState]
   const showBrowserConnectAction = !browserReadinessLoading
     && (browserConnected !== true || !browserBridgeAvailable)
@@ -2649,7 +2649,7 @@ export default function App() {
                     <div className="research-preflight-actions">
                       {showBrowserConnectAction && (
                         <button type="button" disabled={browserConnecting} onClick={() => void handleConnectBrowser()}>
-                          <MonitorUp aria-hidden="true" />{browserConnecting ? '正在打开…' : '读取页面高清图纸'}
+                          <MonitorUp aria-hidden="true" />{browserConnecting ? '正在连接 Chrome…' : '连接 Chrome 读取高清图纸'}
                         </button>
                       )}
                       <button
@@ -2665,7 +2665,7 @@ export default function App() {
                   </header>
                   {(browserReadinessError || browserPairingStatus) && (
                     <p className="research-preflight-message" aria-live="polite">
-                      {browserReadinessError ? '连接状态未读取，请检查本地服务后重试。' : browserPairingStatus}
+                      {browserReadinessError ? '连接状态没有读取到。请点“刷新”重试；如果反复失败，请关闭并重新打开 ArchResearch。' : browserPairingStatus}
                     </p>
                   )}
                 </section>
@@ -2816,7 +2816,7 @@ export default function App() {
             <div className="drawing-recovery-actions">
               {browserConnected !== true && (
                 <button type="button" disabled={browserConnecting} onClick={() => void handleConnectBrowser()}>
-                  <MonitorUp aria-hidden="true" />{browserConnecting ? '正在打开 Chrome…' : '在 Chrome 中启用精确提取'}
+                  <MonitorUp aria-hidden="true" />{browserConnecting ? '正在打开 Chrome…' : '在 Chrome 中连接图纸提取扩展'}
                 </button>
               )}
               <button type="button" onClick={() => void refreshBrowserConnection()}>
@@ -2839,7 +2839,7 @@ export default function App() {
           activeRun && isRunActive ? (
             <section className="active-research-canvas" aria-label="研究正在进行">
               <header>
-                <span>{isVisualResearch ? '正在寻找图纸灵感' : '正在研究这个问题'}</span>
+                <span>{isVisualResearch ? '正在寻找图纸灵感 · 完成后结果会自动显示在这里' : '正在研究这个问题 · 完成后结果会自动显示在这里'}</span>
                 <h1>{activeRun.question}</h1>
                 <p>{activeStatus ? currentStageDescriptions[activeStatus] : isVisualResearch ? '正在准备灵感检索' : '正在准备研究任务'}</p>
               </header>
@@ -3405,7 +3405,7 @@ export default function App() {
               </button>}
               {isVisualResearch && <button aria-label="编辑图纸表达规范" aria-describedby="tool-style-help" type="button" onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setStyleProfileOpen(true) }}>
                 <Palette aria-hidden="true" />
-                <span><strong>编辑图纸表达规范</strong><small id="tool-style-help">手动设定配色、线型与字体，保存到本研究板</small></span>
+                <span><strong>编辑图纸表达规范</strong><small id="tool-style-help">手动设定配色、线宽与字体，保存到本研究板</small></span>
               </button>}
               {isVisualResearch ? (
                 <button aria-label="查看个人收藏" aria-describedby="tool-collection-help" type="button" onClick={(event) => void openPersonalCollections(event.currentTarget)}>
@@ -3415,12 +3415,12 @@ export default function App() {
               ) : (
                 <button aria-label="导出策略矩阵" aria-describedby="tool-private-export-help" type="button" disabled={privateExportDisabled} onClick={() => void handleExport('private')}>
                   <Download aria-hidden="true" />
-                  <span><strong>导出策略矩阵</strong><small id="tool-private-export-help">{selectedProjectCount < 2 ? `已选 ${selectedProjectCount} 个案例，还需选择 ${2 - selectedProjectCount} 个不同案例` : `比较 ${selectedProjectCount} 个案例的机制与边界`}</small></span>
+                  <span><strong>导出策略矩阵</strong><small id="tool-private-export-help">{selectedProjectCount < 2 ? `已选 ${selectedProjectCount} 个案例，还需选择 ${2 - selectedProjectCount} 个不同案例` : `把 ${selectedProjectCount} 个案例的核心解法与适用条件整理成一张对照表`}</small></span>
                 </button>
               )}
               <button aria-label={isVisualResearch ? '生成可分享来源板' : '生成可分享结果板'} aria-describedby="tool-share-export-help" type="button" disabled={comparisonIds.length === 0} onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setShareSummaryOpen(true) }}>
                 <Share2 aria-hidden="true" />
-                <span><strong>{isVisualResearch ? '生成可分享来源板' : '生成可分享结果板'}</strong><small id="tool-share-export-help">{isVisualResearch ? '受限图片只保留署名、来源与链接' : '整理已选案例的机制与做法'}</small></span>
+                <span><strong>{isVisualResearch ? '生成可分享来源板' : '生成可分享结果板'}</strong><small id="tool-share-export-help">{comparisonIds.length === 0 ? '先在上方结果中选中至少 1 项参考' : isVisualResearch ? '受限图片只保留署名、来源与链接' : '整理已选案例的核心解法与怎么做'}</small></span>
               </button>
             </div>
             {lastExport && (
@@ -3445,18 +3445,18 @@ export default function App() {
           <section className="collection-dock" aria-label="收藏选择">
             {collectionSaveSucceeded && selectedPendingCollectionCount === 0 ? (
               <div className="collection-dock-success" role="status">
-                <Check aria-hidden="true" /><strong>加入成功</strong>
+                <Check aria-hidden="true" /><strong>已加入个人收藏，可回到主页打开“个人收藏”查看</strong>
               </div>
             ) : (
               <>
                 <div className="collection-dock-summary">
-                  <strong>{isVisualResearch ? `已选 ${selectedPendingCollectionCount} 张图纸` : `已选 ${selectedPendingCollectionCount} 个项目案例`}</strong>
-                  <span>把真正能用的参考留到主页收藏</span>
+                  <strong>{isVisualResearch ? `已选 ${selectedPendingCollectionCount} 张图纸（最多 6 张）` : `已选 ${selectedPendingCollectionCount} 个项目案例（最多 6 个）`}</strong>
+                  <span>把真正能用的参考加入个人收藏，之后可在主页回看</span>
                 </div>
                 <div className="collection-dock-actions">
                   <button type="button" onClick={() => void clearResultSelection()}>清空选择</button>
                   {!isVisualResearch && (
-                    <button type="button" disabled={selectedProjectCount < 2} onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setComparisonOpen(true) }}>对照方法与边界</button>
+                    <button type="button" disabled={selectedProjectCount < 2} onClick={(event) => { overlayTriggerRef.current = event.currentTarget; setComparisonOpen(true) }}>对照案例策略</button>
                   )}
                   <button
                     className="collection-add"
@@ -3478,7 +3478,7 @@ export default function App() {
             <header className="panel-heading"><h2>表达规范</h2><button type="button" autoFocus onClick={closeOverlays}>关闭表达规范</button></header>
             <label htmlFor="style-primary-color">主色</label>
             <input id="style-primary-color" type="color" value={styleProfile.primaryColor} onChange={(event) => setStyleProfile((current) => ({ ...current, primaryColor: event.target.value }))} />
-            <label htmlFor="style-line-hierarchy">线型层级</label>
+            <label htmlFor="style-line-hierarchy">线宽层级</label>
             <select id="style-line-hierarchy" value={styleProfile.lineHierarchy} onChange={(event) => setStyleProfile((current) => ({ ...current, lineHierarchy: event.target.value as StyleDraft['lineHierarchy'] }))}>
               <option value="relative">相对层级</option><option value="contrast">强对比层级</option><option value="uniform">均一层级</option>
             </select>
@@ -3498,10 +3498,10 @@ export default function App() {
         )}
 
         {!isVisualResearch && comparisonOpen && (
-          <section className="floating-panel comparison-panel" role="dialog" aria-modal="true" aria-label="方法对照">
+          <section className="floating-panel comparison-panel" role="dialog" aria-modal="true" aria-label="对照案例策略">
             <header className="panel-heading">
-              <div><h2>方法对照</h2><p>比较这些参考怎样回答你的设计问题</p></div>
-              <button type="button" autoFocus onClick={closeOverlays}>关闭方法对照</button>
+              <div><h2>对照案例策略</h2><p>比较这些参考怎样回答你的设计问题</p></div>
+              <button type="button" autoFocus onClick={closeOverlays}>关闭案例策略对照</button>
             </header>
             <section className="comparison-guide" aria-labelledby="comparison-guide-title">
               <div>
@@ -3513,13 +3513,13 @@ export default function App() {
                 <div>
                   <span>建议先带回方案</span>
                   <h3>{recommendedComparisonResult.title}</h3>
-                  <p>先用它处理{comparisonFocusLabels[recommendedComparisonResult.assetType]}，再用其他参考校核相邻层级和使用边界。</p>
+                  <p>先用它处理{comparisonFocusLabels[recommendedComparisonResult.assetType]}，再用其他参考补上它没覆盖的方面，并对照各自的适用条件。</p>
                 </div>
               )}
             </section>
             <p className="comparison-scroll-hint">横向滑动查看各项参考 →</p>
             <div className="comparison-table-wrap">
-              <table className="comparison-table" aria-label="方法对照表">
+              <table className="comparison-table" aria-label="案例策略对照表">
                 <thead>
                   <tr>
                     <th scope="col">对照维度</th>
@@ -3544,7 +3544,7 @@ export default function App() {
                   <tr><th scope="row">解决什么</th>{selectedComparisonResults.map((result) => <td key={result.id}>{comparisonFocusLabels[result.assetType]}</td>)}</tr>
                   <tr><th scope="row">可借鉴方法</th>{selectedComparisonResults.map((result) => <td key={result.id}>{result.inference}</td>)}</tr>
                   <tr><th scope="row">图中看到</th>{selectedComparisonResults.map((result) => <td key={result.id}>{result.observation}</td>)}</tr>
-                  <tr><th scope="row">使用边界</th>{selectedComparisonResults.map((result) => <td key={result.id}>{firstUserFacingBoundary([result.limitation]) || '未列出'}</td>)}</tr>
+                  <tr><th scope="row">适用条件</th>{selectedComparisonResults.map((result) => <td key={result.id}>{firstUserFacingBoundary([result.limitation]) || '未列出'}</td>)}</tr>
                 </tbody>
               </table>
             </div>
@@ -3553,16 +3553,16 @@ export default function App() {
 
         {shareSummaryOpen && (
           <section className="floating-panel share-panel" role="dialog" aria-modal="true" aria-label="分享版导出摘要">
-            <h2>{isVisualResearch ? '分享版权利检查' : '生成分享结果'}</h2>
-            <p>{shareableCount} 张图片可嵌入</p>
+            <h2>{isVisualResearch ? '分享前的图片授权检查' : '生成分享结果'}</h2>
+            <p>{shareableCount} 张图片将直接放进分享版</p>
             {isVisualResearch ? <>
               <p>{comparisonIds.length - shareableCount} 项将改为来源卡</p>
               <p>来源卡保留项目、发布者、署名和原始链接，不复制受限图片。</p>
             </> : (
-              <p>{comparisonIds.length - shareableCount} 项只保留研究文字</p>
+              <p>{comparisonIds.length - shareableCount} 项因图片授权受限，分享版中只保留研究文字与来源</p>
             )}
             <button type="button" onClick={() => void handleExport('share')}>确认生成分享版</button>
-            <button type="button" autoFocus onClick={closeOverlays}>返回画板</button>
+            <button type="button" autoFocus onClick={closeOverlays}>暂不生成，返回结果</button>
           </section>
         )}
 

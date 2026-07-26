@@ -1521,7 +1521,7 @@ describe('research board', () => {
     const preflight = await screen.findByRole('region', { name: '研究环境' })
     expect(await within(preflight).findByText('研究环境待连接')).toBeVisible()
     expect(within(preflight).getByText('当前页面未检测到扩展')).toBeVisible()
-    expect(within(preflight).getByRole('button', { name: '读取页面高清图纸' })).toBeVisible()
+    expect(within(preflight).getByRole('button', { name: '连接 Chrome 读取高清图纸' })).toBeVisible()
     expect(within(preflight).queryByText('Chrome 图纸提取')).not.toBeInTheDocument()
   })
 
@@ -1548,7 +1548,7 @@ describe('research board', () => {
     renderBoard()
 
     const recentRun = await screen.findByRole('button', { name: `打开研究：${liveQuestion}` })
-    expect(within(recentRun).getByText('部分结果 · 当前自动补齐已到上限')).toBeVisible()
+    expect(within(recentRun).getByText('部分结果 · 本轮自动检索次数已用完，先交付当前可用结果')).toBeVisible()
     expect(screen.queryByText('budget_exhausted')).not.toBeInTheDocument()
     expect(screen.queryByText('insufficient_usable_assets')).not.toBeInTheDocument()
   })
@@ -1571,7 +1571,7 @@ describe('research board', () => {
     renderBoard()
 
     const recentRun = await screen.findByRole('button', { name: `打开研究：${liveQuestion}` })
-    expect(within(recentRun).getByText('部分结果 · 本轮图纸检查容量已用完')).toBeVisible()
+    expect(within(recentRun).getByText('部分结果 · 本轮可检查的图纸数量已达上限')).toBeVisible()
     expect(within(recentRun).queryByText('本轮研究达到时间上限')).not.toBeInTheDocument()
     expect(screen.queryByText('visual_budget_exhausted')).not.toBeInTheDocument()
   })
@@ -1707,7 +1707,7 @@ describe('research board', () => {
     await user.click(within(dossier).getByRole('button', { name: '选择案例 Live Mill Conversion' }))
     expect(within(dossier).getByRole('button', { name: '取消选择案例 Live Mill Conversion' })).toBePressed()
     const collectionDock = screen.getByRole('region', { name: '收藏选择' })
-    expect(within(collectionDock).getByText('已选 1 个项目案例')).toBeVisible()
+    expect(within(collectionDock).getByText('已选 1 个项目案例（最多 6 个）')).toBeVisible()
   })
 
   it('selects the same case independently per subquestion and clears every selection after saving', async () => {
@@ -1760,7 +1760,7 @@ describe('research board', () => {
     expect(firstButton).toBePressed()
     expect(secondButton).toBePressed()
     const collectionDock = screen.getByRole('region', { name: '收藏选择' })
-    expect(within(collectionDock).getByText('已选 2 个项目案例')).toBeVisible()
+    expect(within(collectionDock).getByText('已选 2 个项目案例（最多 6 个）')).toBeVisible()
     await user.click(within(collectionDock).getByRole('button', { name: '添加 2 项到个人收藏' }))
 
     await waitFor(() => {
@@ -1781,9 +1781,9 @@ describe('research board', () => {
     expect(JSON.parse(String((finalBoardPatch?.[1] as RequestInit).body))).toEqual({
       selected_asset_ids: [],
     })
-    expect(within(screen.getByRole('region', { name: '收藏选择' })).getByText('加入成功')).toBeVisible()
+    expect(within(screen.getByRole('region', { name: '收藏选择' })).getByText('已加入个人收藏，可回到主页打开“个人收藏”查看')).toBeVisible()
     await user.click(within(dossiers[0]).getByRole('button', { name: '选择案例 Live Mill Conversion' }))
-    expect(within(screen.getByRole('region', { name: '收藏选择' })).getByText('已选 1 个项目案例')).toBeVisible()
+    expect(within(screen.getByRole('region', { name: '收藏选择' })).getByText('已选 1 个项目案例（最多 6 个）')).toBeVisible()
   })
 
   it('shows a question judgment and two representative cases before the full evidence inventory', async () => {
@@ -2008,7 +2008,7 @@ describe('research board', () => {
     expect(await screen.findByText('研究环境待连接')).toBeVisible()
     expect(screen.getByText('连接 Chrome 后可读取小红书和当前页面高清图纸')).toBeVisible()
     expect(screen.queryByText('图纸提取未连接')).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: '读取页面高清图纸' }))
+    await user.click(screen.getByRole('button', { name: '连接 Chrome 读取高清图纸' }))
 
     expect(requestBrowserBridge).toHaveBeenNthCalledWith(2, { type: 'status' })
     expect(requestBrowserBridge).toHaveBeenNthCalledWith(3, {
@@ -2018,7 +2018,7 @@ describe('research board', () => {
     })
     expect(await screen.findByText('图纸提取扩展已连接', {}, { timeout: 2_000 })).toBeVisible()
     expect(within(await screen.findByRole('region', { name: '研究环境' })).getByText(
-      '读取页面高清图纸需授权',
+      '读取页面高清图纸需授权：点击浏览器工具栏的 ArchResearch，选择“允许网页读取”，再点“刷新”',
     )).toBeVisible()
     expect(screen.queryByText('731904')).not.toBeInTheDocument()
   })
@@ -2034,7 +2034,7 @@ describe('research board', () => {
 
     await screen.findByText('真实工作区')
     await user.click(screen.getByRole('button', { name: /图纸灵感.*配色、线型、版式与分析图/ }))
-    await user.click(await screen.findByRole('button', { name: '读取页面高清图纸' }))
+    await user.click(await screen.findByRole('button', { name: '连接 Chrome 读取高清图纸' }))
 
     expect(await screen.findByText(
       '已在 Chrome 打开本页；新页面会自动连接扩展。当前公开网页研究不受影响。',
@@ -2658,9 +2658,9 @@ describe('research board', () => {
     await startLiveResearch(user)
 
     expect(await screen.findByText('已交付部分结果')).toBeVisible()
-    expect(screen.getByRole('heading', { name: '当前自动补齐已到上限' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: '本轮自动检索次数已用完，先交付当前可用结果' })).toBeVisible()
     expect(screen.getByText('已保留 1 条可用项目证据，覆盖 1 个项目，其中 1 条已有来源依据。')).toBeVisible()
-    expect(screen.getByText('“标准”档位需要更多可用项目证据')).toBeVisible()
+    expect(screen.getByText('“标准”研究需要更多可用项目证据')).toBeVisible()
     expect(screen.getByText('可以继续查看现有结果；重试会开启新一轮研究，补找项目原文与来源依据。')).toBeVisible()
     expect(screen.queryByText('budget_exhausted')).not.toBeInTheDocument()
     expect(screen.queryByText('fewer_than_six_usable_assets')).not.toBeInTheDocument()
@@ -2934,7 +2934,7 @@ describe('research board', () => {
 
     await startVisualResearch(user)
 
-    expect(await screen.findByText('正在寻找图纸灵感')).toBeVisible()
+    expect(await screen.findByText('正在寻找图纸灵感 · 完成后结果会自动显示在这里')).toBeVisible()
     expect(screen.getByRole('heading', { name: '正在探索 3 个灵感方向' })).toBeVisible()
     expect(screen.queryByText(/证据问题/)).not.toBeInTheDocument()
     const progressDetails = screen.getByText('查看研究进度').closest('details')
@@ -3200,7 +3200,7 @@ describe('research board', () => {
 
     await user.click(screen.getByRole('button', { name: '选择案例 Live Mill Conversion' }))
     const collectionDock = screen.getByRole('region', { name: '收藏选择' })
-    expect(within(collectionDock).getByText('已选 1 个项目案例')).toBeVisible()
+    expect(within(collectionDock).getByText('已选 1 个项目案例（最多 6 个）')).toBeVisible()
     await user.click(within(collectionDock).getByRole('button', { name: '添加 1 项到个人收藏' }))
 
     expect(fetchMock).toHaveBeenCalledWith('/v1/results/asset-live/save', {
@@ -3209,12 +3209,12 @@ describe('research board', () => {
       body: JSON.stringify({ note: '', subquestion_ids: ['program'] }),
     })
     expect(fetchMock).toHaveBeenCalledWith('/v1/collections/collection-old', { method: 'DELETE' })
-    expect(within(collectionDock).getByText('加入成功')).toBeVisible()
-    expect(within(collectionDock).queryByText('已选 1 个项目案例')).not.toBeInTheDocument()
+    expect(within(collectionDock).getByText('已加入个人收藏，可回到主页打开“个人收藏”查看')).toBeVisible()
+    expect(within(collectionDock).queryByText('已选 1 个项目案例（最多 6 个）')).not.toBeInTheDocument()
     expect(within(collectionDock).queryByRole('button')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '选择案例 Courtyard Mill' }))
-    expect(within(collectionDock).getByText('已选 1 个项目案例')).toBeVisible()
+    expect(within(collectionDock).getByText('已选 1 个项目案例（最多 6 个）')).toBeVisible()
     expect(within(collectionDock).getByRole('button', { name: '添加 1 项到个人收藏' })).toBeEnabled()
   })
 
@@ -3240,7 +3240,7 @@ describe('research board', () => {
     expect(within(resultWorkbench).getByRole('button', { name: '导出策略矩阵' })).toBeDisabled()
     expect(within(resultWorkbench).getByRole('button', { name: '生成可分享结果板' })).toBeDisabled()
     expect(within(resultWorkbench).getAllByText('已选 0 个案例，还需选择 2 个不同案例')).toHaveLength(2)
-    expect(within(resultWorkbench).getByText('整理已选案例的机制与做法')).toBeVisible()
+    expect(within(resultWorkbench).getByText('先在上方结果中选中至少 1 项参考')).toBeVisible()
     expect(within(resultWorkbench).queryByRole('button', { name: '对照图纸表达' })).not.toBeInTheDocument()
     expect(within(resultWorkbench).queryByRole('button', { name: '编辑图纸表达规范' })).not.toBeInTheDocument()
     expect(within(resultWorkbench).queryByRole('button', { name: '导出个人灵感板' })).not.toBeInTheDocument()
@@ -3270,25 +3270,25 @@ describe('research board', () => {
     expect(within(resultWorkbench).queryByRole('button', { name: '对照案例策略' })).not.toBeInTheDocument()
     expect(within(resultWorkbench).queryByRole('button', { name: '导出策略矩阵' })).not.toBeInTheDocument()
     expect(within(resultWorkbench).queryByRole('button', { name: '生成可分享证据板' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: '方法对照选择' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('dialog', { name: '方法对照' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: '对照案例策略选择' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: '对照案例策略' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '加入对照' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '选择此图用于收藏' }))
     expect(screen.getByRole('button', { name: '取消收藏选择' })).toBePressed()
     expect(within(resultWorkbench).getByRole('button', { name: '生成可分享来源板' })).toBeEnabled()
     const collectionDock = screen.getByRole('region', { name: '收藏选择' })
-    expect(within(collectionDock).getByText('已选 1 张图纸')).toBeVisible()
+    expect(within(collectionDock).getByText('已选 1 张图纸（最多 6 张）')).toBeVisible()
     await user.click(within(collectionDock).getByRole('button', { name: '添加 1 项到个人收藏' }))
     expect(fetch).toHaveBeenCalledWith('/v1/results/asset-live/save', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ note: '' }),
     })
-    expect(within(collectionDock).getByText('加入成功')).toBeVisible()
+    expect(within(collectionDock).getByText('已加入个人收藏，可回到主页打开“个人收藏”查看')).toBeVisible()
     expect(screen.getByRole('button', { name: '选择此图用于收藏' })).not.toBePressed()
-    expect(screen.queryByRole('region', { name: '方法对照选择' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('dialog', { name: '方法对照' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: '对照案例策略选择' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: '对照案例策略' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '查看研究过程' })).not.toBeInTheDocument()
     expect(screen.queryByRole('dialog', { name: '研究过程记录' })).not.toBeInTheDocument()
   })
@@ -3304,7 +3304,7 @@ describe('research board', () => {
 
     await user.click(screen.getByRole('button', { name: '选择案例 Live Mill Conversion' }))
     await user.click(screen.getByRole('button', { name: '生成可分享结果板' }))
-    expect(screen.getByText('1 张图片可嵌入')).toBeVisible()
+    expect(screen.getByText('1 张图片将直接放进分享版')).toBeVisible()
     expect(
       fetchMock.mock.calls.filter(([path]) => path === '/v1/boards/board-live/exports'),
     ).toHaveLength(0)
@@ -3342,7 +3342,7 @@ describe('research board', () => {
     expect(within(stylePanel).getByRole('combobox', { name: '字体类别' })).toHaveValue('serif')
     expect(within(stylePanel).getByRole('combobox', { name: '纹理' })).toHaveValue('none')
     expect(within(stylePanel).getByRole('textbox', { name: '版式备注' })).toHaveValue('')
-    await user.selectOptions(within(stylePanel).getByRole('combobox', { name: '线型层级' }), 'uniform')
+    await user.selectOptions(within(stylePanel).getByRole('combobox', { name: '线宽层级' }), 'uniform')
     await user.selectOptions(within(stylePanel).getByRole('combobox', { name: '纹理' }), 'vellum')
     await user.type(within(stylePanel).getByRole('textbox', { name: '版式备注' }), '证据栏靠右，图组留白更大')
     await user.click(within(stylePanel).getByRole('button', { name: '保存表达规范' }))
@@ -3363,15 +3363,15 @@ describe('research board', () => {
     await user.selectOptions(screen.getByRole('combobox', { name: '图纸类型' }), 'all')
     await user.click(screen.getByRole('button', { name: '选择案例 Section Layers Replay' }))
     await user.click(screen.getByRole('button', { name: '选择案例 Layered Axon Replay' }))
-    await user.click(screen.getByRole('button', { name: '对照方法与边界' }))
-    const comparison = screen.getByRole('dialog', { name: '方法对照' })
+    await user.click(screen.getAllByRole('button', { name: '对照案例策略' })[0])
+    const comparison = screen.getByRole('dialog', { name: '对照案例策略' })
     expect(comparison).toBeVisible()
     expect(within(comparison).getByRole('heading', { name: '这组对照怎么看' })).toBeVisible()
-    expect(within(comparison).getByRole('table', { name: '方法对照表' })).toBeVisible()
+    expect(within(comparison).getByRole('table', { name: '案例策略对照表' })).toBeVisible()
     expect(within(comparison).getByRole('rowheader', { name: '解决什么' })).toBeVisible()
     expect(within(comparison).getByRole('rowheader', { name: '可借鉴方法' })).toBeVisible()
     expect(within(comparison).getByRole('rowheader', { name: '图中看到' })).toBeVisible()
-    expect(within(comparison).getByRole('rowheader', { name: '使用边界' })).toBeVisible()
+    expect(within(comparison).getByRole('rowheader', { name: '适用条件' })).toBeVisible()
     expect(within(comparison).queryByText(/来源|证据|核对|核验|正文|证明/)).not.toBeInTheDocument()
   })
 
