@@ -26,16 +26,16 @@
 
 ## 当前已验证基线
 
-- 分支 `codex/archresearch-v2-1`（未 push，push 需显式授权）。基线链：`98a9a01` → `d772902` 产品基线 → `06f3424` WMI-free 启停 → 此后逐里程碑小步提交（最近 `bb32390` 收藏累加保存）。
+- 分支 `codex/archresearch-v2-1`（未 push，push 需显式授权）。基线链：`98a9a01` → `d772902` 产品基线 → `06f3424` WMI-free 启停 → 此后逐里程碑小步提交。
 - 权威门禁 `scripts/verify.ps1`：**342 API / 135 Board / 165 Extension / 8 packaged E2E**，加 Ruff/format、strict Mypy、两端 lint/typecheck/build、进程/安全/评测检查。PowerShell 5 会吞中间失败，脚本末行成功文案不能单独作为证明。
 - 进程脚本必须保持无 WMI/CIM（MSIX pwsh 加载 MMI 失败会杀掉自己拉起的服务）：监听发现用 `netstat -ano`，命令行读 PEB。
-- 持久数据基线：**4 workspaces / 13 completed Runs / active 0 / `keep_forever` 13/13 / 301 assets / 8 条收藏 / 1 份任务书**。其中《城市社区共享中心》8 问全部 completed 零缺口（M137）；`76f52c79`（三档验收 Deep）与 `ff16988d`（任务书 Standard）是现行验收声明的底层证据，不是失败记录。
+- 持久数据基线：**4 workspaces / 15 Runs（13 条 permanent + 2 条模拟试点 Run，14 天保留）/ active 0 / 11 条收藏（含 3 条模拟产物）/ 1 份任务书**。《城市社区共享中心》8 问全部 completed 零缺口（M137）；`76f52c79`（三档验收 Deep）与 `ff16988d`（任务书 Standard）是现行验收声明的底层证据，不是失败记录。模拟产物去留待用户决定。
 - 服务：`scripts/start.ps1` 幂等启动 API 8000 / Board 5173，登录自启已配置（M127）。
 - 本工作区由多个 agent 会话并发写入（长期约束）：提交前后必须重读 `git status`，另一会话仍在写同名文件时暂停提交。
 
 ## 当前唯一主线
 
-1. **M121 已 complete**（2026-07-27 用户改为多 agent 模拟验收）：记录在 `docs/m121-simulated-pilot-2026-07-27.md`。修复队列：M148 提交反馈加固（当轮，in_progress）→ M149 五项 P1（结论错位/保存入口/等待计数/保留提醒/案例供给）→ M150 六项重复 P2 文案与结构。图纸灵感线与任务书路径修复后需补定向模拟。
+1. **M121 已 complete**（2026-07-27 用户改为多 agent 模拟验收）：记录在 `docs/m121-simulated-pilot-2026-07-27.md`。M148 提交反馈加固已 complete。修复队列：**M149 五项 P1**（结论错位先做工程诊断/保存入口/等待计数/保留提醒/案例供给）→ M150 六项重复 P2 文案与结构 → 图纸灵感线与任务书路径的定向补充模拟。
 2. M122 表征后模块化（表征已完成，见 `docs/m122-extraction-map.md`；styles 拆分必须测试契约先行）→ M123 可重复发布收口（CI 草案已就绪未验证、干净机器证明、刷新发布证据；`docs/release-evidence-2026-07-16.md` 与 8 张旧 PNG 引用已删 Run，留在 Git 外等 M123 一并处置）。
 
 ## 工作区保护

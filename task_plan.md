@@ -54,7 +54,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 
 代码交付内不伪造的外部验收（需要用户资源或真人参与）：
 
-- M121 真实用户试点：2–3 名目标用户按 `docs/m121-pilot-kit.md` 观察（已取代早期"六名学生可用性研究"的提法）。
+- ~~M121 真实用户试点~~：2026-07-27 用户决定改为多 agent 模拟验收并已完成（见 `docs/m121-simulated-pilot-2026-07-27.md`）；真人观察不再是门槛，工具包条款保留备查。
 - 30 条版本化任务的真实网页批量执行与人工标注：主动启用、会产生费用。
 - 100+ 独立来源、权利清晰的真实图纸样本（当前 108 张为确定性合成夹具）。
 
@@ -62,41 +62,20 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 
 ## Completion roadmap
 
-当前持久基线：**4 workspaces / 13 completed Runs / active 0 / `keep_forever` 13/13 / 301 assets / 8 条收藏 / 1 份任务书**。当前权威门禁：**342 API / 131 Board / 165 Extension / 8 packaged E2E** 加 Ruff/format、strict Mypy、两端 lint/typecheck/build、进程/安全/评测检查（`scripts/verify.ps1`）。
+当前持久基线：**4 workspaces / 15 Runs（13 permanent + 2 条 14 天保留的模拟试点 Run）/ active 0 / 11 条收藏（8 + 3 条模拟产物）/ 1 份任务书**。当前权威门禁：**342 API / 135 Board / 165 Extension / 8 packaged E2E** 加 Ruff/format、strict Mypy、两端 lint/typecheck/build、进程/安全/评测检查（`scripts/verify.ps1`）。
 
 | Delivery target | Estimated completion | Remaining gate |
 |---|---:|---|
 | Local single-user V2.1 | 95% | 目标用户验证（M121）、可维护性表征（M122）。 |
 | Portfolio / supervised demonstration | 90% | 把发布证据刷新到最终源码状态（M123）。 |
-| Small closed beta | 88% | 完成 2–3 人试点并形成严重度矩阵与覆盖阈值。 |
+| Small closed beta | 90% | 落实 M149/M150 试点修复；补测图纸灵感线与任务书路径。 |
 | Public repeatable release | 70% | CI、干净机器安装/更新证明、授权后的版本化发布（M123）。 |
 
-执行顺序保持 M121 → M122 → M123；任何由试点产生的修复先定义单独的 behavior-first 里程碑再动代码。
+执行顺序：M149（五项 P1）→ M150（六项重复 P2）→ 图纸灵感线与任务书路径的定向补充模拟 → M122 → M123。任何修复先定义单独的 behavior-first 里程碑再动代码。
 
-### M121 real-target-user pilot execution plan
+### M121 试点执行计划（已完成，2026-07-27 模拟验收）
 
-**Assumptions and scope**
-
-- Planning is approved; participant recruitment and observation require the user's coordination. No product implementation is implied by this plan.
-- Use 2–3 architecture students or young designers with a current studio/project context. Record only de-identified task wording and observations; do not capture credentials, private source material or screenshots.
-- Participants initiate any research themselves. Keep active Runs at 0 before and after each session, never retry a failed or sealed Run, and never use Run `10d31b4c-94dd-4442-b24a-fc1b241e658e`.
-- 任务脚本、会话时间轴、记录表与主持人边界以 `docs/m121-pilot-kit.md` 为准。
-
-**Severity and decision gate**
-
-- P0: data loss, unsafe action, credential/privacy exposure or irreversible corruption.
-- P1: cannot finish a core task, materially misleading evidence/completion claim or repeated wrong-mode submission.
-- P2: task finishes only with help, major navigation confusion or repeated comprehension failure.
-- P3: isolated wording, density or polish issue that does not block the task.
-- Propose one bounded repair phase only for any P0/P1 finding, or for the same P2 pattern observed in at least two participants. Record one-off P2/P3 findings without implementation.
-- M121 becomes complete only after all 2–3 participants and their tasks are documented with a severity/frequency matrix. If no repair threshold is met, the next proposed phase is M122; if a threshold is met, define one behavior-first repair milestone before any code change.
-
-**Acceptance**
-
-- Participant/task coverage and every observation field are complete and de-identified.
-- A ranked finding matrix links each issue to concrete tasks and participant frequency; no conclusion relies on one anecdote alone unless it is P0/P1.
-- Active stays 0 outside participant-created attempt-0 Runs; no sealed Run is retried.
-- No Firecrawl, screenshot, automatic Live Run, reset, checkout, clean or push occurs.
+任务脚本、判据、记录表与 P0–P3 分级以 `docs/m121-pilot-kit.md` 为准；本轮执行方式、评分矩阵、缺陷清单与模拟局限见 `docs/m121-simulated-pilot-2026-07-27.md` 及逐字 JSON。后续任何补充模拟轮沿用同一套判据与"persona 与评审分离"的方法。
 
 ### M107 real-brief fixture (still the deterministic brief contract)
 
