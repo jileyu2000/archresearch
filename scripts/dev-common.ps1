@@ -98,6 +98,151 @@ function Resolve-WorkspaceRuntime {
     }
 }
 
+function Initialize-ProcessInterop {
+    if ("ArchResearchProcessInterop" -as [type]) {
+        return
+    }
+
+    Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+
+public static class ArchResearchProcessInterop
+{
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ProcessBasicInformation
+    {
+        public IntPtr Reserved1;
+        public IntPtr PebBaseAddress;
+        public IntPtr Reserved2_0;
+        public IntPtr Reserved2_1;
+        public IntPtr UniqueProcessId;
+        public IntPtr Reserved3;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct UnicodeString
+    {
+        public ushort Length;
+        public ushort MaximumLength;
+        public IntPtr Buffer;
+    }
+
+    [DllImport("ntdll.dll")]
+    private static extern int NtQueryInformationProcess(
+        IntPtr processHandle,
+        int processInformationClass,
+        ref ProcessBasicInformation processInformation,
+        int processInformationLength,
+        out int returnLength);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr OpenProcess(int access, bool inheritHandle, int processId);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CloseHandle(IntPtr handle);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ReadProcessMemory(
+        IntPtr processHandle,
+        IntPtr baseAddress,
+        IntPtr buffer,
+        IntPtr size,
+        out IntPtr bytesRead);
+
+    private const int ProcessQueryInformation = 0x0400;
+    private const int ProcessVmRead = 0x0010;
+
+    private static IntPtr Read(IntPtr process, IntPtr address, int size)
+    {
+        IntPtr buffer = Marshal.AllocHGlobal(size);
+        IntPtr read;
+        if (!ReadProcessMemory(process, address, buffer, (IntPtr)size, out read) ||
+            read.ToInt64() != size)
+        {
+            Marshal.FreeHGlobal(buffer);
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+        return buffer;
+    }
+
+    public static string GetCommandLine(int processId)
+    {
+        IntPtr process = OpenProcess(ProcessQueryInformation | ProcessVmRead, false, processId);
+        if (process == IntPtr.Zero)
+        {
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+
+        try
+        {
+            ProcessBasicInformation info = new ProcessBasicInformation();
+            int returned;
+            int status = NtQueryInformationProcess(process, 0, ref info, Marshal.SizeOf(info), out returned);
+            if (status != 0)
+            {
+                throw new InvalidOperationException("NtQueryInformationProcess failed with status " + status + ".");
+            }
+
+            int pointerSize = IntPtr.Size;
+            // PEB.ProcessParameters lives at 0x20 on 64-bit and 0x10 on 32-bit.
+            int parametersOffset = pointerSize == 8 ? 0x20 : 0x10;
+            IntPtr parametersBuffer = Read(process, info.PebBaseAddress + parametersOffset, pointerSize);
+            IntPtr parameters;
+            try
+            {
+                parameters = pointerSize == 8
+                    ? (IntPtr)Marshal.ReadInt64(parametersBuffer)
+                    : (IntPtr)Marshal.ReadInt32(parametersBuffer);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(parametersBuffer);
+            }
+
+            // RTL_USER_PROCESS_PARAMETERS.CommandLine lives at 0x70 on 64-bit and 0x40 on 32-bit.
+            int commandLineOffset = pointerSize == 8 ? 0x70 : 0x40;
+            IntPtr unicodeBuffer = Read(
+                process,
+                parameters + commandLineOffset,
+                Marshal.SizeOf(typeof(UnicodeString)));
+            UnicodeString unicode;
+            try
+            {
+                unicode = (UnicodeString)Marshal.PtrToStructure(unicodeBuffer, typeof(UnicodeString));
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(unicodeBuffer);
+            }
+
+            if (unicode.Length == 0 || unicode.Buffer == IntPtr.Zero)
+            {
+                return string.Empty;
+            }
+
+            IntPtr textBuffer = Read(process, unicode.Buffer, unicode.Length);
+            try
+            {
+                return Marshal.PtrToStringUni(textBuffer, unicode.Length / 2);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(textBuffer);
+            }
+        }
+        finally
+        {
+            CloseHandle(process);
+        }
+    }
+}
+'@
+}
+
 function Get-TcpListeningProcessIds {
     param(
         [Parameter(Mandatory = $true)]
@@ -105,10 +250,27 @@ function Get-TcpListeningProcessIds {
         [int]$Port
     )
 
-    Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue |
-        Where-Object { $_.LocalAddress -in @("127.0.0.1", "::1") } |
-        ForEach-Object { [int]$_.OwningProcess } |
-        Sort-Object -Unique
+    $loopbackEndpoints = @("127.0.0.1:$Port", "[::1]:$Port")
+    $unconnectedEndpoints = @("0.0.0.0:0", "[::]:0", "*:*")
+
+    $processIds = foreach ($row in @(& netstat.exe -ano)) {
+        $fields = -split $row.Trim()
+        if ($fields.Count -lt 5 -or $fields[0] -ne "TCP") {
+            continue
+        }
+        if ($loopbackEndpoints -notcontains $fields[1] -or
+            $unconnectedEndpoints -notcontains $fields[2]) {
+            continue
+        }
+
+        $processId = 0
+        if (-not [int]::TryParse($fields[4], [ref]$processId) -or $processId -le 0) {
+            continue
+        }
+        $processId
+    }
+
+    @($processIds) | Sort-Object -Unique
 }
 
 function Get-ProcessCommandLine {
@@ -118,8 +280,8 @@ function Get-ProcessCommandLine {
     )
 
     try {
-        $record = Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId" -ErrorAction Stop
-        return [string]$record.CommandLine
+        Initialize-ProcessInterop
+        return [ArchResearchProcessInterop]::GetCommandLine($ProcessId)
     }
     catch {
         return $null

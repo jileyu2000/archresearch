@@ -10,8 +10,7 @@ function Wait-Listener {
     )
 
     foreach ($attempt in 1..40) {
-        $listener = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue
-        if ($null -ne $listener) {
+        if (@(Get-TcpListeningProcessIds -Port $Port).Count -gt 0) {
             return
         }
         Start-Sleep -Milliseconds 100
@@ -25,8 +24,9 @@ function Stop-TestListener {
         [int]$Port
     )
 
-    Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue |
-        ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
+    foreach ($processId in @(Get-TcpListeningProcessIds -Port $Port)) {
+        Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
+    }
 }
 
 $workspace = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
@@ -113,6 +113,16 @@ try {
         throw "The test must reproduce a launcher PID that differs from its listening child PID."
     }
 
+    $listenerCommandLine = Get-ProcessCommandLine -ProcessId $listenerIds[0]
+    if ([string]::IsNullOrWhiteSpace($listenerCommandLine)) {
+        throw "The listening child command line must be readable without WMI."
+    }
+    if (-not (Test-CommandLineReferencesWorkspace `
+        -CommandLine $listenerCommandLine `
+        -WorkspaceRoot $workspace)) {
+        throw "The listening child command line must reference the workspace."
+    }
+
     $outsideIds = @(Get-WorkspaceListeningProcessIds -WorkspaceRoot $workspace -Port $outsidePort)
     if ($outsideIds.Count -ne 0) {
         throw "A listener whose command line does not reference the workspace must be ignored."
@@ -123,11 +133,18 @@ try {
         throw "Only the workspace-owned listening child should be stopped."
     }
     Start-Sleep -Milliseconds 250
-    if ($null -ne (Get-NetTCPConnection -State Listen -LocalPort $workspacePort -ErrorAction SilentlyContinue)) {
+    if (@(Get-TcpListeningProcessIds -Port $workspacePort).Count -ne 0) {
         throw "Workspace listener is still running."
     }
-    if ($null -eq (Get-NetTCPConnection -State Listen -LocalPort $outsidePort -ErrorAction SilentlyContinue)) {
+    if (@(Get-TcpListeningProcessIds -Port $outsidePort).Count -eq 0) {
         throw "Unrelated listener was stopped."
+    }
+
+    $devCommonScript = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot "..\dev-common.ps1")
+    foreach ($wmiDependency in @("Get-CimInstance", "Get-WmiObject", "Get-NetTCPConnection")) {
+        if ($devCommonScript.Contains($wmiDependency)) {
+            throw "dev-common.ps1 must not depend on WMI through $wmiDependency."
+        }
     }
 
     $startScript = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot "..\start.ps1")
