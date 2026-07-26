@@ -154,7 +154,7 @@
 79. 遗留证据不一致：`docs/release-evidence-2026-07-16.md` 冻结的三个 accepted run 里，`7d8faa53` 与 `b4c314a6` 的底层数据已删除，`.artifacts/portfolio/` 对应的 8 张 PNG 只剩截图。该文档与 10 张 PNG 均未纳入 Git，处置推迟到 M123 刷新发布证据时一并决定，不要当作当前有效证据引用。
 
 80. M130–M135 已完成结果与收藏的答案优先阅读收口、旧深度不足 Run 的定向删除（当前基线 3 projects / 9 Runs / 9 completed / active 0 / `keep_forever` 9/9）、单文档栏全局版式（`--layout-doc-max` 共享规则 + design-system 契约）、全触点白话文案（词汇统一 + `copy-glossary.test.ts` 源码级守卫封禁 18 个废弃词）与章节结论不复读规则。当前权威门禁为 **341 API / 123 Board / 165 Extension / 8 packaged E2E**。文案词汇表已定稿：怎么做 / 适用条件 / 核心解法 / 对照案例策略 / 连接 Chrome 读取高清图纸 / 转载合集（非首发）/ 备份与恢复；废弃词见 `apps/board/src/copy-glossary.test.ts`。
-81. M121 观察工具包已提交至 `docs/pilot/m121-observation-kit.md`（10 个按序任务、去身份化记录表、会后 5 问、P0–P3 处置阈值、硬边界）。**当前唯一下一步：用户招募 2–3 名真实目标用户后按该工具包执行 M121 试点观察**；观察期间不得自动创建 Live Run、不得截图。M122 模块化按既定顺序排在试点之后。
+81. M121 观察工具包已提交至 `docs/m121-pilot-kit.md`（10 个按序任务、去身份化记录表、会后 5 问、P0–P3 处置阈值、硬边界）。**当前唯一下一步：用户招募 2–3 名真实目标用户后按该工具包执行 M121 试点观察**；观察期间不得自动创建 Live Run、不得截图。M122 模块化按既定顺序排在试点之后。
 
 ## 工作区保护
 
