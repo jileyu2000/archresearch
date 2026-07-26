@@ -395,6 +395,7 @@ class EvidenceClaimRead(EvidenceClaimCreate):
 
 
 class SubquestionAssetAnalysis(BaseModel):
+    project_name_zh: str = ""
     project_context: str = ""
     design_mechanism: str = ""
     transfer_strategy: list[str] = Field(default_factory=list)
@@ -490,6 +491,7 @@ class SavedReferenceCaseImage(BaseModel):
 class SavedReferenceCaseSubquestion(BaseModel):
     id: str
     question: str
+    project_name_zh: str = ""
     project_context: str = ""
     design_mechanism: str = ""
     transfer_strategy: list[str] = Field(default_factory=list)

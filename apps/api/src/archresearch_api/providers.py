@@ -317,6 +317,7 @@ class PublicPageSupportedFact(BaseModel):
 
 class PublicPageAnalysis(BaseModel):
     relevance: int = Field(ge=0, le=4)
+    project_name_zh: str = Field(default="", max_length=200)
     drawing_ids: list[str] = Field(default_factory=list, max_length=4)
     project_context: str = Field(default="", max_length=2_000)
     design_mechanism: str = Field(default="", max_length=2_000)
@@ -918,6 +919,9 @@ class OpenAIResearchProvider:
                     "limitations，留给运行级综合处理。不要因为没有平面、剖面或精准配图而清空"
                     "正文支持的项目条件、设计机制或转译步骤。不要求 page_text 逐张描述图片，"
                     "但不能把未读取的图像像素写成事实。"
+                    "project_name_zh 给出该项目通行的简体中文名称（如 ArchDaily 中文版使用的译名；"
+                    "无通行译名时给出简洁准确的直译）。它是展示用翻译标签，不作为来源事实；"
+                    "原名已是中文或无法确定时留空。"
                     f"当前研究强度要求：{requirement_instructions}\n"
                     f"研究子问题：{question.strip()[:1_000]}\n"
                     f"来源 URL：{source_url}\n"

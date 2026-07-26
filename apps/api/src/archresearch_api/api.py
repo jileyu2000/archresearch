@@ -288,7 +288,12 @@ def _collection_case_subquestions(
         limitations = analysis.get("limitations", [])
         item: dict[str, object] = {
             "id": subquestion_id,
-            "question": question_by_id.get(subquestion_id, "未记录具体案例子问题"),
+            "question": question_by_id.get(subquestion_id, "未记录具体研究子问题"),
+            "project_name_zh": (
+                analysis.get("project_name_zh", "")
+                if isinstance(analysis.get("project_name_zh"), str)
+                else ""
+            ),
             "project_context": analysis.get("project_context", ""),
             "design_mechanism": analysis.get("design_mechanism", ""),
             "transfer_strategy": transfer_strategy if isinstance(transfer_strategy, list) else [],

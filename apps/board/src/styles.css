@@ -1975,6 +1975,17 @@ h3 {
   font-size: var(--font-base);
 }
 
+/* The original (usually English) project name stays visible as a quiet
+   reference line under the Chinese display name. */
+.case-answer-original-name {
+  margin: 2px 0 0;
+  color: var(--color-ink-secondary);
+  font-size: var(--font-sm);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-title);
+  overflow-wrap: anywhere;
+}
+
 /* One quiet provenance link per case: it opens the source page without
    bringing back verification copy or the inspector. */
 .case-answer-source,

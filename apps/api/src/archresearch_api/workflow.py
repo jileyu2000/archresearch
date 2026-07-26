@@ -3480,6 +3480,12 @@ def _persist_public_page_analysis(
                 if isinstance(branch.get("design_mechanism"), str)
                 else ""
             )
+            incoming_project_name_zh = (getattr(analysis, "project_name_zh", "") or "").strip()
+            branch["project_name_zh"] = incoming_project_name_zh or (
+                branch.get("project_name_zh")
+                if isinstance(branch.get("project_name_zh"), str)
+                else ""
+            )
             for field, incoming in (
                 ("transfer_strategy", supported_transfer),
                 ("limitations", analysis.limitations),

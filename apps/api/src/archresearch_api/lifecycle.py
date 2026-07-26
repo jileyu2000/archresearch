@@ -75,9 +75,7 @@ def cleanup_expired_data(
                 )
             )
         )
-        kept_asset_ids = select(AssetCandidate.id).where(
-            AssetCandidate.run_id.in_(kept_run_ids)
-        )
+        kept_asset_ids = select(AssetCandidate.id).where(AssetCandidate.run_id.in_(kept_run_ids))
         expired_claims = list(
             session.scalars(
                 select(EvidenceClaim).where(

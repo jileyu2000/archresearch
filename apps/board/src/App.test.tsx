@@ -1593,6 +1593,31 @@ describe('research board', () => {
     expect(await screen.findByRole('button', { name: '取消研究' })).toBeVisible()
   })
 
+  it('leads cases with a Chinese project name and keeps the original as reference', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', createLiveFetch({
+      existingRunStatus: 'completed',
+      candidateOverrides: {
+        subquestion_analysis: {
+          program: {
+            project_name_zh: '利物浦磨坊改造',
+            project_context: '旧厂房保留主结构。',
+            design_mechanism: '新公共层穿过原有框架，通过竖向交通核连接首层与上部空间。',
+            transfer_strategy: ['先标出现有结构不可改动范围'],
+            observations: [],
+            limitations: ['需要核对现有结构承载力。'],
+          },
+        },
+      },
+    }))
+    renderBoard()
+
+    await user.click(await screen.findByRole('button', { name: `打开研究：${liveQuestion}` }))
+    const dossier = await screen.findByRole('article', { name: '代表案例 利物浦磨坊改造' })
+    expect(within(dossier).getByRole('heading', { level: 4, name: '利物浦磨坊改造' })).toBeVisible()
+    expect(within(dossier).getByText('Live Mill Conversion')).toBeVisible()
+  })
+
   it('opens a completed record normally while background research is running', async () => {
     const user = userEvent.setup()
     vi.stubGlobal('fetch', createLiveFetch({

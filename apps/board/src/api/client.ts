@@ -158,6 +158,7 @@ export interface ApiEvidenceClaim {
 }
 
 export interface ApiSubquestionAnalysis {
+  project_name_zh?: string
   project_context?: string
   design_mechanism?: string
   transfer_strategy?: string[]
@@ -250,6 +251,7 @@ export interface PersonalCollectionCaseEvidence {
 export interface PersonalCollectionCaseSubquestion {
   id: string
   question: string
+  project_name_zh?: string
   project_context: string
   design_mechanism: string
   transfer_strategy: string[]

@@ -73,6 +73,7 @@ type WorkResult = EvidenceResult & {
 }
 
 type ResultAnalysis = {
+  projectNameZh: string
   projectContext: string
   designMechanism: string
   transferStrategy: string[]
@@ -685,6 +686,7 @@ function toWorkResult(candidate: ApiAssetCandidate): WorkResult {
       Object.entries(candidate.subquestion_analysis ?? {}).map(([id, analysis]) => [
         id,
         {
+          projectNameZh: (analysis.project_name_zh ?? '').trim(),
           projectContext: chineseText(
             analysis.project_context,
             legacyAnalysis.projectContext,
@@ -877,6 +879,7 @@ function analysisFor(result: WorkResult, subquestionId: string) {
   const scoped = result.subquestionAnalysis[subquestionId]
   const limitations = scoped?.limitations.length ? scoped.limitations : [result.limitation]
   return {
+    projectNameZh: scoped?.projectNameZh?.trim() ?? '',
     projectContext: scoped?.projectContext.trim() || result.projectContext,
     designMechanism: scoped?.designMechanism.trim() || result.designMechanism,
     transferStrategy: scoped?.transferStrategy.length ? scoped.transferStrategy : result.transferStrategy,
@@ -3203,9 +3206,11 @@ export default function App() {
                         // so that one case does not read the same sentence twice in a row.
                         const mechanismIsChapterConclusion = dossierIndex === 0
                           && dossier.analysis.designMechanism.trim() === group.questionSummary?.statement
+                        const originalProject = userFacingProjectName(dossier.project)
+                        const chineseProject = dossier.analysis.projectNameZh
                         const selectionKey = collectionSelectionKey(dossier.primary.id, caseSubquestionId)
                         const caseSelected = collectionSelections.some((item) => item.key === selectionKey)
-                        const displayProject = userFacingProjectName(dossier.project)
+                        const displayProject = chineseProject || originalProject
                         const actions = uniqueSummaryItems(dossier.analysis.transferStrategy, 3)
                         const previewResult = dossier.assets.find((result) => (
                           Boolean(availablePreviewUrl(result, failedPreviewUrls))
@@ -3222,6 +3227,9 @@ export default function App() {
                           <header className="dossier-heading case-answer-heading">
                             <div>
                               <h4 className="case-answer-title">{displayProject}</h4>
+                              {chineseProject && chineseProject !== originalProject && (
+                                <p className="case-answer-original-name">{originalProject}</p>
+                              )}
                               {identityLine && <p>{identityLine}</p>}
                             </div>
                             <button
@@ -3696,7 +3704,9 @@ export default function App() {
                               <ul className="collection-architecture-list">
                                 {group.entries.map(({ item, analysis }) => {
                                   const snapshot = item.snapshot
-                                  const projectName = userFacingProjectName(snapshot.project_name || '未命名项目')
+                                  const originalName = userFacingProjectName(snapshot.project_name || '未命名项目')
+                                  const chineseName = (analysis.project_name_zh ?? '').trim()
+                                  const projectName = chineseName || originalName
                                   const designMechanism = analysis.design_mechanism.trim()
                                   const solutionSteps = uniqueSummaryItems(analysis.transfer_strategy, 3)
                                   const boundary = firstUserFacingBoundary(analysis.limitations)
@@ -3708,6 +3718,9 @@ export default function App() {
                                         <header className="collection-case-heading">
                                           <div className="collection-case-title">
                                             <h4>{projectName}</h4>
+                                            {chineseName && chineseName !== originalName && (
+                                              <p className="case-answer-original-name">{originalName}</p>
+                                            )}
                                           </div>
                                           <div className="collection-text-actions">
                                             <button type="button" aria-label={`删除收藏：${projectName}`} title="删除收藏" onClick={() => void deletePersonalCollection(item.id)}>

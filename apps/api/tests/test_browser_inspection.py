@@ -109,6 +109,7 @@ class AnalyzingPageProvider(SingleBatchProvider):
         return PublicPageAnalysis(
             relevance=4,
             drawing_ids=[drawings[0].drawing_id],
+            project_name_zh="服务入口示范馆",
             project_context="项目将服务入口设置在东侧。",
             design_mechanism="将后勤入口与公众入口分置在建筑两侧。",
             transfer_strategy=["在总平面先标出两类入口。", "用独立服务廊道连接后台。"],
@@ -3620,6 +3621,7 @@ def test_collected_project_page_analysis_enriches_the_evidence_card_without_web_
     assert candidate.subquestion_analysis["program"]["design_mechanism"] == (
         "将后勤入口与公众入口分置在建筑两侧。"
     )
+    assert candidate.subquestion_analysis["program"]["project_name_zh"] == "服务入口示范馆"
     assert set(candidate.subquestion_analysis) == {"program", "circulation", "section"}
     assert len(facts) == 1
     assert facts[0].source_url == project_url
