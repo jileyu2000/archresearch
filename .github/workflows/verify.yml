@@ -1,0 +1,66 @@
+# M123 draft: reproduces the established local gate (scripts/verify.ps1) in CI.
+# Unvalidated until the repository is first pushed — treat the first CI run as
+# part of M123 acceptance, not as an already-proven gate. No provider keys are
+# required: every default test uses mock/local fixtures.
+name: verify
+
+on:
+  push:
+    branches: [main, 'codex/**']
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: apps/api/pyproject.toml
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Enable pnpm 11 via corepack
+        shell: pwsh
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.7.0 --activate
+          pnpm --version
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pnpm\store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+
+      - name: Prepare environment file
+        shell: pwsh
+        run: Copy-Item .env.example .env
+
+      - name: Setup workspace (venv, api deps, pnpm install, extension build)
+        shell: pwsh
+        run: ./scripts/setup.ps1
+
+      # windows-latest ships Chrome stable, which the packaged MV3 E2E uses
+      # through Playwright's persistent context.
+      - name: Run the full repository gate
+        shell: pwsh
+        run: ./scripts/verify.ps1
+
+      - name: Upload test artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-logs
+          path: |
+            apps/api/pytest*.xml
+            apps/board/test-results
+            apps/extension/test-results
+          if-no-files-found: ignore
