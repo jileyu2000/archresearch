@@ -1579,6 +1579,20 @@ describe('research board', () => {
     expect(screen.queryByText('visual_budget_exhausted')).not.toBeInTheDocument()
   })
 
+  it('opens on the home page while background research keeps running', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', createLiveFetch({ existingRunStatus: 'searching' }))
+    renderBoard()
+
+    expect(await screen.findByRole('heading', { name: '从一个卡住你的地方开始' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: '取消研究' })).not.toBeInTheDocument()
+    const recentResearch = await screen.findByRole('region', { name: '最近研究' })
+    expect(await within(recentResearch).findByText('正在搜索')).toBeVisible()
+
+    await user.click(within(recentResearch).getByRole('button', { name: `打开研究：${liveQuestion}` }))
+    expect(await screen.findByRole('button', { name: '取消研究' })).toBeVisible()
+  })
+
   it('restores the latest persisted run after the user opens it', async () => {
     const user = userEvent.setup()
     vi.stubGlobal('fetch', createLiveFetch({ existingRunStatus: 'completed' }))
@@ -2338,10 +2352,13 @@ describe('research board', () => {
   })
 
   it('hides project management while a historical run is active', async () => {
+    const user = userEvent.setup()
     const { fetchMock, releaseHydration } = createWorkspaceRaceFetch()
     vi.stubGlobal('fetch', fetchMock)
     renderBoard()
 
+    const recentResearch = await screen.findByRole('region', { name: '最近研究' })
+    await user.click(await within(recentResearch).findByRole('button', { name: '打开研究：仍在运行的旧任务' }))
     expect(await screen.findByRole('status')).toHaveTextContent('正在搜索')
     expect(screen.queryByRole('button', { name: /切换研究项目/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '新建项目' })).not.toBeInTheDocument()
@@ -2400,6 +2417,8 @@ describe('research board', () => {
     vi.stubGlobal('fetch', fetchMock)
     renderBoard()
 
+    const recentResearch = await screen.findByRole('region', { name: '最近研究' })
+    await user.click(await within(recentResearch).findByRole('button', { name: '打开研究：旧工作区正在研究的任务' }))
     expect(await screen.findByRole('status')).toHaveTextContent('正在搜索')
     await waitFor(() => {
       expect(fetchMock.mock.calls.some(([input]) => String(input) === '/v1/runs/run-polling')).toBe(true)

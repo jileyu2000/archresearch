@@ -1083,6 +1083,11 @@ export default function App() {
   const overlayTriggerRef = useRef<HTMLElement | null>(null)
   const questionInputRef = useRef<HTMLTextAreaElement | null>(null)
   const hydrateRequestRef = useRef(0)
+  const activeRunIdRef = useRef('')
+
+  useEffect(() => {
+    activeRunIdRef.current = activeRun?.id ?? ''
+  }, [activeRun])
   const chromeConnectRequested = useMemo(
     () => new URLSearchParams(window.location.search).get('connect') === 'chrome',
     [],
@@ -1491,16 +1496,11 @@ export default function App() {
           - Date.parse(first.updatedAt ?? first.createdAt ?? '')
         ))
         setRecentRuns(runs)
+        // Research is a background process: opening the app never hijacks the
+        // view into a running run. The run stays a live row in 最近研究 and is
+        // polled quietly so its status keeps moving; opening it is a click.
         const latest = runs.find((run) => !terminalStatuses.has(run.status))
-        if (!latest) return
-        if (latest.workspaceId && latest.workspaceId !== activeWorkspaceId) {
-          window.localStorage.setItem(activeWorkspaceStorageKey, latest.workspaceId)
-          setActiveWorkspaceId(latest.workspaceId)
-        }
-        setActiveRun(latest)
-        setAnnouncement(runAnnouncement(latest))
-        setComposerOpen(false)
-        if (active) setPollingRunId(latest.id)
+        if (latest && active) setPollingRunId(latest.id)
       })
       .catch((error) => {
         if (active) setActionError(apiMessage(error))
@@ -1524,21 +1524,28 @@ export default function App() {
         .getRun(pollingRunId)
         .then(async (nextRun) => {
           if (hydrateRequestRef.current !== requestId) return
-          setActiveRun(nextRun)
+          const watching = activeRunIdRef.current === nextRun.id
           updateRecentRun(nextRun)
-          setAnnouncement(runAnnouncement(nextRun))
+          if (watching) {
+            setActiveRun(nextRun)
+            setAnnouncement(runAnnouncement(nextRun))
+          }
           if (terminalStatuses.has(nextRun.status)) {
             setPollingRunId('')
-            await hydrateRun(
-              nextRun.id,
-              () => hydrateRequestRef.current === requestId,
-            )
+            if (watching) {
+              await hydrateRun(
+                nextRun.id,
+                () => hydrateRequestRef.current === requestId,
+              )
+            }
           }
         })
         .catch((error) => {
           if (hydrateRequestRef.current !== requestId) return
           setPollingRunId('')
-          setActionError(`进度更新已中断，研究可能仍在后台进行。请刷新页面或从“最近研究”重新打开查看。（${apiMessage(error)}）`)
+          if (activeRunIdRef.current === pollingRunId) {
+            setActionError(`进度更新已中断，研究可能仍在后台进行。请刷新页面或从“最近研究”重新打开查看。（${apiMessage(error)}）`)
+          }
         })
         .finally(() => {
           busy = false
