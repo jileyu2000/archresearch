@@ -136,9 +136,14 @@ describe('responsive design-system rules', () => {
     expect(styles).not.toMatch(/\.result-task-heading\s*\{[^}]*max-width:\s*1100px/)
   })
 
-  it('caps every conclusion block at a reading measure', () => {
-    expect(styles).toMatch(/\.synthesis-primary li\s*\{[^}]*max-width:\s*64ch/)
-    expect(styles).toMatch(/\.synthesis-boundary\s*\{[^}]*max-width:\s*64ch/)
+  it('lets text-only result blocks fill the document column', () => {
+    expect(styles).not.toMatch(/\.result-task-heading h1\s*\{[^}]*max-width:\s*34ch/)
+    expect(styles).not.toMatch(/\.research-synthesis > header\s*\{[^}]*max-width:\s*78ch/)
+    expect(styles).not.toMatch(/\.synthesis-primary li\s*\{[^}]*max-width:\s*64ch/)
+    expect(styles).not.toMatch(/\.synthesis-boundary\s*\{[^}]*max-width:\s*64ch/)
+    expect(styles).toMatch(
+      /\.synthesis-primary\[data-answer-only="true"\]\s*\{[^}]*max-width:\s*none/,
+    )
     expect(styles).toMatch(/\.collection-question-heading h2\s*\{[^}]*max-width:\s*40ch/)
     expect(styles).toMatch(/\.collection-case-heading h4\s*\{[^}]*max-width:\s*40ch/)
     expect(styles).toMatch(/\.case-answer-heading h4\s*\{[^}]*max-width:\s*40ch/)
@@ -172,11 +177,14 @@ describe('responsive design-system rules', () => {
     )
   })
 
-  it('lets imageless case answers use the full reading measure', () => {
+  it('lets imageless case answers fill the document column', () => {
     expect(styles).toMatch(
-      /\.case-answer-layout:not\(\[data-has-image="true"\]\) \.case-answer-mechanism[^{]*\{[^}]*max-width:\s*72ch/,
+      /\.case-answer-layout:not\(\[data-has-image="true"\]\) \.case-answer-mechanism[^{]*\{[^}]*max-width:\s*none/,
     )
-    expect(styles).toMatch(/\.case-chapter-heading h3\s*\{[^}]*max-width:\s*64ch/)
+    expect(styles).not.toMatch(/\.case-chapter-heading h3\s*\{[^}]*max-width:\s*64ch/)
+    expect(styles).toMatch(
+      /\.collection-case-layout:not\(:has\(\.collection-case-media\)\) \.collection-case-solution\s*\{[^}]*max-width:\s*none/,
+    )
   })
 
   it('stacks applicability labels above their text at body size', () => {
