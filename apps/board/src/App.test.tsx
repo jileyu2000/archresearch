@@ -3310,7 +3310,10 @@ describe('research board', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ note: '', subquestion_ids: ['program'] }),
     })
-    expect(fetchMock).toHaveBeenCalledWith('/v1/collections/collection-old', { method: 'DELETE' })
+    expect(fetchMock).not.toHaveBeenCalledWith('/v1/collections/collection-old', { method: 'DELETE' })
+    expect(
+      fetchMock.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === 'DELETE'),
+    ).toBe(false)
     expect(within(collectionDock).getByText('已加入个人收藏，可回到主页打开“个人收藏”查看')).toBeVisible()
     expect(within(collectionDock).queryByText('已选 1 个项目案例（最多 6 个）')).not.toBeInTheDocument()
     expect(within(collectionDock).queryByRole('button')).not.toBeInTheDocument()

@@ -1863,6 +1863,12 @@
 - 用户指出章节大句与"案例研究结果"区头分不清问题与结论。章节编号从裸数字改为「子问题 N」标记（待归组组改"待归组"），栅格列 32px→auto。真实页面显示 子问题 1/2/3。
 - Board 132/132、lint/typecheck 绿；翻译映射表存 scratchpad（不入库不入 Git）。
 
+## M145 additive collection saving and eaten-item recovery
+
+- 用户报告"收藏了、修了几次之后收藏页东西没了"，怀疑功能坏或代码重置。数据轨迹澄清：所有代码修复轮都未触碰收藏（每次操作前后计数已验证）；真实原因是 M93 的"同题新批替换旧批"设计——7/23 保存的耕织图收藏 `f71144ab` 在用户 7/27 01:26 保存 3 条同题新收藏的同一时刻被产品按设计删除。
+- 语义改为累加：保存新批次绝不删除任何既有收藏（含同题旧批），删除只由用户逐项执行。红灯为反转既有替换契约（保存后不得发出任何 DELETE），移除 superseded/removedCollections 逻辑后转绿。PRODUCT.md 与 architecture.md 的替换条款同步改写。
+- 被吃掉的 `f71144ab` 从 M131 备份救回（删除发生在该备份之后）：停服插回行（模式/存在性断言）、其资产 c2139894 仍存活、重启后 saved_references=8。Board 131/131、lint/typecheck 绿。
+
 ## M144 husk-run deletion
 
 - 用户批准删除四条资产不可恢复的空壳 Run（d995bed5/a2cf2e20/d13bdc67/58f4b9f9）。按 M131 流程：先做全量产品备份（55,382,928 B，.artifacts/archresearch-backup-before-husk-delete.zip）；停服后用 `lifecycle.delete_runs` 删除，脚本带四重前置断言（目标存在、目标资产为 0 确系空壳、与保护名单零重叠、保护名单删除前后完整）。

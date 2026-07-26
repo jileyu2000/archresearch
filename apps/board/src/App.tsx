@@ -1250,16 +1250,8 @@ export default function App() {
     setCollectionSaving(true)
     setActionError('')
     try {
-      const currentCollections = activeWorkspaceId
-        ? await apiClient.listPersonalCollections(activeWorkspaceId)
-        : personalCollections
-      const currentQuestion = activeRun?.question.trim()
-      const superseded = currentQuestion
-        ? currentCollections.filter((item) => (
-            item.snapshot.question?.trim() === currentQuestion
-            && item.snapshot.goal === activeRun?.goal
-          ))
-        : []
+      // Saving is additive: a new batch never deletes earlier saved items,
+      // even for the same question. Removal is always the user's own action.
       const savedItems: PersonalCollection[] = []
       for (const resultId of pendingIds) {
         if (rejectedIds.includes(resultId)) {
@@ -1276,22 +1268,10 @@ export default function App() {
           subquestionIds.length > 0 ? subquestionIds : undefined,
         ))
       }
-      const savedItemIds = new Set(savedItems.map((item) => item.id))
-      const removedCollections = superseded.filter((item) => !savedItemIds.has(item.id))
-      await Promise.all(removedCollections.map((item) => apiClient.deletePersonalCollection(item.id)))
-      const supersededAssetIds = new Set(superseded.map((item) => item.asset_candidate_id))
-      setSavedIds((current) => [
-        ...new Set([
-          ...current.filter((id) => !supersededAssetIds.has(id)),
-          ...pendingIds,
-        ]),
-      ])
+      setSavedIds((current) => [...new Set([...current, ...pendingIds])])
       setPersonalCollections((current) => [
         ...savedItems,
-        ...current.filter((item) => (
-          !removedCollections.some((oldItem) => oldItem.id === item.id)
-          && !savedItems.some((saved) => saved.id === item.id)
-        )),
+        ...current.filter((item) => !savedItems.some((saved) => saved.id === item.id)),
       ])
       setCollectionSelections([])
       setComparisonIds([])
