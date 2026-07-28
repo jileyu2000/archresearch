@@ -6,7 +6,7 @@
 
 ## 证据边界
 
-本清单只记录可由当前源码、当前本地 API 和隔离安装环境复核的证据。本轮没有创建或重试 Live Run，没有调用 Provider、公开来源或小红书，也没有恢复备份。Hosted CI 需在用户授权 push 后才能产生远端运行记录；本清单不把本地验证写成已运行的 GitHub Actions。
+本清单只记录可由当前源码、当前本地 API、隔离安装环境和公开 GitHub Actions 日志复核的证据。本轮没有创建或重试 Live Run，没有调用 Provider、公开来源或小红书，也没有恢复备份。
 
 2026-07-16 的旧清单和 10 张旧界面图已保留在 `docs/history/release-evidence-2026-07-16.md` 与 `.artifacts/portfolio/history-2026-07-16/`，只作历史材料。其三个底层 Run 已按用户确认删除，不再作为当前发布证明。
 
@@ -55,4 +55,6 @@
 
 `.github/workflows/verify.yml` 使用 Windows latest、Python 3.12、Node 24、frozen setup、根 coverage 和权威 verify，并声明 `workflow_dispatch` 与 `contents: read`。默认 CI 不需要 live provider key。
 
-当前本地发布验证完成，但没有 stage、commit、push 或创建 GitHub Release。远端 CI、版本 tag 和公开发布仍需用户单独授权。
+公开仓库 `jileyu2000/archresearch` 已建立。Hosted CI run `30332351557` 验证 Chromium 环境修复，run `30333320610` 验证发布记录落点；两轮都通过 setup、Playwright Chromium 安装、Board/Extension coverage 与完整 `scripts/verify.ps1`，最终日志明确为 348 API / 177 Board / 165 Extension / 8 packaged E2E 全绿。默认 CI 未使用 live provider key。
+
+当前唯一未完成的发布动作是创建 `v2.1.0` tag 和 GitHub Release；备份 ZIP、本地数据库与 API Key 均不进入公开仓库或 Release 附件。
