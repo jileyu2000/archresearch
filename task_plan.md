@@ -55,6 +55,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | M154 publish V2.1.0 | complete | 公开仓库 `jileyu2000/archresearch`、README/About/topics 与发布素材已就绪，备份 ZIP/数据库/Key 均未入库。CI 环境差异已逐项红绿修复；Windows Hosted CI 对最终 tag 落点 `2a92539` 通过 Chromium 安装、coverage、348 API / 177 Board / 165 Extension / 8 packaged E2E 及完整静态/类型/构建门禁。annotated tag `v2.1.0` 已推送，面向访客的正式 GitHub Release 已发布且无本地附件。 |
 | M155 evidence-grounded agent boundaries | complete | `agent/planning.py`、`execution.py`、`verification.py` 与 `synthesis.py` 已按红绿合同形成明确边界；七阶段 orchestrator、API/schema、checkpoint、取消/恢复、查询预算、gap 补查、失败保留与 evidence-bound 双门槛不变。完整门禁 360 API / 177 Board / 165 Extension / 8 packaged E2E 全绿；durable 为 4/15/13 permanent/0 active/14 collections/2 inputs。 |
 | M156 competition GitHub presentation and publish | complete | GitHub 访客页覆盖场景价值、Agent 架构、工作流/工具、创新、完成度、访问方式、3 个测试问题和人机协同边界；architecture/demo 文档同步四模块、双门槛和现行三档。公开产品提交 `010eceb` 已推送 `main`；本地完整门禁与 Hosted CI `30362938145` 均通过 360/177/165/8，durable 仍为 4/15/13 permanent/0 active/14 collections/2 inputs。 |
+| M157 project-first GitHub presentation | in_progress | 把竞赛要求仅作为信息组织参考，README 恢复为 ArchResearch 的长期通用项目主页；删除参赛、投稿和评审专属定位，保留目标用户、痛点、场景价值、Agent 架构、人机协同、完成度、截图、安装、演示和验证入口。仅修改公开文档与规划记录，审查、完整门禁和 Hosted CI 通过后发布。 |
 
 ## External acceptance gates
 
@@ -93,6 +94,13 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 2. GitHub 访客页 → 验证：首屏能回答“解决什么问题、谁使用、怎样运行”；架构与七阶段 evidence-grounded 工作流、截图、安装/演示、数据与安全边界均可从目录直接到达。
 3. 发布安全 → 验证：公开 diff 不含 Key、数据库、备份 ZIP 或本地路径泄露；链接与图片有效，Markdown 可读。
 4. 发布门禁 → 验证：M155 独立审查无功能回归，`scripts/verify.ps1` 全绿，durable 基线不变；仅显式 stage 本轮文件，提交、推送后 Hosted CI 通过。
+
+### M157 验收合同
+
+1. 长期项目定位 → 验证：README 不再把仓库或展示页描述为参赛、投稿、评审或专门为竞赛准备；“建筑竞赛”仅可作为真实用户使用场景出现。
+2. 信息完整 → 验证：目标用户、真实痛点、使用场景、实际价值、Evidence-Grounded Plan-and-Execute 架构、人机协同、完成度、截图、安装、演示和测试入口继续保留。
+3. 外科范围 → 验证：不改生产代码、测试合同、架构或 durable 数据；公开差异不含凭据、数据库、备份 ZIP 或无关文件。
+4. 发布门禁 → 验证：Markdown 链接与图片有效，`git diff --check` 和独立 diff 审查通过；完整离线门禁通过后显式 stage，推送 `main` 并等待 Hosted CI 成功。
 
 ### M121 试点执行计划（已完成，2026-07-27 模拟验收）
 

@@ -777,3 +777,19 @@
 - 16 个显式产品/公开文档路径经 staged diff、敏感信息和禁止文件扫描后提交为 `010eceb`，推送到 `origin/main`；`.archresearch`、备份、凭据和三份规划记录未进入该提交。
 - Hosted CI run `30362938145` 于 14 分 22 秒后 success：clean setup、Chromium、coverage、25 tasks / 108 samples、360 API / 177 Board / 165 Extension / 8 packaged E2E 与完整静态/类型/构建门禁全部通过。
 - M156 complete；当前唯一下一步是提交本次 HANDOFF/规划闭合记录并等待该记录提交的 Hosted CI，产品代码不再修改。
+
+## M157 长期项目主页定位启动
+
+- 用户明确 README 不应把 ArchResearch 描述成专为竞赛制作的投稿页面；竞赛要求只作为介绍结构参考，公开页面必须在脱离竞赛语境后仍然成立。
+- 恢复时本地 `HEAD` 与 `origin/main` 均为 `c13182d`，工作树干净；Hosted CI `30364437489` 为 success，360 API / 177 Board / 165 Extension / 8 packaged E2E 基线已闭合。
+- 本轮唯一实现范围是 README 的项目定位、维度表头、版本称谓和访问/演示措辞；保留真实的建筑竞赛使用场景以及全部能力、边界、安装、截图和测试入口，不改生产代码或 durable 数据。
+- README 已删除海之子杯、投稿方向、评审跳转、100 字作品简介和参赛版本等专属措辞，改为“项目定位 / 项目维度 / 当前版本 / 访问与演示 / 最短体验路径”；定向扫描确认 `参赛|投稿|评审` 等专属词为零。
+- “建筑竞赛/竞赛”只在项目定位和目标用户两处作为真实使用场景保留；Agent 架构、能力、限制、安装、截图、三档演示和测试问题均未删除。
+- README 独立 diff 审查确认改动只涉及公开定位与演示措辞，没有修改安装命令、架构、能力合同、数据边界或测试数字。仓库没有现成的 README 本地链接检查脚本，本轮将使用只读解析检查全部本地链接/图片目标。
+- 首次只读链接汇总因 PowerShell 变量名 `$matches` 与自动匹配变量冲突，只影响显示的总数，不影响文件；改用独立变量并加入标题锚点检查后，27 个 Markdown 目标中 20 个唯一本地文件/图片和 1 个内部锚点全部有效，缺失为 0。
+- 发布前范围审查通过：`git diff --check` exit 0；仅 README、task plan、findings、progress 四个 Markdown 文件发生变化，staged 0。新增行的凭据模式、本机绝对路径、`.archresearch`、`.env`、数据库和 ZIP 扫描均为 0。
+- 首次全量门禁调用的前台工具超时设为 1 秒，约 5 秒后返回 124，未取得验证结论；进程复核发现同一时刻启动的 `pwsh` PID 84712 仍在运行，因此不重复启动第二套门禁，先等待并识别该进程的完成状态。
+- 为 PID 84712 建立退出码监视时，该进程已在监视器接管前结束，因原 stdout/进程句柄随超时调用丢失，无法把这次运行认定为成功或失败。下一次改用隐藏后台 wrapper，将 stdout/stderr 和最终 exit code 写入系统临时目录并短间隔轮询；这是不同的可观测执行方式。
+- 隐藏后台 wrapper 的启动命令被执行环境策略在运行前拒绝，未产生新的验证进程或项目文件。改用工具自带的可续接执行单元运行长门禁，以保留输出和真实 exit code。
+- 可续接执行单元中的完整 `scripts/verify.ps1` 最终 exit 0，耗时 314.2 秒：360 API / 177 Board / 165 Extension / 8 packaged E2E 全绿，Ruff/format、strict Mypy、两端 lint/typecheck/test/build、进程、安全和 25 tasks / 108 samples 评测夹具检查均通过；未调用真实模型或创建研究任务。
+- 门禁后工作区仍只有 README、task plan、findings、progress 四个预期 Markdown 文件，`git diff --check` exit 0；最终逐行 diff 审查确认公开页面只改变定位措辞，规划记录只登记 M157 决策、错误与验收证据。

@@ -513,3 +513,10 @@
 - 版本化任务的权威数量是 25：`research_tasks.jsonl` 实际 25 行、fixture README 与 `validate-evaluation-fixtures.ps1` 合同均为 25。README、architecture 和 demo 文档中的既有“30 条”均是过时陈述，发布前统一修正。
 - 公开完成度以现有可复核证据表述：360 API / 177 Board / 165 Extension / 8 packaged E2E；实时研究所需 Provider、浏览器权限、小红书登录态、单活限制与图片权利降级必须与能力一同呈现。
 - 公开产品提交 `010eceb` 的 Hosted CI `30362938145` 在 fresh Windows runner 通过 setup、Chromium、前端 coverage 和完整仓库门禁；日志明确为 25 条 fixture、360 API、177 Board、165 Extension、8 packaged E2E 与 `All ArchResearch checks passed.`。
+
+## 2026-07-28 M157 长期项目主页定位
+
+- 用户明确：GitHub README 是 ArchResearch 的长期通用项目主页，即使不参加竞赛也会公开发布；竞赛要求只用于帮助组织目标用户、痛点、场景价值、技术方案、人机协同、完成度和访问方式，不能成为仓库定位。
+- 当前 README 的“参赛定位”、海之子杯/投稿方向/评审跳转、“作品简介（100 字内）”、“技术说明模板要求”、“当前参赛版本”和“评审访问与演示”会让访客误解项目专为竞赛制作，必须改为普通项目语言。
+- “课程设计、建筑竞赛或毕业设计”是产品的真实使用场景，不属于竞赛投稿定位，应保留；Agent 四模块、截图、安装、演示、测试问题和已知边界也都继续保留。
+- 本轮不需要改架构、产品代码或运行功能；验收重点是公开表达、Markdown 完整性、敏感信息边界和发布后 Hosted CI。
