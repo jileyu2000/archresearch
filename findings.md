@@ -475,3 +475,4 @@
 - Hosted CI run `30330946581` 已把失败范围缩到环境准备：348 API、177 Board、165 Extension、coverage、lint、typecheck 与 build 均通过；packaged Extension E2E 的 2 个入口因 `ms-playwright/chromium-1228/.../chrome.exe` 不存在而失败，其余 6 项未运行。E2E 实际使用 Playwright Chromium，不使用 runner 自带的系统 Chrome。
 - 最小修复是在 workspace setup 后显式执行 `pnpm --dir apps/extension exec playwright install chromium`；发布合同必须锁定该步骤，防止后续工作流注释或 runner 镜像假设再次掩盖真实依赖。
 - Hosted CI run `30332351557` 最终全绿：Chromium 安装成功，coverage 通过，完整门禁明确输出 348 API 与 8 packaged E2E 通过；作业总耗时 16 分 58 秒。CI 注释只剩 GitHub Actions 运行时的 Node 20 弃用提示，不影响仓库 Node 24 测试面，也不是本次发布阻塞。
+- 最终 tag 落点 `2a92539` 的 Hosted CI run `30334270656` 全绿；annotated tag `v2.1.0` 已推送，正式 Release 为非 draft、非 prerelease，且 assets 为空。GitHub 自动源码包只来自公开 Git tree，不包含被忽略的备份、数据库或凭据。

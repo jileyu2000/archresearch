@@ -732,3 +732,6 @@
 - 完整 `scripts/verify.ps1` exit 0，耗时 183.1 秒：348 API / 177 Board / 165 Extension / 8 packaged E2E 全绿，Ruff/format、strict Mypy、lint/typecheck/build、进程、安全和评测检查全部通过。下一步收窄为提交两处 CI 修复并等待 Hosted CI。
 - 两处 CI 修复以提交 `133b186` 推送到 `origin/main`；只显式 stage 工作流与发布合同，备份 ZIP 和规划记录未进入该提交。
 - Hosted CI run `30332351557` 于 16 分 58 秒后 exit 0：Chromium 安装、coverage、完整门禁均成功；日志明确为 348 API、8 packaged E2E 和 `All ArchResearch checks passed.`。当前唯一下一步是提交发布记录、等待最终 CI，再创建 `v2.1.0` tag/Release。
+- 发布记录提交 `dbb3411` 与证据时态修正 `2a92539` 均已推送；tag 落点 Hosted CI run `30334270656` 在 11 分 56 秒后全绿。
+- annotated tag `v2.1.0` 已推送并精确指向 `2a92539`；正式 Release `ArchResearch v2.1.0` 已发布，非 draft/非 prerelease、无自定义 assets。首次 `gh release view` 请求了当前 CLI 不支持的 `isLatest` 字段，按 CLI 返回的可用字段重跑后完成核验。
+- M154 已完成；当前无剩余发布动作。

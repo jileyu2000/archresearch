@@ -51,8 +51,8 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | M152 targeted visual/task-brief simulation | complete | 4 个 persona 在隔离 loaded UI 上完成图纸灵感与任务书路径。V1、B1、B2 全部核心判据通过；V2 能找到收藏图但不能解释与原问题/方向的关系，核心 T7 失败。两条任务书有效 Run 均 `completed/coverage_satisfied / 12 usable / 4 projects / 4/4`；浏览器 error 0；M152 未写 durable 数据。归档：`docs/m152-targeted-simulation-2026-07-27.md` + 逐字 JSON。产出 3 项 P1 与 4 项 2/2 重复 P2，进入 M153。 |
 | M153 targeted-simulation repair batch | complete | 3 项 P1 + 4 项重复 P2 均按行为红灯后最小实现收口：独立幂等 default-workspace 入口保留普通同名创建；默认 Mock 为 context/mechanism 写确定性逐字摘录且 live provider 不自证；视觉收藏新存/旧快照都投影原问题与方向；结果解释 5 张去重图与 7 次方向关联；XHS/Chrome 职责、唯一图片 accessible name、任务书文件名均完成。desktop/390px loaded QA 无溢出、error 0；权威门禁 348 API / 141 Board / 165 Extension / 8 packaged E2E 全绿，durable 基线不变。 |
 | M122 behavior characterization and bounded modularization | complete | 8/8 片全部完成：coverage 基线与硬阈值、8 个纯模块、11 个视图组件、`useBrowserReadiness()`、Run payload reducer、`useRunHydration()` 与 `useRunPolling()` 均按红绿合同抽出。`App.tsx` 4,089→1,752 行；Board 177 tests、覆盖率 80.01/75.75/84.77/83.80，完整门禁 348/177/165/8；请求世代、后台轮询、终态水合、页面行为及 durable 基线不变。 |
-| M123 repeatable release closure | complete | CI 合同已补手动触发、只读权限与根 coverage；API / Board / Extension / manifest 统一为 2.1.0。隔离 fresh setup/start/update、备份只读预检与 8001/5174 HTTP 200 均通过；当前发布证据已刷新，旧清单与 10 张旧 PNG 全部归档保留。最终门禁 348/177/165/8、coverage 80.01/75.75/84.77/83.80 与 82.69/76.52/83.96/84.73；durable 基线未变。Hosted CI、tag 与公开发布仍需显式授权。 |
-| M154 publish V2.1.0 | in_progress | 公开仓库 `jileyu2000/archresearch` 已建立，README/About/topics 与发布素材已就绪，备份 ZIP 未入库。CI 环境兼容问题已逐项红绿修复；Hosted run `30332351557` 在 Windows fresh runner 上通过 Chromium 安装、coverage、348 API / 177 Board / 165 Extension / 8 packaged E2E 及完整静态/类型/构建门禁。唯一剩余动作是以通过最终 CI 的提交创建 `v2.1.0` tag 和面向访客的 GitHub Release。 |
+| M123 repeatable release closure | complete | CI 合同已补手动触发、只读权限与根 coverage；API / Board / Extension / manifest 统一为 2.1.0。隔离 fresh setup/start/update、备份只读预检与 8001/5174 HTTP 200 均通过；当前发布证据已刷新，旧清单与 10 张旧 PNG 全部归档保留。最终门禁 348/177/165/8、coverage 80.01/75.75/84.77/83.80 与 82.69/76.52/83.96/84.73；durable 基线未变。当时尚待授权的 Hosted CI、tag 与公开发布已由 M154 完成。 |
+| M154 publish V2.1.0 | complete | 公开仓库 `jileyu2000/archresearch`、README/About/topics 与发布素材已就绪，备份 ZIP/数据库/Key 均未入库。CI 环境差异已逐项红绿修复；Windows Hosted CI 对最终 tag 落点 `2a92539` 通过 Chromium 安装、coverage、348 API / 177 Board / 165 Extension / 8 packaged E2E 及完整静态/类型/构建门禁。annotated tag `v2.1.0` 已推送，面向访客的正式 GitHub Release 已发布且无本地附件。 |
 
 ## External acceptance gates
 
@@ -73,9 +73,9 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | Local single-user V2.1 | 100% | 当前本地功能与门禁已收口。 |
 | Portfolio / supervised demonstration | 100% | 当前源码、三条可核对 Run 与 desktop/mobile loaded QA 已形成发布证据。 |
 | Small closed beta | 100% | 当前本地基线无剩余 M153 行为门槛。 |
-| Public repeatable release | 98% | 公开仓库与 Hosted CI 已闭合；只剩 `v2.1.0` tag 和 GitHub Release。 |
+| Public repeatable release | 100% | `v2.1.0` tag、GitHub Release、公开源码与 Hosted CI 均已闭合。 |
 
-执行顺序：M154；提交当前发布记录并等待最终 Hosted CI，全绿后创建 `v2.1.0` tag/Release。
+执行顺序：M154 已完成；当前无剩余发布动作，后续仅按用户提出的新目标立项。
 
 ### M121 试点执行计划（已完成，2026-07-27 模拟验收）
 

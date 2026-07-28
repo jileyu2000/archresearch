@@ -57,4 +57,4 @@
 
 公开仓库 `jileyu2000/archresearch` 已建立。Hosted CI run `30332351557` 验证 Chromium 环境修复，run `30333320610` 验证发布记录落点；两轮都通过 setup、Playwright Chromium 安装、Board/Extension coverage 与完整 `scripts/verify.ps1`，最终日志明确为 348 API / 177 Board / 165 Extension / 8 packaged E2E 全绿。默认 CI 未使用 live provider key。
 
-当前唯一未完成的发布动作是创建 `v2.1.0` tag 和 GitHub Release；备份 ZIP、本地数据库与 API Key 均不进入公开仓库或 Release 附件。
+annotated tag `v2.1.0` 指向已验证提交 `2a92539`，正式 Release 已发布于 `https://github.com/jileyu2000/archresearch/releases/tag/v2.1.0`。Release 无自定义附件；备份 ZIP、本地数据库与 API Key 均未进入公开仓库或 GitHub 自动生成的源码包。
