@@ -30,6 +30,7 @@ from fastapi import (
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy import select
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session, selectinload
 from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
@@ -39,6 +40,7 @@ from .browser import BrowserBroker
 from .config import Settings
 from .database import Database
 from .models import (
+    RUN_RETENTION_DAYS,
     AssetCandidate,
     InputArtifact,
     ReferenceBoard,
@@ -98,6 +100,9 @@ from .workspace_backup import (
 from .xiaohongshu import XiaohongshuSearch
 
 router = APIRouter(prefix="/v1")
+DEFAULT_WORKSPACE_ID = "00000000-0000-4000-8000-000000000001"
+DEFAULT_WORKSPACE_NAME = "建筑研究工作区"
+DEFAULT_WORKSPACE_BRIEF = "记录当前设计任务、约束和实时研究结果。"
 
 SHAREABLE_IMAGE_RIGHTS = {"user_owned", "open_license", "permissioned"}
 EXPORT_ASSET_TYPE_LABELS = {
@@ -306,6 +311,24 @@ def _collection_case_subquestions(
     return case_subquestions
 
 
+def _collection_visual_directions(
+    asset: AssetCandidate,
+    run: ResearchRun,
+) -> list[str]:
+    question_by_id = {
+        item["id"]: item["question"]
+        for item in run.subquestions
+        if isinstance(item.get("id"), str) and isinstance(item.get("question"), str)
+    }
+    return list(
+        dict.fromkeys(
+            question_by_id[subquestion_id]
+            for subquestion_id in asset.subquestion_ids
+            if subquestion_id in question_by_id
+        )
+    )
+
+
 def _collection_case_images(
     asset: AssetCandidate,
     session: Session,
@@ -354,9 +377,16 @@ def _collection_read(
     session: Session,
 ) -> tuple[SavedReferenceRead, bool]:
     snapshot = dict(saved.snapshot)
-    if snapshot.get("goal") != "visual_reference_search" and (
-        not snapshot.get("case_subquestions") or "case_images" not in snapshot
-    ):
+    if snapshot.get("goal") == "visual_reference_search":
+        if not snapshot.get("visual_directions"):
+            asset = session.get(AssetCandidate, saved.asset_candidate_id)
+            if asset is not None:
+                run = session.get(ResearchRun, asset.run_id)
+                if run is not None:
+                    visual_directions = _collection_visual_directions(asset, run)
+                    if visual_directions:
+                        snapshot["visual_directions"] = visual_directions
+    elif not snapshot.get("case_subquestions") or "case_images" not in snapshot:
         asset = session.get(AssetCandidate, saved.asset_candidate_id)
         if asset is not None:
             if not snapshot.get("case_subquestions"):
@@ -426,6 +456,34 @@ def _reserve_research_run(
     if not run_gate.reserve(run_id):
         raise HTTPException(status_code=409, detail=RUN_TRANSITION_MESSAGE)
     return run_gate
+
+
+@router.post("/workspaces/default", response_model=WorkspaceRead)
+def ensure_default_workspace(session: Session = Depends(get_session)) -> Workspace:
+    existing = session.scalar(
+        select(Workspace).order_by(
+            Workspace.archived_at.is_not(None),
+            Workspace.created_at,
+        )
+    )
+    if existing is not None:
+        return existing
+    session.execute(
+        sqlite_insert(Workspace)
+        .values(
+            id=DEFAULT_WORKSPACE_ID,
+            name=DEFAULT_WORKSPACE_NAME,
+            brief=DEFAULT_WORKSPACE_BRIEF,
+            constraints=[],
+            archived_at=None,
+        )
+        .on_conflict_do_nothing(index_elements=[Workspace.id])
+    )
+    session.commit()
+    workspace = session.get(Workspace, DEFAULT_WORKSPACE_ID)
+    if workspace is None:
+        raise HTTPException(status_code=500, detail="Default workspace initialization failed")
+    return workspace
 
 
 @router.post("/workspaces", response_model=WorkspaceRead, status_code=status.HTTP_201_CREATED)
@@ -674,7 +732,7 @@ def create_run(
         subquestions=[item.model_dump() for item in payload.subquestions or []],
         status=RunStatus.created.value,
         coverage_report={},
-        retention_expires_at=datetime.now(UTC) + timedelta(days=14),
+        retention_expires_at=datetime.now(UTC) + timedelta(days=RUN_RETENTION_DAYS),
     )
     try:
         session.add(run)
@@ -751,7 +809,10 @@ def update_run_retention(
 ) -> ResearchRun:
     run = _run_or_404(session, run_id)
     run.keep_forever = payload.permanent
-    run.retention_expires_at = None if payload.permanent else datetime.now(UTC) + timedelta(days=14)
+    if payload.permanent:
+        run.retention_expires_at = None
+    else:
+        run.retention_expires_at = datetime.now(UTC) + timedelta(days=RUN_RETENTION_DAYS)
     session.commit()
     session.refresh(run)
     return run
@@ -1017,7 +1078,11 @@ def save_result(
         )
     if case_subquestions:
         snapshot["case_subquestions"] = case_subquestions
-    if run.goal != "visual_reference_search":
+    if run.goal == "visual_reference_search":
+        visual_directions = _collection_visual_directions(asset, run)
+        if visual_directions:
+            snapshot["visual_directions"] = visual_directions
+    else:
         snapshot["case_images"] = _collection_case_images(asset, session)
     collection_file = _copy_collection_content(asset, saved.id, settings.data_dir)
     if collection_file is not None:

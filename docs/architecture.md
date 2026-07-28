@@ -54,17 +54,17 @@ stateDiagram-v2
     inspecting --> failed: "失败且没有资产"
 ```
 
-每个阶段向 SQLite 提交检查点并写入脱敏 `TraceEvent`。每条 Run 默认设置 14 天保留期，可由用户单独改为永久保留；`keep_forever` 同时豁免该 Run 的资产、来源页与证据声明各自的独立过期时钟，永久 Run 的子数据不会被启动清扫删除。应用启动时删除到期 Run 及其候选文件、导出文件与关联用户状态，同时清理其他过期临时数据，并恢复未进入终态的运行。`partial`、`blocked`、`cancelled` 和 `failed` 可重试；重试增加 `attempt`，保留已有资产与证据。
+每个阶段向 SQLite 提交检查点并写入脱敏 `TraceEvent`；进入 `gap_check` 时还把当前覆盖计数写回 Run，Board 轮询期间即可显示已取得的可用参考数。新建 Run 从创建日起默认保留一学期（180 天），可由用户单独改为永久保留；取消永久后从操作日起重新获得 180 天。既有记录沿用已存到期日，不做静默迁移。`keep_forever` 同时豁免该 Run 的资产、来源页与证据声明各自的独立过期时钟，永久 Run 的子数据不会被启动清扫删除。应用启动时删除到期 Run 及其候选文件、导出文件与关联用户状态，同时清理其他过期临时数据，并恢复未进入终态的运行。`partial`、`blocked`、`cancelled` 和 `failed` 可重试；重试增加 `attempt`，保留已有资产与证据。
 
 默认预算：
 
 | 模式 | 轮次 | 查询 | 页面 | 时间 |
 |---|---:|---:|---:|---:|
-| Quick | 2 | 4 | 12 | 4 分钟 |
-| Balanced | 3 | 8 | 30 | 12 分钟 |
-| Deep | 5 | 16 | 60 | 30 分钟 |
+| Quick | 2 | 6 | 12 | 30 分钟 |
+| Balanced | 3 | 12 | 30 | 30 分钟 |
+| Deep | 4 | 24 | 60 | 30 分钟 |
 
-当前统一提前停止条件为至少 6 张可用资产、3 个项目且 4 张达到 `verified` 或 `partial`。连续两批无新增资产也会停止并交付已有结果。
+建筑研究的完成目标按 Quick / Balanced / Deep 分别为 3 / 4 / 6 个研究问题、6 / 12 / 18 张可用资产、3 / 4 / 6 个正式项目以及 4 / 6 / 9 张 `verified` 或 `partial` 资产；覆盖与正文分析丰富度必须同时达标。页面正文即使证据链完整，也只有在可比较尺度上直接回答当前子问题时才进入正式案例；纯类比页面保留为线索而不抬升。连续两批无新增资产仍会停止并交付已有结果。
 
 ## 数据与证据
 
@@ -113,14 +113,14 @@ Chrome broker、终态消息和受管标签在 V2.1 中是单连接资源，因�
 |---|---|
 | 未收藏候选图块、临时 DOM、EvidenceClaim | 7 天 |
 | 查询、来源元数据、Trace | 30 天 |
-| Run 行 | 14 天，可逐条设为永久 |
+| Run 行 | 新建记录 180 天，可逐条设为永久；既有记录沿用已存日期 |
 | 用户上传、SavedReference、ReferenceBoard、StyleProfile | 用户删除前 |
 
 `keep_forever=1` 的 Run 连同其全部子数据豁免以上所有时钟（M141 修复）。
 
 `InputArtifact` 属于 workspace，不只属于一次 Run。建筑研究没有 PDF 时，Board 继续在开始研究前保存当前场景提交的 URL/文件并直接创建 Run；URL 仅以研究线索字符串进入 planner/query，持久 PDF 最多抽取 2,000 字正文进入同一 research context。有 PDF 时，同一次“开始研究”先把文件、主问题和档位 multipart POST 到非持久化 `/v1/workspaces/{id}/brief-review`：API 在内存中校验大小与 PDF、最多读取 12,000 字，调用同一 typed planning provider 返回 `project_summary`、最多六条 `project_boundaries` 和与档位一致的 `ResearchSubquestion`。该内部请求不写 `InputArtifact`、不占用单活 Run gate，也不产生 ResearchRun；成功后 Board 立即调用现有 input upload 和 Run POST，并把 3/4/6 条 subquestions 放入 `ResearchSpec`。API 校验数量与唯一 id 后写入 `ResearchRun.subquestions`，workflow 的 checkpoint-first planner 直接使用它们而不重新规划。Board 不渲染 review 响应为新的用户界面；失败时保留表单并停止创建 Run，避免静默丢失任务书边界。建筑研究接受可选任务书 PDF 和案例 URL；`visual_reference_search` 不显示这组输入。切换 goal 清空尚未提交的 Board 表单，不删除既有 workspace artifacts。界面不得把 URL 描述为保证优先访问，也不得声称普通建筑研究或图纸灵感会视觉理解用户上传图片；建筑研究不添加 artifact 仍可仅凭问题开始。
 
-`SavedReference` 是用户主动策展的个人收藏，不是记忆层。保存时把研究题目、研究目标和结果摘要写入 snapshot；建筑结果额外写入自包含的 `case_subquestions`，逐项保存子问题题目、项目条件、设计机制、转译步骤、适用边界及与条件/机制 statement 精确匹配的逐字原文，并写入最多三项 typed `case_images`。案例图片只从同一 Run、同一项目且已有 `image_url` 的正式 `AssetCandidate` 中选择：当前收藏资产优先，再优先补足不同资产类型，最后按既有顺序填满并按 URL 去重；它们是项目识别索引，不提升或替代逐题证据。Pydantic `SavedReferenceSnapshot` 是该响应结构的来源，Board TypeScript contract 与之对齐。既有 snapshot 在首次 workspace 收藏读取时，若原 AssetCandidate/Run 尚在，会分别只追加缺失的逐题包和案例图片并持久化兼容升级；没有精确 EvidenceClaim 时保持无原文，而不借用同项目其他分支。受控本地图仍复制到独立 `collections/` 目录，因此普通 Run 的 14 天清理可以删除 checkpoint、候选和导出，同时保留可按收藏 ID 管理的收藏项、逐题研究内容和案例图片索引。一次前端提交完整保存新批次；保存是累加动作，不删除任何既有收藏（含同题旧批），删除只由用户对单项显式执行。Board 仍从同一个 workspace 聚合端点读取完整快照，并在内存中把建筑收藏展平为“原研究题目 + 案例子问题”目录项；选择状态只存在于当前 Board 页面，不写入 URL、数据库或新增 API。目录初始不渲染项目内容；点入后只把所选子问题映射为命名 region，项目保持独立 article，h2–h5 保留语义层级。界面只投影逐题设计机制和去重后的前三条转译步骤，并在其后显示紧凑案例图带。项目条件、完整边界和逐字证据仍在 snapshot 中，不因界面精简而删除。收藏类型切换、离开与重开会清除目录选择。收藏页可原位切换到只消费本地图或 image URL 的图纸视图。图纸灵感高清链接复用同一个安全 collection-content handler，本地副本缺失时才回退 snapshot image URL，原帖来源仍保持独立。该界面精简不新增表、列或 Alembic 迁移。
+`SavedReference` 是用户主动策展的个人收藏，不是记忆层。保存时把研究题目、研究目标和结果摘要写入 snapshot；建筑结果额外写入自包含的 `case_subquestions`，逐项保存子问题题目、项目条件、设计机制、转译步骤、适用边界及与条件/机制 statement 精确匹配的逐字原文，并写入最多三项 typed `case_images`。案例图片只从同一 Run、同一项目且已有 `image_url` 的正式 `AssetCandidate` 中选择：当前收藏资产优先，再优先补足不同资产类型，最后按既有顺序填满并按 URL 去重；它们是项目识别索引，不提升或替代逐题证据。Pydantic `SavedReferenceSnapshot` 是该响应结构的来源，Board TypeScript contract 与之对齐。既有 snapshot 在首次 workspace 收藏读取时，若原 AssetCandidate/Run 尚在，会分别只追加缺失的逐题包和案例图片并持久化兼容升级；没有精确 EvidenceClaim 时保持无原文，而不借用同项目其他分支。受控本地图仍复制到独立 `collections/` 目录，因此普通 Run 过期清理可以删除 checkpoint、候选和导出，同时保留可按收藏 ID 管理的收藏项、逐题研究内容和案例图片索引。一次前端提交完整保存新批次；保存是累加动作，不删除任何既有收藏（含同题旧批），删除只由用户对单项显式执行。Board 仍从同一个 workspace 聚合端点读取完整快照，并在内存中把建筑收藏展平为“原研究题目 + 案例子问题”目录项；选择状态只存在于当前 Board 页面，不写入 URL、数据库或新增 API。目录初始不渲染项目内容；点入后只把所选子问题映射为命名 region，项目保持独立 article，h2–h5 保留语义层级。界面只投影逐题设计机制和去重后的前三条转译步骤，并在其后显示紧凑案例图带。项目条件、完整边界和逐字证据仍在 snapshot 中，不因界面精简而删除。收藏类型切换、离开与重开会清除目录选择。收藏页可原位切换到只消费本地图或 image URL 的图纸视图。图纸灵感高清链接复用同一个安全 collection-content handler，本地副本缺失时才回退 snapshot image URL，原帖来源仍保持独立。该界面精简不新增表、列或 Alembic 迁移。
 
 所有路径都在当前本地工作区内，不建立全局索引。
 

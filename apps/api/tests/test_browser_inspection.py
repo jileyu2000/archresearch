@@ -3192,6 +3192,12 @@ def test_deterministic_synthesis_uses_only_evidence_grounded_case_fields() -> No
     assert cases[0].subquestion_analysis["branch-a"].transfer_strategy[0] in (
         synthesis.recommendations[0].statement
     )
+    assert cases[0].subquestion_analysis["branch-a"].transfer_strategy[0] in (
+        synthesis.answer.statement
+    )
+    assert cases[0].subquestion_analysis["branch-a"].design_mechanism not in (
+        synthesis.answer.statement
+    )
 
 
 @pytest.mark.parametrize(
@@ -3770,13 +3776,24 @@ def test_text_complete_page_analysis_creates_a_case_without_any_image(
 
 
 @pytest.mark.parametrize(
-    ("raw_relevance", "complete_evidence", "expected_covered_subquestions"),
-    [(0, True, 3), (1, True, 3), (1, False, 0)],
+    (
+        "raw_relevance",
+        "complete_evidence",
+        "direct_match",
+        "expected_covered_subquestions",
+    ),
+    [
+        (0, True, True, 3),
+        (1, True, True, 3),
+        (1, False, True, 0),
+        (4, True, False, 0),
+    ],
 )
-def test_low_relevance_page_analysis_requires_a_complete_verbatim_chain(
+def test_page_analysis_requires_a_complete_directly_matching_verbatim_chain(
     tmp_path: Path,
     raw_relevance: int,
     complete_evidence: bool,
+    direct_match: bool,
     expected_covered_subquestions: int,
 ) -> None:
     database, run_id = _database_with_run(tmp_path)
@@ -3804,6 +3821,7 @@ def test_low_relevance_page_analysis_requires_a_complete_verbatim_chain(
             return analysis.model_copy(
                 update={
                     "relevance": raw_relevance,
+                    "direct_match": direct_match,
                     "facts": analysis.facts if complete_evidence else analysis.facts[:1],
                 }
             )
@@ -3842,10 +3860,12 @@ def test_low_relevance_page_analysis_requires_a_complete_verbatim_chain(
 
     assert run is not None
     assert run.coverage_report["covered_subquestions"] == expected_covered_subquestions
-    if complete_evidence:
+    if complete_evidence and direct_match:
         assert candidate is not None
         assert candidate.relevance == 2
         assert candidate.design_mechanism == "独立插入体在保留外壳内组织展览和工作坊。"
+    elif not direct_match:
+        assert candidate is None
     else:
         assert candidate is not None
         assert candidate.relevance == 2

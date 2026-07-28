@@ -230,6 +230,7 @@ export interface PersonalCollectionSnapshot {
   design_mechanism?: string
   transfer_strategy?: string[]
   limitations?: string[]
+  visual_directions?: string[]
   case_images?: PersonalCollectionCaseImage[]
   case_subquestions?: PersonalCollectionCaseSubquestion[]
   rights_status?: ApiAssetCandidate['rights_status']
@@ -453,6 +454,12 @@ export function createApiClient(baseUrl = '/v1') {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(input),
+      })
+    },
+
+    ensureDefaultWorkspace() {
+      return request<Workspace>(`${baseUrl}/workspaces/default`, {
+        method: 'POST',
       })
     },
 

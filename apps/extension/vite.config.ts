@@ -21,5 +21,17 @@ export default defineConfig({
   test: {
     include: ["tests/**/*.test.ts"],
     restoreMocks: true,
+    coverage: {
+      provider: "v8",
+      include: ["src/**/*.ts"],
+      reporter: ["text", "json-summary"],
+      reportsDirectory: "../../.artifacts/coverage/extension",
+      thresholds: {
+        statements: 82.69,
+        branches: 76.52,
+        functions: 83.96,
+        lines: 84.73,
+      },
+    },
   },
 });

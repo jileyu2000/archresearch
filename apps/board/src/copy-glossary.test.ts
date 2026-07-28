@@ -1,6 +1,46 @@
 import { describe, expect, it } from 'vitest'
 
-import source from './App.tsx?raw'
+import appSource from './App.tsx?raw'
+import caseAnalysisSource from './components/CaseAnalysis.tsx?raw'
+import comparisonDialogSource from './components/ComparisonDialog.tsx?raw'
+import dataManagementPageSource from './components/DataManagementPage.tsx?raw'
+import homeSectionsSource from './components/HomeSections.tsx?raw'
+import personalCollectionsPageSource from './components/PersonalCollectionsPage.tsx?raw'
+import researchComposerSource from './components/ResearchComposer.tsx?raw'
+import sharePanelSource from './components/SharePanel.tsx?raw'
+import sourceInspectorSource from './components/SourceInspector.tsx?raw'
+import stylePanelSource from './components/StylePanel.tsx?raw'
+import visualInspirationBoardSource from './components/VisualInspirationBoard.tsx?raw'
+import browserReadinessSource from './hooks/useBrowserReadiness.ts?raw'
+import backupSource from './lib/backup.ts?raw'
+import collectionsSource from './lib/collections.ts?raw'
+import demoSource from './lib/demo.ts?raw'
+import labelsSource from './lib/labels.ts?raw'
+import runSource from './lib/run.ts?raw'
+import textSource from './lib/text.ts?raw'
+import workResultSource from './lib/workResult.ts?raw'
+
+const source = [
+  appSource,
+  caseAnalysisSource,
+  comparisonDialogSource,
+  dataManagementPageSource,
+  homeSectionsSource,
+  personalCollectionsPageSource,
+  researchComposerSource,
+  sharePanelSource,
+  sourceInspectorSource,
+  stylePanelSource,
+  visualInspirationBoardSource,
+  browserReadinessSource,
+  backupSource,
+  collectionsSource,
+  demoSource,
+  labelsSource,
+  runSource,
+  textSource,
+  workResultSource,
+].join('\n')
 
 // The user-facing vocabulary is settled: one concept gets one plain name.
 // This guard keeps retired or internal wording from drifting back into the
@@ -42,6 +82,20 @@ describe('copy glossary', () => {
       '校验并恢复',
       'SHA-256',
       '预检',
+      '正在打包',
+      '换电脑或重装之前',
+      '在新电脑上，或者出事之后',
+      '这一页做两件事',
+      // Retired after the second pilot: the interface now uses one set of
+      // research-depth names and keeps implementation/audit language internal.
+      '查看上次结果',
+      '初步依据',
+      '初步灵感',
+      '证据方向',
+      '综合方法',
+      '策略矩阵',
+      '未读取图片像素',
+      '连续检索',
     ]
     for (const term of banned) {
       expect(source, `retired term "${term}" must not reappear`).not.toContain(term)

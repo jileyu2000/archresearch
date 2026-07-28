@@ -68,6 +68,7 @@ describe('local API client', () => {
       .fn()
       .mockResolvedValueOnce(jsonResponse([{ id: 'workspace-1', name: 'Studio' }]))
       .mockResolvedValueOnce(jsonResponse({ id: 'workspace-2', name: '竞赛工作区' }, 201))
+      .mockResolvedValueOnce(jsonResponse({ id: 'workspace-default', name: '建筑研究工作区' }))
     vi.stubGlobal('fetch', fetchMock)
     const client = createApiClient('/v1')
 
@@ -76,12 +77,20 @@ describe('local API client', () => {
       id: 'workspace-2',
       name: '竞赛工作区',
     })
+    expect(await client.ensureDefaultWorkspace()).toEqual({
+      id: 'workspace-default',
+      name: '建筑研究工作区',
+    })
     expect(fetchMock.mock.calls[1]).toEqual([
       '/v1/workspaces',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ name: '竞赛工作区', brief: '场馆更新' }),
       }),
+    ])
+    expect(fetchMock.mock.calls[2]).toEqual([
+      '/v1/workspaces/default',
+      expect.objectContaining({ method: 'POST' }),
     ])
   })
 

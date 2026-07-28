@@ -1,4 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
+from threading import Barrier
 
 from fastapi.testclient import TestClient
 
@@ -28,6 +30,30 @@ def test_workspace_crud(client: TestClient) -> None:
 
     assert client.delete(f"/v1/workspaces/{workspace['id']}").status_code == 204
     assert client.get(f"/v1/workspaces/{workspace['id']}").status_code == 404
+
+
+def test_ensure_default_workspace_is_idempotent_under_concurrent_first_load(
+    client: TestClient,
+) -> None:
+    barrier = Barrier(2)
+
+    def ensure_default() -> object:
+        barrier.wait()
+        return client.post("/v1/workspaces/default")
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = list(executor.map(lambda _: ensure_default(), range(2)))
+
+    assert [response.status_code for response in responses] == [200, 200]
+    assert len({response.json()["id"] for response in responses}) == 1
+    assert responses[0].json()["name"] == "建筑研究工作区"
+    assert len(client.get("/v1/workspaces").json()) == 1
+
+    first_duplicate = client.post("/v1/workspaces", json={"name": "同名项目"})
+    second_duplicate = client.post("/v1/workspaces", json={"name": "同名项目"})
+    assert first_duplicate.status_code == 201
+    assert second_duplicate.status_code == 201
+    assert first_duplicate.json()["id"] != second_duplicate.json()["id"]
 
 
 def test_history_record_name_is_derived_from_question_content(

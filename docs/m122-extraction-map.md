@@ -1,9 +1,28 @@
 # M122 拆分地图（表征阶段产出，2026-07-27）
 
+## 执行状态
+
+- 第 1/8 片已完成：加入 Board/Extension coverage-v8、根级 `pnpm test:coverage` 与硬阈值；以缺模块红灯钉住边界后，抽出 `lib/text.ts`、`labels.ts`、`storage.ts`、`backup.ts`、`run.ts`、`demo.ts`、`collections.ts`、`workResult.ts`。
+- `App.tsx` 从 M153 后的 4,089 行降至 3,241 行；React 状态、组件和 JSX 未拆。Board 总覆盖率从 78.17/72.39/80.50/81.78 变为 78.36/72.59/80.50/81.84，新 lib 组为 88.67/81.41/97.01/91.92。
+- 第 2/8 片已完成：以缺组件红灯钉住 `<DataManagementPage>`，再等价搬移备份/恢复状态、API 操作与 JSX；组件关闭时保持挂载，保留原有跨页面状态语义。App 只保留页面开关、操作提示和恢复后的工作区刷新回调。
+- `App.tsx` 继续从 3,241 行降至 3,132 行；Board 151 tests，覆盖率为 78.44/72.73/80.63/81.91，新组件函数覆盖率 100%。
+- 第 3/8 片已完成：以缺组件红灯钉住 SharePanel / StylePanel / ComparisonDialog / SourceInspector，再等价搬移四个叶子覆盖层；统一关闭、trigger ref、body scroll lock、Escape 与 Tab 焦点循环全部继续留 App。
+- `App.tsx` 继续从 3,132 行降至 2,977 行；Board 155 tests，覆盖率为 78.79/73.68/81.94/82.23；ComparisonDialog、SharePanel、SourceInspector 的 statements/functions 均为 100%。
+- 第 4/8 片已完成：以缺组件红灯钉住 `<PersonalCollectionsPage>` 后，等价搬移建筑/图纸切换、加载/空态、目录/详情和视觉上下文；删除 API、`savedIds` 同步、打开加载与页面开关仍留 App。
+- `App.tsx` 继续从 2,977 行降至 2,701 行；Board 158 tests，覆盖率为 78.94/73.78/82.47/82.39，新组件 statements/functions/lines 均为 100%；完整门禁 348/158/165/8。下一片是 `<VisualInspirationBoard>` → `<CaseAnalysis>`。
+- 第 5/8 片已完成：以缺组件红灯钉住 `<VisualInspirationBoard>` / `<CaseAnalysis>` 后，依次等价搬移图纸方向/帖子/图片和建筑子问题/代表案例答案；group 派生、选择持久化、overlay trigger 与浏览器不可用判断继续留 App。
+- `App.tsx` 继续从 2,701 行降至 2,349 行；Board 161 tests，覆盖率为 79.42/75.42/83.11/82.87，四项均高于第四片；完整门禁 348/161/165/8。下一片是 `<ResearchComposer>` + HomeSections。
+- 第 6/8 片已完成：以缺组件红灯钉住 `<ResearchComposer>` / `<HomeSections>` 后，等价搬移受控研究表单、环境展示、问题起点、工作区新建表单和最近研究；输入/提交/工作区/API 副作用与跨组件 question ref 继续留 App。
+- `App.tsx` 继续从 2,349 行降至 2,024 行；Board 164 tests，覆盖率为 79.45/75.55/83.18/82.89，四项均高于第五片；完整门禁 348/164/165/8。下一片是 `useBrowserReadiness()`，先解决 `hydrateRun` 与环境检查双写浏览器状态。
+- 第 7/8 片已完成：以缺 hook 红灯钉住首次检查、手动刷新、权限/错误投影和后发检查优先语义，再集中配对、自动连接、权限确认、服务刷新及环境文案。请求序号丢弃陈旧结果，`hydrateRun` 只通过 hook 刷新环境。
+- `App.tsx` 继续从 2,024 行降至 1,818 行；Board 172 tests，覆盖率为 79.81/75.55/83.66/83.76，四项均不低于第六片；完整门禁 348/172/165/8。下一片是 run payload reducer + `useRunPolling()` / `useRunHydration()`。
+- 第 8/8 片已完成：以缺模块红灯钉住 payload 原子 hydrate/reset、陈旧请求失效和终态轮询顺序；Run payload 已收敛到 reducer，请求世代归 `useRunHydration()`，1 秒 polling/busy/当前 Run 终态水合归 `useRunPolling()`。
+- `App.tsx` 最终从 1,818 行降至 1,752 行；Board 177 tests，覆盖率为 80.01/75.75/84.77/83.80，四项均不低于第七片；完整门禁 348/177/165/8，durable 与服务基线不变。M122 8/8 全部完成。
+
 ## 覆盖率基线
 
 - API（pytest-cov 6.3.0，342 tests，exit 0）：**总体 91%**（5735 语句 / 497 未覆盖）；workflow.py 95%、api.py 91%、lifecycle.py 96%、providers.py 96%。报告存于 `.artifacts/coverage/api-coverage.xml`。M122 阈值定为"逐模块不下降"。
-- Board / Extension：待装 `@vitest/coverage-v8`（装包会重载 dev server，排在模拟试点结束后）。
+- Board / Extension：coverage-v8 已安装并设硬阈值；根命令 `pnpm test:coverage`。Board 最低阈值为 statements 78.17 / branches 72.39 / functions 80.50 / lines 81.78；Extension 为 82.69 / 76.52 / 83.96 / 84.73。
 
 > 只读分析产出，未改任何代码。三个大文件各一节：候选模块、依赖、风险与推荐拆分顺序。
 > 拆分执行时以本文件为起点，每一片先迁移/补行为测试，再动实现，完整门禁全绿才进入下一片。

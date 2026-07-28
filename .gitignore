@@ -27,6 +27,8 @@ test-results/
 
 # Local verification output
 .artifacts/api-test-results.xml
+.artifacts/coverage/
+.artifacts/*.log
 apps/api/.artifacts/
 .impeccable/
 apps/extension/.impeccable/

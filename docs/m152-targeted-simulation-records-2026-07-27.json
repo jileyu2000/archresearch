@@ -1,0 +1,412 @@
+{
+  "metadata": {
+    "milestone": "M152",
+    "date": "2026-07-27",
+    "method": "同一执行 agent 顺序扮演四个 persona，在真实 loaded Board 上按 M121 判据走查；结果与评审在场次后分开记录。",
+    "board_url": "http://127.0.0.1:15173/",
+    "api_url": "http://127.0.0.1:18000/",
+    "final_task_brief_data_root": "C:\\Users\\76384\\AppData\\Local\\Temp\\archresearch-m152-20260727\\data-evidence-v5",
+    "durable_archresearch_modified": false,
+    "normal_services": {
+      "api_8000": 200,
+      "board_5173": 200
+    },
+    "final_browser_error_count": 0
+  },
+  "sessions": [
+    {
+      "id": "V1",
+      "persona": "低年级建筑学生，正在做社区活动中心课程设计；要画轴测图，偏好黑白细线稿和少量绿色标注，对研究工具没有先验。",
+      "question": "我要画一张社区活动中心的轴测图，想找黑白细线稿和少量绿色标注的表达风格。",
+      "run_id": "0eef88d5-a4fa-43a3-b210-352b44a9299e",
+      "terminal": {
+        "status": "completed",
+        "stop_reason": "coverage_satisfied",
+        "usable_assets": 33,
+        "covered_subquestions": 3,
+        "subquestions": 3
+      },
+      "tasks": [
+        {
+          "task": "T5 发起图纸灵感并解释状态",
+          "outcome": "通过",
+          "process": "切换到图纸灵感，输入问题并点击查找灵感；约 120ms 出现结果壳与图纸专用七阶段，约 3 秒完成。",
+          "ui_text": [
+            "已创建",
+            "0 条可用参考",
+            "正在寻找图纸灵感",
+            "返回主页"
+          ],
+          "persona_quotes": [
+            "我能看懂：请求已经收到了，它正在按图纸方向找，完成后会自己显示。",
+            "三个方向里我会先看精细线稿轴测图，和我想要的黑白细线最接近。"
+          ],
+          "criterion": "能发起图纸搜索，并指出至少一个与问题相关的表达方向。",
+          "score": "pass"
+        },
+        {
+          "task": "T6b 保存一张真正想留的图",
+          "outcome": "通过",
+          "process": "在精细线稿方向选择一张图片；底部选择条显示 1 张，保存后明确说明选择已清空。",
+          "ui_text": [
+            "已选 1 张图纸（最多6张）",
+            "添加 1 项到个人收藏",
+            "已保存1项，选择已清空"
+          ],
+          "persona_quotes": [
+            "保存成功是明确的；我知道清空的是临时选择，不是刚存的收藏。"
+          ],
+          "criterion": "不借助提示完成保存并判断成功。",
+          "score": "pass"
+        },
+        {
+          "task": "T7 找回并说明关系",
+          "outcome": "通过",
+          "process": "返回主页，进入个人收藏；默认建筑方案为空，但图纸灵感标签显示 1 项。切换后看到刚存的图片、原笔记和删除动作。",
+          "ui_text": [
+            "建筑方案 0 项",
+            "图纸灵感 1 项",
+            "轴测图表达参考 5-1"
+          ],
+          "persona_quotes": [
+            "现在只有一张，我能凭刚看过的标题认出它，也能点回原笔记。"
+          ],
+          "criterion": "找到保存内容并说明它与原研究的关系。",
+          "score": "pass"
+        }
+      ],
+      "observations": [
+        "顶部 33 张，三个方向各 12 张，页面未解释总数按去重计。",
+        "小红书可用与未启用页面高清图纸读取同时出现，职责关系不清楚。",
+        "36 个图片选择按钮的 accessible name 都是“选择此图用于收藏”。"
+      ]
+    },
+    {
+      "id": "V2",
+      "persona": "大四竞赛学生，两周后交图；旧厂房改造轴测图要比较拼贴色块、材质渲染和人物叙事。",
+      "question": "两周后竞赛交图，我要做一张旧厂房改造轴测图，想比较拼贴色块、材质渲染和人物叙事三种风格。",
+      "run_id": "c901ba40-9fac-4364-ab9d-9c930cd2df07",
+      "terminal": {
+        "status": "completed",
+        "stop_reason": "coverage_satisfied",
+        "usable_assets": 35,
+        "covered_subquestions": 3,
+        "subquestions": 3
+      },
+      "tasks": [
+        {
+          "task": "T5 发起图纸灵感并比较方向",
+          "outcome": "通过",
+          "process": "输入竞赛问题，运行壳与 V1 一致；结果出现三个方向，每个方向 12 张。",
+          "ui_text": [
+            "35 张参考",
+            "精细线稿轴测图 · 12 张",
+            "拼贴叙事轴测图 · 12 张",
+            "材质氛围轴测图 · 12 张"
+          ],
+          "persona_quotes": [
+            "三个方向正好对应我要比较的三类，我先留拼贴叙事，再回来看材质和人物。"
+          ],
+          "criterion": "能比较方向并指出下一步。",
+          "score": "pass"
+        },
+        {
+          "task": "T6b 保存拼贴方向图片",
+          "outcome": "通过",
+          "process": "在拼贴叙事区域选择目标图片并保存；保存反馈与 V1 一致。",
+          "ui_text": [
+            "已选 1 张图纸（最多6张）",
+            "已保存1项，选择已清空"
+          ],
+          "persona_quotes": [
+            "保存动作没绕路，反馈也在我刚操作的位置。"
+          ],
+          "criterion": "保存目标图片并判断成功。",
+          "score": "pass"
+        },
+        {
+          "task": "T7 找回并说明关系",
+          "outcome": "未通过",
+          "process": "个人收藏中能看到并打开两张图片及原笔记，但列表只有帖子标题，没有原研究问题或表达方向。",
+          "ui_text": [
+            "图纸灵感 2 项",
+            "轴测图表达参考 5-1",
+            "轴测图表达参考 1-1"
+          ],
+          "persona_quotes": [
+            "我能找到两张图，但光看这里不知道哪张是社区中心那次、哪张是旧厂房竞赛，也不知道一张原来属于精细线稿还是拼贴叙事。",
+            "除非我记住帖子标题，否则一周后没法解释它和哪次研究有关。"
+          ],
+          "criterion": "找到保存内容并说明它与原研究问题/方向的关系。",
+          "score": "fail"
+        }
+      ],
+      "observations": [
+        "顶部 35 张与方向合计 36 张再次形成未解释的计数差。",
+        "小红书与 Chrome 高清读取职责再次不清楚。",
+        "同一方向 12 个、全页 36 个选择按钮再次使用同一 accessible name。",
+        "API SavedReference.snapshot.question 已保存两条不同原问题，界面没有投影。"
+      ]
+    },
+    {
+      "id": "B1",
+      "persona": "研一建筑学生，做江南蚕桑文化馆；希望任务书能把《耕织图》的工序、长卷和人物活动带入空间研究，而不是只提装饰纹样。",
+      "question": "江南蚕桑文化馆的展览空间，怎样把《耕织图》的工序、长卷和人物活动转译成连续参观与互动节点？",
+      "brief_file": "m152-smart-museum-brief.pdf",
+      "run_id": "7660197b-0d35-4baa-addd-6d0470dd72c7",
+      "terminal": {
+        "status": "completed",
+        "stop_reason": "coverage_satisfied",
+        "usable_assets": 12,
+        "project_count": 4,
+        "covered_subquestions": 4,
+        "subquestions": 4
+      },
+      "tasks": [
+        {
+          "task": "T4 理解任务书作用并选择文件",
+          "outcome": "通过",
+          "process": "展开可选资料，读取说明，通过 file chooser 选择 PDF。",
+          "ui_text": [
+            "任务书用于收束研究范围",
+            "系统会先读取场地、功能与限制，把它们作为问题拆解和案例检索的边界。",
+            "1 个文件待上传"
+          ],
+          "persona_quotes": [
+            "它不是把 PDF 当附件存起来，而是先读场地、功能和限制，用来约束后面的拆题和找案例。",
+            "这里只有 1 个文件，看不到名字；如果桌面上有两个版本，我提交前没法确认选的是哪份。"
+          ],
+          "criterion": "能解释任务书在同一 Run 中的作用。",
+          "score": "pass"
+        },
+        {
+          "task": "T2/状态 发起任务书驱动研究",
+          "outcome": "通过",
+          "process": "点击开始研究后 120ms 内按钮变为禁用等待态；随后出现四个《耕织图》专属问题。",
+          "ui_text": [
+            "正在准备研究…",
+            "蚕桑丝织工序如何转化为连续的参观序列？",
+            "长廊与分段单元如何转化为博物馆空间语法？",
+            "人物、器具与场所的关系如何形成互动节点？",
+            "二维叙事如何通过时间与交互形成四维体验？"
+          ],
+          "persona_quotes": [
+            "四个问题已经把 PDF 里的工序、长卷、人物和时间体验拆开了，我能确认任务书真的参与了研究。"
+          ],
+          "criterion": "提交有反馈，并能解释运行状态与任务书约束。",
+          "score": "pass"
+        },
+        {
+          "task": "T3 理解结果",
+          "outcome": "通过",
+          "process": "完整结果按四个任务书问题展开；每问 4 个代表案例，并显示怎么做、适用条件、出处和图纸。",
+          "ui_text": [
+            "案例研究结果",
+            "代表案例 织造厂再生中心",
+            "怎么做",
+            "适用条件",
+            "出处 · dezeen.com"
+          ],
+          "persona_quotes": [
+            "我会先把连续叙事拆成空间节点，再用可行走的公共路径连接；这和我的任务书问题是同一件事，不是泛泛的厂房案例简介。",
+            "每个案例都能回到出处，夹具也明确提醒不要把测试结论当真实案例。"
+          ],
+          "criterion": "能复述至少一条结果和下一步。",
+          "score": "pass"
+        },
+        {
+          "task": "T6a/T7 保存并找回",
+          "outcome": "通过",
+          "process": "在首个任务书方向直接收藏织造厂再生中心；按钮原位变为已加入收藏。返回个人收藏后，目录显示完整原问题与研究方向，详情保留解法、出处和案例图。",
+          "ui_text": [
+            "已加入收藏 织造厂再生中心",
+            "原研究问题",
+            "研究方向：蚕桑丝织工序如何转化为连续的参观序列？",
+            "核心解法"
+          ],
+          "persona_quotes": [
+            "我能按自己的原问题认领这条记录，也能看出它属于哪一个任务书方向。"
+          ],
+          "criterion": "保存并找回，能说明与原研究的关系。",
+          "score": "pass"
+        }
+      ]
+    },
+    {
+      "id": "B2",
+      "persona": "科技馆展览方向学生，要把《耕织图》长卷转成可行走、可停留、可互动的时间序列；需要和另一份相似蚕桑课题区分。",
+      "question": "苏州科技馆的蚕桑丝织展览中，怎样把《耕织图》的长卷叙事变成可行走、可停留、可互动的时间序列？",
+      "brief_file": "m152-smart-museum-brief.pdf",
+      "run_id": "f1923292-f346-46da-be76-6f13a878bff2",
+      "terminal": {
+        "status": "completed",
+        "stop_reason": "coverage_satisfied",
+        "usable_assets": 12,
+        "project_count": 4,
+        "covered_subquestions": 4,
+        "subquestions": 4
+      },
+      "tasks": [
+        {
+          "task": "T4 选择任务书并核对",
+          "outcome": "部分",
+          "process": "成功选择 PDF，DOM 只显示数量，文件名不可见；仍可继续提交。",
+          "ui_text": [
+            "1 个文件待上传"
+          ],
+          "persona_quotes": [
+            "我知道选进来一份，但不知道是不是最终版；提交前应该把文件名列出来。"
+          ],
+          "criterion": "选择正确任务书并能在提交前核对。",
+          "score": "partial"
+        },
+        {
+          "task": "T2/T3 发起并理解结果",
+          "outcome": "通过",
+          "process": "提交后立即有准备态，约 700ms 后完整完成；四问和 16 个案例关联全部出现，无 partial 警告。",
+          "ui_text": [
+            "正在准备研究…",
+            "案例研究结果",
+            "代表案例",
+            "怎么做",
+            "适用条件"
+          ],
+          "persona_quotes": [
+            "它把长卷叙事拆成工序、空间语法、互动节点和四维体验，我知道该从哪一个方向继续画图。"
+          ],
+          "criterion": "能解释任务书如何影响结果，并复述下一步。",
+          "score": "pass"
+        },
+        {
+          "task": "T6a/T7 保存并区分两条相似研究",
+          "outcome": "通过",
+          "process": "保存船坞创意园；收藏目录同时显示 B1/B2 两条完整原问题和相同研究方向，进入 B2 详情后看到核心解法、出处与图纸。",
+          "ui_text": [
+            "建筑方案 2 项",
+            "原研究问题",
+            "研究方向：蚕桑丝织工序如何转化为连续的参观序列？",
+            "收藏案例 船坞创意园"
+          ],
+          "persona_quotes": [
+            "虽然两个研究方向同名，但两条原问题都完整显示，我能分清科技馆这条和文化馆那条。"
+          ],
+          "criterion": "找回目标收藏并区分其原研究关系。",
+          "score": "pass"
+        }
+      ],
+      "observations": [
+        "两条目录按钮的 visible text 可区分，但 accessible name 都是“查看子问题：蚕桑丝织工序如何转化为连续的参观序列？”。"
+      ]
+    }
+  ],
+  "scorecard": {
+    "visual_input_status_result": {
+      "V1": "pass",
+      "V2": "pass"
+    },
+    "visual_save": {
+      "V1": "pass",
+      "V2": "pass"
+    },
+    "visual_retrieve_and_relationship": {
+      "V1": "pass",
+      "V2": "fail"
+    },
+    "task_brief_role_and_launch": {
+      "B1": "pass",
+      "B2": "pass"
+    },
+    "task_brief_result": {
+      "B1": "pass",
+      "B2": "pass"
+    },
+    "task_brief_save_and_retrieve": {
+      "B1": "pass",
+      "B2": "pass"
+    }
+  },
+  "repair_candidates": [
+    {
+      "id": "M152-P1-01",
+      "severity": "P1",
+      "title": "图纸收藏不显示原研究问题或表达方向",
+      "evidence": "V2 核心 T7 失败；SavedReference.snapshot.question 已有数据，Board 未投影。",
+      "decision": "M153"
+    },
+    {
+      "id": "M152-P1-02",
+      "severity": "P1",
+      "title": "全新空库并发创建两个默认工作区",
+      "evidence": "多个独立数据根均在首次加载时创建两个同名 id，其中一个保持空置。",
+      "decision": "M153"
+    },
+    {
+      "id": "M152-P1-03",
+      "severity": "P1",
+      "title": "默认 mock 的 coverage completed 与 Board 证据展示合同脱节",
+      "evidence": "默认 mock 可 completed/12 assets，但资产没有 text_excerpt，Board 全部隐藏；相同 statement 的正文 excerpt 不升级既有 claim。",
+      "decision": "M153"
+    },
+    {
+      "id": "M152-P2-01",
+      "severity": "P2",
+      "title": "图纸去重总数与方向关联数口径未说明",
+      "evidence": "V1 33 vs 36；V2 35 vs 36。",
+      "decision": "M153"
+    },
+    {
+      "id": "M152-P2-02",
+      "severity": "P2",
+      "title": "小红书检索与 Chrome 页面高清读取职责不清",
+      "evidence": "V1/V2 首见复述均无法解释两种能力的关系。",
+      "decision": "M153"
+    },
+    {
+      "id": "M152-P2-03",
+      "severity": "P2",
+      "title": "图纸选择按钮 accessible name 全部重复",
+      "evidence": "V1/V2 每轮 36 个按钮都叫“选择此图用于收藏”。",
+      "decision": "M153"
+    },
+    {
+      "id": "M152-P2-04",
+      "severity": "P2",
+      "title": "任务书选择后不显示文件名",
+      "evidence": "B1/B2 均只显示“1 个文件待上传”。",
+      "decision": "M153"
+    }
+  ],
+  "system_calibration_events": [
+    {
+      "stage": "default mock",
+      "result": "不计 persona",
+      "reason": "API completed 但无 text_excerpt，Board 正确隐藏所有案例；登记为产品 P1。"
+    },
+    {
+      "stage": "data-evidence",
+      "result": "不计 persona",
+      "reason": "临时 URL 从第一个 /p 切分，parser 夹具错误。"
+    },
+    {
+      "stage": "data-evidence-v2",
+      "result": "不计 persona",
+      "reason": "research.example 未满足 trusted_secondary，analyzer 未进入。"
+    },
+    {
+      "stage": "data-evidence-v3/v4",
+      "result": "不计 persona",
+      "reason": "同义 statement 与既有无 excerpt claim 不满足 formal article coverage。"
+    },
+    {
+      "stage": "data-evidence-v5",
+      "result": "有效",
+      "reason": "analyzer 成为唯一分析/evidence 写入者；B1/B2 均正式 completed。"
+    }
+  ],
+  "limitations": [
+    "四个 persona 是同一执行 agent 的顺序角色扮演，不是独立真人。",
+    "角色原话是按 persona 即时复述；状态、DOM、API、accessible name 与计数是实际观察。",
+    "T7 是即时找回，不是现实中的一周后。",
+    "确定性图片、正文和 PDF 只验证产品路径，不代表真实案例研究质量。"
+  ]
+}

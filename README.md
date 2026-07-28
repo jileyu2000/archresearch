@@ -53,6 +53,16 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/configure-autostart.ps1
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/stop.ps1
 ```
 
+### 更新已有安装
+
+在你已经通过下载新版本或自己的 Git 操作替换源码后，运行：
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/update.ps1
+```
+
+更新脚本不会执行 `git pull`、reset、checkout 或 clean。它只依次停止当前工作区服务、重新安装依赖并构建扩展、运行完整离线门禁，再启动验证通过的版本；若安装或验证失败，脚本立即停止，不会启动未通过门禁的版本。本地研究数据继续保存在 `.archresearch`，更新前也可先从“备份数据”页面下载独立 ZIP。
+
 ### 安装扩展与配对
 
 1. 打开 `chrome://extensions`，启用开发者模式。
@@ -127,10 +137,11 @@ OPENAI_VISION_MODEL=gpt-5.6-sol
 ## 验证
 
 ```powershell
+pnpm test:coverage
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1
 ```
 
-该命令运行 PowerShell 安全与进程生命周期测试、评测夹具验证、Python 单元/集成测试、Ruff、Mypy、两个 TypeScript 应用的 lint/类型检查/测试/生产构建，以及打包后 Chrome 扩展 E2E。所有默认测试均使用 Mock/本地 fixture，不调用真实模型或公开搜索网页。
+第一条命令执行 Board 与 Extension 覆盖率门槛；第二条运行发布、PowerShell 安全与进程生命周期测试、评测夹具验证、Python 单元/集成测试、Ruff、Mypy、两个 TypeScript 应用的 lint/类型检查/测试/生产构建，以及打包后 Chrome 扩展 E2E。所有默认测试均使用 Mock/本地 fixture，不调用真实模型或公开搜索网页。
 
 只验证版本化评测集：
 

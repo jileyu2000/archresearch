@@ -23,6 +23,13 @@ _RECORD_TITLE_SPLIT = re.compile(
 def research_record_title(question: str) -> str:
     text = " ".join(question.split())
     text = _RECORD_TITLE_LEAD.sub("", text).strip(" ：:，,。.!！?？；;")
+    question_clauses = [
+        clause.strip(" ：:，,。.!！?？；;")
+        for clause in re.split(r"[?？]+", text)
+        if clause.strip(" ：:，,。.!！?？；;")
+    ]
+    if len(question_clauses) > 1:
+        text = question_clauses[-1]
     split = _RECORD_TITLE_SPLIT.search(text)
     if split is not None:
         context = text[: split.start()].strip(" ，,。.!！?？；;")
@@ -31,7 +38,7 @@ def research_record_title(question: str) -> str:
         if context and action:
             first_clause = re.split(r"[，,；;]", context, maxsplit=1)[0]
             subject = re.match(r"^(.{2,12}?)(?:是|作为)", first_clause)
-            context = subject.group(1) if subject else context
+            context = subject.group(1) if subject else first_clause
             text = f"{context}：{action}"
     if len(text) > RECORD_TITLE_MAX_LENGTH:
         prefix = text[: RECORD_TITLE_MAX_LENGTH - 1].rstrip(" 的与和及、，：:；;–-")
@@ -143,7 +150,7 @@ DEPTH_TARGETS: dict[BudgetMode, DepthTarget] = {
         research_passes=2,
         assets_per_subquestion=2,
         analysis_requirements=["visible_observation", "design_mechanism"],
-        projects=2,
+        projects=3,
         assets=6,
         multi_asset_projects=1,
         verified_or_partial=4,
@@ -515,6 +522,7 @@ class SavedReferenceSnapshot(BaseModel):
     design_mechanism: str = ""
     transfer_strategy: list[str] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
+    visual_directions: list[str] = Field(default_factory=list)
     case_images: list[SavedReferenceCaseImage] = Field(default_factory=list)
     case_subquestions: list[SavedReferenceCaseSubquestion] = Field(default_factory=list)
 

@@ -256,3 +256,217 @@
 - 重复 P2（M150）：三档双命名（3/3）；术语语域（初步依据缩略态/连续检索/未读取图片像素/证据方向，3/3）；研究进行中整页被进度视图接管、全局入口不可达（2/2）；保存成功反馈远离按钮+选中态清空被误读为失败（2/2）；系统长句标题难认领、截断在要害（3/3）；顶栏"查看上次结果/个人收藏"职责重叠（2/3）。
 - 应保护的核心价值（两名到达结果页者一致）："怎么做三条+可点回原文的出处链接"是最信任资产；收藏按研究子问题组织的找回路径一次到达。
 - 模拟局限已随记录归档；图纸灵感全流程与任务书路径本轮零覆盖，修复后需补定向模拟。
+
+## 2026-07-27 M149/M151 启动观察
+
+- M149 按既定顺序先做只读根因诊断：U1 的“研究结论栏与证据脱节”不能先按展示问题猜修法，必须沿 Run 结果、题目级 summary、案例逐题 analysis 与 Board 投影逐层核对，定位错位发生在哪一层后再写红灯。
+- 用户截图里的备份页并非缺信息，而是同一语义重复：页首解释“本地存储 + 手动下载 + 整体恢复”，备份区再次解释“手动 + 定期下载 + 排除项”，恢复区又用整段话重复“替换而非合并 + 自动检查 + 失败回滚 + 手动确认”。信息齐全但扫描成本过高。
+- M151 的目标不是删掉风险说明，而是按动作重排：页首一句说明本地数据；备份区只保留当前数据、上次备份与主动作；恢复区把“替换当前数据，不会合并”贴近文件选择和危险确认。行为合同保持不变。
+- 成熟产品的共性不是“把所有保护机制先解释完”，而是动词化入口与逐步披露：Apple 用“立即备份 / 从备份恢复”，并把可恢复范围放在动作说明中；Windows 直接以“备份电脑 / 还原”组织任务。可迁移到本产品的是短标题、动作旁后果和状态优先，不是照抄云同步承诺。参考：https://support.apple.com/zh-cn/104984 、https://support.microsoft.com/zh-CN/Windows/experience/backup-recovery/back-up-and-restore-with-windows-backup
+- 当前实现的冗长集中在 `App.tsx:2482-2535`：页首 100+ 字、备份三行状态各带括注/建议、排除项另起一段、恢复说明约 150 字。现有测试已经锁定真正不能丢的合同：手动备份、排除服务配置/登录信息、浏览器本地下载记录、自动只读检查、替换而非合并、危险动作二次确认、失败不动数据。因此可以迁移测试表达并安全删除重复解释。
+- 当前 CSS 已有 `.data-management-section`、`.data-backup-section`、`.data-backup-action` 和恢复控件的独立布局入口；版式修复应复用这些类与现有 4/8 间距 token，避免新增卡片或新视觉语言。
+- 原尺寸截图确认版式根因：1120px 页面把备份区切成“约 760px 文案 + 240px 动作”，但左栏又使用 128px 标签轨，实际说明只有约 600px，造成多处两三行断裂；恢复区虽然是一列，150 字长段落仍先占据整屏主视觉，文件选择被推到首屏底部。标题、解释、状态与风险说明几乎同权重，扫视时找不到唯一下一步。
+- 可行的最小布局是两段平面工作流而不是更多卡片：页首缩成一行；“备份”区用紧凑状态列 + 右侧主动作，去掉独立“备份方式”行；“恢复”区用短后果句与文件选择组成两列，自动检查结果再在下方铺满。移动端继续按现有 720px 媒体块单列且控件 44px。
+- `design-system.test.ts` 目前没有备份页布局合同；M151 需要新增最小契约，固定桌面恢复区双列、结果跨满与 720px 单列，而不是只靠截图主观验收。`copy-glossary.test.ts` 已封禁若干旧备份术语，但“正在打包”仍残留在按钮状态，与其“不要暴露打包内部概念”的注释冲突；应迁移为用户动作“正在下载…”并加入守卫。
+- M149 的原始模拟材料可从 `docs/m121-simulated-pilot-records-2026-07-27.json` 精确追溯 U1，而不是依赖汇总文档转述；下一步先提取 U1 Run、问题、结论原文与用户观察，再对照持久 API 数据。
+- U1 的具体错位不是轻微概括偏差：研究问题是“3 米高差的高处沿街入口与低处社区广场如何自然连接”，结果页总标题却是“项目将发现的 18 世纪下水道改造为祖传梅斯卡尔酒品鉴与烹饪体验空间”。它看起来是某个案例自身的逐题机制/摘要被提升成 Run 级结论，且该案例并不是用户记住的两个主要案例之一；应优先核查综合 answer 的构建与 Board `userFacingSynthesis` 投影，不先归因于中文翻译。
+- 代码链初步支持这个方向：Board `researchSynthesisOverview` 对正常且 ≤96 字的 `synthesis.answer.statement` 原样作为总标题，只在 fallback/超长时才从 causal chain 投影；后端确定性 fallback 的 answer 明确由若干“项目名：design_mechanism”拼接。若 Provider 返回的正常 answer 本身只是单案例机制，Board 当前不会核查它是否覆盖研究问题或多个子问题。
+- 后端已有强证据结构可用于安全投影：`causal_chains` 的 finding 带 `evidence_asset_ids`，每个 case 又按 subquestion 保存 branch analysis。修复方向应优先在展示投影或 synthesis 接受边界上做“总标题必须是跨题判断”的行为合同，而不是丢弃现有逐题案例数据。
+- U1 durable data 已用 SQLite `mode=ro` 全量核对，排除“前端绑定到别的 Run”：Run `7456d7eb-...` 的 question/subquestions 均正确，coverage 内 synthesis 明确是 `generation_mode=deterministic_fallback`；answer 与唯一 causal chain 都绑定 asset `7daf4462`（Oaxaca Gastronomic Center）。错位句正是该 asset 的 `design_mechanism`，证据绑定没错，**语义角色错了**：单案例简介被当作整轮结论。
+- 根因闭合：quick fallback 只取 `primary_branches[:1]`；后端 answer 用该 branch 的 `design_mechanism`，Board 对 fallback 又从 causal chain 提取同一“机制”作 headline，所以两层共同把第一子问题的首个案例机制提升为 Run 级结论。该 branch 的第一条 `transfer_strategy` 则明确回到用户任务（先测绘层高、地下遗存、夹层和入口标高），是更安全的 fallback 顶部判断来源。
+- 兼容旧 Run 的最小修法应同时覆盖两层：后端未来 deterministic answer 改用 evidence-bound transfer，不再持久化单案例简介为总答案；Board 对既有 fallback 优先取 causal chain 的“转译”段，仍保留机制作为最后兜底。这样不改 durable 历史数据也能立即修复 U1 展示。
+- 双层修复已按该边界落地：后端只替换 deterministic answer 的字段来源（同一 branch、同一 asset evidence id），不改变 causal/comparison/depth 数量；Board 只调整 machine-shaped/fallback headline 的候选优先级为“转译 → 机制 → raw fallback”，正常 Provider synthesis 完全不受影响。
+- 现有设计系统测试以 raw CSS 正则固定关键响应式结构，适合为 M151 增加小型合同；不需要引入截图快照。备份页 720px 媒体块独立于全局 860/620 单块约定，因此可在原块内迁移而不触碰结果页媒体结构。
+- M151 loaded QA 证明重排成立：1440×900 下页面 1120px 居中，恢复区是 409.6 / 614.4px 双列，文件控件与说明在右侧形成单一任务列；整个页面高度从用户截图接近一整屏收敛到 474px，水平溢出 0。390×844 下页面宽 351px、恢复区单列，下载按钮与文件控件均 44px，高度 720px，水平溢出 0，console error 0。
+- 桌面“备份数据”仍保留明确主动作，移动端顺序为标题 → 两行状态 → 包含/排除一句话 → 下载 → 恢复后果 → 选文件，没有信息断裂。Impeccable 的影响是把风险说明从页首长文移到相关动作附近，并以平面结构线而不是新增卡片建立层级。
+- 工具恢复记录：项目内 `.claude/skills/impeccable/scripts/context.mjs` 不存在；改用技能实际安装目录成功。系统 `python` 不在 PATH；改用 `apps/api/.venv/Scripts/python.exe` 执行 session catchup 成功，未发现未同步上下文。
+
+## 2026-07-27 M149 五项 P1 根因与产品决策
+
+- U1 结论并非串到错误 asset，而是 deterministic fallback 把首个案例的 `design_mechanism` 提升为整轮 answer，Board 又重复以“机制”作标题。未来持久 answer 与历史 Run 的显示投影都优先使用同一 evidence-bound causal chain 的“转译”，既不改 durable 数据，也不补写新事实。
+- 收藏入口的缺口是动作可发现性，不是收藏 API：结果页原先只能先勾选案例，再在底部选择条中保存。每个 dossier 现在直接提供“加入个人收藏”，复用同一保存请求；直接收藏不清空当前多选，原“选择案例”继续服务批量收藏和案例对照。
+- 等待期计数一直为 0 的根因在后端检查点：workflow 每轮已计算 coverage，但只把摘要写入 Trace，`ResearchRun.coverage_report` 要到终态才更新。`gap_check` checkpoint 现在同步持久覆盖摘要，因此既有 Board 轮询无需读取半成品结果即可显示实时可用参考数。
+- 保留焦虑按试点访谈采用“一学期”而非增加提醒系统：新 Run 从创建日起 180 天，取消永久后从操作日起 180 天；每行显示具体到期日，14 天内才使用“即将到期”警示。现有数据库行的到期日不迁移、不静默延长，backup 的“超过 14 天未下载”提醒仍是另一套备份频率规则。
+- U1 的 3 个研究问题只有 2 个正式项目却可完成，来自 Quick `projects=2` 与 `subquestions=3` 的合同不一致；改为至少 3 个正式项目。U3 的儿童卧室案例证据链本身完整，但只是房间/家具尺度类比；仅靠 relevance 无法表达“证据真实但不直接回答本题”，因此正文分析新增独立 `direct_match` 闸门，保留低 relevance 完整证据可被纠偏的既有行为，同时阻止尺度错配进入正式案例。
+- “罗马的卧室”不是跨项目绑定错误，而是模型把标题与 URL 中明确的 Barcelona 错译为 Rome。未来 prompt 明确禁止引入来源不存在的城市/国家；Board 对存量记录采用保守显示规则：原题与 URL 同时明示英文地点、中文标签又无法核实时回退原名。这样 U3 立即不再显示错误城市，又不修改历史数据库。
+
+## 2026-07-27 M150 第一轮源码审计
+
+- 三档双命名是一个明确的单点根因：`modeLabels` 仍输出“概览 / 标准 / 深入”，`researchDepthOptions.coverage` 又输出“快速找方向 / 形成方案依据 / 做跨案例论证”。两套词同时进入单选项、最近研究、演示页、partial 缺口与页头。最小修复是让 `modeLabels` 直接成为三条用户结果词，并把选项结构缩成“label + description”；内部 `quick/balanced/deep` 请求值完全不变。
+- 已定位四类试点原话对应的源码触点：“证据方向”在 planning 阶段说明；“连续检索”在 `no_new_assets` 停止原因；“初步依据 / 初步灵感”在完成但 enrichment 不足的历史状态；“未读取图片像素”需继续从 App 与收藏投影中定位。它们都是面向用户的状态/边界文案，不需要改后端状态码或证据模型。
+- 现有记录标题函数已经会把“背景，如何行动”重排为“背景：行动”，但固定 28 字从尾部截断，长动作会丢失真正的判断对象。M150 需要用实际试点长问题补一个行为样本，再决定是压缩背景还是保留动作尾部；不能把标题问题误修成增加字符上限。
+- Header、运行中页面和收藏反馈需要继续读相邻 JSX 后才能定方案。当前已确认收藏成功只有全局 `announcement` 与结果底部 selection dock 的完成态，直接收藏按钮本身没有独立成功反馈；批量保存会清空选择，因此用户看到勾选消失时容易误判为失败。
+- 顶栏职责可以用删除而不是重命名解决：“查看上次结果”与最近研究第一条完全重复，也是用户在“找收藏”时的错误候选；移除后主页顶栏只保留数据工具（备份、个人收藏），最近研究负责打开 Run。运行中结果页当前刻意不显示“返回主页”（条件排除了 `isRunActive`），因此全局入口全部消失；让所有结果视图统一显示“返回主页”即可一跳回到历史、收藏与备份，不需在进度页再复制三枚按钮。
+- 保存反馈需要分两种动作：直接收藏在原案例按钮就地变成“已加入收藏”，不再触发远处 dock；批量收藏仍在原底部 dock 就地显示“已保存 N 项，选择已清空”，明确消失的是临时选择而不是收藏。API 和累加语义不变。
+- 术语收口采用直接、可判断的状态词：“已完成 · 初步依据”→“已完成 · 案例不足”，“已完成 · 初步灵感”→“已完成 · 图纸较少”，“证据方向”→“可研究的小问题”，“连续检索没有找到新的有效项目证据”→“这轮没有找到更多可用案例”，“综合方法”→“整理结论”，“证据问题”→“研究问题”。“策略矩阵”属于同一批用户点名的论文语域，界面动作改为“案例对照表”；底层 export mode 不变。
+- 收藏目录的认领顺序目前反了：系统生成的完整 `group.question` 是主标题，用户原始 `collectionQuestion` 只是次要行。应让用户原问题先出现并作为认领锚点，再以“研究方向”标注系统拆解；每行仍由子问题 id 区分，不改变收藏组织结构。
+## 2026-07-27 — M150 title and regression-test decisions
+
+- 研究记录标题不能只靠把长度上限调大：现存长问题里有多个连续问句，当前算法总从第一句开头截断，正好丢掉最后一个最能区分任务的问法。最小修复是优先取最后一个完整问句；单问句仍沿用“场景：动作”的既有提炼。
+- 收藏目录不新增标题字段。把用户最初输入的问题提升为主标题，把系统拆出的子问题降为“研究方向”副标题，即可保留辨认锚点并避免迁移旧数据。
+- M150 行为测试迁移点已经定位：旧“概览 / 标准 / 深入”、旧部分完成状态、顶栏“查看上次结果”、全局收藏成功条，以及批量收藏的模糊成功文案都必须先改成新合同；运行中任务新增“返回主页”可达性断言。
+- 标题回归用例会覆盖飞行记录里的真实失败形态：多个问句拼接时，标题应取最后一个问句，而不是截断第一段背景。
+- 收藏反馈无需新增持久字段：现有 `savedIds` 足以让单项目按钮原位变成“已加入收藏”；批量成功条只需复用本次操作的 announcement，并且只在清空选择的批量路径出现。
+- 研究方式卡片将直接使用唯一名称作标题、效果说明作副文，不再同时显示“概览 / 标准 / 深入”和第二套名称；演示页沿用同一套标题。
+- “查看上次结果”整块顶栏动作可直接删除，最近研究列表继续承担找回记录；`返回主页` 条件扩大到所有结果视图即可恢复运行中的全局导航。
+- 首次真实 loaded-state QA 暴露了一个旧数据兼容点：后端新标题算法只影响新建记录，现存记录仍携带旧的截断 `title`，首页第一条依旧显示“旧厂房改造成社区文化中心……”。M150 的“记录标题可辨认”不能只验证新建路径，显示层还需为旧截断标题从完整 `question` 生成辨认标题，且不写回耐久数据。
+- 复查后确认上条不是代码缺口，而是 QA 时 API 仍运行修改前进程：`ResearchRunRead.derive_title_from_question` 每次响应都会从完整问题动态生成标题，因此服务重启后旧记录也会立即采用新算法，不写回数据库。无需再复制一套前端标题逻辑。
+- 服务重启后首条旧记录已显示为“新植入的结构和旧结构应该脱开还是连接”。但单问句仍有第二种失败：高差场地问题的长背景占满 28 字，动作完全不可见。既有提炼函数已经计算 `first_clause`，却在没有“是 / 作为”时误用完整 context；改为使用首个场景分句即可让“用剖面和流线……”进入标题，且不增加长度上限。
+- 390×844 截图显示标题算法虽已把动作放进 28 字，但 `.recent-question { white-space: nowrap }` 又在窄屏把动作裁掉。最小布局修复是让记录标题最多显示两行；记录列表已有固定滚动区，不会因此无限拉长首页。
+- 完整门禁后第一次基线脚本误报 1/1/1：原因不是测试实例接管或数据变化，而是 PowerShell 对 `Invoke-RestMethod` 顶层 JSON 数组的包装计数方式；直接查看 `/v1/workspaces` 原始响应仍是 4 个真实工作区。最终基线必须用明确枚举/原始 JSON 解析，不能沿用该计数写法。
+
+## 2026-07-27 M152 执行边界
+
+- M121 验收轮对图纸灵感线零有效覆盖，任务书路径也未形成从输入到找回的完整证据；M152 只补这两个明确空白，不重跑已经通过的普通建筑研究主线。
+- 仍用 M121 的核心判据和严重度规则。定向场次会把 T5/T6b/T7 与任务书版 T2/T3/T6a/T7 串成完整路径，并单独记录运行状态理解；评分与逐字记录必须能追溯到真实 loaded UI。
+- 为保护用户现有数据，浏览器动作必须指向隔离数据目录与确定性 mock provider。若隔离环境不能生成某段真实状态，明确记系统原因中断或受控替代，不借用 `.archresearch` 中的持久 Run 完成动作。
+- 默认 mock provider 足以驱动任务书路径，但默认 mock 运行没有 XHS searcher，图纸灵感会按产品边界诚实失败；要覆盖图纸结果与收藏，隔离实例必须注入 tests 已有的确定性 XHS 下载器/视觉分类器，而不能改生产配置或触碰真实登录态。
+- 已采用临时双端口实例：API 18000、Board 15173、临时 SQLite/文件根和临时 PDF。隔离 API 的健康响应明确为 `provider_mode=mock`；正常 8000/5173 服务保持原状。
+- 隔离 Board 首屏真实 loaded DOM 通过：新实例显示空的“建筑研究工作区”，两类入口、单一三档名称、可选任务书入口和 180 天说明均按 M150/M149 现行合同出现；没有借用任何历史 Run 或收藏。
+- 图纸入口切换后，问题占位符与 CTA 会改成“轴测图 / 查找灵感”，三档研究方式和任务书入口正确隐藏。研究环境同时显示“小红书可用”和“未启用页面高清图纸读取 / 连接 Chrome”，两者职责对首见者可能仍需解释，先作为单画像 P2 候选观察。
+- 图纸提交后约 120ms 已进入结果壳：顶部显示“已创建 / 0 条可用参考”，正文是“正在寻找图纸灵感”，七阶段全部换成图纸语域，且“返回主页”在运行中可达。V1 对“请求已接收、正在检索、完成后自动出现”可从同屏文字直接复述。
+- V1 结果在约 3 秒后 completed：3 个命名清楚的轴测表达方向，结果按“方向→帖子→图片”展开，并在每帖附近显示原笔记链接和“转载合集（非首发）· 权利未注明”。V1 可指认“精细线稿轴测图”为可用方向，T5 结果理解通过。
+- 图纸结果顶层写 33 张，三个方向各写 12 张（合计 36）；同一图片可能跨方向关联但界面没说明“总数按去重计”，先记录为 V1 单人 P2 候选，不据此立项。另有 36 个选择按钮均使用同一可访问名称“选择此图用于收藏”，键盘/读屏下难以辨认目标，先列可访问性 P2 候选。
+- V1 从图片旁按钮选中后，底部明确显示“已选 1 张图纸（最多 6 张）/ 添加 1 项到个人收藏”；保存后原地变为“已保存 1 项，选择已清空”。T6b 保存动作与成功反馈通过。
+- V1 返回主页后，最近研究首条能凭原问题前半句识别，副信息是“图纸灵感 · 33 张参考 · 7/27 / 已完成”，保留日期明确到 2027-01-23。
+- 个人收藏固定默认打开“建筑方案”，即使当前只有“图纸灵感 1 项”，会先显示空建筑状态；类型切换按钮本身给出 0/1 计数，V1 可据此选择正确类型。作为一次额外点击记录，暂不判失败。
+- V1 切到“图纸灵感 1 项”后立即看到保存图片、原笔记入口和删除动作；图片标题与刚选帖子一致。T7 找回通过，完整路径无提示完成。
+- V2 以“旧厂房竞赛轴测、比较拼贴/材质/人物叙事”发起，提交后同样立即出现图纸专用七阶段和返回主页，约 3 秒后 completed。三个方向能对应其比较意图，T5 输入、状态与方向理解通过。
+- V2 顶层为 35 张、方向仍各 12 张（合计 36），复现 V1 的“去重总数与方向关联数口径不明”；达到 2/2 重复 P2 阈值。V2 首屏也再次读到“小红书可用 · 未启用页面高清图纸读取 / 连接 Chrome”，两种读取能力的关系仍不直观，达到 2/2 重复 P2 候选阈值。
+- V2 能按“拼贴叙事轴测图”区域找到目标并保存，选择条和“已保存 1 项，选择已清空”反馈与 V1 一致，T6b 通过。该方向的 12 个图片选择按钮仍全部同名，复现 V1 的键盘/读屏目标不可辨认问题，达到 2/2 重复可访问性 P2 阈值。
+- V2 从主页进入图纸收藏后，两条已保存图片都能直接打开高清图与原笔记，T7 的“找到保存内容”通过；但列表只显示帖子标题“轴测图表达参考 5-1 / 1-1”，不显示原研究问题或“精细线稿 / 拼贴叙事”方向，V2 无法从文字说明其与哪次研究的关系。该项按核心 T7 先评 P1 候选，需结合 API 快照和第二路径证据复核是否仅为 fixture 命名局限。
+- 隔离 API 首次只读枚举意外看到两个同名“建筑研究工作区”（一个 0 Run、一个 2 Runs）；可能是空实例在 Vite/React 开发模式下的重复初始化，也可能是计数脚本枚举形状问题。当前不定性，下一步看原始 JSON 和创建时间；不把环境伪影写成产品缺陷。
+- API 快照复核闭合了图纸找回根因：两条 `SavedReference.snapshot.question` 都保存了完整且不同的原研究问题，界面有数据可用，只是图纸收藏列表没有投影它。故 V2 的关系解释失败不是 fixture 标题限制，按核心 T7 评 P1。
+- 原始 `/v1/workspaces` 也确认确有两个不同 id 的同名默认项目，创建时间只差约 3ms；这符合首次空库初始化被 React/Vite 开发模式并发触发两次的竞态形状。一个项目始终空，另一个承载全部 Run/收藏。无数据丢失，按新安装数据初始化 P1 记录；M152 不直接修。
+- B1 任务书入口真实 loaded DOM 通过：切回建筑研究后显示三档，展开区直接说明“任务书用于收束研究范围”“系统先读取场地、功能与限制，把它们作为问题拆解和案例检索边界”，案例 URL 单独称研究线索。B1 能准确复述任务书作用。
+- B1 通过受支持的 file chooser 成功选入单份 PDF，表单只显示“1 个文件待上传”，不显示文件名。任务可继续，但用户无法在提交前核对是否选对任务书；先记单画像 P2 候选。
+- B1 点击后按钮立即进入“正在准备研究…”禁用态，任务书读取期间没有零反馈；约 1 秒后结果壳已显示 4 个《耕织图》专属问题（工序序列、长廊空间语法、人物/器具/场所、四维体验），证明 PDF review 的 typed questions 确实约束同一 Run，而非仅把文件当附件。此时结果仍为空，需继续确认运行终态。
+- B1 后端只读状态已是 `completed / coverage_satisfied`，4/4 子问题覆盖、12 个 verified/partial assets；但 loaded UI 在多次等待后仍把四问全部显示为“暂时没有可用结果”，且没有完成状态条。不是研究夹具无产出，而是结果没有装入界面，核心 T3 失败，评 P1。
+- `/v1/runs/{id}/results` 独立返回 12 条完整结果，首项目“织造厂再生中心”同时关联四个任务书子问题；浏览器 console 只有 Vite 连接与 React DevTools 提示、零 error。故故障边界收窄到 Board 的快速完成状态/结果 hydration，而非 API 或渲染异常。
+- 从主页重开“耕织图：转译提取元素”仍是四问全空，排除只发生在初次自动跳转的 hydration 竞态；主页本身正确显示“研究已完成 / 形成方案依据 / 12 张参考”。需继续核对 Board 是否按 M149 `direct_match` 过滤了 mock 资产，避免把夹具合同缺口误判为生产结果丢失。
+- 根因不是 `direct_match`：Board 的 `analysisReady` 要求中文 context/mechanism、transfer 且至少一条 `evidence_claim.text_excerpt`；默认 `MockResearchProvider` 产生的 12 个 verified/partial assets 没有逐字引文，故被正确隐藏，但 workflow coverage 仍把它们计为完成。这个 no-key mock 的完成/展示合同脱节本身是独立 P1；B1 当前场次按系统原因中断，不计 persona T3。
+- 诊断用 `rg` 误带不存在的 `apps/board/src/types.ts`，命令退出 2，但其余 App/API 结果有效；后续只查实际类型文件，不重复该路径。
+- B1 有效场次再次显示“正在准备研究…”；进入 Run 后同屏是“正在搜索 / 12 条可用参考”、七阶段和四个任务书专属问题，且可返回主页。B1 能准确复述：PDF 已把问题收束到工序、长廊、互动节点和四维体验，运行仍在继续。T2/状态理解通过。
+- B1 第二次尝试终态为诚实 partial：界面写“已有证据已保留 / 12 条可用参考 / 覆盖 0 个项目”，后端是 `blocked / article_analysis_incomplete`。复核发现临时解析器错误地从 `/projects/p1` 的第一个 `/p` 切 URL，正文 analyzer 实际没跑；这是测试夹具故障，不计产品或 persona 结果。界面没有伪装 completed，状态诚实性反而通过。
+- 第三次隔离尝试中 parser 已正确返回正文，但 workflow 只会对推断为 `trusted_secondary` 的直接项目页进入 public-page analyzer；临时 `research.example` 域名被推断为未知来源，所以 12 页均停在 `enriched: 0`。这是夹具来源分级未满足产品安全门槛，不是产品缺陷；下一次改用可信出版域名形状并换全新隔离数据根。
+- B1 v3 的可信来源夹具已进入正文分析：loaded UI 展示四个任务书问题，每问都有 3 个“代表案例”、证据出处和“怎么做”。但同一屏顶部又写“研究尚未完成 / 覆盖 0 个项目 / 12 条可用参考”，与正文至少 3 个明确项目冲突。先作为核心结果状态 P1 候选，下一步用只读 Run/coverage 数据判断是计数语义还是夹具字段缺口。
+- v3 的“覆盖 0 / 正文有案例”已判定为夹具字段错配，不是产品缺陷：formal coverage 要求 top-level `project_context` 与 `design_mechanism` 两句都各自绑定逐字引文；临时 analyzer 提供的是另一组同义句，只让按题 branch 达到 Board 展示门槛。已让 v4 analyzer 对齐 mock asset 的原始两句并各带逐字引文；v3 仅保留为系统校准事件，不计 persona 或缺陷。
+- v4 进一步暴露默认 mock 的重复 evidence 行为：mock 搜索先为 `project_context` 持久一个无 excerpt 的 claim；正文 analyzer 返回同一 statement 和真实 excerpt 后，持久层把它视为重复而没有补齐 excerpt。`design_mechanism` 能新增带 excerpt 的 claim，但 context 仍无引文，formal coverage 因而继续为 0。这再次支持已登记的“默认 mock 完成/展示合同 P1”，但 v4 仍作为系统校准事件，不计 persona。
+- B1 有效场次通过完整任务书链路：等待态明确，PDF 收束出四个专属子问题，完成结果能用“方向→代表案例→怎么做/适用条件→出处”理解；直接收藏原位反馈；个人收藏目录同时显示原研究问题与任务书衍生方向，详情保留解法、出处和案例图。T2/T3/T6a/T7 全部通过。
+- B2 选择同一 PDF 后也只显示“1 个文件待上传”，真实文件名 `m152-smart-museum-brief.pdf` 不在 DOM；复现 B1 的提交前无法核对文件问题，达到 2/2 重复 P2 阈值。
+- B2 收藏目录把两条相同任务书方向、不同原问题分别显示为完整“原研究问题”，视觉上可一眼区分，建筑收藏的 T7 关系理解继续通过。不过两行按钮的可访问名称都只有同一个子问题，未包含原问题；当前只在 B2 的双记录场景出现，作为单画像可访问性 P2 观察，不单独立项。
+- v5 API 为两位任务书 persona 提供一致的正式终态：两条 Run 都是 `completed / coverage_satisfied / 12 usable / 4 projects / 4/4 subquestions`；浏览器 error 日志为 0。空库仍生成两个创建于同一秒的默认工作区，其中只有一个承载 2 Runs，初始化竞态 P1 在独立 v5 数据根再次复现。
+- M152 分级闭合为 3 项 P1（图纸收藏缺原问题/方向、fresh DB 双默认工作区、默认 mock completed 与 evidence 展示脱节）与 4 项 2/2 重复 P2（图纸去重计数口径、XHS/Chrome 职责、图片选择 accessible name、任务书文件名）。其余单画像观察不立项；统一进入 M153，不在 M152 修改生产代码。
+- 最终 durable 只读核验发现收藏从交接基线 11 增至 14，但新增 3 条均创建于 12:04、属于既有“城市社区共享中心”Run 的多使用者活动问题，和 M152 的两条图纸问题/两条《耕织图》问题都不匹配；正常 Runs 仍为 15。结合本轮隔离 Run 全在临时库，可判为并发外部状态变化，必须保留并把当前基线更新为 14 collections，不能回删。
+
+## 2026-07-27 M153 第一轮审计
+
+- 默认工作区竞态触点已定位到 Board `App.tsx:1432-1441`：挂载 effect 先 GET，空数组后直接 POST “建筑研究工作区”。React/Vite 开发模式的严格挂载会让两个 effect 同时看到空库，纯前端 `length===0` 无法提供数据库级唯一保证；验收测试必须真实并发触发，而不只断言单次调用。
+- 任务书、图纸环境与图片 accessible name 都是现有 App JSX 的直接投影，可做小型展示修复，不新增页面或确认步骤。Impeccable 的约束是继续使用标准文件控件、平面信息层级与既有 4/8 token，不为文件名或说明再造卡片。
+- 当前 PRODUCT 仍写“文件名由原生控件显示一次，外层只保留文件数量”，与 M152 loaded DOM 中实际无法核对文件名的证据冲突；M153 应迁移这条产品合同为“外层列出已选文件名”，而不是保留旧条款再叠加例外。
+- 图纸收藏数据层已按 `snapshot.question` 分组，但只有建筑收藏把该分组投影为问题目录；视觉收藏直接铺图片，所以 P1 不需要新增 durable 字段。方向可从收藏 snapshot 的 `subquestions` / 保存时的选中子问题继续追查，优先复用现有快照。
+- 默认 MockResearchProvider 直接预填 context、mechanism、transfer 与 facts，却没有逐字 excerpt；现有 workspace POST 也完全无幂等/默认语义。后端修复应保持普通“创建项目”仍可自由命名，把“确保默认项目”与普通创建分开，不用 workspace 名称唯一索引改变用户行为。
+- 默认工作区竞态不应通过“名称唯一”修复：普通用户可能合法创建同名项目。最小安全方案是为首启增加独立的幂等 ensure-default 语义，并在数据库冲突层保证并发调用只留下一个默认工作区。
+- 图纸收藏已有 `snapshot.question`，但视觉收藏分支没有渲染它；仍需确认保存快照是否也保留具体方向，不能在 UI 中臆造不存在的数据。
+- 任务书文件名合同与当前 `PRODUCT.md` / `DESIGN.md` 中“外层只显示数量”的旧规则冲突；实现时需要同步迁移产品合同，改为控件外展示已选文件名。
+- 图纸选择按钮目前所有项共享同一个 `aria-label`，应组合方向、来源、图片类型和序号形成稳定且可区分的名称。
+- 图纸总量是去重后的资产数，方向分组是关联数；页面需要一句短说明，明确同一张图可能归入多个方向，避免用户把去重总数与各方向关联数相加后误判为计数错误。
+- 图纸收藏保存时 `run.question` 已进入 snapshot，但 `_collection_case_subquestions` 对 visual goal 直接返回空数组；关联方向仍保存在 `AssetCandidate.subquestion_ids` 与 `ResearchRun.subquestions`，因此可以无迁移地写入并回填 `visual_directions`，旧收藏也能兼容恢复。
+- 默认 Mock 的最小证据合同收敛为 ProviderAsset 上的可选 `evidence_excerpts` 映射：仅 Mock 为其已声明的 context/mechanism 提供确定性摘录，持久层只按 statement 精确绑定；真实 provider 默认空映射，不凭空把模型总结冒充网页逐字引文。
+- 首启幂等入口采用固定 default workspace id + SQLite `INSERT ... ON CONFLICT DO NOTHING`。普通 `POST /workspaces` 保持原样，重复名称仍合法；Board 只把空列表后的创建调用换成 `ensureDefaultWorkspace`。
+- UI 最小投影已确定：视觉收藏每张图下方显示“原研究问题 / 灵感方向”；任务书选入后用平面文件名列表供提交前核对；图纸结果标题旁补充“总数按不重复图片计算，同一张图可出现在多个方向”；选择按钮名称包含方向、帖子、图纸类型和组内序号。
+- 实现后并发测试稳定通过：两个同时到达的 `POST /v1/workspaces/default` 返回同一固定 UUID，库中只产生一个默认项目；随后两个普通同名 `POST /v1/workspaces` 仍各自成功，确认没有偷改用户创建语义。
+- Mock 的证据映射在 live OpenAI 结果进入持久层前由 `_conservative_live_result` 强制清空，因此只有确定性 mock fixture 能直接写入演示摘录；真实 provider 仍必须依赖网页正文分析，正式事实门槛没有放宽。
+- Board 第一轮绿灯只剩两处旧环境文案断言；它们是合同迁移而非实现错误，更新为 Chrome/小红书分工后的新词后，App + client 114 项全部通过。
+- loaded QA 证明默认工作区修复不仅是接口单测成立：React 开发模式从 fresh DB 启动后，页面与 API 都只返回固定 UUID 的同一个“建筑研究工作区”。
+- 视觉结果中的“5 张”是唯一图片数，3/2/2 的三个方向合计为 7 次关联；桌面和 390px 都能同时读到计数说明，且 7 个渲染关联按钮生成 7 个唯一 accessible name。
+- 两条视觉收藏的最小认领信息是“原研究问题 + 灵感方向”；在 390px 下两组文本完整呈现且 `scrollWidth === clientWidth`，无需新增详情页或卡片层级。
+- 外部 `images.example` 测试图故意不可达时，页面使用既有“灵感图加载失败”占位；这不影响关系、计数和可访问性验收，也没有产生 console error。
+- Browser 的 viewport capability 在 reload 后才能稳定作用到目标标签；对弹出窗口调用 `window.resizeTo` 不是可靠的移动端验收方式。
+
+## 2026-07-27 M122 第一片边界
+
+- 这是一轮行为保持型重构，不接受顺手改文案、界面、样式或后端合同；任何变更行都必须能追溯到覆盖率基线或纯函数搬移。
+- “失败行为测试”在本片解释为模块边界红灯：测试先从尚不存在的 `lib/*` 入口导入并断言现有行为，确认因缺模块失败后再搬实现；产品行为本身已有 141 项 Board 回归守卫。
+- 覆盖率基线必须在搬移前取得；搬移后以同一命令比较，不允许用排除文件或降低阈值制造“覆盖率不下降”。
+- Board 与 Extension 的 Vitest 配置都尚未声明 coverage，两个 package 也都没有 `@vitest/coverage-v8`；当前实际测试解析到 Vitest 4.1.10，因此 coverage 插件应使用同一 4.1.x 兼容线，并把稳定命令写成各自的 `test:coverage`。
+- extraction map 所列第一片函数仍全部位于 `App.tsx`，但 M153 后行号整体后移；抽取必须按符号与依赖定位，不能按旧行号机械切片。
+- 搬移前覆盖率基线：Board 78.17/72.39/80.50/81.78（statements/branches/functions/lines），其中 `App.tsx` 78.29/72.34/78.66/81.85；Extension 82.69/76.52/83.96/84.73。后测使用同一 include/exclude 与 reporter 配置，不以改配置规避下降。
+- 第一片依赖图可保持单向：text、labels、storage 独立；backup 只依赖 storage；workResult 依赖 text+labels+API types；demo 依赖 workResult+mock；run 依赖 labels+API types；collections 只依赖 API types。`researchSynthesisOverview` 与 React 组件暂留 App。
+- 搬移后 Board 总覆盖率 78.36/72.59/80.50/81.84，四项均达到或超过原基线；新 lib 组为 88.67/81.41/97.01/91.92。App 单文件比例因移走高覆盖纯函数而重新分母化，不能与旧 App 数字直接解释为行为漏测；项目总量和新模块分项才是同配置下可比指标。
+- `copy-glossary.test.ts` 原先把单体 `App.tsx` 当作全部用户文案集合。模块化后必须显式拼接各生产纯模块，否则既会误报必需词缺失，也会让禁用词在新模块逃逸；这是一条需沿后续组件拆分继续维护的源码守卫合同。
+
+## 2026-07-27 M122 第二片边界
+
+- `<DataManagementPage>` 的文件、预检、下载和最终确认状态没有被其他视图消费，适合整体移入组件；App 只保留页面开关、跨开关清空的操作提示、当前项目/研究记录计数、运行中禁用状态和恢复后刷新工作区的父级回调。
+- 恢复顺序是本片的关键行为合同：上传恢复 → 重新读取工作区 → 父级更新列表并优先恢复原 active id → 写入 localStorage → 重置当前工作区视图 → 页面清空预检/文件/确认并显示完成状态。抽取不得调换该顺序。
+- 页面文案与 CSS 已在 M151 验收，本片不改任何可见文本、className 或响应式结构。`copy-glossary.test.ts` 需要把新生产组件源码纳入扫描，防止抽离后形成文案守卫盲区。
+
+## 2026-07-27 M122 第三片边界
+
+- 四个目标都是条件渲染的叶子覆盖层；App 继续唯一持有 open 状态、触发按钮 ref、统一 `closeOverlays`、body scroll lock、Escape 关闭和 Tab 循环。组件只接收数据与 `onClose`/动作回调，不各自复制焦点管理。
+- SharePanel 只需研究类型、已选数、可直接分享图片数、确认与关闭；StylePanel 只需 profile/status、字段修改、保存与关闭。两者不应下沉 API 或父级状态。
+- ComparisonDialog 的 overview、推荐首项和表格完全由 selected results + failed preview map 派生，适合随视图下沉；SourceInspector 同样可由单个 WorkResult、收藏/拒绝/备注状态与小回调完整渲染。
+- 既有 App 回归直接覆盖分享确认、样式保存和案例对照；SourceInspector 缺少正向打开合同，因此本片的独立组件测试必须覆盖预览失败、证据矩阵、收藏/拒绝、备注 change/blur 与遮罩关闭。
+- `copy-glossary.test.ts` 仍是用户文案全集守卫；四个组件搬出后都要纳入 raw source 拼接。CSS class 与 DOM 层级原样保留，不做覆盖层视觉重设计。
+
+## 2026-07-27 M122 第四片边界
+
+- 收藏页的五个状态仍由 App 持有：页面开关、建筑/图纸视图、选中目录项、收藏列表和加载态；因此返首页、重新打开及切换视图时的既有复位时机不会因组件挂载方式改变。
+- `collectionSections`、建筑目录和当前目录详情只服务收藏页，可随 JSX 一并下沉；新组件接收受控 view/selection、收藏列表、加载态以及切换、选择、删除回调。
+- `deletePersonalCollection` 必须留 App：它同时调用删除 API、更新 `personalCollections` 并按被删快照同步 `savedIds`，不是纯展示职责。打开收藏页时的 API 加载与返回主页状态复位也留 App。
+- 既有 App 集成测试已覆盖建筑/图纸计数与切换、建筑目录/详情/返回、视觉上下文、来源、删除及重新打开后的复位；本片另补组件边界红绿测试，避免机械搬移后仅靠大组件间接覆盖。
+
+## 2026-07-28 M122 第五片边界
+
+- `<VisualInspirationBoard>` 只负责方向→帖子→图片的展示与事件转发；`inspirationGroups`、全结果顺序、已选 id、失败预览表和持久化选择函数由 App 提供。打开检视器时仍由 App 记录 trigger、result/subquestion 并切换 overlay。
+- `<CaseAnalysis>` 只负责子问题章节、代表案例答案、直接收藏/批量选择和可选项目预览；`caseGroups`、收藏选择状态、saved/rejected 状态、浏览器不可用判断及所有 API 副作用继续留 App。
+- 两块结果视图共享 `WorkResult` 和既有纯 helper，但不互相持有状态；为了保持地图规定的边界，不把 group 派生或跨视图选择 reducer 顺手移入组件。
+- 既有 App 回归已覆盖主结果结构、视觉方向/帖子/图片、空章节、直接收藏和预览分支；本片仍需独立组件合同，明确 props 与回调语义，并把两个新生产源码纳入 copy glossary 扫描。
+
+## 2026-07-28 M122 第六片边界
+
+- `<ResearchComposer>` 是受控表单：goal/mode/question/files/referenceUrl、加载/运行/就近错误和浏览器环境状态全部由 App 持有；组件只渲染两类入口、任务书/案例页和环境操作，并原样转发表单与按钮事件。
+- `questionInputRef` 继续由 App 持有并传入 composer，因为 `<HomeSections>` 的问题起点点击后必须跨组件把焦点送回研究问题；这是两个组件之间唯一通过父级协调的 DOM 引用。
+- `<HomeSections>` 可一并承接固定 problem starters、RunHistoryList 和日期/保留期显示 helper；工作区创建、打开历史 Run、更新保留期仍是 App 回调。这样不会把 API 或页面导航下沉。
+- 关键行为合同包括：切换 goal 时父级清空不兼容输入；建筑模式显示三档与可选资料，视觉模式显示环境状态；提交错误紧邻按钮；新建项目表单受控；最近研究保留期和打开/永久操作保持原 accessible name。
+- 第六片抽取后 `App.tsx` 从 2,349 行降至 2,024 行；组件事件只回传到父级，`handleResearchSubmit`、`handleCreateWorkspace`、`openRun`、`handleRunRetention`、浏览器连接及取消/重试都未下沉。
+- 第七片的真实耦合点不是展示文案，而是六项浏览器状态有多个写者：`loadBrowserReadiness`、`handleConnectBrowser`、`ensureBrowserResearchAccess`、`refreshBrowserConnection`，以及 `hydrateRun` 对 `browserConnected` / `xiaohongshuSearchAvailable` 的额外写入。hook 合同必须先钉住竞态与陈旧结果处理，不能只把 useState 和 callback 机械挪文件。
+- `useBrowserReadiness` 现在是浏览器环境状态的唯一写者；每次异步检查先取得递增 request id，只允许最后启动且仍有效的检查提交状态。Run 水合复用同一入口并传入自己的 `shouldApply`，因此旧 Run 和旧环境请求都不能覆盖更新结果。
+- 初始检查、手动刷新、服务连接刷新、配对/自动连接、XHS 已可用短路、可选 Chrome 放行、页面权限拒绝、API 错误和 demo no-op 均有 hook 或 App 合同；迁出的文案继续由 copy glossary raw source 扫描。
+- 第八片不能直接把 `hydrateRun` 和 polling effect 搬文件：当前 payload 有 results、两个 selected id、board、comparison/saved/rejected、notes、trace、style 等成组写入和两套 reset，且 `hydrateRequestRef` 跨打开、启动、取消、重试、重跑和返首页递增。应先用 reducer 固定 hydrate/reset 原子边界，再抽请求世代与轮询。
+
+## 2026-07-28 M122 第八片边界与结果
+
+- Run payload reducer 统一承接 results、selected ids、board、comparison/saved/rejected、notes、trace 与 style；hydrate/reset 由单次 reducer action 提交，局部收藏、拒绝、备注、选择和样式仍通过等价函数式更新，保留异步完成时读取最新 state 的语义。
+- `useRunHydration()` 独占请求世代：打开、启动、取消、重试、重跑、切项目和返首页只调用 begin/current/invalidate/isCurrent，不再直接共享 ref。水合仍先并发读取 results/board/user/events 与浏览器环境，再按 board id 读取 style；每个提交点都检查同一世代。
+- `useRunPolling()` 保留 1 秒间隔、busy 防并发和后台 Run 静默更新；只有当前打开的 Run 到达终态才水合 payload，后台 Run 只更新最近研究，错误也只在当前打开 Run 上展示。
+- 新合同覆盖完整 hydrate/reset、成功投影 board/user/trace/style、局部函数式更新、陈旧请求丢弃和终态顺序。Board 最终 177 tests，覆盖率 80.01/75.75/84.77/83.80，四项均不低于第七片。
+
+## 2026-07-28 M123 初始审计
+
+- CI 草案已存在于 `.github/workflows/verify.yml`，不是从零新增；M123 必须先验证其是否真的覆盖 Windows 所需门禁，不能仅以文件存在作为 CI 完成证据。
+- Git 外旧发布清单仍绑定 2026-07-16 的 Quick/Balanced/Deep：Balanced `7d8faa53` 与 Deep `b4c314a6` 已在 M131 删除，对应 8 张 PNG 已失效；Quick `d13bdc67` 两张仍在。旧清单的 226 API / 75 Board 门禁也已明显过期。
+- `.artifacts` 另有三份可恢复数据备份与当前 Board/Extension coverage summary；所有文件先保留。发布证据刷新应基于当前 durable Run 与最终门禁，不复用失效 Run，也不主动调用 live provider。
+- 支持的更新语义不是替用户拉取源码：`scripts/update.ps1` 在源码已由用户替换后执行 stop → setup → verify → start，禁止 Git 写操作；任何安装或门禁失败都会在 start 前终止。
+- CI 草案原本已有 Windows/Python 3.12/Node 24/setup/full verify，但缺少手动触发、显式只读权限和 M122 coverage 门槛。M123 只补这三项，不引入 live provider 或额外服务。
+- V2.1 的发布版本面此前仍为 `0.1.0`；API 包/应用、Board 包、Extension 包/manifest 现统一以 `2.1.0` 为发布合同。根包继续 private 且无版本，不作为可发布制品。
+- 干净安装使用当前解析到的 Ruff 0.16，发现 `apps/extension/tests/e2e/support/full-stack-api.py` 把同属第三方的 `uvicorn` 与 `archresearch_api` 分成两个 import block；这是 clean-install 工具链兼容问题，不是产品行为或持久数据问题。最小修复只移除块间空行。
+- 用户截图中的 `image_gen.imagegen` schema/registration 报错来自 Codex 客户端工具注册冲突；本轮没有调用图片生成，也不属于 ArchResearch 运行、更新或发布链故障。
+- 隔离更新在 fresh setup 后完整通过 348 API / 177 Board / 165 Extension / 8 packaged E2E 与全部静态、类型和构建门禁，随后重新启动 8001/5174，两个端口均返回 200。
+- `archresearch-backup-before-husk-delete.zip` 的隔离预检为 `ready=true`、format 1、schema `d0f1a2b3c4d5`，识别 56 files / 61,044,756 bytes / 4 workspaces / 17 Runs / 7 collections / 2 inputs；运行前后隔离 SQLite 的共享读 SHA-256 相同，workspace 0→0，未调用 restore。
+- 最终源码可视证据采用仍可由当前 API 核对的三条 permanent Run：Deep `76f52c79`（51 usable / 9 formal projects / 6/6 / gaps 0）、任务书 Balanced `ff16988d`（28 / 8 / 4/4 / gaps 0）、图纸 Quick `f5be3f17`（5 / 3 / 3/3 / gaps 0）。桌面首页、备份桌面/390px和三条结果页均横向无溢出、console error 0。
+- 旧 2026-07-16 清单的 Quick `d13bdc67` 后来也在 M144 作为不可恢复空壳删除，故不应只归档 Balanced/Deep 的 8 张图；10 张旧 UI 截图全部保留为历史材料，但不再作为当前发布证明。
+
+## 2026-07-28 M123 最终结论
+
+- 当前源码的本地可重复发布链已经形成闭环：fresh setup、start、stop → setup → verify → start 更新、隔离备份预检、当前 API 证据与 loaded UI 截图均可复核；默认路径不需要 live provider key。
+- 当前发布清单为 `docs/release-evidence-2026-07-28.md`。旧清单与 10 张旧 PNG 已移动到 history 位置而未删除；旧底层 Run 均已不存在，历史截图不能再作为当前发布证明。
+- 根级 coverage 最终为 Board 177 tests、80.01/75.75/84.77/83.80；Extension 165 tests、82.69/76.52/83.96/84.73。根级 `scripts/verify.ps1` 另通过 348 API / 177 Board / 165 Extension / 8 packaged E2E 及全部静态、类型、构建、进程、安全和评测检查。
+- 本地证明不等于 Hosted CI 已运行。工作流合同已就绪，但远端 CI、版本 tag 和公开发布只能在用户明确授权 Git 发布后产生。
+
+## 2026-07-28 M154 发布预检
+
+- GitHub CLI 2.96.0 已登录 `jileyu2000`，具备 `repo` 与 `workflow` 权限；但本地仓库没有任何 Git remote，账号前 100 个仓库中也没有名称含 arch/research 的候选，不能推断发布目标。
+- 项目内可安全清理项是 Mypy/Pytest/Ruff 缓存、`.artifacts` coverage/验证日志与已忽略的旧审计 scratch；API venv、pnpm dependencies、Extension dist 和 `.archresearch` 仍服务本地运行链，不能按体积机械删除。
+- `.artifacts` 的三份 ZIP 共 197,333,728 bytes，属于用户数据备份；16 张 portfolio PNG 共 2,609,028 bytes，属于当前/历史发布证据。两类都不是临时垃圾，清理阶段保留，发布 stage 必须显式挑选而不能 `git add -A`。

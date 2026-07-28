@@ -5,9 +5,13 @@
 name: verify
 
 on:
+  workflow_dispatch:
   push:
     branches: [main, 'codex/**']
   pull_request:
+
+permissions:
+  contents: read
 
 jobs:
   verify:
@@ -47,6 +51,10 @@ jobs:
       - name: Setup workspace (venv, api deps, pnpm install, extension build)
         shell: pwsh
         run: ./scripts/setup.ps1
+
+      - name: Enforce frontend coverage thresholds
+        shell: pwsh
+        run: pnpm test:coverage
 
       # windows-latest ships Chrome stable, which the packaged MV3 E2E uses
       # through Playwright's persistent context.

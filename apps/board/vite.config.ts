@@ -21,6 +21,19 @@ export function createViteConfig(environment: DevEnvironment = processEnvironmen
       environment: 'jsdom',
       setupFiles: './src/test/setup.ts',
       css: true,
+      coverage: {
+        provider: 'v8',
+        include: ['src/**/*.{ts,tsx}'],
+        exclude: ['src/**/*.test.{ts,tsx}', 'src/test/**', 'src/vite-env.d.ts'],
+        reporter: ['text', 'json-summary'],
+        reportsDirectory: '../../.artifacts/coverage/board',
+        thresholds: {
+          statements: 78.17,
+          branches: 72.39,
+          functions: 80.5,
+          lines: 81.78,
+        },
+      },
     },
   })
 }

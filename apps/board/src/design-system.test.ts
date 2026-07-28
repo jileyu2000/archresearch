@@ -60,6 +60,28 @@ describe('responsive design-system rules', () => {
     )
   })
 
+  it('keeps the distinguishing action visible in long research-record titles', () => {
+    expect(styles).toMatch(
+      /\.recent-question\s*\{[^}]*display:\s*-webkit-box[^}]*-webkit-line-clamp:\s*2[^}]*white-space:\s*normal/s,
+    )
+  })
+
+  it('uses a compact two-step backup layout and stacks it on small screens', () => {
+    const mobileStart = styles.indexOf('@media (max-width: 720px)')
+    const nextMediaStart = styles.indexOf('@media', mobileStart + 1)
+    const mobileRules = styles.slice(mobileStart, nextMediaStart)
+
+    expect(styles).toMatch(
+      /\.data-restore-section\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*0\.8fr\) minmax\(320px,\s*1\.2fr\)/s,
+    )
+    expect(styles).toMatch(
+      /\.data-restore-checking,\s*\.data-restore-error,\s*\.backup-preflight-result\s*\{[^}]*grid-column:\s*1 \/ -1/s,
+    )
+    expect(mobileRules).toMatch(
+      /\.data-management-section,\s*\.data-restore-controls,\s*\.backup-status > div\s*\{[^}]*grid-template-columns:\s*1fr/s,
+    )
+  })
+
   it('uses readable text-image result layouts and returns them to one column on compact screens', () => {
     const compactStart = styles.indexOf('@media (max-width: 1180px)')
     const tabletStart = styles.indexOf('@media (max-width: 860px)')

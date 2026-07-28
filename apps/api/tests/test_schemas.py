@@ -39,6 +39,17 @@ from archresearch_api.schemas import (
             "这是一个没有问句标记而且明显超过历史记录标题长度限制的建筑研究描述文本",
             "这是一个没有问句标记而且明显超过历史记录标题长度限制…",
         ),
+        (
+            "旧厂房改造成社区文化中心，原有的混凝土排架和大跨屋架要保留，新功能怎么放进去？"
+            "旧厂房改造为社区文化中心，如何在大跨空间里植入多功能厅、书吧等新体量？"
+            "新植入的结构和旧结构应该脱开还是连接？",
+            "新植入的结构和旧结构应该脱开还是连接",
+        ),
+        (
+            "社区文化中心场地南北有3米高差，主入口在高处沿街，低处是社区广场："
+            "如何用剖面和流线把两个标高的人流自然连接起来，而不是只靠一部大台阶？",
+            "社区文化中心场地南北有3米高差：用剖面和流线把两个标高…",
+        ),
     ],
 )
 def test_research_record_title_handles_future_question_shapes(question: str, expected: str) -> None:
@@ -87,7 +98,7 @@ def test_research_modes_have_distinct_evidence_obligations() -> None:
         "research_passes": 2,
         "assets_per_subquestion": 2,
         "analysis_requirements": ["visible_observation", "design_mechanism"],
-        "projects": 2,
+        "projects": 3,
         "assets": 6,
         "multi_asset_projects": 1,
         "verified_or_partial": 4,

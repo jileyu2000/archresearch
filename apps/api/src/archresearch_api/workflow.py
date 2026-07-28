@@ -1455,6 +1455,8 @@ def _checkpoint(
         )
         run.status = status.value
         run.checkpoint_stage = status.value
+        if status is RunStatus.gap_check:
+            run.coverage_report = dict(summary)
         session.add(
             TraceEvent(
                 run_id=run_id,
@@ -3257,6 +3259,8 @@ def _persist_public_page_analysis(
     subquestion_id: str,
     evidence_pages: Sequence[tuple[ProviderSource, ParsedPublicPage]] | None = None,
 ) -> int:
+    if not analysis.direct_match:
+        return 0
     drawing_by_id = {drawing.drawing_id: drawing for drawing in drawings}
     selected_urls = {
         drawing_by_id[drawing_id].image_url
@@ -3992,7 +3996,6 @@ def _persist_assets(
                             ]
                         )
                     )
-                new_facts = [fact for fact in item.facts if fact not in existing_candidate.facts]
                 existing_candidate.facts = list(
                     dict.fromkeys([*existing_candidate.facts, *item.facts])
                 )
@@ -4005,16 +4008,7 @@ def _persist_assets(
                 existing_candidate.limitations = list(
                     dict.fromkeys([*existing_candidate.limitations, *item.limitations])
                 )
-                for statement in new_facts:
-                    session.add(
-                        EvidenceClaim(
-                            asset_candidate_id=existing_candidate.id,
-                            claim_type="fact",
-                            statement=statement,
-                            source_url=item.source_url,
-                            expires_at=datetime.now(UTC) + timedelta(days=30),
-                        )
-                    )
+                _persist_provider_evidence_claims(session, existing_candidate, item)
                 continue
             candidate = AssetCandidate(
                 run_id=run_id,
@@ -4054,19 +4048,46 @@ def _persist_assets(
                 assets_by_image_url.setdefault(item.image_url, []).append(candidate)
             if item.relevance >= 2:
                 added_usable += 1
-            for statement in item.facts:
-                session.add(
-                    EvidenceClaim(
-                        asset_candidate_id=candidate.id,
-                        claim_type="fact",
-                        statement=statement,
-                        source_url=item.source_url,
-                        expires_at=datetime.now(UTC) + timedelta(days=30),
-                    )
-                )
+            _persist_provider_evidence_claims(session, candidate, item)
         _rerank_assets(session, run_id)
         session.commit()
         return added_usable
+
+
+def _persist_provider_evidence_claims(
+    session: Session,
+    candidate: AssetCandidate,
+    item: ProviderAsset,
+) -> None:
+    excerpts = {evidence.statement: evidence.text_excerpt for evidence in item.evidence_excerpts}
+    statements = list(dict.fromkeys([*item.facts, *excerpts]))
+    existing_claims = {
+        (claim.statement, claim.source_url): claim
+        for claim in session.scalars(
+            select(EvidenceClaim).where(
+                EvidenceClaim.asset_candidate_id == candidate.id,
+                EvidenceClaim.claim_type == "fact",
+            )
+        )
+    }
+    for statement in statements:
+        key = (statement, item.source_url)
+        existing_claim = existing_claims.get(key)
+        text_excerpt = excerpts.get(statement)
+        if existing_claim is not None:
+            if text_excerpt and not existing_claim.text_excerpt:
+                existing_claim.text_excerpt = text_excerpt
+            continue
+        claim = EvidenceClaim(
+            asset_candidate_id=candidate.id,
+            claim_type="fact",
+            statement=statement,
+            source_url=item.source_url,
+            text_excerpt=text_excerpt,
+            expires_at=datetime.now(UTC) + timedelta(days=30),
+        )
+        session.add(claim)
+        existing_claims[key] = claim
 
 
 def _persist_inspected_assets(
@@ -4511,7 +4532,7 @@ def _deterministic_research_synthesis(
         [
             "【本地证据汇总】",
             *[
-                f"{case.project_name}：{branch.design_mechanism}"
+                f"{case.project_name}：{branch.transfer_strategy[0]}"
                 for _, case, branch in causal_branches
             ],
         ],

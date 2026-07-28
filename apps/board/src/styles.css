@@ -695,7 +695,7 @@ h3 {
 .data-management-section {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
+  align-items: start;
   gap: var(--space-6);
   padding: var(--space-6);
   border-top: 1px solid var(--color-line);
@@ -716,14 +716,14 @@ h3 {
 
 .backup-status {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-2);
   margin: var(--space-4) 0 0;
 }
 
 .backup-status > div {
   display: grid;
-  grid-template-columns: 128px minmax(0, 1fr);
-  gap: var(--space-4);
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: var(--space-3);
 }
 
 .backup-status dt {
@@ -749,10 +749,14 @@ h3 {
   font-weight: var(--weight-semibold);
 }
 
+.data-backup-note {
+  margin-top: var(--space-4);
+}
+
 .data-backup-action {
   display: grid;
   gap: var(--space-2);
-  max-width: 240px;
+  width: 260px;
 }
 
 .data-backup-action small {
@@ -763,13 +767,22 @@ h3 {
 }
 
 .data-restore-section {
-  grid-template-columns: 1fr;
-  align-items: stretch;
+  grid-template-columns: minmax(0, 0.8fr) minmax(320px, 1.2fr);
 }
 
-.data-restore-note,
-.data-restore-checking {
+.data-restore-note {
+  margin: 0;
+  color: var(--color-ink-secondary);
+  font-size: var(--font-compact);
+}
+
+.data-restore-checking,
+.data-restore-error,
+.backup-preflight-result {
   grid-column: 1 / -1;
+}
+
+.data-restore-checking {
   margin: 0;
   color: var(--color-ink-secondary);
   font-size: var(--font-compact);
@@ -905,7 +918,7 @@ h3 {
   }
 
   .data-backup-action {
-    max-width: none;
+    width: auto;
   }
 
   .data-management-section > button,
@@ -1183,6 +1196,26 @@ h3 {
 .research-quick-actions span {
   color: var(--color-ink-secondary);
   font-size: var(--font-xs);
+}
+
+.research-pending-files {
+  display: flex;
+  min-width: 0;
+  max-width: min(48vw, 520px);
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
+  padding: 0;
+  color: var(--color-ink-secondary);
+  font-size: var(--font-xs);
+  list-style: none;
+}
+
+.research-pending-files li {
+  max-width: 32ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .research-quick-actions .research-submit span {
@@ -1683,12 +1716,14 @@ h3 {
 }
 
 .recent-question {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
   min-width: 0;
   overflow: hidden;
   font-size: var(--font-base);
   font-weight: var(--weight-semibold);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  -webkit-box-orient: vertical;
 }
 
 .recent-meta {
@@ -2186,7 +2221,9 @@ h3 {
 }
 
 .collection-visual-item {
+  display: grid;
   min-width: 0;
+  gap: var(--space-2);
 }
 
 .collection-visual-media {
@@ -2266,6 +2303,19 @@ h3 {
   height: var(--icon-md);
 }
 
+.collection-visual-context {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.collection-visual-context p {
+  margin: 0;
+  color: var(--color-ink-secondary);
+  font-size: var(--font-sm);
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
 .recent-history .recent-run-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 116px;
@@ -2295,6 +2345,10 @@ h3 {
   color: var(--color-ink-secondary);
   font-size: var(--font-xs);
   font-weight: var(--weight-semibold);
+}
+
+.retention-control span[data-urgent="true"] {
+  color: var(--color-warning-ink);
 }
 
 .retention-control button {
@@ -2941,6 +2995,11 @@ h3 {
   max-width: 72ch;
 }
 
+.visual-inspiration-heading .visual-count-note {
+  margin-top: var(--space-2);
+  font-size: var(--font-xs);
+}
+
 .inspiration-question-groups {
   display: grid;
   gap: var(--space-6);
@@ -3450,14 +3509,32 @@ h3 {
   gap: var(--space-2);
 }
 
+.dossier-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.dossier-save,
 .dossier-select {
   min-height: 34px;
   padding: var(--space-1) var(--space-3);
+}
+
+.dossier-save {
+  border-color: var(--color-action);
+  background: var(--color-action);
+  color: var(--color-surface);
+}
+
+.dossier-select {
   border-color: var(--color-line-strong);
   background: var(--color-surface);
   color: var(--color-action-hover);
 }
 
+.dossier-save svg,
 .dossier-select svg {
   width: var(--icon-sm);
   height: var(--icon-sm);
@@ -5008,8 +5085,15 @@ h3 {
     flex-direction: column;
   }
 
+  .case-answer-heading .dossier-actions {
+    width: 100%;
+  }
+
+  .case-answer-heading .dossier-save,
   .case-answer-heading .dossier-select {
+    min-width: 0;
     min-height: 44px;
+    flex: 1;
   }
 
 
@@ -5142,6 +5226,11 @@ h3 {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     justify-content: stretch;
+  }
+
+  .research-pending-files {
+    grid-column: 1 / -1;
+    max-width: 100%;
   }
 
   .research-quick-actions button {

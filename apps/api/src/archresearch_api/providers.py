@@ -223,6 +223,11 @@ def visual_style_directions(drawing_type: str) -> list[ResearchSubquestion]:
     ]
 
 
+class ProviderEvidenceExcerpt(BaseModel):
+    statement: str
+    text_excerpt: str
+
+
 class ProviderAsset(BaseModel):
     project_name: str
     asset_type: ArchitectureAssetType
@@ -243,6 +248,7 @@ class ProviderAsset(BaseModel):
     observations: list[str] = Field(default_factory=list)
     inferences: list[str] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
+    evidence_excerpts: list[ProviderEvidenceExcerpt] = Field(default_factory=list)
 
     @field_validator("source_url", "image_url")
     @classmethod
@@ -317,6 +323,7 @@ class PublicPageSupportedFact(BaseModel):
 
 class PublicPageAnalysis(BaseModel):
     relevance: int = Field(ge=0, le=4)
+    direct_match: bool = True
     project_name_zh: str = Field(default="", max_length=200)
     drawing_ids: list[str] = Field(default_factory=list, max_length=4)
     project_context: str = Field(default="", max_length=2_000)
@@ -719,6 +726,16 @@ class MockResearchProvider:
                             "项目尺度、结构体系与消防条件需和当前设计逐项核对。",
                             "图中可见关系不能替代对完整技术图纸的核验。",
                         ],
+                        evidence_excerpts=[
+                            ProviderEvidenceExcerpt(
+                                statement=context,
+                                text_excerpt=f"演示来源摘录：{context}",
+                            ),
+                            ProviderEvidenceExcerpt(
+                                statement=mechanism,
+                                text_excerpt=f"演示来源摘录：{mechanism}",
+                            ),
+                        ],
                     )
                 )
                 sources.append(
@@ -910,6 +927,11 @@ class OpenAIResearchProvider:
                     "且两条核心事实都有逐字证据，relevance 必须至少为 2；relevance 0 或 1 "
                     "只用于无法形成完整证据链的页面。relevance 只用于排序，不能否定已经通过"
                     "逐字校验的项目事实。"
+                    "direct_match 只有在案例直接回答当前研究子问题、且设计操作与问题处于"
+                    "可比较的构件或建筑尺度时才为 true。房间、家具或临时装置只能类比说明"
+                    "建筑尺度的结构或功能决策时，direct_match 必须为 false；如果子问题本身"
+                    "就在研究相同的小尺度介入，则可以为 true。来源无法支持用户正在判断的"
+                    "设计选择时也必须为 false。"
                     "不要生成"
                     "图像可见观察，因为本调用没有读取图片像素。不要求单个页面覆盖子问题列出的全部"
                     "策略或使用者；只要 page_text 逐字支持其中一个具体的条件—设计操作—空间结果，"
@@ -921,7 +943,8 @@ class OpenAIResearchProvider:
                     "但不能把未读取的图像像素写成事实。"
                     "project_name_zh 给出该项目通行的简体中文名称（如 ArchDaily 中文版使用的译名；"
                     "无通行译名时给出简洁准确的直译）。它是展示用翻译标签，不作为来源事实；"
-                    "原名已是中文或无法确定时留空。"
+                    "必须保留原项目的地点信息，不得引入项目标题、来源 URL 或正文中不存在的城市或"
+                    "国家；原名已是中文或无法确定时留空。"
                     f"当前研究强度要求：{requirement_instructions}\n"
                     f"研究子问题：{question.strip()[:1_000]}\n"
                     f"来源 URL：{source_url}\n"
@@ -1115,6 +1138,7 @@ def _conservative_live_result(result: ProviderSearchResult) -> ProviderSearchRes
                         if asset.result_tier is ResultTier.verified
                         else asset.result_tier
                     ),
+                    "evidence_excerpts": [],
                 }
             )
         )

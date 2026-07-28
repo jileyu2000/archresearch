@@ -29,8 +29,11 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+RUN_RETENTION_DAYS = 180
+
+
 def default_run_retention_expiry() -> datetime:
-    return utc_now() + timedelta(days=14)
+    return utc_now() + timedelta(days=RUN_RETENTION_DAYS)
 
 
 class TimestampMixin:

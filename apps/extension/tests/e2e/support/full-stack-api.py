@@ -4,7 +4,6 @@ import argparse
 from pathlib import Path
 
 import uvicorn
-
 from archresearch_api.browser import BrowserBroker
 from archresearch_api.config import Settings
 from archresearch_api.main import create_app

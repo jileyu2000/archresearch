@@ -45,10 +45,14 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 |---|---|---|
 | M121 simulated-user pilot | complete | 2026-07-27 用户将验收改为多 agent 模拟测试后，本轮即验收轮：3 个盲测 persona 按工具包脚本驱动真实应用，独立评审按判据打分。2/3 全程跑通，核心链路判据全过；"怎么做+出处链接"被一致列为最信任资产。产出：5 项 P1（M149）、6 项重复 P2（M150）、当轮修复项（M148）、环境事件复核（零反馈/冻结最可能为自动化 ref 伪影，产品侧真缺口单列）。记录：`docs/m121-simulated-pilot-2026-07-27.md` + 逐字 JSON。图纸灵感线与任务书路径本轮零覆盖，修复后需补定向模拟。 |
 | M148 submit feedback hardening | complete | 提交后按钮立即进入"正在创建研究…"禁用态；启动与任务书失败的报错以 role=alert 就近渲染在提交按钮旁（.research-submit-error），切换入口清空。红绿 2 条新测试；门禁 342 API / 135 Board / 165 Extension / 8 packaged E2E 全绿。 |
-| M149 pilot P1 repairs | proposed | 五项：结论栏与证据脱节（先工程根因诊断疑似绑定错位）；保存入口可发现性（结果页直接给"加入个人收藏"动作）；等待期"可用参考"计数全程为 0 的失灵；保留策略提醒与说明（到期提醒/起算日/一学期诉求的产品决策）；案例供给与匹配质量（含中英名不一致核查）。每项独立红绿。 |
-| M150 pilot repeated-P2 batch | proposed | 六项：三档双命名统一为一套词；术语语域清理（初步依据缩略态、连续检索、未读取图片像素、证据方向等）；研究进行中保留全局入口（主页不被进度视图整页接管）；保存成功反馈就近化 + 选中态清空的语义说明；记录/收藏标题的可辨认性；顶栏"查看上次结果/个人收藏"职责梳理。 |
-| M122 behavior characterization and bounded modularization | proposed（表征已启动） | 表征产出见 `docs/m122-extraction-map.md`：API 覆盖率基线 91%（逐模块不下降阈值），三份拆分地图（`App.tsx` 4,013 行 8 步、`workflow.py` 4,977 行 10+1 步、`styles.css` 5,430 行 14 文件且**测试契约先行**）。Board/Extension 覆盖率待装插件。拆分执行沿既有产品边界，每个切片后完整门禁不变绿不继续。 |
-| M123 repeatable release closure | proposed | 干净 Windows/Chrome 环境证明 setup/start/update 与备份预检；为既有门禁加 CI；把发布证据刷新到最终源码状态（一并处置 M131/M144 后失效的 `docs/release-evidence-2026-07-16.md` 与 8 张旧 PNG）。stage/commit 已单独授权过的除外，push 仍需显式授权。 |
+| M149 pilot P1 repairs | complete | 五项均独立红绿：deterministic fallback 以证据绑定的转译而非首案例简介作结论，旧 Run 的 Board 投影同步兼容；每案例直接提供“加入个人收藏”并保留原多选/对照；`gap_check` 检查点实时写回覆盖计数；新 Run 从创建日起默认保留一学期（180 天），逐条显示准确日期与 14 天内到期提醒，既有记录不迁移；Quick 至少 3 个正式项目，正文分析新增直接匹配闸门，尺度类比不再进入正式案例，地点译名不能核实时回退原名。权威门禁 344 API / 139 Board / 165 Extension / 8 packaged E2E，exit 0。 |
+| M150 pilot repeated-P2 batch | complete | 六项按行为合同红绿收口：只显示“快速找方向 / 形成方案依据 / 做跨案例论证”一套研究方式；替换试点复现的内部语域并过滤“未读取图片像素”类审计边界；运行中结果可返回主页；直接收藏按钮原位确认，批量保存明确“选择已清空”；记录标题兼容多问句/长单问句并最多显示两行，收藏目录以原问题为主标题；顶栏删除重复“查看上次结果”。1280×720 与 390×844 loaded QA 无溢出/console error。权威门禁 346 API / 140 Board / 165 Extension / 8 packaged E2E，exit 0。 |
+| M151 backup page copy and layout distillation | complete | 参考 Apple / Microsoft 的动作式备份表达收敛为“备份数据 / 恢复数据、下载备份、替换当前数据并恢复”；状态只保留“当前数据 / 最近备份”，风险说明贴近相关动作。桌面恢复区双列、≤720px 单列，自动检查/替换式恢复/最终确认/失败回滚语义不变。App/glossary/design 契约红绿闭合；1440×900 与 390×844 loaded QA 均无溢出和 console error，移动控件 44px；完整门禁随 M149 通过。 |
+| M152 targeted visual/task-brief simulation | complete | 4 个 persona 在隔离 loaded UI 上完成图纸灵感与任务书路径。V1、B1、B2 全部核心判据通过；V2 能找到收藏图但不能解释与原问题/方向的关系，核心 T7 失败。两条任务书有效 Run 均 `completed/coverage_satisfied / 12 usable / 4 projects / 4/4`；浏览器 error 0；M152 未写 durable 数据。归档：`docs/m152-targeted-simulation-2026-07-27.md` + 逐字 JSON。产出 3 项 P1 与 4 项 2/2 重复 P2，进入 M153。 |
+| M153 targeted-simulation repair batch | complete | 3 项 P1 + 4 项重复 P2 均按行为红灯后最小实现收口：独立幂等 default-workspace 入口保留普通同名创建；默认 Mock 为 context/mechanism 写确定性逐字摘录且 live provider 不自证；视觉收藏新存/旧快照都投影原问题与方向；结果解释 5 张去重图与 7 次方向关联；XHS/Chrome 职责、唯一图片 accessible name、任务书文件名均完成。desktop/390px loaded QA 无溢出、error 0；权威门禁 348 API / 141 Board / 165 Extension / 8 packaged E2E 全绿，durable 基线不变。 |
+| M122 behavior characterization and bounded modularization | complete | 8/8 片全部完成：coverage 基线与硬阈值、8 个纯模块、11 个视图组件、`useBrowserReadiness()`、Run payload reducer、`useRunHydration()` 与 `useRunPolling()` 均按红绿合同抽出。`App.tsx` 4,089→1,752 行；Board 177 tests、覆盖率 80.01/75.75/84.77/83.80，完整门禁 348/177/165/8；请求世代、后台轮询、终态水合、页面行为及 durable 基线不变。 |
+| M123 repeatable release closure | complete | CI 合同已补手动触发、只读权限与根 coverage；API / Board / Extension / manifest 统一为 2.1.0。隔离 fresh setup/start/update、备份只读预检与 8001/5174 HTTP 200 均通过；当前发布证据已刷新，旧清单与 10 张旧 PNG 全部归档保留。最终门禁 348/177/165/8、coverage 80.01/75.75/84.77/83.80 与 82.69/76.52/83.96/84.73；durable 基线未变。Hosted CI、tag 与公开发布仍需显式授权。 |
+| M154 publish V2.1.0 | in_progress | 用户已授权启动发布并要求先清理目录。83.71 MiB 可再生成缓存、日志与旧审计材料已移入系统临时隔离区，运行数据、依赖、3 份备份 ZIP 与 16 张发布 PNG 均保留；服务仍为 200。GitHub CLI 已认证，但本地没有 remote，账号下也无可识别的 ArchResearch 仓库；需确认仓库目标与可见性后才能 stage/commit/push、Hosted CI、tag/Release。 |
 
 ## External acceptance gates
 
@@ -58,24 +62,32 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 - 30 条版本化任务的真实网页批量执行与人工标注：主动启用、会产生费用。
 - 100+ 独立来源、权利清晰的真实图纸样本（当前 108 张为确定性合成夹具）。
 
-2026-07-16 的三档真实验收与 XHS/OpenCLI 登录态验收已完成并留作历史证据；其中部分底层 Run 数据已按用户要求删除，证据刷新归 M123。
+2026-07-16 的三档真实验收与 XHS/OpenCLI 登录态验收已完成并归档为历史证据；其中底层 Run 已按用户要求删除。当前发布证明见 `docs/release-evidence-2026-07-28.md`。
 
 ## Completion roadmap
 
-当前持久基线：**4 workspaces / 15 Runs（13 permanent + 2 条 14 天保留的模拟试点 Run）/ active 0 / 11 条收藏（8 + 3 条模拟产物）/ 1 份任务书**。当前权威门禁：**342 API / 135 Board / 165 Extension / 8 packaged E2E** 加 Ruff/format、strict Mypy、两端 lint/typecheck/build、进程/安全/评测检查（`scripts/verify.ps1`）。
+当前持久基线：**4 workspaces / 15 Runs（13 permanent + 2 条仍沿用既有到期日的模拟试点 Run）/ active 0 / 14 条收藏 / 2 条 input artifacts**。其中 2026-07-27 12:04 新增的 3 条收藏属于既有“城市社区共享中心”Run，与 M152 隔离问题不同，是并发外部变化，已保留。新建 Run 默认 180 天，既有记录未迁移。当前权威门禁：**348 API / 177 Board / 165 Extension / 8 packaged E2E** 加 Ruff/format、strict Mypy、两端 lint/typecheck/build、进程/安全/评测检查（`scripts/verify.ps1`）。
 
 | Delivery target | Estimated completion | Remaining gate |
 |---|---:|---|
-| Local single-user V2.1 | 95% | 目标用户验证（M121）、可维护性表征（M122）。 |
-| Portfolio / supervised demonstration | 90% | 把发布证据刷新到最终源码状态（M123）。 |
-| Small closed beta | 90% | 落实 M149/M150 试点修复；补测图纸灵感线与任务书路径。 |
-| Public repeatable release | 70% | CI、干净机器安装/更新证明、授权后的版本化发布（M123）。 |
+| Local single-user V2.1 | 100% | 当前本地功能与门禁已收口。 |
+| Portfolio / supervised demonstration | 100% | 当前源码、三条可核对 Run 与 desktop/mobile loaded QA 已形成发布证据。 |
+| Small closed beta | 100% | 当前本地基线无剩余 M153 行为门槛。 |
+| Public repeatable release | 90% | 本地可重复发布证明已完成；Hosted CI、版本 tag 与公开发布需用户明确授权。 |
 
-执行顺序：M149（五项 P1）→ M150（六项重复 P2）→ 图纸灵感线与任务书路径的定向补充模拟 → M122 → M123。任何修复先定义单独的 behavior-first 里程碑再动代码。
+执行顺序：M154；先确认 GitHub 仓库目标与可见性，再确认发布文件范围、commit/push、Hosted CI、`v2.1.0` tag/Release。
 
 ### M121 试点执行计划（已完成，2026-07-27 模拟验收）
 
 任务脚本、判据、记录表与 P0–P3 分级以 `docs/m121-pilot-kit.md` 为准；本轮执行方式、评分矩阵、缺陷清单与模拟局限见 `docs/m121-simulated-pilot-2026-07-27.md` 及逐字 JSON。后续任何补充模拟轮沿用同一套判据与"persona 与评审分离"的方法。
+
+### M153 验收合同
+
+1. 默认工作区初始化 → 验证：对同一 fresh DB 并发触发初始化，最终只有一个默认 workspace，且既有数据库不被合并或改名。
+2. 默认 mock 完成/展示一致 → 验证：若 Run 为 `completed/coverage_satisfied`，Board 至少显示与 coverage 对应的 evidence-bound 正式案例；否则 API 必须诚实保持 partial/blocked，不能出现“完成但四问全空”。
+3. 图纸收藏关系 → 验证：保存来自两个不同原问题、两个不同方向的图片后，收藏列表无需打开详情即可辨认原问题与方向；旧 snapshot 继续可读。
+4. 重复 P2 → 验证：结果页解释去重总数与方向关联数；环境文案区分小红书检索和 Chrome 页面高清读取；图片选择按钮名称包含可辨认目标；选择任务书后显示每个文件名。
+5. 回归 → 验证：先见定向红灯，再做最小实现；运行 API/Board 定向测试、桌面与 390px loaded QA、`scripts/verify.ps1`，durable 基线与正常服务不被测试数据改写。
 
 ### M107 real-brief fixture (still the deterministic brief contract)
 
@@ -92,7 +104,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 - The `suoxie` relay key is accepted only through hidden PowerShell input and stored in Windows Credential Manager; provider JSON contains no secret. Never print or migrate the key.
 - Project automation defaults to PowerShell 7 (`pwsh`); Windows PowerShell 5.1 only for explicit compatibility checks. Process scripts must stay WMI/CIM-free (MSIX pwsh cannot load MMI): listener discovery via `netstat -ano`, command lines via PEB.
 - All browser commands are enumerated JSON messages; no arbitrary selectors, JavaScript, credentials, social actions, or general form submission.
-- Retention: Runs default to 14-day retention with per-record permanent toggle; assets/claims 7 days, sources/query metadata/trace 30 days. `keep_forever` protects the Run **and all its child evidence** from every expiry clock (M141). Personal collections are snapshots that survive Run expiry; saving is additive and never deletes an existing collection (M145).
+- Retention: new Runs default to one semester (180 days) from creation with a per-record permanent toggle; cancelling permanent restarts 180 days from that action, while existing rows keep their stored expiry. Assets/claims use 7 days and sources/query metadata/trace 30 days unless their Run is permanent. `keep_forever` protects the Run **and all its child evidence** from every expiry clock (M141). Personal collections are snapshots that survive Run expiry; saving is additive and never deletes an existing collection (M145).
 - Research depth is a semantic contract (decomposition, per-subquestion coverage, analysis obligations); query/page/time values are bounded execution ceilings. All depths owe a complete answer across planned subquestions; depth changes rigor, never permission to deliver a knowingly incomplete answer as complete.
-- Deterministic replay fixtures remain the zero-cost development and regression path. Firecrawl was fully removed in M41 and must not return; TinEye/source lookup was removed in M113; Pinterest was removed in M94 and unexpected Pinterest results are discarded before persistence. Release-evidence refresh (including any new captures) is deferred to M123.
+- Deterministic replay fixtures remain the zero-cost development and regression path. Firecrawl was fully removed in M41 and must not return; TinEye/source lookup was removed in M113; Pinterest was removed in M94 and unexpected Pinterest results are discarded before persistence. Current release evidence is frozen in `docs/release-evidence-2026-07-28.md`; older captures remain historical only.
 - Xiaohongshu support uses only the user's visible, signed-in Chrome pages after explicit one-time permission; read-only `search`/`download` commands, no password/cookie/DM access, revocable anytime. Authoritative architecture/project sources establish case facts; Xiaohongshu is the sole visual-inspiration source and cannot alone prove a project case.

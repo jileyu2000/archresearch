@@ -6,6 +6,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from archresearch_api.models import AssetCandidate, InputArtifact, ResearchRun, SavedReference
+from archresearch_api.schemas import RunStatus
+from archresearch_api.workflow import _checkpoint
 
 
 def _create_run(client: TestClient, workspace_id: str, mode: str = "balanced") -> dict[str, object]:
@@ -58,10 +60,67 @@ def test_mock_run_persists_stage_checkpoints_and_results(
             claim["claim_type"] == "fact"
             and claim["statement"] == item["project_context"]
             and claim["source_url"] == item["source_url"]
+            and claim["text_excerpt"]
             for claim in item["evidence_claims"]
         )
         for item in results.json()
     )
+    assert all(
+        any(
+            claim["claim_type"] == "fact"
+            and claim["statement"] == item["design_mechanism"]
+            and claim["source_url"] == item["source_url"]
+            and claim["text_excerpt"]
+            for claim in item["evidence_claims"]
+        )
+        for item in results.json()
+    )
+
+
+def test_gap_check_exposes_live_coverage_while_run_is_active(
+    client: TestClient,
+    workspace_id: str,
+) -> None:
+    with client.app.state.database.session_factory() as session:
+        run = ResearchRun(
+            workspace_id=workspace_id,
+            question="旧建筑中如何植入新功能？",
+            goal="precedent_research",
+            budget_mode="quick",
+            budget={},
+            research_sources=[],
+            subquestions=[],
+            status=RunStatus.verifying.value,
+            coverage_report={},
+        )
+        session.add(run)
+        session.commit()
+        run_id = run.id
+
+    coverage = {
+        "usable_assets": 3,
+        "project_count": 2,
+        "verified_or_partial": 2,
+        "subquestion_count": 3,
+        "covered_subquestions": 1,
+        "covered_subquestion_ids": ["program"],
+        "multi_asset_projects": 1,
+        "subquestion_passes": {"program": 1},
+        "gaps": ["uncovered_subquestions"],
+        "enrichment_gaps": ["insufficient_usable_assets"],
+    }
+    _checkpoint(
+        client.app.state.database,
+        run_id,
+        RunStatus.gap_check,
+        coverage,
+    )
+
+    response = client.get(f"/v1/runs/{run_id}")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "gap_check"
+    assert response.json()["coverage_report"]["usable_assets"] == 3
 
 
 def test_project_brief_review_precedes_run_creation_and_confirmed_questions_are_used(
@@ -127,7 +186,7 @@ def test_workspace_runs_are_listed_newest_first(client: TestClient, workspace_id
     assert [item["id"] for item in response.json()] == [second["id"], first["id"]]
 
 
-def test_run_defaults_to_fourteen_days_and_can_be_kept_permanently(
+def test_run_defaults_to_one_semester_and_can_be_kept_permanently(
     client: TestClient,
     workspace_id: str,
 ) -> None:
@@ -136,7 +195,9 @@ def test_run_defaults_to_fourteen_days_and_can_be_kept_permanently(
     expiry = datetime.fromisoformat(str(run["retention_expires_at"]))
 
     assert run["keep_forever"] is False
-    assert before + timedelta(days=13, hours=23) <= expiry <= before + timedelta(days=14, minutes=1)
+    earliest_expiry = before + timedelta(days=179, hours=23)
+    latest_expiry = before + timedelta(days=180, minutes=1)
+    assert earliest_expiry <= expiry <= latest_expiry
 
     permanent = client.patch(
         f"/v1/runs/{run['id']}/retention",
@@ -155,9 +216,9 @@ def test_run_defaults_to_fourteen_days_and_can_be_kept_permanently(
     assert temporary.status_code == 200
     assert temporary.json()["keep_forever"] is False
     assert (
-        reset_at + timedelta(days=13, hours=23)
+        reset_at + timedelta(days=179, hours=23)
         <= reset_expiry
-        <= reset_at + timedelta(days=14, minutes=1)
+        <= reset_at + timedelta(days=180, minutes=1)
     )
 
 
@@ -415,6 +476,61 @@ def test_personal_collections_keep_question_mode_and_local_content(
     assert deleted.status_code == 204
     assert client.get(f"/v1/workspaces/{workspace_id}/collections").json() == []
     assert not (data_dir / "collections" / snapshot["collection_file"]).exists()
+
+
+def test_visual_collection_keeps_and_backfills_its_research_direction(
+    client: TestClient, workspace_id: str
+) -> None:
+    with client.app.state.database.session_factory() as session:
+        run = ResearchRun(
+            workspace_id=workspace_id,
+            question="旧厂房竞赛轴测图怎样比较线稿与拼贴表达？",
+            goal="visual_reference_search",
+            budget_mode="balanced",
+            budget={},
+            subquestions=[
+                {
+                    "id": "linework-style",
+                    "question": "精细线稿轴测图",
+                    "rationale": "比较线宽、虚实和留白。",
+                }
+            ],
+            status="completed",
+        )
+        session.add(run)
+        session.flush()
+        asset = AssetCandidate(
+            run_id=run.id,
+            project_name="轴测表达参考",
+            asset_type="axonometric",
+            source_url="https://example.com/visual-note",
+            image_url="https://example.com/visual-note.jpg",
+            result_tier="visual_lead",
+            relevance=3,
+            subquestion_ids=["linework-style"],
+        )
+        session.add(asset)
+        session.commit()
+        asset_id = asset.id
+
+    saved = client.post(f"/v1/results/{asset_id}/save", json={"note": ""})
+
+    assert saved.status_code == 201
+    snapshot = saved.json()["snapshot"]
+    assert snapshot["question"] == "旧厂房竞赛轴测图怎样比较线稿与拼贴表达？"
+    assert snapshot["visual_directions"] == ["精细线稿轴测图"]
+
+    with client.app.state.database.session_factory() as session:
+        saved_record = session.get(SavedReference, saved.json()["id"])
+        assert saved_record is not None
+        legacy_snapshot = dict(saved_record.snapshot)
+        legacy_snapshot.pop("visual_directions")
+        saved_record.snapshot = legacy_snapshot
+        session.commit()
+
+    collections = client.get(f"/v1/workspaces/{workspace_id}/collections")
+    assert collections.status_code == 200
+    assert collections.json()[0]["snapshot"]["visual_directions"] == ["精细线稿轴测图"]
 
 
 def test_saved_case_subquestions_follow_explicit_selection_and_note_updates_preserve_it(
