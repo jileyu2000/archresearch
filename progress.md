@@ -793,3 +793,5 @@
 - 隐藏后台 wrapper 的启动命令被执行环境策略在运行前拒绝，未产生新的验证进程或项目文件。改用工具自带的可续接执行单元运行长门禁，以保留输出和真实 exit code。
 - 可续接执行单元中的完整 `scripts/verify.ps1` 最终 exit 0，耗时 314.2 秒：360 API / 177 Board / 165 Extension / 8 packaged E2E 全绿，Ruff/format、strict Mypy、两端 lint/typecheck/test/build、进程、安全和 25 tasks / 108 samples 评测夹具检查均通过；未调用真实模型或创建研究任务。
 - 门禁后工作区仍只有 README、task plan、findings、progress 四个预期 Markdown 文件，`git diff --check` exit 0；最终逐行 diff 审查确认公开页面只改变定位措辞，规划记录只登记 M157 决策、错误与验收证据。
+- README 与三份规划记录以提交 `cdb97f0` 推送到 `origin/main`；只显式 stage 四个 Markdown 文件，未使用 `git add -A`，未纳入 `.archresearch`、数据库、备份、凭据或无关文件。
+- Hosted CI run `30368067949` 精确对应 `cdb97f0`，13 分 52 秒后 success：fresh setup、Playwright Chromium、frontend coverage 与完整 repository gate 全部通过。M157 验收已闭合，下一步仅提交 HANDOFF/规划完成记录并等待其 CI。
