@@ -28,7 +28,10 @@ $runtime = Resolve-WorkspaceRuntime -WorkspaceRoot $workspace.Path
 if (-not $runtime.Python.EndsWith("python.exe")) {
     throw "Expected a Python executable."
 }
-if (-not $runtime.Pnpm.EndsWith("pnpm.cmd")) {
+if (
+    -not (Test-Path -LiteralPath $runtime.Pnpm -PathType Leaf) -or
+    [System.IO.Path]::GetFileNameWithoutExtension($runtime.Pnpm) -ne "pnpm"
+) {
     throw "Expected a pnpm executable."
 }
 

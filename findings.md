@@ -471,3 +471,4 @@
 - 项目内可安全清理项是 Mypy/Pytest/Ruff 缓存、`.artifacts` coverage/验证日志与已忽略的旧审计 scratch；API venv、pnpm dependencies、Extension dist 和 `.archresearch` 仍服务本地运行链，不能按体积机械删除。
 - `.artifacts` 的三份 ZIP 共 197,333,728 bytes，属于用户数据备份；16 张 portfolio PNG 共 2,609,028 bytes，属于当前/历史发布证据。两类都不是临时垃圾，清理阶段保留，发布 stage 必须显式挑选而不能 `git add -A`。
 - 首次 Hosted CI 的 coverage step 不是覆盖率阈值失败，而是 `design-system.test.ts` 的源码结构正则在 Windows CRLF checkout 下误报：选择器组与 `transform: none` 的语义关系未变，但 `\r` 让 240 字符距离上限被突破。测试入口统一换行后，原结构合同可跨 LF/CRLF 执行，无需改生产 CSS 或降低任何门槛。
+- 第二次 Hosted CI 已通过 coverage，完整门禁只在 `dev-common.tests.ps1` 的 `.EndsWith("pnpm.cmd")` 失败。Corepack 在 hosted runner 提供可正常执行的无扩展 `pnpm` shim；运行解析器和 setup 均已成功，故正确合同是“路径为现有文件且去扩展名为 pnpm”，而不是绑定某一种 Windows shim 后缀。

@@ -720,3 +720,5 @@
 - Hosted CI run `30329423939` 的 setup 成功，coverage step 中 Board 176/177：唯一失败是 reduced-motion 源码正则在 Windows CRLF 下超过 `{0,240}` 距离；Extension 165 与其覆盖率已通过，完整门禁因前置失败未运行。
 - 按批准方案只在 `design-system.test.ts` 的 raw CSS 入口统一 CRLF/LF，不改生产样式或断言上限。定向 18/18；根 `pnpm test:coverage` 通过 Board 177（80.01/75.75/84.77/83.80）与 Extension 165（82.69/76.52/83.96/84.73）。
 - README 首屏新增项目定位、CI/版本徽章、真实首页图与三类核心能力；GitHub About 改为中文产品说明，并加入 architecture、architecture-research、local-first、fastapi、react、chrome-extension topics。
+- 第二次 Hosted CI run `30329792870` 已通过 clean setup 与完整 frontend coverage，随后在 full gate 的首个 `dev-common.tests.ps1` 失败：Corepack 的有效 shim 不以 `pnpm.cmd` 结尾。按批准方案把测试合同改为路径存在且去扩展名为 `pnpm`，兼容 `.cmd`、`.ps1` 与 extensionless shim，不改 `Resolve-WorkspaceRuntime`。
+- 定向 dev-common 测试通过；本地完整 `scripts/verify.ps1` exit 0：348 API / 177 Board / 165 Extension / 8 packaged E2E 与全部静态、类型、构建、进程、安全和评测检查全绿。
