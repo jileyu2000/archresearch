@@ -53,6 +53,8 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | M122 behavior characterization and bounded modularization | complete | 8/8 片全部完成：coverage 基线与硬阈值、8 个纯模块、11 个视图组件、`useBrowserReadiness()`、Run payload reducer、`useRunHydration()` 与 `useRunPolling()` 均按红绿合同抽出。`App.tsx` 4,089→1,752 行；Board 177 tests、覆盖率 80.01/75.75/84.77/83.80，完整门禁 348/177/165/8；请求世代、后台轮询、终态水合、页面行为及 durable 基线不变。 |
 | M123 repeatable release closure | complete | CI 合同已补手动触发、只读权限与根 coverage；API / Board / Extension / manifest 统一为 2.1.0。隔离 fresh setup/start/update、备份只读预检与 8001/5174 HTTP 200 均通过；当前发布证据已刷新，旧清单与 10 张旧 PNG 全部归档保留。最终门禁 348/177/165/8、coverage 80.01/75.75/84.77/83.80 与 82.69/76.52/83.96/84.73；durable 基线未变。当时尚待授权的 Hosted CI、tag 与公开发布已由 M154 完成。 |
 | M154 publish V2.1.0 | complete | 公开仓库 `jileyu2000/archresearch`、README/About/topics 与发布素材已就绪，备份 ZIP/数据库/Key 均未入库。CI 环境差异已逐项红绿修复；Windows Hosted CI 对最终 tag 落点 `2a92539` 通过 Chromium 安装、coverage、348 API / 177 Board / 165 Extension / 8 packaged E2E 及完整静态/类型/构建门禁。annotated tag `v2.1.0` 已推送，面向访客的正式 GitHub Release 已发布且无本地附件。 |
+| M155 evidence-grounded agent boundaries | complete | `agent/planning.py`、`execution.py`、`verification.py` 与 `synthesis.py` 已按红绿合同形成明确边界；七阶段 orchestrator、API/schema、checkpoint、取消/恢复、查询预算、gap 补查、失败保留与 evidence-bound 双门槛不变。完整门禁 360 API / 177 Board / 165 Extension / 8 packaged E2E 全绿；durable 为 4/15/13 permanent/0 active/14 collections/2 inputs。 |
+| M156 competition GitHub presentation and publish | complete | GitHub 访客页覆盖场景价值、Agent 架构、工作流/工具、创新、完成度、访问方式、3 个测试问题和人机协同边界；architecture/demo 文档同步四模块、双门槛和现行三档。公开产品提交 `010eceb` 已推送 `main`；本地完整门禁与 Hosted CI `30362938145` 均通过 360/177/165/8，durable 仍为 4/15/13 permanent/0 active/14 collections/2 inputs。 |
 
 ## External acceptance gates
 
@@ -75,7 +77,22 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | Small closed beta | 100% | 当前本地基线无剩余 M153 行为门槛。 |
 | Public repeatable release | 100% | `v2.1.0` tag、GitHub Release、公开源码与 Hosted CI 均已闭合。 |
 
-执行顺序：M154 已完成；当前无剩余发布动作，后续仅按用户提出的新目标立项。
+执行顺序：M155/M156 已完成并通过本地与 Hosted CI；当前无剩余发布动作，后续仅按用户提出的新目标立项。
+
+### M155 验收合同
+
+1. 架构边界 → 验证：规划、执行支撑、核验/coverage 与综合职责具有小型明确模块；`workflow.py` 只保留运行编排和阶段顺序，不引入框架或多智能体运行时。
+2. 行为保持 → 验证：七阶段 checkpoint 顺序、查询预算、恢复去重、取消、失败保留、gap 补查与终态判定不变。
+3. 证据合同 → 验证：事实仍绑定 URL 与逐字引文，模型 relevance 只排序，coverage 与 enrichment 同时达标才 `completed`。
+4. 红绿迁移 → 验证：每片先新增因缺少目标边界而失败的测试，再做最小搬移；不借重构改变用户文案、API 或 durable schema。
+5. 回归 → 验证：API 定向测试、lint/format、strict Mypy、`scripts/verify.ps1` 全绿；durable 数据不改写。
+
+### M156 验收合同
+
+1. 竞赛对齐 → 验证：逐项核对公告和提交模板，只写可由当前源码、测试或发布证据支持的能力，不夸大部署形态、模型自主性或真实用户验证。
+2. GitHub 访客页 → 验证：首屏能回答“解决什么问题、谁使用、怎样运行”；架构与七阶段 evidence-grounded 工作流、截图、安装/演示、数据与安全边界均可从目录直接到达。
+3. 发布安全 → 验证：公开 diff 不含 Key、数据库、备份 ZIP 或本地路径泄露；链接与图片有效，Markdown 可读。
+4. 发布门禁 → 验证：M155 独立审查无功能回归，`scripts/verify.ps1` 全绿，durable 基线不变；仅显式 stage 本轮文件，提交、推送后 Hosted CI 通过。
 
 ### M121 试点执行计划（已完成，2026-07-27 模拟验收）
 

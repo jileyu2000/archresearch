@@ -476,3 +476,40 @@
 - 最小修复是在 workspace setup 后显式执行 `pnpm --dir apps/extension exec playwright install chromium`；发布合同必须锁定该步骤，防止后续工作流注释或 runner 镜像假设再次掩盖真实依赖。
 - Hosted CI run `30332351557` 最终全绿：Chromium 安装成功，coverage 通过，完整门禁明确输出 348 API 与 8 packaged E2E 通过；作业总耗时 16 分 58 秒。CI 注释只剩 GitHub Actions 运行时的 Node 20 弃用提示，不影响仓库 Node 24 测试面，也不是本次发布阻塞。
 - 最终 tag 落点 `2a92539` 的 Hosted CI run `30334270656` 全绿；annotated tag `v2.1.0` 已推送，正式 Release 为非 draft、非 prerelease，且 assets 为空。GitHub 自动源码包只来自公开 Git tree，不包含被忽略的备份、数据库或凭据。
+
+## 2026-07-28 M155 架构边界审计
+
+- ArchResearch 当前已经是 Evidence-Grounded Plan-and-Execute Agent：模型负责拆解、页面分析与综合，确定性后端负责七阶段编排、工具边界、证据准入、coverage/enrichment 完成门槛和失败保留；优化目标是让源码边界匹配现有运行语义，不是更换 Agent 架构。
+- `workflow.py` 当前 4,998 行；`execute_research_run()` 从 185 行延伸到 1,407 行，后续同文件继续承载规划、查询生成、公开页解析、视觉分类、证据持久化、综合、coverage 与失败处理等近 50 个私有函数。
+- 348 项 API 基线中，`test_workflow.py`、`test_browser_inspection.py` 和 runs/results 合同大量从 `execute_research_run()` 公共入口覆盖 checkpoint、恢复、取消、来源降级与终态；大块移动执行器风险高，第一片应从无数据库写入的纯规划边界开始。
+- M155 不引入 LangChain、LangGraph 或多智能体；`workflow.py` 继续作为单一 orchestrator，抽出的模块只提供 typed、bounded 的阶段职责。
+- 第一片初审发现生产调用虽已切到 `agent/planning.py`，旧的 8 个规划/查询函数和站点轮换常量仍留在 `workflow.py`，形成双实现；这必须随本次抽取删除，不能用兼容别名继续保留隐性第二入口。
+- 删除旧定义后的首轮红灯来自 `test_workflow.py` 与 `test_browser_inspection.py` 直接导入旧私有函数。测试应迁移到新边界并保留原断言，而不是恢复生产私有入口；迁移后规划、查询、视觉 fallback 与完整 workflow 定向集共 46 项通过。
+- 第一片收尾后 Ruff check/format、strict Mypy 与 `git diff --check` 均通过。一次只读 `rg` 同时包含不存在的根 `pyproject.toml` 导致 exit 1；实际配置位于 `apps/api/pyproject.toml`，后续不再查询该不存在路径。
+- 第二片选择核验边界，因为 `_coverage()` 虽读取持久结果，却具有稳定的 `CoverageData` 输出并唯一承载 coverage/enrichment 双门槛；相比搬动 1,200 行执行器，这一边界可由现有终态回归直接保护。
+- `agent/verification.py` 现在独占 coverage 计算、非建筑目标阈值以及 `completion_satisfied()` / `enrichment_satisfied()`。`workflow.py` 只消费结果决定阶段和终态；测试 monkeypatch 同步迁移到公开边界绑定，没有留下旧 `_coverage` 别名。
+- 独立合同明确：coverage gaps 为空只代表逐题覆盖成立，enrichment gaps 仍存在时不得 completed。新模块 2 项与完整 planning/workflow/browser-inspection 受影响集 153 项通过。
+- 一次只读测试搜索同时包含不存在的 `test_runs.py` / `test_results.py`，命令因此 exit 1；有效匹配均来自实际存在的 workflow/browser 文件，后续不再使用这两个路径。
+- 核验模块首个合并补丁因现行 `CoverageData` 另有 `synthesis: NotRequired[...]` 字段而匹配失败，工具在写入前整体中止；随后按真实定义拆成原子补丁并保留该字段。
+- M155 最终边界为 `planning`（计划/查询/站点轮换）、`execution`（checkpoint/取消/恢复键/预算与计数）、`verification`（coverage/enrichment）和 `synthesis`（证据绑定的确定性综合内核）。Provider 调用、页面解析和事务型证据持久化仍由现有具体适配层承担，没有引入框架或多智能体运行时。
+- 执行支撑机械重命名曾把新导入 `build_research_context` 的旧后缀再次替换成 `buildbuild_research_context`；首轮导入测试立即捕获，修正单一导入后同一测试通过。综合结构检查也有一次无效 workdir 路径，改用正确项目根后完成，均未造成持久状态变化。
+- 四片合并后的权威 `scripts/verify.ps1` exit 0：360 API / 177 Board / 165 Extension / 8 packaged E2E，以及 Ruff/format、strict Mypy、两端 lint/typecheck/build、进程/安全/评测检查全绿。
+- durable 只读复核仍为 4 workspaces / 15 Runs / 13 permanent / active 0 / 14 collections / 2 input artifacts；API 8000 health 为 ok，Board 服务保持。首次用不存在的 GET `/workspaces/{id}/inputs` 统计输入得到 405，未写数据，已改用 SQLite `mode=ro` 得到正确 2。
+
+## 2026-07-28 M156 竞赛要求
+
+- 公告明确提交物：智能体 Demo 链接或代码包、项目技术说明、核心演示视频、AI 应用履历表；支持个人或不超过 4 人团队，报名与作品提交周期为 6 月 24 日至 8 月 31 日。
+- 评审三维度：场景创意价值（真实痛点与落地可行性）；AI 协同能力（人机协同规划、AI 交互迭代、AI 纠偏管理）；技术创新能力（创新构思、技术应用、工具整合、完成度）。
+- 技术说明模板要求覆盖目标用户、痛点与问题定义、使用场景、实际价值、核心功能、技术方案、提示词/交互、知识来源、工作流/工具、前后端/数据库/API/部署、架构图、创新差异、完成度/不足、访问步骤、1-3 个测试问题、案例截图和团队分工。
+- 人机协同履历表按 L1 基础问答至 L6 业务创新自评，并记录“使用场景 / AI 工具 / 描述”。GitHub 不替代该表，但应诚实呈现模型负责的任务、确定性系统负责的约束，以及测试/人工决策如何纠偏。
+- 公告第 3 页要求独立构思与自主研发，并规定传播/展示权利；README 只使用仓库自有截图和可复核数据，不复制公告海报作为项目宣传素材。
+- 公告 PDF 10 页已逐页渲染并检查。两份 DOCX 因本机无 LibreOffice 无法渲染，按 documents 技能允许回退路径完成段落/表格结构提取；模板未修改。
+
+## 2026-07-28 M156 GitHub 展示边界
+
+- GitHub 仓库本身可同时承担公告允许的“Demo 链接或代码包”和公开项目介绍，但不能替代技术说明 DOCX、核心演示视频或 AI 应用履历表；README 只覆盖评审快速理解与复现入口。
+- 当前产品是 Windows/Chrome 本地应用，没有公网 SaaS。公开页应把固定 `?demo=` 回放、默认 mock 持久化闭环和主动启用的实时网页研究分开，不能把前两者描述成真实模型或实时网页结果。
+- 最短评审入口统一使用现行三档“快速找方向 / 形成方案依据 / 做跨案例论证”；`quick / balanced / deep` 只作为内部 URL/请求值说明。
+- 版本化任务的权威数量是 25：`research_tasks.jsonl` 实际 25 行、fixture README 与 `validate-evaluation-fixtures.ps1` 合同均为 25。README、architecture 和 demo 文档中的既有“30 条”均是过时陈述，发布前统一修正。
+- 公开完成度以现有可复核证据表述：360 API / 177 Board / 165 Extension / 8 packaged E2E；实时研究所需 Provider、浏览器权限、小红书登录态、单活限制与图片权利降级必须与能力一同呈现。
+- 公开产品提交 `010eceb` 的 Hosted CI `30362938145` 在 fresh Windows runner 通过 setup、Chromium、前端 coverage 和完整仓库门禁；日志明确为 25 条 fixture、360 API、177 Board、165 Extension、8 packaged E2E 与 `All ArchResearch checks passed.`。

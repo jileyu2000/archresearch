@@ -735,3 +735,45 @@
 - 发布记录提交 `dbb3411` 与证据时态修正 `2a92539` 均已推送；tag 落点 Hosted CI run `30334270656` 在 11 分 56 秒后全绿。
 - annotated tag `v2.1.0` 已推送并精确指向 `2a92539`；正式 Release `ArchResearch v2.1.0` 已发布，非 draft/非 prerelease、无自定义 assets。首次 `gh release view` 请求了当前 CLI 不支持的 `isLatest` 字段，按 CLI 返回的可用字段重跑后完成核验。
 - M154 已完成；当前无剩余发布动作。
+
+## M155 evidence-grounded agent boundaries 启动
+
+- 用户明确要求按 Evidence-Grounded Plan-and-Execute Agent 优化现有架构；当前工作树恢复时干净，分支 `codex/archresearch-v2-1` 跟踪 `origin/main`。
+- 边界固定为行为保持型模块化：保留七阶段状态机、API、Pydantic/SQLAlchemy schema、工具协议、checkpoint、取消/恢复、gap 补查和证据完成语义；不引入 LangChain、LangGraph 或多智能体。
+- 审计确认 `workflow.py` 为 4,998 行，公共执行器约 1,220 行；第一片选择纯规划边界，先写缺模块/合同红灯，再最小搬移，随后跑 API 定向测试、静态检查与完整门禁。
+- 第一片新合同 `test_agent_planning.py` 已确认预期红灯：导入阶段精确失败于不存在的 `archresearch_api.agent`，未执行测试；生产模块尚未创建。
+- `agent/planning.py` 已接管生产执行器的计划生成、查询生成、公开检索查询和站点轮换；新边界合同 3 项、视觉 fallback 与完整 `test_workflow.py` 共 45 项通过。
+- 一次定向 pytest 使用了不存在的测试选择器，因 `not found` 未收集测试；随后按源码真实测试名重跑成功，未重复错误选择器。
+- 恢复审查发现第一片只切换了调用，旧的 8 个规划函数与轮换常量仍留在 `workflow.py`。删除重复实现后，定向测试按预期在收集阶段暴露旧私有导入；已把 `test_workflow.py` 与 `test_browser_inspection.py` 迁移到 `agent.planning`，没有恢复兼容别名。
+- 新增 orchestrator 绑定合同后，规划/查询/视觉 fallback/完整 workflow 定向集 46/46 通过；Ruff check、Ruff format、strict Mypy 与 `git diff --check` 全绿。此前记录的 45 项是另一命令组合口径，现以可复现的 46 项命令为准。
+- 用户要求 M155 完成后独立审查、确认功能不受影响，并依据竞赛要求更新 GitHub 展示后发布；已登记为后继 M156，发布只在完整门禁和 durable 只读核验通过后进行。
+
+## M155 第 2 片：verification boundary
+
+- `test_agent_verification.py` 先在导入阶段精确红于缺少 `archresearch_api.agent.verification`；合同固定 coverage 与 enrichment 两层完成语义，以及 orchestrator 必须绑定新模块。
+- 首个合并补丁因 `CoverageData` 的 `synthesis` 可选字段未包含在匹配上下文中而整体失败、没有部分写入；改用小型原子补丁后，字段与行为均完整保留。
+- coverage 数据查询、项目/逐题/多资产统计、article-ready 逐字证据门槛、gap 名称和三档目标已等价移入 `agent/verification.py`；`workflow.py` 改用 `calculate_coverage()`、`completion_satisfied()` 和 `enrichment_satisfied()`。
+- 6 个 browser-inspection 时间预算测试的 monkeypatch 已迁移到新绑定，不保留旧 `_coverage` 兼容入口。独立边界 2/2；planning + workflow + browser-inspection 受影响回归 153/153 通过。
+
+## M155 第 3-4 片与最终验证
+
+- `test_agent_execution.py` 先精确红于缺少 execution 模块；取消、checkpoint、查询恢复键、页预算、研究上下文与运行计数已等价迁出。机械重命名首轮产生一个 `buildbuild_research_context` 导入错误，被 20 项定向测试立即捕获；修正后 20/20、Ruff/format/strict Mypy 与当时完整 357 API 全绿。
+- `test_agent_synthesis.py` 先精确红于缺少 synthesis 模块；证据约束的确定性综合、finding 去重、可恢复错误分类与 case/branch 纯函数已迁出，Provider/checkpoint 编排仍留 workflow。独立 3/3、既有 synthesis 11/11 通过。
+- 四片合并后完整 API 为 360/360；`scripts/verify.ps1` exit 0：360 API / 177 Board / 165 Extension / 8 packaged E2E，加全部静态、类型、构建、进程、安全和评测门禁。
+- 只读结束复核为 4 workspaces / 15 Runs / 13 permanent / active 0 / 14 collections / 2 inputs；API health ok。误查只支持 POST 的 inputs 路由得到 405，未写入任何数据，最终以 SQLite `mode=ro` 为准。
+- M155 complete；未 stage、commit、push，也未创建研究任务或调用真实模型。
+
+## M156 竞赛 GitHub 展示启动
+
+- 已按 PDF 技能把 10 页公告全部渲染为 PNG 并逐页检查，提取提交物、评审三维度、报名周期、原创与权利条款。
+- 已按 documents 技能读取两份 DOCX 模板。LibreOffice/soffice 不存在，官方 renderer 无法执行；模板仅做结构化段落/表格提取，未编辑或交付 DOCX。
+- 本次恢复首次调用 planning catchup 时系统 `python` 被 Microsoft Store alias 拦截；未重复失败，改用 Codex bundled Python 后成功恢复 18 条未同步上下文。恢复时工作树为 M155 代码/测试/记录与 README，staged 0。
+- README 已补齐参赛方向、100 字简介、场景价值、真实截图、四模块 Agent、人机协同/纠偏、完成度与已知边界、评审访问步骤及 3 个测试问题；固定回放、mock 闭环与实时研究明确分开。
+- `docs/architecture.md` 已同步 planning/execution/verification/synthesis 四模块、唯一 orchestrator、gap 有界循环和 coverage + enrichment 双门槛；`docs/demo-flows.md` 只迁移现行三档名称、完成语义与 30 条评测计数。
+- 独立代码审查以 AST 逐定义对比：27 个迁出函数、2 个类型类、2 个常量，以及 `workflow.py` 留下的 53 个定义在名称归一化后均为零函数体差异。公开审查确认 22 个本地 Markdown 链接/图片、4 张 tracked README 截图、82 字作品简介和隐私扫描通过。
+- 完整 `scripts/verify.ps1` exit 0：360 API / 177 Board / 165 Extension / 8 packaged E2E，以及 Ruff/format、strict Mypy、两端 lint/typecheck/build、进程/安全/评测检查全部通过。
+- 门禁权威输出确认评测任务实际为 25 条；README、architecture 和 demo 文档中既有的“30 条”已统一修正。上行中“30 条评测计数”是修复前记录，不再作为当前事实。
+- 文档修正后 fixture 复核为 25 tasks / 108 samples，22 个本地 Markdown 链接/图片和公开旧词扫描通过；API/Board 均为 200。SQLite `mode=ro` 确认 4 workspaces / 15 Runs（14 completed + 1 partial）/ 13 permanent / active 0 / 14 collections / 2 inputs。
+- 16 个显式产品/公开文档路径经 staged diff、敏感信息和禁止文件扫描后提交为 `010eceb`，推送到 `origin/main`；`.archresearch`、备份、凭据和三份规划记录未进入该提交。
+- Hosted CI run `30362938145` 于 14 分 22 秒后 success：clean setup、Chromium、coverage、25 tasks / 108 samples、360 API / 177 Board / 165 Extension / 8 packaged E2E 与完整静态/类型/构建门禁全部通过。
+- M156 complete；当前唯一下一步是提交本次 HANDOFF/规划闭合记录并等待该记录提交的 Hosted CI，产品代码不再修改。
