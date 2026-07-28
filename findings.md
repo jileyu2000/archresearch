@@ -472,3 +472,6 @@
 - `.artifacts` 的三份 ZIP 共 197,333,728 bytes，属于用户数据备份；16 张 portfolio PNG 共 2,609,028 bytes，属于当前/历史发布证据。两类都不是临时垃圾，清理阶段保留，发布 stage 必须显式挑选而不能 `git add -A`。
 - 首次 Hosted CI 的 coverage step 不是覆盖率阈值失败，而是 `design-system.test.ts` 的源码结构正则在 Windows CRLF checkout 下误报：选择器组与 `transform: none` 的语义关系未变，但 `\r` 让 240 字符距离上限被突破。测试入口统一换行后，原结构合同可跨 LF/CRLF 执行，无需改生产 CSS 或降低任何门槛。
 - 第二次 Hosted CI 已通过 coverage，完整门禁只在 `dev-common.tests.ps1` 的 `.EndsWith("pnpm.cmd")` 失败。Corepack 在 hosted runner 提供可正常执行的无扩展 `pnpm` shim；运行解析器和 setup 均已成功，故正确合同是“路径为现有文件且去扩展名为 pnpm”，而不是绑定某一种 Windows shim 后缀。
+- Hosted CI run `30330946581` 已把失败范围缩到环境准备：348 API、177 Board、165 Extension、coverage、lint、typecheck 与 build 均通过；packaged Extension E2E 的 2 个入口因 `ms-playwright/chromium-1228/.../chrome.exe` 不存在而失败，其余 6 项未运行。E2E 实际使用 Playwright Chromium，不使用 runner 自带的系统 Chrome。
+- 最小修复是在 workspace setup 后显式执行 `pnpm --dir apps/extension exec playwright install chromium`；发布合同必须锁定该步骤，防止后续工作流注释或 runner 镜像假设再次掩盖真实依赖。
+- Hosted CI run `30332351557` 最终全绿：Chromium 安装成功，coverage 通过，完整门禁明确输出 348 API 与 8 packaged E2E 通过；作业总耗时 16 分 58 秒。CI 注释只剩 GitHub Actions 运行时的 Node 20 弃用提示，不影响仓库 Node 24 测试面，也不是本次发布阻塞。

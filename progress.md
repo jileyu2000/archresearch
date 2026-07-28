@@ -722,3 +722,13 @@
 - README 首屏新增项目定位、CI/版本徽章、真实首页图与三类核心能力；GitHub About 改为中文产品说明，并加入 architecture、architecture-research、local-first、fastapi、react、chrome-extension topics。
 - 第二次 Hosted CI run `30329792870` 已通过 clean setup 与完整 frontend coverage，随后在 full gate 的首个 `dev-common.tests.ps1` 失败：Corepack 的有效 shim 不以 `pnpm.cmd` 结尾。按批准方案把测试合同改为路径存在且去扩展名为 `pnpm`，兼容 `.cmd`、`.ps1` 与 extensionless shim，不改 `Resolve-WorkspaceRuntime`。
 - 定向 dev-common 测试通过；本地完整 `scripts/verify.ps1` exit 0：348 API / 177 Board / 165 Extension / 8 packaged E2E 与全部静态、类型、构建、进程、安全和评测检查全绿。
+
+## M154 Hosted CI Chromium 修复
+
+- planning-with-files 首次 catchup 误用系统 `python`，被 Microsoft Store alias 拦截；未重复同一失败，改用 Codex bundled Python 后成功恢复 53 条未同步上下文。
+- 已用 `gh run view 30330946581 --log-failed` 复核唯一失败：Playwright Chromium 未安装，2 项 packaged E2E 无法启动、6 项未运行；产品测试、静态检查与构建均已通过。
+- `release.tests.ps1` 先新增 Chromium 安装合同并确认精确红灯；随后 `.github/workflows/verify.yml` 在 setup 后安装 Chromium，删除错误的系统 Chrome 注释。定向发布测试转绿，`git diff --check` exit 0。
+- 当前下一步：运行完整 `scripts/verify.ps1`；通过后按显式路径提交、push，并等待 Hosted CI 验证 8 项 packaged E2E 全部执行。
+- 完整 `scripts/verify.ps1` exit 0，耗时 183.1 秒：348 API / 177 Board / 165 Extension / 8 packaged E2E 全绿，Ruff/format、strict Mypy、lint/typecheck/build、进程、安全和评测检查全部通过。下一步收窄为提交两处 CI 修复并等待 Hosted CI。
+- 两处 CI 修复以提交 `133b186` 推送到 `origin/main`；只显式 stage 工作流与发布合同，备份 ZIP 和规划记录未进入该提交。
+- Hosted CI run `30332351557` 于 16 分 58 秒后 exit 0：Chromium 安装、coverage、完整门禁均成功；日志明确为 348 API、8 packaged E2E 和 `All ArchResearch checks passed.`。当前唯一下一步是提交发布记录、等待最终 CI，再创建 `v2.1.0` tag/Release。

@@ -27,12 +27,12 @@
 
 ## 当前已验证基线
 
-- 分支 `codex/archresearch-v2-1`（未 push，push 需显式授权）。基线链：`98a9a01` → `d772902` 产品基线 → `06f3424` WMI-free 启停 → 此后逐里程碑小步提交。
+- 分支 `codex/archresearch-v2-1` 跟踪 `origin/main`，公开仓库为 `https://github.com/jileyu2000/archresearch`。发布提交链至 `133b186` 已 push；后续仍按显式路径 stage，备份 ZIP 不得入库。
 - 权威门禁 `scripts/verify.ps1`：**348 API / 177 Board / 165 Extension / 8 packaged E2E**，加 Ruff/format、strict Mypy、两端 lint/typecheck/build、进程/安全/评测检查。PowerShell 5 会吞中间失败，脚本末行成功文案不能单独作为证明。另有根级 `pnpm test:coverage`：Board 78.17/72.39/80.50/81.78 与 Extension 82.69/76.52/83.96/84.73 为最低阈值；M122 完成后 Board 实测为 80.01/75.75/84.77/83.80。
 - 进程脚本必须保持无 WMI/CIM（MSIX pwsh 加载 MMI 失败会杀掉自己拉起的服务）：监听发现用 `netstat -ano`，命令行读 PEB。
 - 持久数据基线：**4 workspaces / 15 Runs（13 条 permanent + 2 条仍沿用既有到期日的模拟试点 Run）/ active 0 / 14 条收藏 / 2 条 input artifacts**。2026-07-27 12:04 新增的 3 条收藏属于既有“城市社区共享中心”Run，与 M152 的隔离图纸/《耕织图》问题不同，是并发外部变化，已按工作区保护规则保留。新建 Run 默认 180 天；M152 未创建或改写 durable Run。《城市社区共享中心》8 问全部 completed 零缺口（M137）；`76f52c79`（三档验收 Deep）与 `ff16988d`（任务书 Standard）是现行验收声明的底层证据，不是失败记录。模拟产物去留待用户决定。
 - 服务：`scripts/start.ps1` 幂等启动 API 8000 / Board 5173，登录自启已配置（M127）。
-- M123 本地发布基线已闭合：API / Board / Extension / manifest 均为 2.1.0；fresh setup/start/update、隔离备份预检与当前发布证据均完成。当前清单为 `docs/release-evidence-2026-07-28.md`，旧清单与 10 张旧 PNG 仅保留为历史材料。Hosted CI、tag 和公开发布尚未运行，必须获得用户明确授权。
+- M123 本地发布基线已闭合：API / Board / Extension / manifest 均为 2.1.0；fresh setup/start/update、隔离备份预检与当前发布证据均完成。当前清单为 `docs/release-evidence-2026-07-28.md`，旧清单与 10 张旧 PNG 仅保留为历史材料。Hosted CI run `30332351557` 已在 Windows fresh runner 通过 Chromium 安装、coverage 与完整 348/177/165/8 门禁；`v2.1.0` tag/Release 尚待创建。
 - 本工作区由多个 agent 会话并发写入（长期约束）：提交前后必须重读 `git status`，另一会话仍在写同名文件时暂停提交。
 
 ## 当前唯一主线
@@ -40,8 +40,8 @@
 1. **M121 / M148 / M149 / M150 / M151 / M152 / M153 已 complete**。M153 已按红绿合同收口 3 项 P1 + 4 项重复 P2：视觉收藏投影原问题/方向；fresh DB 并发初始化唯一且普通同名工作区仍合法；Mock 完成态有 evidence-bound 结果；图纸计数、XHS/Chrome 职责、唯一图片 accessible name、任务书文件名均完成。desktop/390px loaded QA 无溢出、error 0；完整门禁全绿，durable 基线未变。
 2. **M122 8/8 已 complete**：Board/Extension coverage-v8 基线与硬阈值、8 个纯模块、11 个视图组件、`useBrowserReadiness()`、Run payload reducer、`useRunHydration()` 与 `useRunPolling()` 均按红绿合同抽出。请求世代、后台轮询、打开历史 Run、取消/重试、终态水合与页面导航顺序保持；`App.tsx` 4,089→1,752 行，文案、DOM class 与 CSS 不变。
 3. **M123 已 complete**：CI 合同、版本面、fresh setup/start/update、备份预检、历史证据归档、当前发布清单、coverage 与最终完整门禁均已收口，durable 基线未变。
-4. **M154 发布已获授权并处于 in_progress**：发布前目录清理已完成，83.71 MiB 可再生成材料位于可恢复隔离区；项目保留运行链、3 份备份 ZIP 与 16 张发布 PNG。
-5. 当前唯一下一步：**确认 GitHub 仓库目标与可见性**。本地没有 remote，`jileyu2000` 账号下无明显对应仓库；目标明确后才可按显式路径 stage/commit/push、运行 Hosted CI，并准备 `v2.1.0` tag/Release。绝不使用 `git add -A`，备份 ZIP 不得入库。
+4. **M154 发布已获授权并处于 in_progress**：发布前目录清理、公开仓库、README/About/topics、显式范围提交与 Hosted CI 均已完成；CI 的 CRLF、Corepack shim 和 Playwright Chromium 三个环境差异均以合同修复，产品代码与门槛未降低。
+5. 当前唯一下一步：**提交本轮发布记录并等待最终 Hosted CI；全绿后创建 `v2.1.0` tag 与面向访客的 GitHub Release**。绝不使用 `git add -A`，备份 ZIP 不得入库。
 
 ## 工作区保护
 
