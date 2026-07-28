@@ -22,6 +22,7 @@ $workflowContracts = @(
     @{ Pattern = "node-version:\s+'24'"; Message = "CI must use the supported Node version." }
     @{ Pattern = 'pnpm test:coverage'; Message = "CI must enforce Board and Extension coverage thresholds." }
     @{ Pattern = '\./scripts/setup\.ps1'; Message = "CI must prove setup.ps1 from a fresh checkout." }
+    @{ Pattern = 'pnpm --dir apps/extension exec playwright install chromium'; Message = "CI must install Playwright Chromium for packaged Extension E2E." }
     @{ Pattern = '\./scripts/verify\.ps1'; Message = "CI must run the authoritative repository gate." }
 )
 foreach ($contract in $workflowContracts) {

@@ -52,12 +52,14 @@ jobs:
         shell: pwsh
         run: ./scripts/setup.ps1
 
+      - name: Install Playwright Chromium for packaged Extension E2E
+        shell: pwsh
+        run: pnpm --dir apps/extension exec playwright install chromium
+
       - name: Enforce frontend coverage thresholds
         shell: pwsh
         run: pnpm test:coverage
 
-      # windows-latest ships Chrome stable, which the packaged MV3 E2E uses
-      # through Playwright's persistent context.
       - name: Run the full repository gate
         shell: pwsh
         run: ./scripts/verify.ps1
