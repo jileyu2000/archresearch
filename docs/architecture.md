@@ -32,6 +32,30 @@ flowchart LR
 
 API 只监听 `127.0.0.1`。扩展首次用一次性配对码连接，随后把轮换后的令牌放在 `chrome.storage.local`；API 落盘保存令牌摘要。
 
+## Evidence-Grounded Plan-and-Execute Agent
+
+FastAPI 进程内只有一个七阶段 orchestrator，不运行自主多 Agent 网络。Evidence-Grounded Plan-and-Execute 的四个职责边界是普通 Python 模块；模型负责适合语言推理的规划、页面分析、视觉分类与综合，确定性代码负责状态、预算、工具权限、证据准入和终态判断。
+
+```mermaid
+flowchart TB
+    U["问题 / 任务书 / 深度"] --> P["Plan<br/>拆题、查询、可信站点轮换"]
+    P --> E["Execute<br/>预算、工具、checkpoint、恢复"]
+    E --> V["Verify<br/>逐题 coverage + enrichment"]
+    V -->|"缺口存在且预算允许"| E
+    V -->|"双门槛通过或预算结束"| S["Synthesize<br/>只消费证据绑定材料"]
+    S --> R["案例答案 / 对照 / 收藏 / 灵感板"]
+```
+
+| 代码边界 | 职责 |
+|---|---|
+| `agent/planning.py` | 规范化 typed plan、确定性 fallback、查询生成和公开建筑站点轮换 |
+| `agent/execution.py` | 取消检查、checkpoint、研究上下文、查询恢复键、页面预算和运行计数 |
+| `agent/verification.py` | 逐题覆盖统计、正式项目/资产门槛、正文分析丰富度和双层完成判定 |
+| `agent/synthesis.py` | 证据约束的确定性综合、finding 去重、case/branch 纯函数和可恢复 fallback |
+| `workflow.py` | 唯一 orchestrator；保留 Provider、浏览器和持久化编排，固定七阶段顺序 |
+
+Provider 调用继续封装在小型具体客户端之后，默认使用确定性 mock。架构不依赖 LangChain、LangGraph、OpenAI Agents SDK 或多 Agent 运行时；缺口循环只发生在 `gap_check`，并受查询、页面、轮次与时间预算共同约束。
+
 ## 研究状态机
 
 ```mermaid
@@ -45,7 +69,7 @@ stateDiagram-v2
     verifying --> gap_check
     gap_check --> searching: "存在证据缺口且预算允许"
     gap_check --> composing: "覆盖达标、无新增或预算耗尽"
-    composing --> completed: "覆盖达标"
+    composing --> completed: "覆盖与正文丰富度达标"
     composing --> partial: "已有可用资产"
     composing --> blocked: "没有可用资产"
     created --> cancelled: "用户取消"
@@ -60,11 +84,11 @@ stateDiagram-v2
 
 | 模式 | 轮次 | 查询 | 页面 | 时间 |
 |---|---:|---:|---:|---:|
-| Quick | 2 | 6 | 12 | 30 分钟 |
-| Balanced | 3 | 12 | 30 | 30 分钟 |
-| Deep | 4 | 24 | 60 | 30 分钟 |
+| 快速找方向 (`quick`) | 2 | 6 | 12 | 30 分钟 |
+| 形成方案依据 (`balanced`) | 3 | 12 | 30 | 30 分钟 |
+| 做跨案例论证 (`deep`) | 4 | 24 | 60 | 30 分钟 |
 
-建筑研究的完成目标按 Quick / Balanced / Deep 分别为 3 / 4 / 6 个研究问题、6 / 12 / 18 张可用资产、3 / 4 / 6 个正式项目以及 4 / 6 / 9 张 `verified` 或 `partial` 资产；覆盖与正文分析丰富度必须同时达标。页面正文即使证据链完整，也只有在可比较尺度上直接回答当前子问题时才进入正式案例；纯类比页面保留为线索而不抬升。连续两批无新增资产仍会停止并交付已有结果。
+建筑研究的完成目标按 `quick / balanced / deep` 分别为 3 / 4 / 6 个研究问题、6 / 12 / 18 张可用资产、3 / 4 / 6 个正式项目以及 4 / 6 / 9 张 `verified` 或 `partial` 资产；覆盖与正文分析丰富度必须同时达标。页面正文即使证据链完整，也只有在可比较尺度上直接回答当前子问题时才进入正式案例；纯类比页面保留为线索而不抬升。连续两批无新增资产仍会停止并交付已有结果。
 
 ## 数据与证据
 
@@ -130,7 +154,7 @@ Chrome broker、终态消息和受管标签在 V2.1 中是单连接资源，因�
 
 版本化评测夹具位于：
 
-- `fixtures/queries/research_tasks.jsonl`：30 条人工研究任务，只是数据，不会自行联网；
+- `fixtures/queries/research_tasks.jsonl`：25 条人工研究任务，只是数据，不会自行联网；
 - `fixtures/evaluation/classification`：108 张 CC0 合成 SVG 和九类标签；
 - `fixtures/evaluation/project_brief_cases.json`：用户提供的真实任务书场景摘要、主问题和预期边界/问题术语，用于零成本验证内部任务书整理；
 - `scripts/validate-evaluation-fixtures.ps1`：离线检查数量、枚举、文件哈希与确定性重生成。

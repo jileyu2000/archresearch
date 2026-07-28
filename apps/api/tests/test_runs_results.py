@@ -5,9 +5,9 @@ import fitz  # type: ignore[import-untyped]
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from archresearch_api.agent.execution import checkpoint
 from archresearch_api.models import AssetCandidate, InputArtifact, ResearchRun, SavedReference
 from archresearch_api.schemas import RunStatus
-from archresearch_api.workflow import _checkpoint
 
 
 def _create_run(client: TestClient, workspace_id: str, mode: str = "balanced") -> dict[str, object]:
@@ -109,7 +109,7 @@ def test_gap_check_exposes_live_coverage_while_run_is_active(
         "gaps": ["uncovered_subquestions"],
         "enrichment_gaps": ["insufficient_usable_assets"],
     }
-    _checkpoint(
+    checkpoint(
         client.app.state.database,
         run_id,
         RunStatus.gap_check,

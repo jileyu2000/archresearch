@@ -7,6 +7,7 @@ import fitz
 from sqlalchemy import func, select
 
 import archresearch_api.workflow as workflow_module
+from archresearch_api.agent.planning import build_public_search_query, build_queries
 from archresearch_api.database import Database
 from archresearch_api.inspection import InspectedVisual
 from archresearch_api.models import (
@@ -52,8 +53,6 @@ from archresearch_api.workflow import (
     _persist_inspected_assets,
     _persist_sources,
     _public_page_analysis_text,
-    _public_search_query,
-    _queries_for,
     _try_xiaohongshu_search,
     execute_research_run,
 )
@@ -446,7 +445,7 @@ def _advance_retry_attempt(database: Database, run_id: str) -> None:
 def test_query_plan_carries_the_selected_analysis_depth() -> None:
     target = DEPTH_TARGETS[BudgetMode.balanced]
 
-    queries = _queries_for(
+    queries = build_queries(
         "旧厂房怎样更新？",
         ResearchGoal.precedent_research,
         _quick_research_plan().subquestions,
@@ -494,7 +493,7 @@ def test_public_page_analysis_question_stabilizes_program_intent_wording() -> No
 
 
 def test_public_search_query_keeps_workspace_typology_for_a_generic_question() -> None:
-    query = _public_search_query(
+    query = build_public_search_query(
         ResearchGoal.precedent_research,
         "en",
         "公众与后勤流线如何通过独立入口和服务廊道分开？",
@@ -510,7 +509,7 @@ def test_public_search_query_keeps_workspace_typology_for_a_generic_question() -
 
 
 def test_public_search_query_prioritizes_program_insertion_over_drawing_media_words() -> None:
-    query = _public_search_query(
+    query = build_public_search_query(
         ResearchGoal.precedent_research,
         "en",
         "新功能通过插入、嵌套或独立盒体植入旧结构，平面图与剖面图如何表达？",
@@ -566,7 +565,7 @@ def test_public_search_query_routes_overlapping_words_by_primary_design_intent()
     ]
 
     for subquestion, expected_terms, excluded_terms in cases:
-        query = _public_search_query(
+        query = build_public_search_query(
             ResearchGoal.precedent_research,
             "en",
             subquestion,

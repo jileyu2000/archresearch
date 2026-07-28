@@ -17,6 +17,11 @@ from PIL import Image
 from sqlalchemy import delete, select
 
 import archresearch_api.workflow as workflow_module
+from archresearch_api.agent.planning import build_research_plan
+from archresearch_api.agent.synthesis import (
+    deterministic_research_synthesis,
+    research_synthesis_case_identity,
+)
 from archresearch_api.browser import BrowserBroker
 from archresearch_api.config import Settings
 from archresearch_api.database import Database
@@ -65,8 +70,6 @@ from archresearch_api.visual import (
 )
 from archresearch_api.workflow import (
     _persist_expanded_project_page,
-    _research_plan,
-    _research_synthesis_case_identity,
     execute_research_run,
 )
 
@@ -662,7 +665,7 @@ def test_visual_plan_fallback_keeps_the_explicitly_requested_drawing_type() -> N
             del question, goal, budget_mode, workspace_context
             raise RuntimeError("planner unavailable")
 
-    plan, planner, error_type = _research_plan(
+    plan, planner, error_type = build_research_plan(
         FailingPlanningProvider(ProviderSearchResult(assets=[], sources=[])),
         question="我想出一张轴测图，帮我找风格",
         goal=ResearchGoal.visual_reference_search,
@@ -2381,7 +2384,7 @@ def test_precedent_normal_rounds_prioritize_coverage_before_enrichment(
             "enrichment_gaps": ([] if enrichment_complete else ["insufficient_subquestion_assets"]),
         }
 
-    monkeypatch.setattr("archresearch_api.workflow._coverage", coverage)
+    monkeypatch.setattr("archresearch_api.workflow.calculate_coverage", coverage)
 
     execute_research_run(database, run_id, provider)
 
@@ -2455,7 +2458,7 @@ def test_public_page_analysis_fairness_only_limits_uncovered_branch_queries(
             "enrichment_gaps": ["insufficient_subquestion_assets"],
         }
         monkeypatch.setattr(
-            "archresearch_api.workflow._coverage",
+            "archresearch_api.workflow.calculate_coverage",
             lambda *args, **kwargs: {
                 **complete_coverage,
                 "covered_subquestion_ids": list(complete_coverage["covered_subquestion_ids"]),
@@ -2639,7 +2642,7 @@ def test_deep_analysis_fairness_preserves_missing_branch_recovery_windows(
         }
 
     _, cases = _deterministic_synthesis_fixture()
-    monkeypatch.setattr("archresearch_api.workflow._coverage", coverage)
+    monkeypatch.setattr("archresearch_api.workflow.calculate_coverage", coverage)
     monkeypatch.setattr(
         "archresearch_api.workflow._research_synthesis_cases",
         lambda *args, **kwargs: cases,
@@ -2790,7 +2793,7 @@ def test_deep_research_preserves_synthesis_time_before_optional_enrichment(
         evidence=["The inserted volume is independent from the retained structure."],
     )
     monkeypatch.setattr(
-        "archresearch_api.workflow._coverage",
+        "archresearch_api.workflow.calculate_coverage",
         lambda *args, **kwargs: {
             **coverage,
             "covered_subquestion_ids": list(coverage["covered_subquestion_ids"]),
@@ -2920,7 +2923,7 @@ def test_deep_four_of_six_with_cited_synthesis_finishes_partial(
         "enrichment_gaps": ["insufficient_subquestion_assets"],
     }
     monkeypatch.setattr(
-        "archresearch_api.workflow._coverage",
+        "archresearch_api.workflow.calculate_coverage",
         lambda *args, **kwargs: {
             **coverage,
             "covered_subquestion_ids": list(covered_ids),
@@ -3098,7 +3101,7 @@ def test_synthesis_fallback_stays_partial_when_enrichment_is_incomplete(
         }
 
     monkeypatch.setattr(
-        "archresearch_api.workflow._coverage",
+        "archresearch_api.workflow.calculate_coverage",
         coverage,
     )
     monkeypatch.setattr(
@@ -3155,7 +3158,7 @@ def test_synthesis_fallback_stays_partial_when_enrichment_is_incomplete(
 def test_deterministic_synthesis_uses_only_evidence_grounded_case_fields() -> None:
     subquestions, cases = _deterministic_synthesis_fixture()
 
-    synthesis = workflow_module._deterministic_research_synthesis(
+    synthesis = deterministic_research_synthesis(
         BudgetMode.deep,
         subquestions,
         cases,
@@ -3214,7 +3217,7 @@ def test_deterministic_synthesis_matches_each_depth_contract(
 ) -> None:
     subquestions, cases = _deterministic_synthesis_fixture()
 
-    synthesis = workflow_module._deterministic_research_synthesis(
+    synthesis = deterministic_research_synthesis(
         budget_mode,
         subquestions,
         cases,
@@ -4750,13 +4753,13 @@ def test_research_synthesis_case_identity_preserves_distinct_analysis_and_eviden
         update={"evidence": [*case.evidence, "补充证据｜原文：Additional evidence."]}
     )
 
-    assert _research_synthesis_case_identity(case) == _research_synthesis_case_identity(
+    assert research_synthesis_case_identity(case) == research_synthesis_case_identity(
         reordered_duplicate
     )
-    assert _research_synthesis_case_identity(case) != _research_synthesis_case_identity(
+    assert research_synthesis_case_identity(case) != research_synthesis_case_identity(
         distinct_analysis
     )
-    assert _research_synthesis_case_identity(case) != _research_synthesis_case_identity(
+    assert research_synthesis_case_identity(case) != research_synthesis_case_identity(
         distinct_evidence
     )
 
