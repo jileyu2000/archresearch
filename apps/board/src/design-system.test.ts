@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import styles from './styles.css?raw'
+import rawStyles from './styles.css?raw'
+
+const styles = rawStyles.replace(/\r\n?/g, '\n')
 
 describe('responsive design-system rules', () => {
   it('gives the primary research prompt more vertical working space', () => {

@@ -716,3 +716,7 @@
 - 递归删除命令在启动前被执行环境安全策略拒绝，没有文件受影响；随后改用精确路径、边界校验和可恢复移动，将 17 个目标、65 个文件、83.71 MiB 移到 `C:\Users\76384\AppData\Local\Temp\archresearch-release-cleanup-20260728`。
 - 已移出根/API Mypy 缓存、API Pytest/Ruff 缓存、根 Ruff 缓存、`.artifacts/coverage`、6 个验证日志，以及 `.impeccable`、`.superpowers`、`work`、空 `outputs/.agents`；`.gitignore` 新增 `.artifacts/coverage/` 与 `.artifacts/*.log`，防止再生成污染。
 - 清理后逐项确认目标均不在项目目录，`.artifacts` 只剩 3 ZIP + 16 PNG；正常 API 8000 / Board 5173 均为 200，`git diff --check` exit 0。
+- 创建公开仓库 `jileyu2000/archresearch` 并绑定 `origin`。92 个显式路径文件共 4.46 MB 进入发布提交 `a8481eb`，包含源码、测试、脚本、文档与 16 张发布 PNG；ZIP 跟踪数为 0。首次 HTTPS push 在确认前连接重置且远端仍为空，改用命令级 HTTP/1.1 后成功建立 `main`。
+- Hosted CI run `30329423939` 的 setup 成功，coverage step 中 Board 176/177：唯一失败是 reduced-motion 源码正则在 Windows CRLF 下超过 `{0,240}` 距离；Extension 165 与其覆盖率已通过，完整门禁因前置失败未运行。
+- 按批准方案只在 `design-system.test.ts` 的 raw CSS 入口统一 CRLF/LF，不改生产样式或断言上限。定向 18/18；根 `pnpm test:coverage` 通过 Board 177（80.01/75.75/84.77/83.80）与 Extension 165（82.69/76.52/83.96/84.73）。
+- README 首屏新增项目定位、CI/版本徽章、真实首页图与三类核心能力；GitHub About 改为中文产品说明，并加入 architecture、architecture-research、local-first、fastapi、react、chrome-extension topics。
