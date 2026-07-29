@@ -59,7 +59,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | M158 Cloudflare Web Edition contract and foundation | in_progress | 双版本范围合同、`apps/web`/`apps/edge` 基础与首轮离线测试已完成：网页工作台不要求用户 Key，浏览器 IndexedDB 保存 Run/result/collection 并支持版本化 JSON 导入导出；Worker 路由、Turnstile、设备/IP 配额、CostGuard DO、七阶段 Workflow、Provider client 与 `fetch` + `HTMLRewriter` 公开页读取已就位。未部署、未创建 Secret/资源、未调用真实模型或真实研究流程。 |
 | M159 browser-local history and public research UX | complete | 公开页第一屏、三档研究、开始/轮询/取消、结果与最近记录均完成；IndexedDB 记录、版本化备份、OPFS 附件 adapter 及其离线测试完成。桌面与 390px loaded QA 无横向溢出；清站点数据、无痕模式和换设备丢失边界已在界面明确。 |
 | M160 edge research orchestration and bounded execution | complete | typed 七阶段 plan/execute/verify/synthesize、短期 Workflow 状态、取消/恢复、逐字引文核验、coverage + enrichment 双门槛、Turnstile、入口配额、有界查询/页面/Token/时间与 kill switch 已完成。用户取消每日/单次美元金额拒绝后，CostGuard SQLite 只记录预留与实际用量；Edge 7 files / 16 tests 及根级完整门禁全绿。实际部署核验归 M161。 |
-| M161 public deployment and dual-edition release | in_progress | `archresearch-web` 已用当前非 mock 源码重新部署为版本 `c17dc24c-28ce-44c3-9c0f-b52a9f4fd95e`；主页/API/安全头、生产 Turnstile、缺 token 拒绝及桌面/390px loaded QA 已通过。README 已明确本地版仅支持 Google Chrome。剩余是由真人完成 Turnstile 后执行一次 Quick 真实研究验收，并发布 GitHub 源码版本；URL 只私下交付，不进入 GitHub README、Release、About 或仓库文档。 |
+| M161 public deployment and dual-edition release | in_progress | `archresearch-web` 已用当前非 mock 源码重新部署为版本 `c17dc24c-28ce-44c3-9c0f-b52a9f4fd95e`；主页/API/安全头、生产 Turnstile、缺 token 拒绝及桌面/390px loaded QA 已通过。Web Edition 源码、Chrome-only README 边界和 fresh build 顺序修复已推送 `main`，Hosted CI `30424872745` 全绿。剩余是由真人完成 Turnstile 后执行一次 Quick 真实研究验收，再决定新版本 tag/Release；URL 只私下交付，不进入 GitHub README、Release、About 或仓库文档。 |
 
 ## External acceptance gates
 

@@ -586,3 +586,4 @@
 - Turnstile iframe 的两条 `%c%d ... NaN` console error 来自 `challenges.cloudflare.com`，不是 ArchResearch bundle。真实 Quick 研究仍需真人完成验证码；自动化不得绕过人机验证。
 - GitHub 首次 Web Edition 提交 `d684c87` 的 Hosted CI run `30423739118` 通过 setup、Chromium、coverage、360 API、177 Board、165 Extension、Web 7 与 Edge 16 tests，最终只在并行 root build 失败：fresh runner 尚无 `apps/web/dist` 时，Edge Wrangler 与 Web build 同时启动并先读取静态目录。本地残留 dist 曾掩盖该竞态。
 - 根级 build 已改为 Web → Board → Extension → Edge 的明确顺序，并新增发布合同守卫该依赖。移开现有 Web dist 后的 fresh root build 与完整 199.6 秒本地门禁均通过；产品 bundle 和 Cloudflare 部署不需要改变。
+- 修复提交 `5a068f3` 的 Hosted CI run `30424872745` 在 fresh Windows runner 12m6s 全绿，setup、Chromium、coverage 与完整 repository gate 全部成功；公开网页源码与 Chrome-only README 边界至此已在 GitHub `main` 获得远端证明。

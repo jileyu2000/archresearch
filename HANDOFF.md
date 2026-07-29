@@ -50,7 +50,7 @@
 6. **M156 已 complete**：GitHub README 已按完整项目说明维度覆盖场景价值、Agent 架构、人机协同/纠偏、完成度、边界、访问步骤、3 个测试问题和真实截图；本地与 Hosted CI 全绿，durable 基线未变。
 7. **M157 已 complete**：README 已从竞赛投稿语境修正为长期通用项目主页，只保留“建筑竞赛”作为真实用户使用场景；项目主页提交 `cdb97f0` 的本地完整门禁与 Hosted CI `30368067949` 全绿。
 8. **M158/M159/M160 当前状态**：Cloudflare 官方审计、双版本范围合同、`apps/web`/`apps/edge` 最小实现、OPFS adapter、离线测试、根级门禁和桌面/移动 QA 已完成；本地版与网页端代码均可构建。M160 在取消每日/单次美元金额拒绝后已通过 Edge 7 files / 16 tests 与完整根级门禁；CostGuard SQLite 保留预留/实际用量记录和停机开关，不再按金额拒绝。公开页读取默认采用 Worker `fetch` + `HTMLRewriter`，不使用 R2 或 Browser Rendering；长期历史只进 IndexedDB，附件只进 OPFS。
-9. 当前部署恢复点：`archresearch-web` 已用当前非 mock 源码重新部署为版本 `c17dc24c-28ce-44c3-9c0f-b52a9f4fd95e`；四个 Secret 名称、Workflow/DO/限流绑定存在，值未读取。线上主页/API/安全头、生产 Turnstile、缺 token 拒绝与桌面/390px loaded QA 已通过。Web Edition 源码与 README Chrome-only 边界已以 `d684c87` 推送 `main`；首轮 Hosted CI `30423739118` 只因 fresh root build 的 Web/Edge 并行竞态失败，显式构建顺序修复与完整本地门禁已通过，尚待推送并等待新 CI。自动化不得绕过 Turnstile，当前唯一产品验收仍是由真人完成验证后跑一个 Quick 真实研究。网页 URL 不得写入 GitHub；新版本 tag/Release 尚未创建。
+9. 当前部署恢复点：`archresearch-web` 已用当前非 mock 源码重新部署为版本 `c17dc24c-28ce-44c3-9c0f-b52a9f4fd95e`；四个 Secret 名称、Workflow/DO/限流绑定存在，值未读取。线上主页/API/安全头、生产 Turnstile、缺 token 拒绝与桌面/390px loaded QA 已通过。Web Edition 源码与 README Chrome-only 边界已推送 `main`；fresh root build 顺序修复提交 `5a068f3` 的 Hosted CI `30424872745` 全绿。自动化不得绕过 Turnstile，当前唯一产品验收是由真人完成验证后跑一个 Quick 真实研究。网页 URL 不得写入 GitHub；新版本 tag/Release 尚未创建。
 
 ## 工作区保护
 

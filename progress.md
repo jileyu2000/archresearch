@@ -871,3 +871,5 @@
 - 发布合同先新增 Web build 必须早于 Edge build 的断言并精确红灯；根 `package.json` 随后改为 Web → Board → Extension → Edge 的显式构建顺序，合同转绿。
 - 组合式 fresh-build 移动/恢复命令和递归删除旧 dist 两次被执行策略在运行前拒绝，均未改文件；改为分步将旧 dist 移开、执行根 build、把旧目录移动到系统临时位置。缺少 dist 的根 build 成功，临时备份可恢复。
 - 修复后的完整 `scripts/verify.ps1` exit 0，耗时 199.6 秒：360 API / 177 Board / 165 Extension / 8 packaged E2E、Web 4 files / 7 tests、Edge 7 files / 16 tests 与全部静态/类型/构建门禁通过。下一步提交并推送两处 CI 修复及记录，等待新 Hosted CI。
+- CI 修复与记录以提交 `5a068f3` 推送 `origin/main`。Hosted CI run `30424872745` 在 12m6s 后 success，fresh Web assets 顺序、coverage 与完整 repository gate 全部通过。
+- 当前公开网页和 GitHub `main` 源码均已发布；正式 tag/Release 暂不创建，因为仍需真人完成生产 Turnstile 并跑一个有界 Quick 真实研究。
