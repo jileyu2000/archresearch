@@ -986,3 +986,16 @@
 - 线上 1440×1000 与 390×844 smoke 覆盖首次安装提醒、关闭后的主页、个人收藏建筑/图纸双标签和备份与恢复页。两种视口横向溢出均为 0，安装弹窗和关键操作完整，移动端可见按钮均至少 44px。
 - 安装链接精确指向 `v2.1.3` extension-only ZIP；页面 public edition meta 为 `public`。桌面与移动标签页的 page console warn/error 均为空。
 - 未点击安装下载、未上传/恢复备份、未绕过 Turnstile、未创建真实研究。临时 390px 视口已重置，测试标签已关闭。M164 生产部署与线上视觉验证至此 complete。
+
+## 2026-07-30 M165 start
+
+- 用户在线上页面发现“立即安装 Chrome 扩展”会直接下载 ZIP，却没有向普通用户说明后续安装方式；立项 M165 修复这一首用断点。
+- 已运行 planning catchup，并按 `impeccable` 加载 Board PRODUCT/DESIGN、onboard 流程和 product register；工作树在启动时与 `origin/main` 同步，只保留既有未跟踪 `.artifacts/qa/` 与 `.artifacts/releases/`。
+- 当前下一步：先修改 `HomeComponents.test.tsx`、Board App 和 Web App 行为测试，要求首个主动作不再是下载链接、点击后才出现四步说明与版本化 ZIP 下载动作；确认红灯后再改 `ResearchComposer` 和既有样式。
+- 用户追加截图后扩展 M165 范围：除安装说明外，还要修复“已授权但当前页未注入、提醒不关闭、重复连接误报失败”。下一步先读 Extension 当前页连接、动态 content script、公共版 meta 校验和 Board readiness 轮询代码，再分别建立 Extension 与 Board/Web 红灯。
+- 安装行为测试先确认首屏仍直接暴露“立即安装 Chrome 扩展”并缺少“查看安装方法”；连接测试分别确认同源重复连接仍注销脚本、公共桥不发送 ready、Board 不自动刷新、弹窗继续给出误导性“不是公共版”提示。Web 测试第一次因漏导入 `within` 先失败，修正测试夹具后获得预期行为红灯。
+- `ResearchComposer` 已在同一弹窗内完成渐进披露：首动作只显示四步方法，步骤明确 ZIP 解压、`chrome://extensions`、开发者模式/加载已解压目录、直接包含 `manifest.json` 的文件夹和连接当前页；只有步骤页显示版本化下载链接。
+- 公共扩展连接已改为同 origin 注册复用、当前标签重复注入和固定 v2 ready 通知；Board 只接受同 window、同 origin、精确字段的 ready 消息并立即重读桥状态。扩展失败文案不再把合法网页误报为“不是公共版”。
+- 聚焦回归通过 Board 128 / Web 4 / Extension 28；权威 `scripts/verify.ps1` exit 0，通过 360 API / 190 Board / 189 Extension / 12 Web / 28 Edge / 8 packaged E2E。首次完整门禁调用只因工具等待窗口设为 1 秒而被外部终止，随后用长任务方式完整重跑成功。
+- coverage 通过：Board 79.01/76.42/84.28/83.18，Extension 83.43/78.54/85.40/85.73。版本面统一为 2.1.4；扩展包 `.artifacts/releases/archresearch-chrome-extension-only-v2.1.4.zip` 为 22,312 bytes，根目录含 `manifest.json`，SHA-256 `A360D2A24199A94D502AD8E8D27CDEFCB88147FA850A2F77A2F6F20929EDBEBD`。
+- 系统 Chrome 本地生产界面 QA 实际展开四步安装说明；2048×983 视口下页面和弹窗横向溢出均为 0，下载、检查连接和暂不安装三个控件均为 44px。截图视觉检查通过，未调用内部浏览器；测试标签已清理。

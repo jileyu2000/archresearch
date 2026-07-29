@@ -6,6 +6,7 @@ import {
   BrowserBridgeError,
   requestBrowserBridge,
   requestPublicBrowserBridgeStatus,
+  subscribePublicBrowserBridgeReady,
   type BrowserBridgeStatus,
 } from '../browserBridge'
 import { useBrowserReadiness } from './useBrowserReadiness'
@@ -14,6 +15,7 @@ vi.mock('../browserBridge', async (importOriginal) => ({
   ...await importOriginal<typeof import('../browserBridge')>(),
   requestBrowserBridge: vi.fn(),
   requestPublicBrowserBridgeStatus: vi.fn(),
+  subscribePublicBrowserBridgeReady: vi.fn(() => vi.fn()),
 }))
 
 function deferred<T>() {
@@ -44,6 +46,8 @@ describe('useBrowserReadiness', () => {
   beforeEach(() => {
     vi.mocked(requestBrowserBridge).mockReset()
     vi.mocked(requestPublicBrowserBridgeStatus).mockReset()
+    vi.mocked(subscribePublicBrowserBridgeReady).mockReset()
+      .mockReturnValue(vi.fn())
   })
 
   afterEach(() => {
@@ -284,5 +288,35 @@ describe('useBrowserReadiness', () => {
     expect(result.current.researchEnvironmentTitle).toBe('需要 Chrome 扩展')
     await expect(result.current.ensureBrowserResearchAccess(true)).resolves.toBe(false)
     expect(onError).toHaveBeenCalledWith(expect.stringContaining('安装'))
+  })
+
+  it('refreshes immediately when the public extension bridge becomes ready', async () => {
+    let announceReady: (() => void) | undefined
+    vi.mocked(subscribePublicBrowserBridgeReady).mockImplementation((listener) => {
+      announceReady = listener
+      return vi.fn()
+    })
+    vi.mocked(requestPublicBrowserBridgeStatus)
+      .mockRejectedValueOnce(
+        new BrowserBridgeError('unavailable', 'ArchResearch extension bridge timed out'),
+      )
+      .mockResolvedValueOnce({
+        paired: true,
+        connection: 'connected',
+        researchPermission: true,
+        visualProtocol: 2,
+      })
+    const { result } = renderHook(() => useBrowserReadiness({
+      demoMode: false,
+      publicEdition: true,
+      onAnnouncement: vi.fn(),
+      onError: vi.fn(),
+    }))
+    await waitFor(() => expect(result.current.extensionDetected).toBe(false))
+
+    act(() => announceReady?.())
+
+    await waitFor(() => expect(result.current.extensionDetected).toBe(true))
+    expect(result.current.researchEnvironmentReady).toBe(true)
   })
 })

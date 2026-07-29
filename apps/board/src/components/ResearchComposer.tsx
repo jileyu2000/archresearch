@@ -1,4 +1,9 @@
-import type { FormEvent, ReactNode, RefObject } from 'react'
+import {
+  useState,
+  type FormEvent,
+  type ReactNode,
+  type RefObject,
+} from 'react'
 import {
   ArrowUp,
   Check,
@@ -112,6 +117,12 @@ export function ResearchComposer({
   onDismissExtensionInstallNotice = () => undefined,
   onCheckExtensionInstall = () => undefined,
 }: ResearchComposerProps) {
+  const [extensionInstallGuideOpen, setExtensionInstallGuideOpen] = useState(false)
+  const dismissExtensionInstallNotice = () => {
+    setExtensionInstallGuideOpen(false)
+    onDismissExtensionInstallNotice()
+  }
+
   return (
     <section className="research-composer" aria-label="新建研究">
       {extensionInstallNoticeOpen && (
@@ -123,32 +134,57 @@ export function ResearchComposer({
             aria-label="安装 Chrome 扩展"
           >
             <p className="extension-install-eyebrow">使用前注意</p>
-            <h2>读取小红书图纸灵感需要 Chrome 扩展</h2>
-            <p className="extension-install-intro">
-              扩展使用你已登录的小红书查找公开笔记；建筑案例研究仍可直接使用。
-            </p>
-            <ol className="extension-install-steps">
-              <li><span>01</span><div><strong>安装 Chrome 扩展</strong><p>只需安装一次，不需要 Python、Node 或其他环境。</p></div></li>
-              <li><span>02</span><div><strong>连接当前网页</strong><p>安装后打开浏览器工具栏中的 ArchResearch，选择“连接当前 ArchResearch 网页”。</p></div></li>
-            </ol>
+            {extensionInstallGuideOpen ? (
+              <>
+                <h2>安装 ArchResearch Chrome 扩展</h2>
+                <p className="extension-install-intro">
+                  Chrome 暂不支持直接安装这个下载包。按下面四步操作一次，以后打开网页版即可使用。
+                </p>
+                <ol className="extension-install-steps">
+                  <li><span>01</span><div><strong>下载并解压安装包</strong><p>点击下方下载 ZIP，完成后右键选择“全部提取”。不要直接打开或选择 ZIP 文件。</p></div></li>
+                  <li><span>02</span><div><strong>打开扩展管理页</strong><p>在地址栏输入 chrome://extensions 并回车。</p></div></li>
+                  <li><span>03</span><div><strong>加载解压后的扩展</strong><p>打开右上角“开发者模式”，点击“加载已解压的扩展程序”，选择直接包含 manifest.json 的文件夹。</p></div></li>
+                  <li><span>04</span><div><strong>连接当前网页</strong><p>回到本页，打开工具栏中的“ArchResearch Chrome 扩展”，点击“连接当前 ArchResearch 网页”。</p></div></li>
+                </ol>
+              </>
+            ) : (
+              <>
+                <h2>读取小红书图纸灵感需要 Chrome 扩展</h2>
+                <p className="extension-install-intro">
+                  扩展使用你已登录的小红书查找公开笔记；建筑案例研究仍可直接使用。
+                </p>
+                <ol className="extension-install-steps">
+                  <li><span>01</span><div><strong>安装 Chrome 扩展</strong><p>只需安装一次，不需要 Python、Node 或其他环境。</p></div></li>
+                  <li><span>02</span><div><strong>连接当前网页</strong><p>安装后打开浏览器工具栏中的 ArchResearch，选择“连接当前 ArchResearch 网页”。</p></div></li>
+                </ol>
+              </>
+            )}
             <p className="extension-install-boundary">
               Cookie、账号和密码不会上传到 ArchResearch。
             </p>
             <div className="extension-install-actions">
-              {extensionInstallUrl && (
+              {extensionInstallGuideOpen && extensionInstallUrl ? (
                 <a
                   className="extension-install-primary"
                   href={extensionInstallUrl}
                   target="_blank"
                   rel="noreferrer"
                 >
-                  立即安装 Chrome 扩展<ExternalLink aria-hidden="true" />
+                  下载扩展安装包<ExternalLink aria-hidden="true" />
                 </a>
+              ) : (
+                <button
+                  className="extension-install-primary"
+                  type="button"
+                  onClick={() => setExtensionInstallGuideOpen(true)}
+                >
+                  查看安装方法
+                </button>
               )}
               <button type="button" onClick={() => void onCheckExtensionInstall()}>
                 我已安装，检查连接
               </button>
-              <button type="button" onClick={onDismissExtensionInstallNotice}>
+              <button type="button" onClick={dismissExtensionInstallNotice}>
                 暂不安装
               </button>
             </div>

@@ -1066,6 +1066,7 @@ describe('research board', () => {
   })
 
   it('links the default install action directly to the versioned Chrome extension component', async () => {
+    const user = userEvent.setup()
     vi.mocked(requestBrowserBridge).mockRejectedValue(
       new BrowserBridgeError('unavailable', 'bridge missing'),
     )
@@ -1073,11 +1074,17 @@ describe('research board', () => {
     renderBoard()
 
     const dialog = await screen.findByRole('dialog', { name: '安装 Chrome 扩展' })
+    expect(within(dialog).queryByRole('link', {
+      name: '下载扩展安装包',
+    })).not.toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: '查看安装方法' }))
+
     expect(within(dialog).getByRole('link', {
-      name: '立即安装 Chrome 扩展',
+      name: '下载扩展安装包',
     })).toHaveAttribute(
       'href',
-      'https://github.com/jileyu2000/archresearch/releases/download/v2.1.3/archresearch-chrome-extension-only-v2.1.3.zip',
+      'https://github.com/jileyu2000/archresearch/releases/download/v2.1.4/archresearch-chrome-extension-only-v2.1.4.zip',
     )
   })
 

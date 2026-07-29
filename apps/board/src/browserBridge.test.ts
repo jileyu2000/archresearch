@@ -6,6 +6,7 @@ import {
   requestXiaohongshuResearch,
   requestXiaohongshuSearch,
   resolveBrowserEndpoint,
+  subscribePublicBrowserBridgeReady,
 } from './browserBridge'
 
 describe('Board extension bridge client', () => {
@@ -177,6 +178,34 @@ describe('Board extension bridge client', () => {
       window.location.origin,
     )
     expect(timeout).toHaveBeenCalledWith(expect.any(Function), 8 * 60 * 1_000)
+  })
+
+  it('announces only a same-page public bridge activation', () => {
+    const onReady = vi.fn()
+    const unsubscribe = subscribePublicBrowserBridgeReady(onReady)
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: window,
+      origin: window.location.origin,
+      data: {
+        channel: 'archresearch.extension',
+        protocol_version: 2,
+        action: 'ready',
+        extra: true,
+      },
+    }))
+    window.dispatchEvent(new MessageEvent('message', {
+      source: window,
+      origin: window.location.origin,
+      data: {
+        channel: 'archresearch.extension',
+        protocol_version: 2,
+        action: 'ready',
+      },
+    }))
+
+    expect(onReady).toHaveBeenCalledOnce()
+    unsubscribe()
   })
 
   it('rejects visual observations that are not bound to a requested direction', async () => {

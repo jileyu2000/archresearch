@@ -6,6 +6,7 @@ import {
   requestBrowserBridge,
   requestPublicBrowserBridgeStatus,
   resolveBrowserEndpoint,
+  subscribePublicBrowserBridgeReady,
   type BrowserBridgeStatus,
 } from '../browserBridge'
 
@@ -105,6 +106,13 @@ export function useBrowserReadiness({
       window.clearTimeout(timeout)
     }
   }, [loadBrowserReadiness])
+
+  useEffect(() => {
+    if (demoMode || !publicEdition) return
+    return subscribePublicBrowserBridgeReady(() => {
+      void loadBrowserReadiness()
+    })
+  }, [demoMode, loadBrowserReadiness, publicEdition])
 
   const refreshBrowserConnection = useCallback(async () => {
     const requestId = readinessRequestRef.current + 1
