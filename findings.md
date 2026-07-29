@@ -658,3 +658,11 @@
 - Cloudflare 账号当前尚未启用 R2，`wrangler r2 bucket list` 返回 code 10042；这不是代码或绑定错误，必须先在 Dashboard 接受 R2 服务后才能创建 `archresearch-visual-previews` 及生命周期规则，生产部署在此之前不可执行。
 - M164 已通过 PR #1 合入 `main`（merge commit `37be809`）；push 与 PR 两套 fresh Windows Hosted CI（`30476043922`、`30476474328`）均成功。annotated `v2.1.3` tag 与正式 Release 已发布，唯一手工附件为 `archresearch-chrome-extension-only-v2.1.3.zip`（22,226 bytes），GitHub digest 与本地 SHA-256 均为 `36920AA1875F62124EE3896CA9C46B468981D480E18D754F9F8F3AD9B9925ED6`；Release 未包含私有网页地址。
 - 发布后再次调用 R2 列表仍返回 code 10042；没有重复尝试创建桶、生命周期规则或 Worker 部署。GitHub connector 创建 PR 因集成权限返回 403，已改用认证 `gh` CLI 成功创建 PR；两次恢复的系统 `python` alias 也仅指向 Microsoft Store，已改用 Codex bundled Python。
+
+## 2026-07-30 M164 R2 and production deployment
+
+- 用户完成 Cloudflare R2 启用后，账户已存在私有 Standard 桶 `archresearch-visual-previews`；`visual-previews/` 前缀启用三日对象过期规则，默认未完成分片上传仍在七日后中止。
+- `apps/edge/wrangler.jsonc` 的 `VISUAL_PREVIEWS` 绑定已随 Worker 部署生效；生产版本为 `c7144317-8daa-4e8f-ae57-5ccf79fc8a41`，继续绑定 Workflow、CostGuard Durable Object、六次/分钟入口限流、静态资源和既有 Secret，`MOCK_MODE=false`。
+- 线上 HTTP 验收通过：主页 200，CSP、`X-Robots-Tag: noindex, nofollow, noarchive` 与 `X-Frame-Options: DENY` 生效；`/api/config` 返回非 Cloudflare 测试占位的 Turnstile site key。
+- 第一次部署请求在读取现有 Worker 服务时遇到代理瞬时 `fetch failed`，部署列表确认线上仍为旧版本；第二次正常重试成功，没有产生半部署版本。
+- 系统 Chrome 视觉 smoke 尚未完成：Chrome 控制诊断显示浏览器未运行，ChatGPT Chrome Extension 已安装且启用，但 Native Messaging Host 注册项缺失。按插件安全规则不能自行修复或改用内部浏览器；需用户从 Codex 插件界面重装/启用 Chrome 插件并打开 Chrome 后继续。

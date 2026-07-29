@@ -971,3 +971,11 @@
 - 记录提交前的首轮机密扫描因正则把正常的公开仓库 URL 误判为异常；未暂存或推送。改为逐行列出新增 URL 后，仅发现该公开仓库地址，新增行不含 token、密钥或私有网页地址。
 - 最后一次只读 Release 汇总误请求 `gh release view` 不支持的 `isLatest` 字段，命令在读取前退出；改用 GitHub `releases/latest` API 复核，不修改远端或工作树。
 - 用户授权协助启用 R2。系统 Chrome 的首次 Cloudflare 页面连接超时并重置，未提交任何操作；连接恢复后已到达 Cloudflare R2 的付款资料页。该页需要用户本人填写并确认账单资料，未代填、未提交付款信息；标签页已保留为 handoff，等待用户确认 R2 已启用后再创建桶和部署。
+
+## 2026-07-30 M164 R2 deployment continuation
+
+- planning catchup 使用 Codex bundled Python 恢复 53 条未同步上下文；`main` 与 `origin/main` 同步，工作树只保留既有未跟踪 `.artifacts/qa/` 与 `.artifacts/releases/`。
+- R2 复核成功：`archresearch-visual-previews` 存在，`visual-previews/` 三日过期规则启用。此前只读/网络受限环境中的 normal、`--no-bundle`、`--no-autoconfig` 和命令行引号尝试均未改变线上 Worker；恢复完整权限后不再使用这些回退路径。
+- 正常 `wrangler deploy` 第一次因代理瞬时连接失败而在 Worker 服务查询阶段退出；部署列表确认无新版本。一次原命令重试成功，上传两个变更静态资源并部署 Worker 版本 `c7144317-8daa-4e8f-ae57-5ccf79fc8a41`，R2 绑定和 `MOCK_MODE=false` 均在 Wrangler 输出中确认。
+- 线上主页、CSP/noindex/frame denial 与正式 Turnstile 配置的 HTTP smoke 通过，未绕过 Turnstile、未创建真实研究、未把私有网页地址写入仓库或 Release。
+- 系统 Chrome 控制连接失败后按 `chrome:control-chrome` 诊断：Chrome 已安装但未运行；ChatGPT Chrome Extension 已安装且启用；Native Messaging Host 文件存在但注册表项缺失。遵守技能约束，未自行修复 Native Host、未启动 Chrome、未改用内部浏览器或独立浏览器脚本。线上 1440/390 视觉 smoke 等用户恢复 Chrome 插件并打开浏览器后继续。
