@@ -16,6 +16,7 @@ interface StructuredRequest {
     content: Array<
       | { type: 'input_text'; text: string }
       | { type: 'input_file'; filename: string; file_data: string }
+      | { type: 'input_image'; image_url: string }
     >
   }>
   maximumOutputTokens: number

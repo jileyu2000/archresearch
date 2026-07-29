@@ -4,8 +4,17 @@ import {
   TurnstileVerifier,
   type CloudflareEnvironment,
 } from './cloudflare'
-import { createPublicConfig, createStartResearchHandler } from './entrypoint'
+import {
+  createPublicConfig,
+  createStartResearchHandler,
+  createVisualSourcesHandler,
+} from './entrypoint'
 import type { ResearchRunSnapshot } from './public-contracts'
+import {
+  cleanupVisualPreviews,
+  discardVisualPreviews,
+  storeVisualPreviews,
+} from './visual-preview-store'
 import { createWorkerRouteHandler, withSecurityHeaders } from './worker-router'
 
 function json(body: unknown, status = 200) {
@@ -27,6 +36,58 @@ function runIdFromPath(pathname: string) {
   const match = /^\/api\/runs\/([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i
     .exec(pathname)
   return match?.[1] ?? null
+}
+
+function visualSourcesRunIdFromPath(pathname: string) {
+  const match = /^\/api\/runs\/([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/visual-sources$/i
+    .exec(pathname)
+  return match?.[1] ?? null
+}
+
+function visualDirectionsFromCheckpoint(checkpoint: {
+  stage: string
+  summary: Record<string, unknown>
+} | null) {
+  if (checkpoint?.stage !== 'planning' || !Array.isArray(checkpoint.summary.subquestions)) {
+    return undefined
+  }
+  const directions: Array<{ id: string; query: string }> = []
+  for (const value of checkpoint.summary.subquestions) {
+    if (typeof value !== 'object' || value === null) return undefined
+    const item = value as Record<string, unknown>
+    if (
+      typeof item.id !== 'string'
+      || !/^[A-Za-z0-9_-]{1,80}$/.test(item.id)
+      || typeof item.searchQuery !== 'string'
+      || item.searchQuery.trim().length < 1
+      || item.searchQuery.length > 500
+    ) return undefined
+    directions.push({ id: item.id, query: item.searchQuery.trim() })
+  }
+  return directions.length > 0 && directions.length <= 6 ? directions : undefined
+}
+
+async function visualUploadSignature(
+  secret: string,
+  runId: string,
+  clientSessionId: string,
+) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
+  const signature = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    new TextEncoder().encode(`${runId}:${clientSessionId}`),
+  )
+  return btoa(String.fromCharCode(...new Uint8Array(signature)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '')
 }
 
 function sanitizeWorkflowOutput(value: unknown): ResearchRunSnapshot | null {
@@ -90,7 +151,38 @@ async function handleApi(request: Request, environment: CloudflareEnvironment) {
           })
         },
       },
+      issueVisualUploadToken: async ({ runId, clientSessionId }) => (
+        await visualUploadSignature(
+          environment.TURNSTILE_SECRET_KEY,
+          runId,
+          clientSessionId,
+        )
+      ),
     })(request)
+  }
+
+  const visualSourcesRunId = visualSourcesRunIdFromPath(url.pathname)
+  if (visualSourcesRunId && request.method === 'POST') {
+    if (!sameOrigin(request)) return json({ error: 'cross_origin_request' }, 403)
+    return await createVisualSourcesHandler({
+      authorize: async ({ runId, clientSessionId, uploadToken }) => (
+        uploadToken === await visualUploadSignature(
+          environment.TURNSTILE_SECRET_KEY,
+          runId,
+          clientSessionId,
+        )
+      ),
+      storeSources: async ({ runId, sources }) => (
+        await storeVisualPreviews(environment.VISUAL_PREVIEWS, runId, sources)
+      ),
+      discardSources: async ({ runId, sources }) => {
+        await discardVisualPreviews(environment.VISUAL_PREVIEWS, runId, sources)
+      },
+      sendEvent: async ({ runId, type, payload }) => {
+        const instance = await environment.RESEARCH_WORKFLOW.get(runId)
+        await instance.sendEvent({ type, payload })
+      },
+    })(visualSourcesRunId, request)
   }
 
   const runId = runIdFromPath(url.pathname)
@@ -119,6 +211,9 @@ async function handleApi(request: Request, environment: CloudflareEnvironment) {
           ? 'created'
           : checkpoint?.stage ?? 'planning',
         checkpointStage: checkpoint?.stage ?? null,
+        ...(visualDirectionsFromCheckpoint(checkpoint)
+          ? { visualDirections: visualDirectionsFromCheckpoint(checkpoint) }
+          : {}),
       })
     } catch {
       return json({ error: 'run_not_found' }, 404)
@@ -131,6 +226,7 @@ async function handleApi(request: Request, environment: CloudflareEnvironment) {
       const instance = await environment.RESEARCH_WORKFLOW.get(runId)
       await instance.terminate({ rollback: false })
       await new DurableCostGateClient(environment.COST_GUARD).settleReserved(runId)
+      await cleanupVisualPreviews(environment.VISUAL_PREVIEWS, runId).catch(() => undefined)
       return new Response(null, { status: 204 })
     } catch {
       return json({ error: 'run_not_found' }, 404)

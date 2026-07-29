@@ -1,6 +1,16 @@
 export type ResearchMode = 'quick' | 'balanced' | 'deep'
 export type ResearchGoal = 'precedent_research' | 'visual_reference_search'
 export type ResearchSource = 'public_web' | 'xiaohongshu'
+export type ArchitectureAssetType =
+  | 'plan'
+  | 'section'
+  | 'elevation'
+  | 'site_plan'
+  | 'axonometric'
+  | 'circulation'
+  | 'analysis_diagram'
+  | 'render'
+  | 'photograph'
 export type WorkflowStage =
   | 'planning'
   | 'searching'
@@ -28,9 +38,11 @@ export interface ResearchWorkflowInput {
 }
 
 export interface BrowserVisualSource {
+  directionId: string
   sourceUrl: string
   title: string
-  imageUrl: string | null
+  imageUrl: string
+  previewObjectKey: string | null
   adjacentText: string
 }
 
@@ -41,11 +53,13 @@ export interface PlannedSubquestion {
 }
 
 export interface SearchCandidate {
+  candidateId?: string
   url: string
   title: string
   subquestionId?: string
   providedText?: string
   imageUrl?: string | null
+  previewObjectKey?: string | null
 }
 
 export interface InspectedSource extends SearchCandidate {
@@ -54,10 +68,13 @@ export interface InspectedSource extends SearchCandidate {
 }
 
 export interface EvidenceFinding {
+  candidateId?: string
   subquestionId: string
   statement: string
   sourceUrl: string
   quote: string
+  imageUrl?: string | null
+  assetType?: ArchitectureAssetType
 }
 
 export interface CoverageReport {
@@ -70,8 +87,10 @@ export interface ResearchSection {
   id: string
   title: string
   facts: Array<Pick<EvidenceFinding, 'statement' | 'sourceUrl' | 'quote'> & {
+    candidateId?: string
     sourceTitle?: string
     imageUrl?: string | null
+    assetType?: ArchitectureAssetType
   }>
 }
 
@@ -100,6 +119,7 @@ export interface ResearchServices {
     sources: InspectedSource[],
   ): Promise<EvidenceFinding[]>
   checkCoverage(
+    input: ResearchWorkflowInput,
     plan: PlannedSubquestion[],
     findings: EvidenceFinding[],
   ): Promise<CoverageReport>
@@ -120,6 +140,10 @@ export interface WorkflowStageRunner {
     stage: WorkflowStage,
     callback: () => Promise<T>,
   ): Promise<T>
+  waitForEvent?<T extends Rpc.Serializable<T>>(
+    name: string,
+    options: { type: string; timeout: '10 minutes' | number },
+  ): Promise<{ payload: T }>
 }
 
 const immediateStageRunner: WorkflowStageRunner = {
@@ -149,18 +173,36 @@ export async function runResearchWorkflow(
       ? input.subquestions.map(({ id, question }) => ({ id, question, searchQuery: question }))
       : await services.plan(input)
   ))
+  const awaitingBrowserVisualSources = input.goal === 'visual_reference_search'
+    && input.browserVisualSources === undefined
   await checkpoints.save('planning', {
     subquestionCount: plan.length,
     subquestions: plan,
+    ...(awaitingBrowserVisualSources ? { awaitingBrowserVisualSources: true } : {}),
   })
+
+  let executionInput = input
+  if (awaitingBrowserVisualSources) {
+    if (!stageRunner.waitForEvent) {
+      throw new Error('Visual research requires a browser-source event runner.')
+    }
+    const event = await stageRunner.waitForEvent<{ sources: BrowserVisualSource[] }>(
+      'xiaohongshu-visual-sources',
+      { type: 'xiaohongshu_visual_sources', timeout: '10 minutes' },
+    )
+    executionInput = {
+      ...input,
+      browserVisualSources: event.payload.sources,
+    }
+  }
 
   const searchedCandidates = await stageRunner.do(
     'searching',
-    async () => await services.search(input, plan),
+    async () => await services.search(executionInput, plan),
   )
-  const candidates = input.referenceUrl
+  const candidates = executionInput.referenceUrl
     ? [{
-        url: input.referenceUrl,
+        url: executionInput.referenceUrl,
         title: '用户指定案例页',
         subquestionId: plan[0]?.id,
       }, ...searchedCandidates]
@@ -169,13 +211,13 @@ export async function runResearchWorkflow(
 
   const sources = await stageRunner.do(
     'inspecting',
-    async () => await services.inspect(input, candidates),
+    async () => await services.inspect(executionInput, candidates),
   )
   await checkpoints.save('inspecting', { sourceCount: sources.length })
 
   const analyzed = await stageRunner.do(
     'analyzing',
-    async () => await services.analyze(input, plan, sources),
+    async () => await services.analyze(executionInput, plan, sources),
   )
   await checkpoints.save('analyzing', { findingCount: analyzed.length })
 
@@ -190,7 +232,7 @@ export async function runResearchWorkflow(
 
   const coverage = await stageRunner.do(
     'gap_check',
-    async () => await services.checkCoverage(plan, verified),
+    async () => await services.checkCoverage(executionInput, plan, verified),
   )
   await checkpoints.save('gap_check', {
     coverageSatisfied: coverage.coverageSatisfied,
@@ -201,7 +243,12 @@ export async function runResearchWorkflow(
 
   const composed = await stageRunner.do(
     'composing',
-    async () => await services.compose(input, plan, verified, coverage),
+    async () => await services.compose(executionInput, plan, verified, coverage),
+  )
+  const sourceById = new Map(
+    sources
+      .filter((source) => source.candidateId)
+      .map((source) => [source.candidateId!, source]),
   )
   const sourceByUrl = new Map(sources.map((source) => [source.url, source]))
   const enriched = {
@@ -210,11 +257,14 @@ export async function runResearchWorkflow(
       ...section,
       rationale: input.subquestions?.find(({ id }) => id === section.id)?.rationale,
       facts: section.facts.map((fact) => {
-        const source = sourceByUrl.get(fact.sourceUrl)
+        const source = fact.candidateId
+          ? sourceById.get(fact.candidateId)
+          : sourceByUrl.get(fact.sourceUrl)
         return {
           ...fact,
           sourceTitle: source?.title,
           imageUrl: source?.imageUrl ?? null,
+          assetType: fact.assetType,
         }
       }),
     })),

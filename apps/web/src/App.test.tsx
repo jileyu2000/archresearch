@@ -6,12 +6,15 @@ import {
   type ApiClient,
   type ResearchRun,
 } from '../../board/src/api/client'
-import { requestBrowserBridge } from '../../board/src/browserBridge'
+import {
+  BrowserBridgeError,
+  requestPublicBrowserBridgeStatus,
+} from '../../board/src/browserBridge'
 import { App } from './App'
 
 vi.mock('../../board/src/browserBridge', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../board/src/browserBridge')>(),
-  requestBrowserBridge: vi.fn(),
+  requestPublicBrowserBridgeStatus: vi.fn(),
 }))
 
 const workspace = {
@@ -54,10 +57,11 @@ function mockClient(overrides: Partial<ApiClient> = {}): ApiClient {
 describe('public ArchResearch product', () => {
   beforeEach(() => {
     window.localStorage.clear()
-    vi.mocked(requestBrowserBridge).mockResolvedValue({
+    vi.mocked(requestPublicBrowserBridgeStatus).mockResolvedValue({
       paired: true,
       connection: 'connected',
       researchPermission: true,
+      visualProtocol: 2,
     })
   })
 
@@ -71,7 +75,7 @@ describe('public ArchResearch product', () => {
       />,
     )
 
-    expect(await screen.findByText('公共研究工具')).toBeVisible()
+    expect(await screen.findByText('建筑研究工具')).toBeVisible()
     expect(screen.getByRole('heading', { name: '从一个卡住你的地方开始' })).toBeVisible()
     expect(screen.getByText('毕业设计')).toBeVisible()
     expect(screen.getByRole('button', {
@@ -118,7 +122,9 @@ describe('public ArchResearch product', () => {
   })
 
   it('shows the install reminder on the public main page while the extension is missing', async () => {
-    vi.mocked(requestBrowserBridge).mockRejectedValue(new Error('bridge missing'))
+    vi.mocked(requestPublicBrowserBridgeStatus).mockRejectedValue(
+      new BrowserBridgeError('unavailable', 'bridge missing'),
+    )
     render(
       <App
         client={mockClient()}

@@ -7,47 +7,69 @@ import {
 
 const envelope = {
   channel: "archresearch.board",
-  protocol_version: 1,
+  protocol_version: 2,
   id: "public-request-1",
 };
 
 describe("public Web Board bridge", () => {
-  it("forwards a bounded Xiaohongshu search from an explicitly connected HTTPS page", async () => {
+  it("forwards bounded planned Xiaohongshu research from an explicitly connected HTTPS page", async () => {
     const runtime = {
       sendMessage: vi.fn().mockResolvedValue({
         ok: true,
         result: {
           sources: [{
+            direction_id: "linework",
             source_url: "https://www.xiaohongshu.com/explore/note-1",
             title: "蓝色轴测图与紧凑注释",
             image_url: "https://sns-webpic-qc.xhscdn.com/note-1.webp",
+            preview_data_url: "data:image/png;base64,aW1hZ2U=",
             adjacent_text: "蓝色轴测图，使用细线与编号组织信息。",
           }],
+          budget: {
+            image_count: 1,
+            preview_bytes: 30,
+            exhausted: false,
+          },
         },
       }),
     };
 
     await expect(forwardPublicBoardBridgeRequest({
       ...envelope,
-      action: "xiaohongshu_search",
-      payload: { query: "社区图书馆 蓝色轴测图" },
+      action: "xiaohongshu_research",
+      payload: {
+        directions: [{
+          id: "linework",
+          query: "社区图书馆 蓝色轴测图",
+        }],
+      },
     }, "https://research.example.com", runtime)).resolves.toEqual({
       channel: "archresearch.extension",
-      protocol_version: 1,
+      protocol_version: 2,
       id: "public-request-1",
       ok: true,
       result: {
         sources: [{
+          direction_id: "linework",
           source_url: "https://www.xiaohongshu.com/explore/note-1",
           title: "蓝色轴测图与紧凑注释",
           image_url: "https://sns-webpic-qc.xhscdn.com/note-1.webp",
+          preview_data_url: "data:image/png;base64,aW1hZ2U=",
           adjacent_text: "蓝色轴测图，使用细线与编号组织信息。",
         }],
+        budget: {
+          image_count: 1,
+          preview_bytes: 30,
+          exhausted: false,
+        },
       },
     });
     expect(runtime.sendMessage).toHaveBeenCalledWith({
-      type: "public.xiaohongshu.search",
-      query: "社区图书馆 蓝色轴测图",
+      type: "public.xiaohongshu.research",
+      directions: [{
+        id: "linework",
+        query: "社区图书馆 蓝色轴测图",
+      }],
     });
   });
 
@@ -59,6 +81,7 @@ describe("public Web Board bridge", () => {
           paired: true,
           connection: "connected",
           research_permission: true,
+          visual_protocol: 2,
         },
       }),
     };
@@ -97,8 +120,8 @@ describe("public Web Board bridge", () => {
     const statusRequest = { ...envelope, action: "status", payload: {} };
     const searchRequest = {
       ...envelope,
-      action: "xiaohongshu_search",
-      payload: { query: "剖面" },
+      action: "xiaohongshu_research",
+      payload: { directions: [{ id: "section", query: "剖面" }] },
     };
 
     await expect(
@@ -166,8 +189,11 @@ describe("public Web Board bridge", () => {
     ["not a URL", { ...envelope, action: "status", payload: {} }],
     ["https://research.example.com", {
       ...envelope,
-      action: "xiaohongshu_search",
-      payload: { query: "图纸", script: "document.cookie" },
+      action: "xiaohongshu_research",
+      payload: {
+        directions: [{ id: "drawing", query: "图纸" }],
+        script: "document.cookie",
+      },
     }],
     ["https://research.example.com", {
       ...envelope,

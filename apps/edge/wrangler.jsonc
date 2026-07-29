@@ -17,6 +17,12 @@
       "class_name": "ResearchWorkflow"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "VISUAL_PREVIEWS",
+      "bucket_name": "archresearch-visual-previews"
+    }
+  ],
   "durable_objects": {
     "bindings": [
       {

@@ -21,6 +21,16 @@ export interface ResearchRunSnapshot {
       quote: string
       sourceTitle?: string
       imageUrl?: string | null
+      assetType?:
+        | 'plan'
+        | 'section'
+        | 'elevation'
+        | 'site_plan'
+        | 'axonometric'
+        | 'circulation'
+        | 'analysis_diagram'
+        | 'render'
+        | 'photograph'
     }>
   }>
   coverage: {

@@ -2,12 +2,18 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { apiClient, type BrowserStatus } from '../api/client'
-import { requestBrowserBridge, type BrowserBridgeStatus } from '../browserBridge'
+import {
+  BrowserBridgeError,
+  requestBrowserBridge,
+  requestPublicBrowserBridgeStatus,
+  type BrowserBridgeStatus,
+} from '../browserBridge'
 import { useBrowserReadiness } from './useBrowserReadiness'
 
 vi.mock('../browserBridge', async (importOriginal) => ({
   ...await importOriginal<typeof import('../browserBridge')>(),
   requestBrowserBridge: vi.fn(),
+  requestPublicBrowserBridgeStatus: vi.fn(),
 }))
 
 function deferred<T>() {
@@ -37,6 +43,7 @@ function renderReadiness() {
 describe('useBrowserReadiness', () => {
   beforeEach(() => {
     vi.mocked(requestBrowserBridge).mockReset()
+    vi.mocked(requestPublicBrowserBridgeStatus).mockReset()
   })
 
   afterEach(() => {
@@ -231,15 +238,17 @@ describe('useBrowserReadiness', () => {
     expect(result.current.browserReadinessLoading).toBe(false)
     expect(status).not.toHaveBeenCalled()
     expect(requestBrowserBridge).not.toHaveBeenCalled()
+    expect(requestPublicBrowserBridgeStatus).not.toHaveBeenCalled()
   })
 
   it('requires the connected extension and research permission in the public edition', async () => {
     const onError = vi.fn()
     const status = vi.spyOn(apiClient, 'getBrowserStatus')
-    vi.mocked(requestBrowserBridge).mockResolvedValue({
+    vi.mocked(requestPublicBrowserBridgeStatus).mockResolvedValue({
       paired: true,
       connection: 'connected',
       researchPermission: true,
+      visualProtocol: 2,
     })
     const { result } = renderHook(() => useBrowserReadiness({
       demoMode: false,
@@ -259,8 +268,8 @@ describe('useBrowserReadiness', () => {
 
   it('keeps public Xiaohongshu research blocked while the extension is missing', async () => {
     const onError = vi.fn()
-    vi.mocked(requestBrowserBridge).mockRejectedValue(
-      new Error('ArchResearch extension bridge timed out'),
+    vi.mocked(requestPublicBrowserBridgeStatus).mockRejectedValue(
+      new BrowserBridgeError('unavailable', 'ArchResearch extension bridge timed out'),
     )
     const { result } = renderHook(() => useBrowserReadiness({
       demoMode: false,

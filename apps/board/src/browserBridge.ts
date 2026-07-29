@@ -2,6 +2,7 @@ export type BrowserBridgeStatus = {
   paired: boolean
   connection: 'disconnected' | 'connecting' | 'connected' | 'error'
   researchPermission: boolean
+  visualProtocol?: 2
 }
 
 export type BrowserBridgeCommand =
@@ -13,6 +14,16 @@ export type BrowserVisualSource = {
   title: string
   imageUrl: string | null
   adjacentText: string
+}
+
+export type BrowserVisualDirection = {
+  id: string
+  query: string
+}
+
+export type BrowserVisualObservation = BrowserVisualSource & {
+  directionId: string
+  previewDataUrl: string | null
 }
 
 export class BrowserBridgeError extends Error {
@@ -96,6 +107,70 @@ export function requestXiaohongshuSearch(
       id,
       action: 'xiaohongshu_search',
       payload: { query: query.trim().slice(0, 500) },
+    }, window.location.origin)
+  })
+}
+
+export function requestPublicBrowserBridgeStatus(
+  timeoutMs = 2_000,
+): Promise<BrowserBridgeStatus> {
+  const id = crypto.randomUUID()
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      window.removeEventListener('message', receive)
+      reject(new BrowserBridgeError('unavailable', 'ArchResearch extension bridge timed out'))
+    }, timeoutMs)
+
+    function receive(event: MessageEvent<unknown>) {
+      if (event.source !== window || event.origin !== window.location.origin) return
+      const response = readPublicStatusResponse(event.data, id)
+      if (!response) return
+      window.clearTimeout(timeout)
+      window.removeEventListener('message', receive)
+      if (response instanceof BrowserBridgeError) reject(response)
+      else resolve(response)
+    }
+
+    window.addEventListener('message', receive)
+    window.postMessage({
+      channel: 'archresearch.board',
+      protocol_version: 2,
+      id,
+      action: 'status',
+      payload: {},
+    }, window.location.origin)
+  })
+}
+
+export function requestXiaohongshuResearch(
+  directions: BrowserVisualDirection[],
+  timeoutMs = 8 * 60 * 1_000,
+): Promise<BrowserVisualObservation[]> {
+  const id = crypto.randomUUID()
+  const directionIds = new Set(directions.map(({ id: directionId }) => directionId))
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      window.removeEventListener('message', receive)
+      reject(new BrowserBridgeError('unavailable', 'ArchResearch extension research timed out'))
+    }, timeoutMs)
+
+    function receive(event: MessageEvent<unknown>) {
+      if (event.source !== window || event.origin !== window.location.origin) return
+      const response = readVisualResearchResponse(event.data, id, directionIds)
+      if (!response) return
+      window.clearTimeout(timeout)
+      window.removeEventListener('message', receive)
+      if (response instanceof BrowserBridgeError) reject(response)
+      else resolve(response)
+    }
+
+    window.addEventListener('message', receive)
+    window.postMessage({
+      channel: 'archresearch.board',
+      protocol_version: 2,
+      id,
+      action: 'xiaohongshu_research',
+      payload: { directions },
     }, window.location.origin)
   })
 }
@@ -186,6 +261,127 @@ function readVisualResponse(
     })
   }
   return sources
+}
+
+function readPublicStatusResponse(
+  value: unknown,
+  id: string,
+): BrowserBridgeStatus | BrowserBridgeError | null {
+  if (!isPublicResponseEnvelope(value, id)) return null
+  if (value.ok === false) {
+    return new BrowserBridgeError('rejected', 'ArchResearch extension rejected the command')
+  }
+  if (
+    !isRecord(value.result)
+    || !hasExactKeys(value.result, [
+      'paired',
+      'connection',
+      'research_permission',
+      'visual_protocol',
+    ])
+    || value.result.paired !== true
+    || value.result.connection !== 'connected'
+    || typeof value.result.research_permission !== 'boolean'
+    || value.result.visual_protocol !== 2
+  ) {
+    return new BrowserBridgeError('invalid_response', 'ArchResearch extension returned invalid status')
+  }
+  return {
+    paired: true,
+    connection: 'connected',
+    researchPermission: value.result.research_permission,
+    visualProtocol: 2,
+  }
+}
+
+function readVisualResearchResponse(
+  value: unknown,
+  id: string,
+  directionIds: ReadonlySet<string>,
+): BrowserVisualObservation[] | BrowserBridgeError | null {
+  if (!isPublicResponseEnvelope(value, id)) return null
+  if (value.ok === false) {
+    return new BrowserBridgeError('rejected', 'ArchResearch extension rejected the research')
+  }
+  if (
+    !isRecord(value.result)
+    || !hasExactKeys(value.result, ['sources', 'budget'])
+    || !Array.isArray(value.result.sources)
+    || value.result.sources.length > 48
+    || !isVisualBudget(value.result.budget)
+  ) {
+    return new BrowserBridgeError('invalid_response', 'ArchResearch extension returned invalid sources')
+  }
+  const sources: BrowserVisualObservation[] = []
+  let previewBytes = 0
+  for (const source of value.result.sources) {
+    if (
+      !isRecord(source)
+      || !hasExactKeys(source, [
+        'direction_id',
+        'source_url',
+        'title',
+        'image_url',
+        'preview_data_url',
+        'adjacent_text',
+      ])
+      || typeof source.direction_id !== 'string'
+      || !/^[A-Za-z0-9_-]{1,80}$/.test(source.direction_id)
+      || !directionIds.has(source.direction_id)
+      || !isXiaohongshuNoteUrl(source.source_url)
+      || typeof source.title !== 'string'
+      || source.title.length > 240
+      || !isXiaohongshuImageUrl(source.image_url)
+      || !isPreviewDataUrl(source.preview_data_url)
+      || typeof source.adjacent_text !== 'string'
+      || source.adjacent_text.length > 1_000
+    ) {
+      return new BrowserBridgeError('invalid_response', 'ArchResearch extension returned invalid sources')
+    }
+    previewBytes += source.preview_data_url?.length ?? 0
+    if (previewBytes > 48 * 1024 * 1024) {
+      return new BrowserBridgeError('invalid_response', 'ArchResearch extension returned invalid sources')
+    }
+    sources.push({
+      directionId: source.direction_id,
+      sourceUrl: source.source_url,
+      title: source.title,
+      imageUrl: source.image_url,
+      previewDataUrl: source.preview_data_url,
+      adjacentText: source.adjacent_text,
+    })
+  }
+  return sources
+}
+
+function isPublicResponseEnvelope(
+  value: unknown,
+  id: string,
+): value is Record<string, unknown> & { ok: boolean } {
+  return isRecord(value)
+    && value.channel === 'archresearch.extension'
+    && value.protocol_version === 2
+    && value.id === id
+    && typeof value.ok === 'boolean'
+}
+
+function isVisualBudget(value: unknown) {
+  return isRecord(value)
+    && hasExactKeys(value, ['image_count', 'preview_bytes', 'exhausted'])
+    && Number.isInteger(value.image_count)
+    && Number(value.image_count) >= 0
+    && Number(value.image_count) <= 48
+    && Number.isInteger(value.preview_bytes)
+    && Number(value.preview_bytes) >= 0
+    && Number(value.preview_bytes) <= 48 * 1024 * 1024
+    && typeof value.exhausted === 'boolean'
+}
+
+function isPreviewDataUrl(value: unknown): value is string | null {
+  return value === null
+    || (typeof value === 'string'
+      && value.startsWith('data:image/png;base64,')
+      && value.length <= 3_000_000)
 }
 
 function isXiaohongshuNoteUrl(value: unknown): value is string {

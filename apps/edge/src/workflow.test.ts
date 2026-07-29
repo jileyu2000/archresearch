@@ -136,4 +136,84 @@ describe('mock Evidence-Grounded Plan-and-Execute workflow', () => {
     expect(result.status).toBe('partial')
     expect(result.coverage.enrichmentSatisfied).toBe(false)
   })
+
+  it('checkpoints visual directions before waiting for bounded Chrome observations', async () => {
+    const visualSources = [{
+      directionId: 'linework',
+      sourceUrl: 'https://www.xiaohongshu.com/explore/note-1',
+      title: '社区图书馆线稿轴测图',
+      imageUrl: 'https://sns-webpic-qc.xhscdn.com/note-1.webp',
+      previewObjectKey: 'visual-previews/run-visual/1.png',
+      adjacentText: '细线、蓝色编号与留白组织公共流线。',
+    }]
+    const checkpoints: Array<{ stage: string; summary: Record<string, unknown> }> = []
+    const services = {
+      plan: vi.fn().mockResolvedValue([
+        {
+          id: 'linework',
+          question: '精细线稿轴测图',
+          searchQuery: '社区图书馆 精细线稿 轴测图',
+        },
+      ]),
+      search: vi.fn().mockResolvedValue([]),
+      inspect: vi.fn().mockResolvedValue([]),
+      analyze: vi.fn().mockResolvedValue([]),
+      verify: vi.fn().mockResolvedValue([]),
+      checkCoverage: vi.fn().mockResolvedValue({
+        coverageSatisfied: false,
+        enrichmentSatisfied: false,
+        gaps: ['每个方向需要 3 篇可用小红书笔记'],
+      }),
+      compose: vi.fn().mockResolvedValue({
+        summary: '已保留当前可用的图纸观察。',
+        sections: [],
+      }),
+    }
+    const waitForEvent = vi.fn().mockResolvedValue({
+      payload: { sources: visualSources },
+    })
+
+    await runResearchWorkflow(
+      {
+        runId: 'run-visual',
+        workspaceId: 'workspace-studio',
+        question: '社区图书馆如何用轴测图表达公共流线？',
+        goal: 'visual_reference_search',
+        mode: 'balanced',
+        researchSources: ['xiaohongshu'],
+        clientSessionId: 'device-session-visual',
+      },
+      services,
+      {
+        save: async (stage, summary) => {
+          checkpoints.push({ stage, summary })
+        },
+      },
+      {
+        do: async (_stage, callback) => await callback(),
+        waitForEvent,
+      },
+    )
+
+    expect(checkpoints[0]).toEqual({
+      stage: 'planning',
+      summary: {
+        subquestionCount: 1,
+        subquestions: [{
+          id: 'linework',
+          question: '精细线稿轴测图',
+          searchQuery: '社区图书馆 精细线稿 轴测图',
+        }],
+        awaitingBrowserVisualSources: true,
+      },
+    })
+    expect(waitForEvent).toHaveBeenCalledWith(
+      'xiaohongshu-visual-sources',
+      { type: 'xiaohongshu_visual_sources', timeout: '10 minutes' },
+    )
+    expect(services.search).toHaveBeenCalledWith(
+      expect.objectContaining({ browserVisualSources: visualSources }),
+      expect.any(Array),
+    )
+  })
 })

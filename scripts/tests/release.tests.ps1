@@ -68,8 +68,12 @@ if ($edgeConfig.assets.run_worker_first -ne $true) {
     throw "Every Web Edition response must pass through the Worker security-header wrapper."
 }
 
-$expectedVersion = "2.1.2"
+$expectedVersion = "2.1.3"
 $boardPackage = Get-Content -Raw -LiteralPath (Join-Path $workspace "apps\board\package.json") |
+    ConvertFrom-Json
+$webPackage = Get-Content -Raw -LiteralPath (Join-Path $workspace "apps\web\package.json") |
+    ConvertFrom-Json
+$edgePackage = Get-Content -Raw -LiteralPath (Join-Path $workspace "apps\edge\package.json") |
     ConvertFrom-Json
 $extensionPackage = Get-Content -Raw -LiteralPath (Join-Path $workspace "apps\extension\package.json") |
     ConvertFrom-Json
@@ -77,6 +81,8 @@ $extensionManifest = Get-Content -Raw -LiteralPath (Join-Path $workspace "apps\e
     ConvertFrom-Json
 foreach ($version in @(
     $boardPackage.version,
+    $webPackage.version,
+    $edgePackage.version,
     $extensionPackage.version,
     $extensionManifest.version
 )) {

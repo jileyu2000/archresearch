@@ -20,8 +20,9 @@ import {
   type WorkspaceRestoreResult,
 } from '../../../board/src/api/client'
 import {
-  requestXiaohongshuSearch,
-  type BrowserVisualSource,
+  requestXiaohongshuResearch,
+  type BrowserVisualDirection,
+  type BrowserVisualObservation,
 } from '../../../board/src/browserBridge'
 
 interface PublicClientOptions {
@@ -31,7 +32,9 @@ interface PublicClientOptions {
   clientSessionId: string
   initialVerificationToken?: string | null
   onVerificationConsumed?: () => void
-  xiaohongshuSearch?: (query: string) => Promise<BrowserVisualSource[]>
+  xiaohongshuResearch?: (
+    directions: BrowserVisualDirection[]
+  ) => Promise<BrowserVisualObservation[]>
 }
 
 type StoreName =
@@ -44,6 +47,7 @@ type StoreName =
   | 'events'
   | 'styles'
   | 'inputs'
+  | 'visualPreviews'
 
 interface StoredResult {
   id: string
@@ -56,7 +60,15 @@ interface StoredState<T> {
   value: T
 }
 
+interface StoredVisualPreview {
+  id: string
+  runId: string
+  candidateId: string
+  previewDataUrl: string
+}
+
 interface PublicFact {
+  candidateId?: string
   statement: string
   sourceUrl: string
   quote: string
@@ -73,6 +85,7 @@ interface PublicSnapshot {
   goal?: ResearchGoal
   mode?: ResearchMode
   checkpointStage?: string | null
+  visualDirections?: BrowserVisualDirection[]
   subquestions?: ResearchSubquestion[]
   summary?: string
   sections?: Array<{
@@ -110,6 +123,7 @@ const storeNames: StoreName[] = [
   'events',
   'styles',
   'inputs',
+  'visualPreviews',
 ]
 
 const terminalRunStatuses = new Set<ResearchRun['status']>([
@@ -250,7 +264,7 @@ export function createPublicApiClient(options: PublicClientOptions) {
     if (database) return database
     const request = options.indexedDB.open(
       options.databaseName ?? 'archresearch-public-product',
-      1,
+      2,
     )
     request.onupgradeneeded = () => {
       for (const name of storeNames) {
@@ -291,6 +305,30 @@ export function createPublicApiClient(options: PublicClientOptions) {
     const transaction = current.transaction(storeName, 'readwrite')
     transaction.objectStore(storeName).delete(id)
     await transactionComplete(transaction)
+  }
+
+  const removeVisualPreviews = async (runId: string) => {
+    const previews = await getAll<StoredVisualPreview>('visualPreviews')
+    for (const preview of previews.filter((item) => item.runId === runId)) {
+      await remove('visualPreviews', preview.id)
+    }
+  }
+
+  const storeVisualPreviews = async (
+    runId: string,
+    sources: BrowserVisualObservation[],
+  ) => {
+    await removeVisualPreviews(runId)
+    for (const [index, source] of sources.entries()) {
+      if (!source.previewDataUrl) continue
+      const candidateId = `visual-${index + 1}`
+      await put('visualPreviews', {
+        id: `${runId}:${candidateId}`,
+        runId,
+        candidateId,
+        previewDataUrl: source.previewDataUrl,
+      } satisfies StoredVisualPreview)
+    }
   }
 
   const cloudRequest = async <T>(path: string, init?: RequestInit) => {
@@ -435,13 +473,28 @@ export function createPublicApiClient(options: PublicClientOptions) {
     await saveRun(run)
 
     if (snapshot.sections) {
+      const localPreviews = (await getAll<StoredVisualPreview>('visualPreviews'))
+        .filter(({ runId }) => runId === snapshot.runId)
+      const previewByCandidateId = new Map(
+        localPreviews.map(({ candidateId, previewDataUrl }) => (
+          [candidateId, previewDataUrl] as const
+        )),
+      )
       const existingResults = await getAll<StoredResult>('results')
       for (const record of existingResults.filter(({ runId }) => runId === snapshot.runId)) {
         await remove('results', record.id)
       }
       for (const section of snapshot.sections) {
         for (const [index, fact] of section.facts.entries()) {
-          const value = resultFromFact(snapshot, section, fact, index)
+          const localPreview = fact.candidateId
+            ? previewByCandidateId.get(fact.candidateId)
+            : undefined
+          const value = resultFromFact(
+            snapshot,
+            section,
+            localPreview ? { ...fact, imageUrl: localPreview } : fact,
+            index,
+          )
           await put('results', { id: value.id, runId: snapshot.runId, value })
         }
       }
@@ -467,7 +520,53 @@ export function createPublicApiClient(options: PublicClientOptions) {
       }))
       await put('events', { id: snapshot.runId, value: events })
     }
+    if (terminalRunStatuses.has(snapshot.status)) {
+      await removeVisualPreviews(snapshot.runId)
+    }
     return run
+  }
+
+  const waitForVisualDirections = async (runId: string) => {
+    for (let attempt = 0; attempt < 1200; attempt += 1) {
+      const snapshot = await cloudRequest<PublicSnapshot>(
+        `/api/runs/${encodeURIComponent(runId)}`,
+      )
+      if (snapshot.visualDirections?.length) return snapshot.visualDirections
+      if (terminalRunStatuses.has(snapshot.status)) {
+        throw new ApiError('视觉研究在浏览器读取前已经结束。', 409)
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 500))
+    }
+    throw new ApiError('等待视觉研究方向超时。', 504)
+  }
+
+  const resumeVisualResearch = async (
+    runId: string,
+    uploadToken: string,
+  ) => {
+    const directions = await waitForVisualDirections(runId)
+    const sources: BrowserVisualObservation[] = await (
+        options.xiaohongshuResearch ?? requestXiaohongshuResearch
+      )(directions)
+      .catch(() => [])
+    await storeVisualPreviews(runId, sources)
+    try {
+      await cloudRequest<void>(
+        `/api/runs/${encodeURIComponent(runId)}/visual-sources`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            clientSessionId: options.clientSessionId,
+            uploadToken,
+            sources,
+          }),
+        },
+      )
+    } catch (error) {
+      await removeVisualPreviews(runId)
+      throw error
+    }
   }
 
   const client: ApiClient = {
@@ -506,7 +605,7 @@ export function createPublicApiClient(options: PublicClientOptions) {
       return {
         ready: true,
         format_version: backup.version,
-        schema_revision: 'public-browser-v1',
+        schema_revision: 'public-browser-v2',
         file_count: storeNames.length,
         total_bytes: file.size,
         categories: Object.fromEntries(
@@ -573,16 +672,14 @@ export function createPublicApiClient(options: PublicClientOptions) {
     async startResearch(input: Parameters<ApiClient['startResearch']>[0]) {
       const turnstileToken = verificationToken
       if (!turnstileToken) throw new ApiError('请先完成人机校验。', 403)
-      const browserVisualSources = input.goal === 'visual_reference_search'
-        ? await (options.xiaohongshuSearch ?? requestXiaohongshuSearch)(input.question)
-        : undefined
-      if (input.goal === 'visual_reference_search' && browserVisualSources?.length === 0) {
-        throw new ApiError('没有从小红书读取到可用笔记。请确认 Chrome 已登录小红书并允许扩展读取网页。', 422)
-      }
       const researchSources = input.goal === 'visual_reference_search'
         ? ['xiaohongshu'] as const
         : input.researchSources ?? []
-      const created = await cloudRequest<{ runId: string; status: 'created' }>('/api/runs', {
+      const created = await cloudRequest<{
+        runId: string
+        status: 'created'
+        visualUploadToken?: string
+      }>('/api/runs', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -594,7 +691,6 @@ export function createPublicApiClient(options: PublicClientOptions) {
           goal: input.goal,
           mode: input.mode,
           researchSources,
-          ...(browserVisualSources ? { browserVisualSources } : {}),
           subquestions: input.subquestions,
           briefFile: pendingBriefs.get(input.workspaceId),
           clientSessionId: options.clientSessionId,
@@ -604,7 +700,7 @@ export function createPublicApiClient(options: PublicClientOptions) {
       options.onVerificationConsumed?.()
       pendingBriefs.delete(input.workspaceId)
       const now = new Date().toISOString()
-      return await saveRun({
+      const run = await saveRun({
         id: created.runId,
         workspaceId: input.workspaceId,
         question: input.question,
@@ -621,6 +717,21 @@ export function createPublicApiClient(options: PublicClientOptions) {
         createdAt: now,
         updatedAt: now,
       })
+      if (input.goal === 'visual_reference_search') {
+        if (!created.visualUploadToken) {
+          throw new ApiError('视觉研究没有获得浏览器读取授权。', 503)
+        }
+        void resumeVisualResearch(created.runId, created.visualUploadToken).catch(async () => {
+          try {
+            await cloudRequest<void>(`/api/runs/${encodeURIComponent(created.runId)}`, {
+              method: 'DELETE',
+            })
+          } catch {
+            // The polling path will surface the server state if cancellation is unavailable.
+          }
+        })
+      }
+      return run
     },
 
     async reviewProjectBrief(input: Parameters<ApiClient['reviewProjectBrief']>[0]) {
@@ -690,6 +801,7 @@ export function createPublicApiClient(options: PublicClientOptions) {
       await cloudRequest<void>(`/api/runs/${encodeURIComponent(runId)}`, {
         method: 'DELETE',
       })
+      await removeVisualPreviews(runId)
       const run = await get<ResearchRun>('runs', runId)
       if (!run) throw new ApiError('研究记录不存在。', 404)
       return await saveRun({
