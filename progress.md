@@ -918,3 +918,8 @@
 - 已构建版本 `2.1.2` 的扩展 ZIP `.artifacts/releases/archresearch-extension-v2.1.2.zip`，manifest 位于压缩包根、公共桥产物齐全，SHA-256 为 `76253847468248E027F2747DEB638B576A961FB0C5F7BD1A4EB584C97E2B7C81`。该站外 ZIP 仍需解压并由 Chrome 开发者模式加载；真正一键安装仍需 Chrome Web Store 审核。
 - 根级最终 `scripts/verify.ps1` exit 0，耗时 196.5 秒：360 API / 183 Board / 178 Extension / 11 Web / 18 Edge / 8 packaged E2E，并通过 Ruff/format、strict Mypy、四端 lint/typecheck、顺序 production build、安全检查与 Wrangler production dry-run。
 - 当前唯一下一步：执行显式变更范围、敏感信息和私有 Worker URL 审查；通过后提交并推送 `main`、等待 Hosted CI，再部署生产 Worker、完成线上 smoke 并发布带扩展 ZIP 的 `v2.1.2` GitHub Release。
+- 首次发布提交 `d05b678` 已推送 `main`，Hosted CI `30437662350` 在 coverage 步骤失败：178 个 Extension 测试全部通过，但新增安全模块使全局覆盖率降至 81.40/75.19/82.17/83.89，低于既有 82.69/76.52/83.96/84.73 门槛；完整仓库门禁因此未执行。修复只补新模块的拒绝分支、边界输入和失败清理测试，不降低门槛、不修改生产协议。
+- CI 诊断时尝试读取不存在的 `apps/extension/vitest.config.ts`，PowerShell 同一命令仍成功读取 `package.json` 后以 exit 1 结束；仓库实际使用 Vitest 默认配置和测试文件环境注释。该只读错误未改文件，后续不再假设该路径存在。
+- 新增 8 个安全边界测试后 Extension 为 19 files / 186 tests；coverage 提升至 statements 83.47、branches 78.21、functions 84.88、lines 85.68，四项均高于既有门槛。测试覆盖桥重复启动/来源过滤/运行时失败、公共页权限/HTTPS/旧注册替换，以及小红书空查询/无效 tab/畸形媒体/清理失败；生产代码未改。
+- 根级 `pnpm test:coverage`、Extension lint/typecheck 与 `git diff --check` 通过；随后完整 `scripts/verify.ps1` exit 0，耗时 192.3 秒：360 API / 183 Board / 186 Extension / 11 Web / 18 Edge / 8 packaged E2E，以及 Ruff/format、strict Mypy、四端 lint/typecheck/build、安全检查与 Wrangler production dry-run 全绿。
+- 当前唯一下一步：提交并推送覆盖率修复，等待新的 Hosted CI 成功后，才部署生产 Worker、执行线上 smoke、打 annotated `v2.1.2` tag 并发布带扩展 ZIP 的 GitHub Release。

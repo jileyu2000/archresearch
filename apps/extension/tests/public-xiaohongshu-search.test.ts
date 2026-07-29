@@ -83,4 +83,68 @@ describe("bounded public Xiaohongshu search", () => {
       payload: { tab_id: 23 },
     }));
   });
+
+  it("rejects empty queries and invalid managed tab responses", async () => {
+    const emptySearch = new PublicXiaohongshuSearch({ execute: vi.fn() });
+    await expect(emptySearch.run(" \u0000 ")).rejects.toThrow("query is required");
+
+    const invalidTabSearch = new PublicXiaohongshuSearch({
+      execute: vi.fn().mockResolvedValue({ tab_id: 0 }),
+    });
+    await expect(invalidTabSearch.run("剖面")).rejects.toThrow("did not open a managed tab");
+  });
+
+  it("bounds malformed media and tolerates tab cleanup failure", async () => {
+    const execute = vi.fn()
+      .mockResolvedValueOnce({ tab_id: 31 })
+      .mockResolvedValueOnce({ waited_ms: 3500 })
+      .mockResolvedValueOnce({
+        media: [
+          null,
+          {
+            media_type: "video",
+            url: null,
+            link_url: null,
+            alt: "",
+            adjacent_text: "",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ scrolled: true })
+      .mockResolvedValueOnce({ waited_ms: 1000 })
+      .mockResolvedValueOnce({ not_media: true })
+      .mockRejectedValueOnce(new Error("already closed"));
+    const search = new PublicXiaohongshuSearch({ execute });
+
+    await expect(search.run("社区中心")).resolves.toEqual({ sources: [] });
+  });
+
+  it("uses adjacent text as a safe title and drops invalid image URLs", async () => {
+    const execute = vi.fn()
+      .mockResolvedValueOnce({ tab_id: 32 })
+      .mockResolvedValueOnce({ waited_ms: 3500 })
+      .mockResolvedValueOnce({
+        media: [{
+          media_type: "canvas",
+          url: "not a URL",
+          link_url: "https://www.xiaohongshu.com/discovery/item/note-2?token=private",
+          alt: " ",
+          adjacent_text: "\u0000  剖面  表达  ",
+        }],
+      })
+      .mockResolvedValueOnce({ scrolled: true })
+      .mockResolvedValueOnce({ waited_ms: 1000 })
+      .mockResolvedValueOnce({ media: [] })
+      .mockResolvedValueOnce({ closed: true });
+    const search = new PublicXiaohongshuSearch({ execute });
+
+    await expect(search.run("剖面表达")).resolves.toEqual({
+      sources: [{
+        source_url: "https://www.xiaohongshu.com/discovery/item/note-2",
+        title: "剖面 表达",
+        image_url: null,
+        adjacent_text: "剖面 表达",
+      }],
+    });
+  });
 });

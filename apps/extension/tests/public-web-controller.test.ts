@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { PublicWebController } from "../src/public-web-controller";
+import {
+  isPublicWebCommand,
+  PublicWebController,
+} from "../src/public-web-controller";
 
 function chromeApi() {
   return {
@@ -24,6 +27,10 @@ function chromeApi() {
 describe("public Web extension controller", () => {
   it("connects only an explicitly selected ArchResearch HTTPS page", async () => {
     const api = chromeApi();
+    api.scripting.getRegisteredContentScripts.mockResolvedValue([{
+      id: "archresearch-public-board",
+      matches: ["https://old.example.com/*"],
+    }]);
     const permissions = { hasResearchAccess: vi.fn().mockResolvedValue(true) };
     const search = { run: vi.fn() };
     const controller = new PublicWebController(api, permissions, search);
@@ -43,6 +50,9 @@ describe("public Web extension controller", () => {
     expect(api.scripting.executeScript).toHaveBeenLastCalledWith({
       target: { tabId: 41 },
       files: ["assets/publicBoardBridge.js"],
+    });
+    expect(api.scripting.unregisterContentScripts).toHaveBeenCalledWith({
+      ids: ["archresearch-public-board"],
     });
   });
 
@@ -136,5 +146,36 @@ describe("public Web extension controller", () => {
     await expect(controller.handle({ type: "public.status" }, {
       tab: { id: 41, url: "https://research.example.com/" },
     })).resolves.toMatchObject({ research_permission: false });
+  });
+
+  it("rejects connection without permission, an active tab, or HTTPS", async () => {
+    const api = chromeApi();
+    const denied = new PublicWebController(
+      api,
+      { hasResearchAccess: vi.fn().mockResolvedValue(false) },
+      { run: vi.fn() },
+    );
+    await expect(denied.handle({ type: "ui.public.connect" }, {}))
+      .rejects.toThrow("Research permission is required");
+
+    api.tabs.query.mockResolvedValueOnce([]);
+    const missingTab = new PublicWebController(
+      api,
+      { hasResearchAccess: vi.fn().mockResolvedValue(true) },
+      { run: vi.fn() },
+    );
+    await expect(missingTab.handle({ type: "ui.public.connect" }, {}))
+      .rejects.toThrow("No active browser tab");
+
+    api.tabs.query.mockResolvedValueOnce([{ id: 41, url: "http://research.example.com/" }]);
+    await expect(missingTab.handle({ type: "ui.public.connect" }, {}))
+      .rejects.toThrow("not an ArchResearch public page");
+  });
+
+  it("recognizes only the public command namespace before strict parsing", () => {
+    expect(isPublicWebCommand({ type: "ui.public.connect" })).toBe(true);
+    expect(isPublicWebCommand({ type: "public.status" })).toBe(true);
+    expect(isPublicWebCommand({ type: "ui.status" })).toBe(false);
+    expect(isPublicWebCommand(null)).toBe(false);
   });
 });

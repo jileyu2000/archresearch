@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { forwardPublicBoardBridgeRequest } from "../src/public-board-bridge";
+import {
+  forwardPublicBoardBridgeRequest,
+  startPublicBoardBridge,
+} from "../src/public-board-bridge";
 
 const envelope = {
   channel: "archresearch.board",
@@ -71,8 +74,96 @@ describe("public Web Board bridge", () => {
     expect(runtime.sendMessage).toHaveBeenCalledWith({ type: "public.status" });
   });
 
+  it("relays only validated runtime failures and source arrays", async () => {
+    const runtime = {
+      sendMessage: vi.fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          error: { code: "permission_required", message: "Permission required" },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          result: {
+            paired: true,
+            connection: "error",
+            research_permission: true,
+          },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          result: { sources: Array.from({ length: 9 }, () => ({})) },
+        }),
+    };
+    const statusRequest = { ...envelope, action: "status", payload: {} };
+    const searchRequest = {
+      ...envelope,
+      action: "xiaohongshu_search",
+      payload: { query: "剖面" },
+    };
+
+    await expect(
+      forwardPublicBoardBridgeRequest(statusRequest, "https://research.example.com", runtime),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "permission_required" },
+    });
+    await expect(
+      forwardPublicBoardBridgeRequest(statusRequest, "https://research.example.com", runtime),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "bridge_error" },
+    });
+    await expect(
+      forwardPublicBoardBridgeRequest(searchRequest, "https://research.example.com", runtime),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "bridge_error" },
+    });
+  });
+
+  it("starts once on a marked HTTPS page and contains runtime failures", async () => {
+    let listener: ((event: MessageEvent<unknown>) => void) | undefined;
+    const runtime = {
+      sendMessage: vi.fn().mockRejectedValue(new Error("worker stopped")),
+    };
+    const scope = {
+      location: { origin: "https://research.example.com" },
+      document: { querySelector: vi.fn().mockReturnValue({}) },
+      addEventListener: vi.fn((_type: string, callback: (event: MessageEvent<unknown>) => void) => {
+        listener = callback;
+      }),
+      postMessage: vi.fn(),
+    };
+
+    startPublicBoardBridge(scope as unknown as Window, runtime);
+    startPublicBoardBridge(scope as unknown as Window, runtime);
+    expect(scope.addEventListener).toHaveBeenCalledOnce();
+
+    listener?.({
+      source: scope,
+      origin: "https://attacker.example.com",
+      data: {},
+    } as unknown as MessageEvent<unknown>);
+    expect(runtime.sendMessage).not.toHaveBeenCalled();
+
+    listener?.({
+      source: scope,
+      origin: scope.location.origin,
+      data: { ...envelope, action: "status", payload: {} },
+    } as unknown as MessageEvent<unknown>);
+    await vi.waitFor(() => expect(scope.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: envelope.id,
+        ok: false,
+        error: { code: "bridge_error", message: "Extension command failed" },
+      }),
+      scope.location.origin,
+    ));
+  });
+
   it.each([
     ["http://research.example.com", { ...envelope, action: "status", payload: {} }],
+    ["not a URL", { ...envelope, action: "status", payload: {} }],
     ["https://research.example.com", {
       ...envelope,
       action: "xiaohongshu_search",
