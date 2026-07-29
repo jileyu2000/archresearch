@@ -979,3 +979,10 @@
 - 正常 `wrangler deploy` 第一次因代理瞬时连接失败而在 Worker 服务查询阶段退出；部署列表确认无新版本。一次原命令重试成功，上传两个变更静态资源并部署 Worker 版本 `c7144317-8daa-4e8f-ae57-5ccf79fc8a41`，R2 绑定和 `MOCK_MODE=false` 均在 Wrangler 输出中确认。
 - 线上主页、CSP/noindex/frame denial 与正式 Turnstile 配置的 HTTP smoke 通过，未绕过 Turnstile、未创建真实研究、未把私有网页地址写入仓库或 Release。
 - 系统 Chrome 控制连接失败后按 `chrome:control-chrome` 诊断：Chrome 已安装但未运行；ChatGPT Chrome Extension 已安装且启用；Native Messaging Host 文件存在但注册表项缺失。遵守技能约束，未自行修复 Native Host、未启动 Chrome、未改用内部浏览器或独立浏览器脚本。线上 1440/390 视觉 smoke 等用户恢复 Chrome 插件并打开浏览器后继续。
+
+## 2026-07-30 M164 final online smoke
+
+- 用户恢复系统 Chrome 控制插件后连接成功；验收只使用系统 Chrome，未调用此前会导致桌面应用闪退的内部浏览器。
+- 线上 1440×1000 与 390×844 smoke 覆盖首次安装提醒、关闭后的主页、个人收藏建筑/图纸双标签和备份与恢复页。两种视口横向溢出均为 0，安装弹窗和关键操作完整，移动端可见按钮均至少 44px。
+- 安装链接精确指向 `v2.1.3` extension-only ZIP；页面 public edition meta 为 `public`。桌面与移动标签页的 page console warn/error 均为空。
+- 未点击安装下载、未上传/恢复备份、未绕过 Turnstile、未创建真实研究。临时 390px 视口已重置，测试标签已关闭。M164 生产部署与线上视觉验证至此 complete。

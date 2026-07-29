@@ -666,3 +666,11 @@
 - 线上 HTTP 验收通过：主页 200，CSP、`X-Robots-Tag: noindex, nofollow, noarchive` 与 `X-Frame-Options: DENY` 生效；`/api/config` 返回非 Cloudflare 测试占位的 Turnstile site key。
 - 第一次部署请求在读取现有 Worker 服务时遇到代理瞬时 `fetch failed`，部署列表确认线上仍为旧版本；第二次正常重试成功，没有产生半部署版本。
 - 系统 Chrome 视觉 smoke 尚未完成：Chrome 控制诊断显示浏览器未运行，ChatGPT Chrome Extension 已安装且启用，但 Native Messaging Host 注册项缺失。按插件安全规则不能自行修复或改用内部浏览器；需用户从 Codex 插件界面重装/启用 Chrome 插件并打开 Chrome 后继续。
+
+## 2026-07-30 M164 production visual smoke closure
+
+- 用户恢复 Codex 的系统 Chrome 控制插件后，验收始终选择 Chrome extension surface，未启用或调用应用内浏览器。临时响应式视口在结束前已重置，验收创建的标签页已清理。
+- 1440×1000 线上安装提醒完整显示：扩展用途、一次安装、连接当前网页和 Cookie/账号边界均正确；安装动作直达 `v2.1.3` extension-only ZIP，三个操作控件高度均为 44px，弹窗与页面横向溢出为 0。
+- 390×844 线上安装提醒宽 342px、高 611px，完整落在视口内；三个操作控件高度均为 44px。关闭提醒后的主页实际 `window.innerWidth` 为 390，根节点和 body 无横向溢出，可见按钮没有小于 44px 的项目。
+- 桌面与移动端均实际打开个人收藏和备份与恢复：建筑方案/图纸灵感双标签、空状态、下载备份和选择备份文件入口完整；390px 两页均无横向溢出。
+- 两个线上标签页的 page console warn/error 均为空。反复出现的 Statsig 网络超时来自 Codex Chrome 控制插件访问 `ab.chatgpt.com`，不在 ArchResearch 页面日志内，也不影响页面操作。
