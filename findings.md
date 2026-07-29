@@ -656,3 +656,5 @@
 - 审查发现浏览器响应原先只校验 `direction_id` 的格式，没有校验它属于本次规划；Edge 过滤陌生方向后会重新编号，导致 IndexedDB 本地截图与终态 `candidateId` 错配。现已用失败行为测试固定为只接受请求方向集合。
 - 公共扩展深读最坏路径在 6 个方向下可能超过原 3 分钟页面等待；现已把浏览器桥等待改为 8 分钟，低于 Workflow 10 分钟事件上限并为上传/调度保留 2 分钟，不再让网页先于合法云端阶段放弃。
 - Cloudflare 账号当前尚未启用 R2，`wrangler r2 bucket list` 返回 code 10042；这不是代码或绑定错误，必须先在 Dashboard 接受 R2 服务后才能创建 `archresearch-visual-previews` 及生命周期规则，生产部署在此之前不可执行。
+- M164 已通过 PR #1 合入 `main`（merge commit `37be809`）；push 与 PR 两套 fresh Windows Hosted CI（`30476043922`、`30476474328`）均成功。annotated `v2.1.3` tag 与正式 Release 已发布，唯一手工附件为 `archresearch-chrome-extension-only-v2.1.3.zip`（22,226 bytes），GitHub digest 与本地 SHA-256 均为 `36920AA1875F62124EE3896CA9C46B468981D480E18D754F9F8F3AD9B9925ED6`；Release 未包含私有网页地址。
+- 发布后再次调用 R2 列表仍返回 code 10042；没有重复尝试创建桶、生命周期规则或 Worker 部署。GitHub connector 创建 PR 因集成权限返回 403，已改用认证 `gh` CLI 成功创建 PR；两次恢复的系统 `python` alias 也仅指向 Microsoft Store，已改用 Codex bundled Python。

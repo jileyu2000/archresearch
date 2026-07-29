@@ -960,3 +960,12 @@
 - 已生成 `.artifacts/releases/archresearch-chrome-extension-only-v2.1.3.zip`：22,226 bytes，manifest 位于根、版本 2.1.3、名称明确为 Chrome 扩展，SHA-256 `36920AA1875F62124EE3896CA9C46B468981D480E18D754F9F8F3AD9B9925ED6`。
 - 本机系统 Chrome headless QA 覆盖 1440×1000 与 390×844 的安装提醒、主页、个人收藏和备份页：全部横向溢出 0、弹窗控件不小于 44px、console/page error 0，安装直链指向 2.1.3 extension-only ZIP。两轮检查器超时分别来自错误要求主页存在品牌 h1、错误要求移动端隐藏副标题可见，修正断言后产品无需修改。
 - Cloudflare R2 检查首次在根包找不到 Wrangler，改用 Edge 锁定版本后到达账户并返回 code 10042（R2 未启用）；未创建桶或部署。下一步可先完成 GitHub 显式范围发布，生产 Worker 必须等用户在 Dashboard 启用 R2。
+
+## 2026-07-30 M164 GitHub release closure
+
+- 恢复严格按 `HANDOFF.md`、`AGENTS.md`、活动计划及记录末尾执行。系统 `python` 是 Microsoft Store alias，改用 Codex bundled Python 后成功恢复未同步上下文；未改用户数据。
+- `b4235d1` 已推送到 `codex/archresearch-v2-1`，工作树只保留既有未跟踪 `.artifacts/qa/` 与 `.artifacts/releases/`。GitHub connector 创建 PR 因 integration 403 被拒绝，认证 `gh` CLI 回退成功创建 draft PR #1；这两个动作之外没有改动远端状态。
+- PR #1 的 push 与 PR 两套 fresh Windows CI `30476043922`、`30476474328` 均为 success，覆盖安装、Playwright、coverage 和完整仓库门禁。PR 已以 merge commit `37be809` 合入 `main`，保留发布分支。
+- annotated `v2.1.3` tag 精确指向 `37be809`；正式 Release 标题为“ArchResearch Chrome 扩展组件 v2.1.3”，唯一附件 `archresearch-chrome-extension-only-v2.1.3.zip` 为 22,226 bytes，SHA-256 与 GitHub digest 一致：`36920AA1875F62124EE3896CA9C46B468981D480E18D754F9F8F3AD9B9925ED6`。ZIP 根目录包含 `manifest.json`，名称/版本为“ArchResearch Chrome 扩展”/`2.1.3`；Release 未含私有网页地址。
+- 发布后 R2 再次检查仍为 Cloudflare code 10042。当前唯一下一步是用户在 Dashboard 启用 R2；启用后创建 `archresearch-visual-previews`、设置三日生命周期、部署 Worker，并以系统 Chrome 完成线上 desktop/mobile smoke。未调用内部浏览器。
+- 记录提交前的首轮机密扫描因正则把正常的公开仓库 URL 误判为异常；未暂存或推送。改为逐行列出新增 URL 后，仅发现该公开仓库地址，新增行不含 token、密钥或私有网页地址。
