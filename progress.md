@@ -899,3 +899,22 @@
 - 生产 Chrome headless smoke：主页 200、CSP/noindex/frame denial、正式 Turnstile 配置、桌面/390px 横向溢出 0；首页、两类研究、个人收藏双标签、完整案例结果、9 个案例选择、案例对照弹窗和静态素材均通过。两条 `%c%d ... NaN` console 信息来自 Cloudflare Turnstile 第三方脚本，产品代码无 console/page error。
 - Hosted CI run `30433096343` 在 fresh Windows runner 17 分 44 秒后 success，覆盖率与完整仓库门禁全部通过。annotated tag `v2.1.1` 和正式 GitHub Release 已发布；Release 未包含 Worker URL、本地数据、Secret 或附件。
 - M162 complete。自动化没有绕过正式 Turnstile，也没有为验收创建真实研究；M161 剩余的人工作业仍是完成 Turnstile 后执行一次 Quick 真实研究。
+
+## 2026-07-29 M163 public Xiaohongshu bridge start
+
+- 用户明确要求公共版加入小红书读取能力，并确认它是项目核心；已立项 M163，当前工作树在启动前与 `origin/main` 同步且干净。
+- 实现假设已向用户公开：复用 Chrome 扩展读取用户既有小红书登录态，Cookie/凭据不进 Cloudflare；不采用云端代登录。
+- 已恢复 planning-with-files 会话并读取 Web PRODUCT/DESIGN、产品 register、现有 ResearchComposer 与公共 CSS。下一步只读审计 Extension manifest、pairing、消息协议和现有 XHS 适配器，再写失败行为测试。
+
+## 2026-07-29 M163 public Xiaohongshu bridge implementation
+
+- Chrome 官方文档核实 `activeTab`、optional host permission、`chrome.scripting` 动态 content script 与 message sender 校验；Notion、1Password、Grammarly 的安装页共同采用“能力说明 + Chrome 专属主按钮 + 安装后一步”的结构。Chrome Web Store 是普通用户真正一键安装的常规渠道，站外 ZIP 不能伪称一键安装。
+- 用户将 UI 合同更新为主页面进入即提醒：未检测到扩展时显示安装/连接弹窗，“暂不安装”只关闭本次；动态桥或本地 loopback 桥检测成功后不再弹出。图纸灵感入口继续显示权限和连接状态。
+- 红灯先覆盖公共页严格 bridge、小红书有界搜索、动态 origin 连接、弹窗、Board readiness、Web start payload、Edge 入口与 XHS 已检查来源。生产实现复用现有 BrowserCommandExecutor；公共消息不接受任意 URL、脚本、selector、表单、社交动作或凭据。
+- 当前定向全绿：Board 15 files / 183 tests、Extension 19 files / 178 tests、Web 3 files / 11 tests、Edge 7 files / 18 tests；Extension/Board/Web/Edge 定向 typecheck 已通过。尚未运行根级完整门禁、打包 MV3 E2E、浏览器 QA、敏感扫描、部署或 GitHub 发布。
+- 恢复审计中记录的无副作用错误：一次嵌套 PowerShell 引号让 `rg` 的 `|` 被当成管道；三次 `rg` 带入不存在的 `apps/edge/tests`、`apps/edge/test` 或根 `src`；一次把扩展 HTML 错写成 `public/popup.html`；一次 findings patch 使用了不匹配的段落上下文。均只读或在 apply 前失败，未改用户数据；后续使用实际 `apps/edge/src/*.test.ts` 与扩展根 HTML 路径。
+- 四端 lint/typecheck、根顺序 production build 与 Wrangler dry-run 已通过；扩展 dist 明确包含 `assets/publicBoardBridge.js`。打包 MV3 E2E 保持 8/8 通过，本地 pairing、固定内容协议、受管标签与 FastAPI crop 路径未回归。
+- 本机 Chrome headless QA 覆盖 1440×1000 与 390×844：首次主页面安装弹窗可见，按钮均至少 44px，高度内可用，body 锁定滚动；弹窗和关闭后的主页横向溢出均为 0。拦截 `/api/config` 为确定性 QA 响应后 console/page error 均为 0；首次直接 Vite QA 的一条 404 来自缺少 Worker `/api/config`，不是产品 bundle。
+- 已构建版本 `2.1.2` 的扩展 ZIP `.artifacts/releases/archresearch-extension-v2.1.2.zip`，manifest 位于压缩包根、公共桥产物齐全，SHA-256 为 `76253847468248E027F2747DEB638B576A961FB0C5F7BD1A4EB584C97E2B7C81`。该站外 ZIP 仍需解压并由 Chrome 开发者模式加载；真正一键安装仍需 Chrome Web Store 审核。
+- 根级最终 `scripts/verify.ps1` exit 0，耗时 196.5 秒：360 API / 183 Board / 178 Extension / 11 Web / 18 Edge / 8 packaged E2E，并通过 Ruff/format、strict Mypy、四端 lint/typecheck、顺序 production build、安全检查与 Wrangler production dry-run。
+- 当前唯一下一步：执行显式变更范围、敏感信息和私有 Worker URL 审查；通过后提交并推送 `main`、等待 Hosted CI，再部署生产 Worker、完成线上 smoke 并发布带扩展 ZIP 的 `v2.1.2` GitHub Release。

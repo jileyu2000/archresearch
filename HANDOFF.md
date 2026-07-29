@@ -36,8 +36,9 @@
 - M123 本地发布基线已闭合：API / Board / Extension / manifest 均为 2.1.0；fresh setup/start/update、隔离备份预检与当前发布证据均完成。当前清单为 `docs/release-evidence-2026-07-28.md`，旧清单与 10 张旧 PNG 仅保留为历史材料。最终 tag 落点 `2a92539` 的 Hosted CI run `30334270656` 已在 Windows fresh runner 通过 Chromium 安装、coverage 与完整 348/177/165/8 门禁。
 - M155/M156 公开产品架构提交为 `010eceb`：Evidence-Grounded Plan-and-Execute 四模块边界、行为合同、README 信息维度、architecture/demo 文档已推送 `main`。Hosted CI run `30362938145` 在 fresh Windows runner 通过 coverage、360/177/165/8 与完整门禁。
 - M157 项目主页提交为 `cdb97f0`：README 已改为长期通用的 ArchResearch 项目主页，竞赛要求只作为信息组织参考，不再出现参赛、投稿或评审专属定位；目标用户、痛点、场景价值、架构、人机协同、完成度、截图、安装和演示入口均保留。Hosted CI run `30368067949` 通过 fresh coverage、360/177/165/8 与完整门禁。
-- M162 当前未提交的完整迁移位于 `apps/board`、`apps/web` 与 `apps/edge`。Web 不再维护简化 UI，而是直接渲染本地 Board；`PublicApiClient` 用 IndexedDB 完成本地 `ApiClient` 合同，Edge 承担 Turnstile、设备/IP 近似配额、CostGuard Durable Object、七阶段 Workflow、Provider Responses API client、公开 HTTPS 页读取和 evidence/coverage/enrichment 双门槛。无 R2 或 Browser Rendering 默认依赖。
-- 最新完整验证：根级 `scripts/verify.ps1` exit 0（197.7 秒），通过 360 API / 179 Board / 165 Extension / 9 Web / 16 Edge / 8 packaged E2E，以及 Ruff/format、strict Mypy、lint/typecheck/build、安全检查与 Wrangler dry-run。Wrangler mock 的 1440×1000 和 390×844 Chrome headless QA 覆盖首页、完整结果、收藏和备份，横向溢出 0、console/page error 0；20 个生产静态素材均进入构建。
+- M162 完整迁移已发布：Web 不再维护简化 UI，而是直接渲染本地 Board；`PublicApiClient` 用 IndexedDB 完成本地 `ApiClient` 合同，Edge 承担 Turnstile、设备/IP 近似配额、CostGuard Durable Object、七阶段 Workflow、Provider Responses API client、公开 HTTPS 页读取和 evidence/coverage/enrichment 双门槛。无 R2 或 Browser Rendering 默认依赖。
+- M163 当前未提交的公共小红书桥接位于 Board/Web/Edge/Extension：公共页只可发送 `status` 与 `xiaohongshu_search` 两个严格动作，扩展以用户手势为当前 HTTPS 公共 origin 动态注册 content script，并用用户已登录的小红书页面做有界只读搜索；Cookie、账号和密码不上传。主页缺少扩展时立即提醒，检测到桥后不再弹出。
+- 最新完整验证：根级 `scripts/verify.ps1` exit 0（196.5 秒），通过 360 API / 183 Board / 178 Extension / 11 Web / 18 Edge / 8 packaged E2E，以及 Ruff/format、strict Mypy、lint/typecheck/build、安全检查与 Wrangler dry-run。本机 1440×1000 和 390×844 Chrome headless QA 覆盖安装提醒与主页，横向溢出 0、产品 console/page error 0；已生成待发布的 `2.1.2` 扩展 ZIP，真正一键安装仍需 Chrome Web Store 审核。
 - 本工作区由多个 agent 会话并发写入（长期约束）：提交前后必须重读 `git status`，另一会话仍在写同名文件时暂停提交。
 
 ## 当前唯一主线
@@ -51,6 +52,7 @@
 7. **M157 已 complete**：README 已从竞赛投稿语境修正为长期通用项目主页，只保留“建筑竞赛”作为真实用户使用场景；项目主页提交 `cdb97f0` 的本地完整门禁与 Hosted CI `30368067949` 全绿。
 8. **M158/M159/M160 当前状态**：Cloudflare 官方审计、双版本范围合同、Edge 有界执行、浏览器本地长期数据、离线测试和既有生产部署均已完成。CostGuard SQLite 保留预留/实际用量记录和停机开关，不按金额拒绝；公开页读取默认采用 Worker `fetch` + `HTMLRewriter`，不使用 R2 或 Browser Rendering。
 9. **M162 已 complete**：公共入口直接复用本地 Board，个人收藏、完整结果工具、任务书、历史、表达规范和备份均已接通。提交 `896945a`、Hosted CI `30433096343`、生产 Worker 版本 `051c4e0c-4e9f-45c8-be0c-99194b16cf7b` 和 `v2.1.1` Release 均已闭合；生产桌面/390px、完整案例对照和静态素材 smoke 通过。网页 URL 继续禁止写入 GitHub。M161 唯一剩余是由真人完成正式 Turnstile 后跑一次 Quick 真实研究，自动化不得绕过。
+10. **M163 发布中**：公共 Web 与 GitHub 本地版共用主页安装提醒、扩展连接状态和小红书视觉读取协议；严格消息/来源校验、动态 exact-origin 注册、有界搜索、Web/Edge 接入、全量门禁、打包 E2E、1440/390px QA 与 `2.1.2` ZIP 均已完成。唯一下一步是敏感扫描与 diff 审查后提交/推送，等待 Hosted CI，再部署 Worker、做线上 smoke 并发布 `v2.1.2` Release；生产 URL 不得进入仓库或 Release。
 
 ## 工作区保护
 
@@ -59,4 +61,4 @@
 
 ## 给新对话的第一句话
 
-> 继续 ArchResearch。先完整读取 HANDOFF.md，再读取 AGENTS.md；随后按 HANDOFF 顺序恢复 task_plan.md、findings.md、progress.md，并运行 `git status --short --branch`。不要重做已完成工作，不要恢复 Firecrawl。当前本地一键安装版与 Cloudflare Web Edition 源码、离线门禁和浏览器 QA 已完成；Web/Edge 离线测试分别为 7/16 通过。Cloudflare 账户已登录但尚无目标 Worker，唯一阻塞是取得独立 Provider Secret、Turnstile credentials 和最终 hostname；不要读取或迁移本地 Windows 凭据，不要用 mock 模式冒充公网实时版。保留所有修改和未跟踪文件；未经明确授权不得 stage、commit、push、reset、checkout 或 clean。
+> 继续 ArchResearch。先完整读取 HANDOFF.md，再读取 AGENTS.md；随后按 HANDOFF 顺序恢复 task_plan.md、findings.md、progress.md，并运行 `git status --short --branch`。不要重做已完成工作，不要恢复 Firecrawl，也不要调用会导致桌面应用闪退的内部浏览器。M163 公共小红书桥接、主页安装提醒、完整门禁、Chrome headless QA 与 `2.1.2` 扩展 ZIP 已完成，唯一下一步是显式范围审查、提交/推送、Hosted CI、Worker 部署/线上 smoke 和 GitHub `v2.1.2` Release。生产 Web URL 不得进入仓库或 Release；真正一键安装仍需 Chrome Web Store 审核。保留所有修改和未跟踪文件，不得 reset、checkout、clean 或 `git add -A`。

@@ -12,11 +12,11 @@
 
 ArchResearch Web Edition serves architecture students and early-career designers who need to turn an architectural question into evidence-backed public case research without installing a local development environment.
 
-Users arrive through a public HTTPS page. Their long-term research history, saved results, personal collections, and backups stay in their own browser. They should not need a local runtime, command-line setup, or provider key.
+Users arrive through a public HTTPS page. Their long-term research history, saved results, personal collections, and backups stay in their own browser. They should not need a local runtime, command-line setup, or provider key. Public case research runs directly; Xiaohongshu visual research requires the ArchResearch Chrome extension and the user's own signed-in Xiaohongshu session.
 
 ## Product Purpose
 
-The Web Edition is the public, install-free deployment of the existing local ArchResearch product. The local edition is the product and interaction source of truth; the Web Edition must not invent a separate information architecture or reduced feature set. It must preserve the complete research loop:
+The Web Edition is the public deployment of the existing local ArchResearch product. Case research is install-free; Xiaohongshu visual research adds one Chrome extension. The local edition is the product and interaction source of truth; the Web Edition must not invent a separate information architecture or reduced feature set. It must preserve the complete research loop:
 
 1. Start an architectural research or visual-inspiration task.
 2. Follow bounded progress and inspect partial results.
@@ -44,8 +44,9 @@ The Web Edition must transfer the local edition's screens, navigation, terminolo
 
 Implementation differences must stay below the product surface wherever possible. Any unavoidable edition difference must be explicit and narrow:
 
-- Local Chrome-extension browsing and local-file integration remain local-edition capabilities.
-- The Web Edition only researches public HTTPS sources through its bounded server protocol.
+- Local-file integration remains a local-edition capability.
+- Public case research reads bounded public HTTPS sources through the server protocol. Xiaohongshu visual research uses the ArchResearch Chrome extension to read bounded visible note cards from the user's signed-in Chrome; cookies, credentials, and browser storage never enter the Cloudflare request.
+- The main page checks for the extension and shows one install/connection notice while it is missing. Once the extension is detected, the notice stops appearing; source-specific readiness remains visible at the visual-research entry.
 - Capabilities that depend on unavailable source data may show an honest unavailable state; their surrounding workflow and navigation must remain present.
 - Long-term user history and collections must not be stored as a platform-wide account library.
 

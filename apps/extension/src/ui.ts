@@ -110,6 +110,22 @@ export function mountBridgeUi(root: Document, runtime: UiRuntime): void {
             error.textContent = failureMessage;
           },
         );
+      } else if (command === "public.connect") {
+        const failureMessage =
+          "未能连接当前网页。请确认当前标签页是 ArchResearch 公共版，并允许网页读取。";
+        error.textContent = "";
+        void runtime.requestResearchPermission().then(
+          (granted) => {
+            if (!granted) {
+              error.textContent = failureMessage;
+              return;
+            }
+            void run({ type: "ui.public.connect" }, failureMessage);
+          },
+          () => {
+            error.textContent = failureMessage;
+          },
+        );
       } else if (command === "permissions.revoke") {
         void run(
           { type: "ui.permissions.revoke" },

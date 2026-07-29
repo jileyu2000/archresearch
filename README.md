@@ -1,7 +1,7 @@
 # ArchResearch
 
 [![verify](https://github.com/jileyu2000/archresearch/actions/workflows/verify.yml/badge.svg)](https://github.com/jileyu2000/archresearch/actions/workflows/verify.yml)
-![version](https://img.shields.io/badge/version-2.1.0-2F5BFF)
+![version](https://img.shields.io/badge/version-2.1.2-2F5BFF)
 ![platform](https://img.shields.io/badge/platform-Windows%2011-171A18)
 
 > 把建筑设计问题变成有出处、能比较、可继续使用的案例答案与图纸灵感板。
@@ -91,7 +91,7 @@ flowchart TB
 
 环境要求：Windows 11、Chrome、Python 3.12、Node.js 24、pnpm 11。
 
-本地安装版的网页读取、扩展和小红书登录态研究目前仅支持 **Google Chrome**；不支持 Edge、Firefox 或 Safari。Cloudflare Web Edition 不使用本地扩展，只需要现代浏览器访问。
+本地安装版的网页读取与小红书登录态研究目前仅支持 **Google Chrome**；不支持 Edge、Firefox 或 Safari。Cloudflare Web Edition 的建筑案例研究可直接使用，但图纸灵感同样需要 Google Chrome、ArchResearch 扩展和用户自己的小红书登录态；不需要 Python、Node、pnpm、PowerShell 或用户自己的 Provider Key。
 
 ```powershell
 Copy-Item .env.example .env
@@ -131,10 +131,14 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/update.ps1
 
 ### 安装扩展与配对
 
+进入 ArchResearch 主页面时会自动检查扩展；未检测到时显示安装与连接提醒。检测成功后不再弹出这条提醒。
+
 1. 打开 `chrome://extensions`，启用开发者模式。
 2. 选择“加载已解压的扩展程序”，使用 `apps/extension/dist`。
-3. 在参考板点击“一键连接浏览器”；手动地址和配对码只作为故障恢复入口。
+3. 公共版：在目标网页打开浏览器工具栏中的 ArchResearch，选择“连接当前 ArchResearch 网页”。本地版：在参考板点击“一键连接浏览器”；手动地址和配对码只作为故障恢复入口。
 4. 首次使用时由 Chrome 确认网页读取权限；授权会保留，直到用户在扩展中主动撤销或卸载扩展。
+
+Chrome Web Store 上架后，页面中的“立即安装 Chrome 扩展”会直接进入商店；在商店审核完成前，该按钮进入最新 GitHub Release 的扩展安装包页面。站外 ZIP 仍需按上面的 Chrome 开发者模式步骤加载，不能冒充商店的一键安装。
 
 ### 启用小红书登录态研究
 
@@ -146,7 +150,7 @@ ArchResearch 扩展与 OpenCLI Bridge 职责不同：前者负责通用登录页
 
 Chrome 的 `captureVisibleTab` 只接受用户手势产生的 `activeTab` 或 `<all_urls>` host permission。连续研究无法要求用户逐页点击，因此扩展从自身弹窗的直接用户手势请求可选的 `<all_urls>`，并保留到用户主动撤销或卸载扩展；实际导航、脚本注入和最终 URL 复核仍严格限制为公网 HTTP/HTTPS，不接受 `file:`、扩展页、回环或私网地址。研究终态仍会关闭扩展打开的标签页。
 
-动态页面读取只作用于扩展创建的受管标签：扩展先创建空白标签并写入 `chrome.storage.session`，再监听该 tab 的 `loading` 事件、立即注入随包发布的固定读取器，确认监听器就绪后才向本地 API 返回 tab id。后续页面命令不重复注入；关闭、终态、断线、撤权或工作线程重启都会清理受管标签和监听器。系统不使用按域名全局注册的内容脚本，因此不会把研究读取器注入用户其他同域标签。
+动态页面读取只作用于扩展创建的受管标签：扩展先创建空白标签并写入 `chrome.storage.session`，再监听该 tab 的 `loading` 事件、立即注入随包发布的固定读取器，确认监听器就绪后才向本地 API 返回 tab id。后续页面命令不重复注入；关闭、终态、断线、撤权或工作线程重启都会清理受管标签和监听器。公共版另有一个由用户从扩展弹窗主动注册的轻量页面桥，只在用户选定的 ArchResearch HTTPS origin 且带公共版标记的页面启动；它只转发状态与有界小红书搜索，不包含通用网页读取动作。
 
 本地首版一次只执行一个研究。新建或重试时若已有研究在运行，界面会要求先等待完成或取消；这避免两个任务共用同一个 Chrome 连接时互相关闭标签。研究终态先送达扩展并完成标签清理，运行槽位才释放给下一次研究。
 

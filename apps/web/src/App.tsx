@@ -11,6 +11,7 @@ interface AppProps {
   client?: ApiClient
   clientSessionId?: string
   verificationToken?: string
+  extensionInstallUrl?: string
 }
 
 interface PublicConfig {
@@ -101,6 +102,7 @@ export function App({
   client: suppliedClient,
   clientSessionId: suppliedClientSessionId,
   verificationToken,
+  extensionInstallUrl,
 }: AppProps) {
   const [verifiedToken, setVerifiedToken] = useState<string | null>(
     verificationToken ?? null,
@@ -176,6 +178,7 @@ export function App({
       edition="public"
       verificationControl={verificationControl}
       verificationReady={Boolean(verifiedToken)}
+      extensionInstallUrl={extensionInstallUrl}
     />
   )
 }

@@ -12,6 +12,7 @@ function renderShell(): void {
     <p data-role="error"></p>
     <button data-command="permissions.request">Grant</button>
     <button data-command="permissions.revoke">Revoke</button>
+    <button data-command="public.connect">Connect public page</button>
     <details data-role="manual-pairing">
       <summary>连接有问题？手动配对</summary>
       <form data-role="pair-form">
@@ -181,6 +182,33 @@ describe("extension popup and side-panel UI", () => {
     expect(
       document.querySelector('[data-role="permission-guidance"]')?.textContent,
     ).toBe("已获得网页研究权限，后续研究无需再次确认。");
+  });
+
+  it("requests Chrome access before connecting the current public Web page", async () => {
+    const sendMessage = vi
+      .fn()
+      .mockResolvedValueOnce(statusResponse)
+      .mockResolvedValueOnce({
+        ok: true,
+        result: {
+          paired: true,
+          connection: "connected",
+          research_permission: true,
+        },
+      });
+    mountBridgeUi(document, { sendMessage, requestResearchPermission });
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+
+    (document.querySelector(
+      '[data-command="public.connect"]',
+    ) as HTMLButtonElement).click();
+
+    await vi.waitFor(() =>
+      expect(sendMessage).toHaveBeenLastCalledWith({
+        type: "ui.public.connect",
+      }),
+    );
+    expect(requestResearchPermission).toHaveBeenCalledOnce();
   });
 
   it("sends the loopback endpoint and one-time code for pairing", async () => {

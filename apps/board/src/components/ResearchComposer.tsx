@@ -3,6 +3,7 @@ import {
   ArrowUp,
   Check,
   CircleDashed,
+  ExternalLink,
   Eye,
   LayoutGrid,
   MonitorUp,
@@ -35,6 +36,8 @@ type ResearchComposerProps = {
   publicEdition?: boolean
   verificationControl?: ReactNode
   verificationReady?: boolean
+  extensionInstallNoticeOpen?: boolean
+  extensionInstallUrl?: string
   activeWorkspaceId: string
   briefReviewLoading: boolean
   researchStarting: boolean
@@ -62,6 +65,8 @@ type ResearchComposerProps = {
   onRefreshBrowserReadiness: () => void | Promise<void>
   onCancel: () => void | Promise<void>
   onRetry: () => void | Promise<void>
+  onDismissExtensionInstallNotice?: () => void
+  onCheckExtensionInstall?: () => void | Promise<void>
 }
 
 export function ResearchComposer({
@@ -75,6 +80,8 @@ export function ResearchComposer({
   publicEdition = false,
   verificationControl,
   verificationReady = true,
+  extensionInstallNoticeOpen = false,
+  extensionInstallUrl = '',
   activeWorkspaceId,
   briefReviewLoading,
   researchStarting,
@@ -102,9 +109,52 @@ export function ResearchComposer({
   onRefreshBrowserReadiness,
   onCancel,
   onRetry,
+  onDismissExtensionInstallNotice = () => undefined,
+  onCheckExtensionInstall = () => undefined,
 }: ResearchComposerProps) {
   return (
     <section className="research-composer" aria-label="新建研究">
+      {extensionInstallNoticeOpen && (
+        <div className="extension-install-backdrop">
+          <section
+            className="extension-install-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label="安装 Chrome 扩展"
+          >
+            <p className="extension-install-eyebrow">使用前注意</p>
+            <h2>读取小红书图纸灵感需要 Chrome 扩展</h2>
+            <p className="extension-install-intro">
+              扩展使用你已登录的小红书查找公开笔记；建筑案例研究仍可直接使用。
+            </p>
+            <ol className="extension-install-steps">
+              <li><span>01</span><div><strong>安装 Chrome 扩展</strong><p>只需安装一次，不需要 Python、Node 或其他环境。</p></div></li>
+              <li><span>02</span><div><strong>连接当前网页</strong><p>安装后打开浏览器工具栏中的 ArchResearch，选择“连接当前 ArchResearch 网页”。</p></div></li>
+            </ol>
+            <p className="extension-install-boundary">
+              Cookie、账号和密码不会上传到 ArchResearch。
+            </p>
+            <div className="extension-install-actions">
+              {extensionInstallUrl && (
+                <a
+                  className="extension-install-primary"
+                  href={extensionInstallUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  立即安装 Chrome 扩展<ExternalLink aria-hidden="true" />
+                </a>
+              )}
+              <button type="button" onClick={() => void onCheckExtensionInstall()}>
+                我已安装，检查连接
+              </button>
+              <button type="button" onClick={onDismissExtensionInstallNotice}>
+                暂不安装
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
       <header>
         <div>
           <h1>从一个卡住你的地方开始</h1>
@@ -262,12 +312,16 @@ export function ResearchComposer({
                 </div>
               </div>
               <div className="research-preflight-actions">
-                {!publicEdition && showBrowserConnectAction && (
+                {showBrowserConnectAction && (
                   <button type="button" disabled={browserConnecting} onClick={() => void onConnectBrowser()}>
-                    <MonitorUp aria-hidden="true" />{browserConnecting ? '正在连接 Chrome…' : '连接 Chrome 读取高清图纸'}
+                    <MonitorUp aria-hidden="true" />{browserConnecting
+                      ? '正在检查 Chrome…'
+                      : publicEdition
+                        ? '检查扩展连接'
+                        : '连接 Chrome 读取高清图纸'}
                   </button>
                 )}
-                {!publicEdition && <button
+                <button
                   className="research-preflight-refresh"
                   type="button"
                   aria-label="刷新环境状态"
@@ -275,7 +329,7 @@ export function ResearchComposer({
                   onClick={() => void onRefreshBrowserReadiness()}
                 >
                   <RefreshCw aria-hidden="true" /><span aria-hidden="true">{browserReadinessLoading ? '检查中…' : '刷新'}</span>
-                </button>}
+                </button>
               </div>
             </header>
             {(browserReadinessError || browserPairingStatus) && (

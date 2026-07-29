@@ -61,6 +61,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | M160 edge research orchestration and bounded execution | complete | typed 七阶段 plan/execute/verify/synthesize、短期 Workflow 状态、取消/恢复、逐字引文核验、coverage + enrichment 双门槛、Turnstile、入口配额、有界查询/页面/Token/时间与 kill switch 已完成。用户取消每日/单次美元金额拒绝后，CostGuard SQLite 只记录预留与实际用量；Edge 7 files / 16 tests 及根级完整门禁全绿。实际部署核验归 M161。 |
 | M161 public deployment and dual-edition release | in_progress | `archresearch-web` 已用当前非 mock 源码重新部署为版本 `c17dc24c-28ce-44c3-9c0f-b52a9f4fd95e`；主页/API/安全头、生产 Turnstile、缺 token 拒绝及桌面/390px loaded QA 已通过。Web Edition 源码、Chrome-only README 边界和 fresh build 顺序修复已推送 `main`，Hosted CI `30424872745` 全绿。剩余是由真人完成 Turnstile 后执行一次 Quick 真实研究验收，再决定新版本 tag/Release；URL 只私下交付，不进入 GitHub README、Release、About 或仓库文档。 |
 | M162 Web Edition full local-product transfer | complete | 公共入口直接复用本地 Board 的同一套 React 页面、样式、导航和结果工作台，只通过 `PublicApiClient` 替换持久化与云端执行；工作区、两类研究、PDF/URL、进度/诊断、完整结果、收藏、对照/导出/分享、表达规范、保留期和 JSON 备份矩阵全部闭合。提交 `896945a` 已推送 `main`，Hosted CI `30433096343` 全绿；生产 Worker 版本 `051c4e0c-4e9f-45c8-be0c-99194b16cf7b` 的桌面/390px smoke、完整结果对照与静态素材均通过，正式 `v2.1.1` Release 已发布。 |
+| M163 public Web Xiaohongshu bridge | in_progress | 严格协议、动态公共页连接、扩展内有界小红书搜索、Web/Edge 输入与主页面安装提醒已按红绿测试实现；根级完整门禁通过 360 API / 183 Board / 178 Extension / 11 Web / 18 Edge / 8 packaged E2E，1440/390 QA 和 `2.1.2` ZIP 已完成。剩余：敏感扫描、提交/Hosted CI、生产部署/线上 smoke 与 GitHub `v2.1.2` Release。 |
 
 ## External acceptance gates
 
@@ -125,8 +126,15 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 4. 完整迁移矩阵 → 验证：首页头部与工作区、建筑设计研究/图纸灵感、任务书与案例页、最近研究、进度/重试/覆盖诊断、建筑/视觉结果、对照/导出/分享/表达工具、收藏与备份逐项对齐本地版；不能以“Web Edition”名义删除功能。
 5. 同源界面 → 验证：公共入口直接渲染本地 Board 产品代码与设计系统，不维护第二套近似 UI；Edition 分支只处理公开来源、Turnstile、云端执行和浏览器本地数据。
 6. 长期历史 → 验证：Run、结果、收藏、表达规范、任务书和备份保存在当前浏览器；云端三日检查点消失后，终态研究仍能从浏览器本地重新打开。
+
+### M163 验收合同
+
+1. 登录态边界 → 验证：小红书登录、Cookie 和凭据始终留在用户 Chrome；网页、Worker、Workflow 和 Provider 不接收凭据。
+2. 受限协议 → 验证：公共网页只能调用版本化、枚举式 bridge 动作，不能下发脚本、任意 selector、社交动作、通用表单或凭据读取。
+3. 明确连接 → 验证：进入主页面即检查扩展，未检测到时显示安装/连接提醒；检测成功后不再弹出。图纸灵感入口继续显示未连接、未登录、已就绪和读取失败状态；只有用户明确点击扩展按钮才注册当前公共 origin、授予权限或开始读取。
+4. 同源产品 → 验证：本地版现有 Chrome/XHS 行为不回归；公共版复用同一研究环境组件，把 XHS 结果并入现有视觉结果、收藏和备份链路。
 5. 视觉与无障碍 → 验证：沿用根 `DESIGN.md` 的绘图桌/网格、品牌、排版和交互语义；键盘焦点可见，状态不只依赖颜色，390px 无横向溢出并尊重 reduced motion。
-6. 发布门禁 → 验证：Web 定向测试先红后绿，Web lint/typecheck/test/build、Edge 合同回归和根 `scripts/verify.ps1` 全绿；部署后复核主页/API/安全头/Turnstile 与桌面/390px loaded UI。URL 仍只私下交付。
+6. 发布门禁 → 验证：manifest/动态 origin、消息来源校验、协议测试、Board/Web/Extension suites、production builds、打包 MV3 E2E、1440/390px QA 和敏感信息扫描全部通过；部署后复核主页/API/安全头/Turnstile。URL 仍只私下交付。
 
 ### M121 试点执行计划（已完成，2026-07-27 模拟验收）
 

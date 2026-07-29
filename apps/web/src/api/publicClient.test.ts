@@ -101,6 +101,55 @@ describe('public product client', () => {
     client.close()
   })
 
+  it('reads bounded Xiaohongshu cards through Chrome before starting public visual research', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      runId: '55555555-5555-4555-8555-555555555555',
+      status: 'created',
+    }), {
+      status: 202,
+      headers: { 'content-type': 'application/json' },
+    }))
+    const xiaohongshuSearch = vi.fn().mockResolvedValue([{
+      sourceUrl: 'https://www.xiaohongshu.com/explore/note-1',
+      title: '蓝色轴测图',
+      imageUrl: 'https://sns-webpic-qc.xhscdn.com/note-1.webp',
+      adjacentText: '蓝色轴测图，使用细线与编号组织信息。',
+    }])
+    const client = createPublicApiClient({
+      indexedDB,
+      databaseName: databaseName('xiaohongshu-start'),
+      fetch: fetchMock,
+      clientSessionId: 'device-session-test',
+      initialVerificationToken: 'verified-token',
+      xiaohongshuSearch,
+    })
+    const workspace = await client.createWorkspace({ name: '图纸研究' })
+
+    await client.startResearch({
+      workspaceId: workspace.id,
+      question: '社区图书馆如何用蓝色轴测图表达公共流线？',
+      goal: 'visual_reference_search',
+      mode: 'quick',
+      researchSources: ['xiaohongshu'],
+    })
+
+    expect(xiaohongshuSearch).toHaveBeenCalledWith(
+      '社区图书馆如何用蓝色轴测图表达公共流线？',
+    )
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      goal: 'visual_reference_search',
+      researchSources: ['xiaohongshu'],
+      browserVisualSources: [{
+        sourceUrl: 'https://www.xiaohongshu.com/explore/note-1',
+        title: '蓝色轴测图',
+        imageUrl: 'https://sns-webpic-qc.xhscdn.com/note-1.webp',
+        adjacentText: '蓝色轴测图，使用细线与编号组织信息。',
+      }],
+    })
+    client.close()
+  })
+
   it('hydrates a completed cloud run into the full local result contract', async () => {
     const runId = '22222222-2222-4222-8222-222222222222'
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({

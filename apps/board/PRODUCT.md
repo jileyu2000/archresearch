@@ -16,6 +16,7 @@ product
 
 - 本地安装版继续面向 Windows/Chrome：用户自行配置 Provider Key，API、SQLite、文件、历史研究与收藏都在本机运行和保存。
 - Cloudflare Web Edition 是独立部署目标：拿到链接即可开始实时公开网页研究，不要求用户配置 Key，模型费用由项目方承担。项目方 Key 只存在 Cloudflare Secret，不能进入浏览器 bundle、存储、响应或 Trace。
+- Web Edition 的建筑案例研究无需扩展；图纸灵感通过 ArchResearch Chrome 扩展读取用户已登录的小红书公开笔记。主页面在未检测到扩展时提醒安装与连接，检测成功后不再弹出；Cookie、账号、密码和浏览器存储不得上传到 Cloudflare。
 - Web Edition 的长期 workspace、Run、结果、收藏和历史默认只保存在当前浏览器的 IndexedDB；PDF、图片等较大文件优先保存在 OPFS。用户可导出和导入版本化备份。清除站点数据、使用无痕模式、换浏览器或换设备都可能失去未导出的记录。
 - 云端只允许保存运行中的最小 checkpoint、费用预留和临时素材，必须设置 TTL 并在交付或终止后删除；不建立平台案例库、跨用户历史或永久云端研究档案。
 - Web Edition 的匿名研究入口先通过 Turnstile、设备/网络配额、单次页面/查询/时间/Token 预算和全局费用熔断，再允许进入 Provider。停用开关或预算不足时必须在产生模型费用前拒绝。

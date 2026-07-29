@@ -11,10 +11,11 @@ describe("background runtime bridge", () => {
     const sendResponse = vi.fn();
     const listener = createUiMessageHandler({ handle });
 
-    expect(listener({ type: "ui.status" }, sendResponse)).toBe(true);
+    const sender = { id: "popup" };
+    expect(listener({ type: "ui.status" }, sender, sendResponse)).toBe(true);
     await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledOnce());
 
-    expect(handle).toHaveBeenCalledWith({ type: "ui.status" });
+    expect(handle).toHaveBeenCalledWith({ type: "ui.status" }, sender);
     expect(sendResponse).toHaveBeenCalledWith({
       ok: true,
       result: { connection: "connected" },
@@ -26,7 +27,11 @@ describe("background runtime bridge", () => {
     const sendResponse = vi.fn();
     const listener = createUiMessageHandler({ handle });
 
-    listener({ type: "ui.execute", script: "document.cookie" }, sendResponse);
+    listener(
+      { type: "ui.execute", script: "document.cookie" },
+      { id: "popup" },
+      sendResponse,
+    );
     await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledOnce());
 
     const response = sendResponse.mock.calls[0]![0];

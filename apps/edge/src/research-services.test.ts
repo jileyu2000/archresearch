@@ -1,10 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   buildCoverageReport,
+  createLiveResearchServices,
   isSafePublicUrl,
   verifyEvidenceFindings,
 } from './research-services'
+import type { ResearchWorkflowInput } from './workflow'
 
 describe('public page evidence boundary', () => {
   it('accepts only safe public HTTPS URLs', () => {
@@ -74,5 +76,47 @@ describe('public page evidence boundary', () => {
       enrichmentSatisfied: false,
       gaps: ['结构如何表达？', '至少还需要 2 个独立来源'],
     })
+  })
+
+  it('uses Chrome-provided Xiaohongshu observations without refetching the note page', async () => {
+    const provider = { generateStructured: vi.fn() }
+    const pageReader = { inspect: vi.fn() }
+    const { services } = createLiveResearchServices(
+      provider as never,
+      pageReader as never,
+      0.01,
+    )
+    const input: ResearchWorkflowInput = {
+      runId: 'run-xhs',
+      workspaceId: 'workspace-xhs',
+      question: '社区图书馆蓝色轴测图',
+      goal: 'visual_reference_search',
+      mode: 'quick',
+      researchSources: ['xiaohongshu'],
+      browserVisualSources: [{
+        sourceUrl: 'https://www.xiaohongshu.com/explore/note-1',
+        title: '蓝色轴测图',
+        imageUrl: 'https://sns-webpic-qc.xhscdn.com/note-1.webp',
+        adjacentText: '蓝色轴测图，使用细线与编号组织信息。',
+      }],
+      clientSessionId: 'device-session-1',
+    }
+    const plan = [
+      { id: 'color', question: '配色如何组织？' },
+      { id: 'line', question: '线型如何组织？' },
+    ]
+
+    const candidates = await services.search(input, plan)
+    const sources = await services.inspect(input, candidates)
+
+    expect(provider.generateStructured).not.toHaveBeenCalled()
+    expect(pageReader.inspect).not.toHaveBeenCalled()
+    expect(sources).toEqual([{
+      url: 'https://www.xiaohongshu.com/explore/note-1',
+      title: '蓝色轴测图',
+      subquestionId: 'color',
+      text: '蓝色轴测图，使用细线与编号组织信息。',
+      imageUrl: 'https://sns-webpic-qc.xhscdn.com/note-1.webp',
+    }])
   })
 })

@@ -114,6 +114,30 @@ describe('home view components', () => {
     expect(props.onRefreshBrowserReadiness).toHaveBeenCalledOnce()
   })
 
+  it('prompts on the main page until the Chrome extension is detected', async () => {
+    const user = userEvent.setup()
+    const props = composerProps({
+      extensionInstallUrl: 'https://chromewebstore.google.com/detail/archresearch/example',
+      extensionInstallNoticeOpen: true,
+      onDismissExtensionInstallNotice: vi.fn(),
+    })
+    render(<ResearchComposer {...props} />)
+
+    const dialog = screen.getByRole('dialog', { name: '安装 Chrome 扩展' })
+    expect(within(dialog).getByRole('heading', {
+      name: '读取小红书图纸灵感需要 Chrome 扩展',
+    })).toBeVisible()
+    expect(within(dialog).getByText('Cookie、账号和密码不会上传到 ArchResearch。')).toBeVisible()
+    expect(within(dialog).getByRole('link', {
+      name: '立即安装 Chrome 扩展',
+    })).toHaveAttribute(
+      'href',
+      'https://chromewebstore.google.com/detail/archresearch/example',
+    )
+    await user.click(within(dialog).getByRole('button', { name: '暂不安装' }))
+    expect(props.onDismissExtensionInstallNotice).toHaveBeenCalledOnce()
+  })
+
   it('renders starters, controlled workspace creation, and recent-run actions', async () => {
     const user = userEvent.setup()
     const run: ResearchRun = {

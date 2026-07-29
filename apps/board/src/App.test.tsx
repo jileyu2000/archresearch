@@ -994,7 +994,7 @@ describe('research board', () => {
     expect(screen.queryByText('Kamala Narayana Temple Survey')).not.toBeInTheDocument()
   })
 
-  it('keeps the same product surface in the public edition without asking for a local extension', async () => {
+  it('keeps the same product surface in public while using the connected extension for Xiaohongshu', async () => {
     const user = userEvent.setup()
     vi.stubGlobal('fetch', createLiveFetch({
       browserConnected: false,
@@ -1008,11 +1008,12 @@ describe('research board', () => {
     }))
 
     expect(screen.getByRole('region', { name: '研究环境' })).toHaveTextContent(
-      '公开图纸来源检索已就绪',
+      '小红书图纸检索已就绪',
     )
-    expect(screen.queryByRole('button', {
-      name: /连接 Chrome 读取高清图纸/,
-    })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '研究环境' })).toHaveTextContent(
+      '使用你已登录的小红书查找公开笔记',
+    )
+    expect(screen.queryByRole('dialog', { name: '安装 Chrome 扩展' })).not.toBeInTheDocument()
   })
 
   it('uses the idempotent default-workspace initializer on a fresh install', async () => {

@@ -347,6 +347,15 @@ export function createLiveResearchServices(
 
     async search(input, plan) {
       const visual = input.goal === 'visual_reference_search'
+      if (visual && input.browserVisualSources?.length) {
+        return input.browserVisualSources.map((source, index) => ({
+          subquestionId: plan[index % plan.length]?.id,
+          url: source.sourceUrl,
+          title: source.title,
+          providedText: source.adjacentText,
+          imageUrl: source.imageUrl,
+        }))
+      }
       const response = await provider.generateStructured<CandidatePayload>({
         schemaName: 'research_candidates',
         schema: candidateSchema,
@@ -374,7 +383,21 @@ export function createLiveResearchServices(
     },
 
     async inspect(input, candidates) {
-      return await pageReader.inspect(candidates, pageCountByMode[input.mode])
+      const provided = candidates
+        .filter((candidate) => candidate.providedText)
+        .map((candidate) => ({
+          url: candidate.url,
+          title: candidate.title,
+          subquestionId: candidate.subquestionId,
+          text: candidate.providedText!,
+          imageUrl: candidate.imageUrl,
+        }))
+      const remote = candidates.filter((candidate) => !candidate.providedText)
+      if (remote.length === 0) return provided
+      return [
+        ...provided,
+        ...await pageReader.inspect(remote, pageCountByMode[input.mode]),
+      ]
     },
 
     async analyze(input, plan, sources) {
@@ -442,7 +465,22 @@ export function createLiveResearchServices(
           title: subquestion.question,
           facts: findings
             .filter((finding) => finding.subquestionId === subquestion.id)
-            .map(({ statement, sourceUrl, quote }) => ({ statement, sourceUrl, quote })),
+            .map(({ statement, sourceUrl, quote }) => {
+              const visualSource = input.browserVisualSources?.find(
+                (source) => source.sourceUrl === sourceUrl,
+              )
+              return {
+                statement,
+                sourceUrl,
+                quote,
+                ...(visualSource
+                  ? {
+                      sourceTitle: visualSource.title,
+                      imageUrl: visualSource.imageUrl,
+                    }
+                  : {}),
+              }
+            }),
         })),
       }
     },

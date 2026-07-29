@@ -36,7 +36,12 @@ function makeChromeApi() {
       onUpdated: { addListener: vi.fn(), removeListener: vi.fn() },
       onRemoved: { addListener: vi.fn() },
     },
-    scripting: { executeScript: vi.fn() },
+    scripting: {
+      executeScript: vi.fn(),
+      getRegisteredContentScripts: vi.fn().mockResolvedValue([]),
+      registerContentScripts: vi.fn().mockResolvedValue(undefined),
+      unregisterContentScripts: vi.fn().mockResolvedValue(undefined),
+    },
     runtime: { onMessage: { addListener: vi.fn() } },
   };
 }

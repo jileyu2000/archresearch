@@ -163,12 +163,14 @@ type AppProps = {
   edition?: 'local' | 'public'
   verificationControl?: ReactNode
   verificationReady?: boolean
+  extensionInstallUrl?: string
 }
 
 export default function App({
   edition = 'local',
   verificationControl,
   verificationReady = true,
+  extensionInstallUrl = 'https://github.com/jileyu2000/archresearch/releases/latest',
 }: AppProps) {
   const publicEdition = edition === 'public'
   const demoDepth = useMemo(() => demoDepthFromSearch(window.location.search), [])
@@ -216,6 +218,7 @@ export default function App({
     browserPairingStatus,
     browserReadinessError,
     browserReadinessLoading,
+    extensionDetected,
     ensureBrowserResearchAccess,
     handleConnectBrowser,
     loadBrowserReadiness,
@@ -245,6 +248,7 @@ export default function App({
   const [composerOpen, setComposerOpen] = useState(!demoMode)
   const [researchOptionsOpen, setResearchOptionsOpen] = useState(false)
   const [briefReviewLoading, setBriefReviewLoading] = useState(false)
+  const [extensionNoticeDismissed, setExtensionNoticeDismissed] = useState(false)
   const [workspaceCreateOpen, setWorkspaceCreateOpen] = useState(false)
   const [inspectorOpen, setInspectorOpen] = useState(false)
   const closeInspectorAfterHydration = useCallback(() => setInspectorOpen(false), [])
@@ -282,7 +286,15 @@ export default function App({
   const overlayTriggerRef = useRef<HTMLElement | null>(null)
   const questionInputRef = useRef<HTMLTextAreaElement | null>(null)
   const selectedResult = results.find((result) => result.id === selectedResultId)
-  const overlayOpen = inspectorOpen || comparisonOpen || shareSummaryOpen || styleProfileOpen
+  const extensionInstallNoticeOpen = !demoMode
+    && !browserReadinessLoading
+    && !extensionDetected
+    && !extensionNoticeDismissed
+  const overlayOpen = inspectorOpen
+    || comparisonOpen
+    || shareSummaryOpen
+    || styleProfileOpen
+    || extensionInstallNoticeOpen
 
   const closeOverlays = useCallback(() => {
     const trigger = overlayTriggerRef.current
@@ -290,6 +302,7 @@ export default function App({
     setComparisonOpen(false)
     setShareSummaryOpen(false)
     setStyleProfileOpen(false)
+    setExtensionNoticeDismissed(true)
     trigger?.focus()
   }, [])
 
@@ -655,11 +668,9 @@ export default function App({
 
   async function startResearchRun(subquestions?: ResearchSubquestion[]) {
     const researchSources: ResearchSource[] = goal === 'visual_reference_search'
-      ? [publicEdition ? 'public_web' : 'xiaohongshu']
+      ? ['xiaohongshu']
       : []
     if (
-      !publicEdition
-      &&
       goal === 'visual_reference_search'
       && !(await ensureBrowserResearchAccess(true))
     ) return
@@ -758,7 +769,7 @@ export default function App({
   async function handleRetry() {
     if (!activeRun) return
     setActionError('')
-    if (!publicEdition && !(await ensureBrowserResearchAccess(
+    if (!(await ensureBrowserResearchAccess(
       activeRun.researchSources?.includes('xiaohongshu') ?? false,
     ))) return
     const requestId = currentRunRequest()
@@ -1285,6 +1296,8 @@ export default function App({
             publicEdition={publicEdition}
             verificationControl={verificationControl}
             verificationReady={verificationReady}
+            extensionInstallNoticeOpen={extensionInstallNoticeOpen}
+            extensionInstallUrl={extensionInstallUrl}
             activeWorkspaceId={activeWorkspaceId}
             briefReviewLoading={briefReviewLoading}
             researchStarting={researchStarting}
@@ -1312,6 +1325,8 @@ export default function App({
             onRefreshBrowserReadiness={refreshBrowserReadiness}
             onCancel={handleCancel}
             onRetry={handleRetry}
+            onDismissExtensionInstallNotice={() => setExtensionNoticeDismissed(true)}
+            onCheckExtensionInstall={refreshBrowserReadiness}
           />
         )}
 

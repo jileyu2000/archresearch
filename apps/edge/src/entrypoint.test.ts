@@ -121,4 +121,58 @@ describe('public research entrypoint', () => {
     expect(config).toEqual({ turnstileSiteKey: 'public-site-key' })
     expect(JSON.stringify(config)).not.toMatch(/secret|provider/i)
   })
+
+  it('accepts only bounded Xiaohongshu observations from the Chrome bridge', async () => {
+    const workflows = { create: vi.fn().mockResolvedValue(undefined) }
+    const handler = createStartResearchHandler({
+      turnstile: { verify: vi.fn().mockResolvedValue(true) },
+      quota: { consume: vi.fn().mockResolvedValue({ allowed: true }) },
+      costGate: {
+        reserve: vi.fn().mockResolvedValue({ accepted: true, reservedUsd: 0.2 }),
+      },
+      workflows,
+      createRunId: () => 'run-xiaohongshu',
+    })
+    const payload = {
+      workspaceId: 'workspace-studio',
+      question: '社区图书馆如何用蓝色轴测图表达公共流线？',
+      goal: 'visual_reference_search',
+      mode: 'quick',
+      researchSources: ['xiaohongshu'],
+      browserVisualSources: [{
+        sourceUrl: 'https://www.xiaohongshu.com/explore/note-1',
+        title: '蓝色轴测图',
+        imageUrl: 'https://sns-webpic-qc.xhscdn.com/note-1.webp',
+        adjacentText: '蓝色轴测图，使用细线与编号组织信息。',
+      }],
+      clientSessionId: 'device-session-1',
+      turnstileToken: 'valid-token',
+    }
+    const response = await handler(new Request('https://research.example/api/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    }))
+
+    expect(response.status).toBe(202)
+    expect(workflows.create).toHaveBeenCalledWith(expect.objectContaining({
+      params: expect.objectContaining({
+        researchSources: ['xiaohongshu'],
+        browserVisualSources: payload.browserVisualSources,
+      }),
+    }))
+
+    const rejected = await handler(new Request('https://research.example/api/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        ...payload,
+        browserVisualSources: [{
+          ...payload.browserVisualSources[0],
+          sourceUrl: 'https://example.com/not-xiaohongshu',
+        }],
+      }),
+    }))
+    expect(rejected.status).toBe(400)
+  })
 })

@@ -19,6 +19,10 @@ import {
   type WorkspaceCreateInput,
   type WorkspaceRestoreResult,
 } from '../../../board/src/api/client'
+import {
+  requestXiaohongshuSearch,
+  type BrowserVisualSource,
+} from '../../../board/src/browserBridge'
 
 interface PublicClientOptions {
   indexedDB: IDBFactory
@@ -27,6 +31,7 @@ interface PublicClientOptions {
   clientSessionId: string
   initialVerificationToken?: string | null
   onVerificationConsumed?: () => void
+  xiaohongshuSearch?: (query: string) => Promise<BrowserVisualSource[]>
 }
 
 type StoreName =
@@ -384,7 +389,7 @@ export function createPublicApiClient(options: PublicClientOptions) {
       status: snapshot.status,
       mode: snapshot.mode ?? existing?.mode ?? 'balanced',
       researchSources: goal === 'visual_reference_search'
-        ? ['public_web']
+        ? ['xiaohongshu']
         : existing?.researchSources ?? [],
       subquestions,
       checkpointStage: snapshot.checkpointStage ?? existing?.checkpointStage ?? null,
@@ -568,6 +573,15 @@ export function createPublicApiClient(options: PublicClientOptions) {
     async startResearch(input: Parameters<ApiClient['startResearch']>[0]) {
       const turnstileToken = verificationToken
       if (!turnstileToken) throw new ApiError('请先完成人机校验。', 403)
+      const browserVisualSources = input.goal === 'visual_reference_search'
+        ? await (options.xiaohongshuSearch ?? requestXiaohongshuSearch)(input.question)
+        : undefined
+      if (input.goal === 'visual_reference_search' && browserVisualSources?.length === 0) {
+        throw new ApiError('没有从小红书读取到可用笔记。请确认 Chrome 已登录小红书并允许扩展读取网页。', 422)
+      }
+      const researchSources = input.goal === 'visual_reference_search'
+        ? ['xiaohongshu'] as const
+        : input.researchSources ?? []
       const created = await cloudRequest<{ runId: string; status: 'created' }>('/api/runs', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -579,7 +593,8 @@ export function createPublicApiClient(options: PublicClientOptions) {
             : {}),
           goal: input.goal,
           mode: input.mode,
-          researchSources: input.researchSources ?? [],
+          researchSources,
+          ...(browserVisualSources ? { browserVisualSources } : {}),
           subquestions: input.subquestions,
           briefFile: pendingBriefs.get(input.workspaceId),
           clientSessionId: options.clientSessionId,
@@ -597,7 +612,7 @@ export function createPublicApiClient(options: PublicClientOptions) {
         goal: input.goal,
         status: created.status,
         mode: input.mode,
-        researchSources: input.researchSources ?? [],
+        researchSources: [...researchSources],
         subquestions: input.subquestions ?? [],
         checkpointStage: null,
         attempt: 1,

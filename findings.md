@@ -601,9 +601,24 @@
 - Cloudflare 只保留有界执行和三日阶段检查点；工作区、终态 Run、结果、Board 选择、收藏、用户状态、表达规范、任务书和备份均在当前浏览器 IndexedDB。公共客户端对终态 Run 优先读取本地记录，并在云端 404 时回退本地，避免短期检查点过期破坏长期历史。
 - 公共版唯一可见差异是诚实的能力边界：公开 HTTPS 来源替代本地小红书/Chrome 扩展，任务书上限 4 MB，研究启动需要 Turnstile；公共界面不得出现“小红书”“原笔记”“旧版灵感分组”等本地专属或迁移痕迹。
 - Web Vite 的 public directory 直接复用 Board 静态素材，因此网格背景和完整演示图不再靠手工复制；生产 dry-run 实际读取 20 个静态文件。
+
+## 2026-07-29 M163 公共版小红书能力决策
+
+- 用户把小红书读取重新确认为公共产品核心能力；M162 的“公共 HTTPS 来源替代本地小红书”不再是可接受的最终边界。
+- 可接受的最小架构是复用现有 Chrome MV3 扩展和用户已经登录的小红书会话，让公共网页通过受信任 origin 与扩展通信。云端托管浏览器代登录会引入账号凭据、Cookie、风控和会话托管，不在本轮授权范围内。
+- 扩展路径意味着公共版从“纯网页零安装”调整为：建筑案例研究仍可直接使用；小红书图纸灵感需要 Chrome 与一次扩展安装。用户不需要 Python、Node、pnpm、PowerShell 或个人 Provider Key。
 - `impeccable` 上下文检查发现 `apps/web` 缺少自己的 `PRODUCT.md`。现已以本地 `apps/board/PRODUCT.md`、根 `DESIGN.md` 和用户“应完整对齐本地版”的验收意见为事实来源补齐 Web 产品合同，明确其不是简化表单或 lite 版。
 - 图纸灵感的本地高质量链路依赖用户已登录的 Chrome/小红书和扩展；Web 可在同一入口明确说明不可用边界，但不能用这一差异解释个人收藏、备份、历史或结果工具的缺失。
 - 首轮实现把本地版的蓝色研究任务台、稳定品牌头、独立备份页和独立收藏页迁入 Web；图纸灵感入口仍可发现，但明确标记为本地 Chrome 版专属，没有在公开版伪造登录态读取。
 - 收藏现在保存 `kind/title/facts` 快照并按原问题分组；直接收藏、批量选择、删除和备份恢复共用同一 IndexedDB 记录。`listCollections()` 会在读取时补齐第一版无快照记录为“历史收藏”，避免既有浏览器数据升级后崩溃。
 - Playwright 使用本机 Chrome headless 直接检查本地 Vite 页面，未调用会闪退的应用内浏览器。1440px 首页/收藏/结果与 390px 首页/收藏均无横向溢出，结果导航会回到页面顶部；console/page error 为 0，390px 未发现宽高都小于 44px 的按钮。
 - 用户把迁移标准收紧为“本地产品整体转移到公共发布”。本地 `App.tsx` 当前还包含工作区、任务书/案例页预审、建筑/图纸灵感双目标、保留期限、进度与覆盖诊断、案例分析/视觉结果、对照、表达规范、私有/分享导出、来源检查等 Web 尚未具备的路径；首片收藏修复不能视为最终发布候选。
+- Chrome 官方文档确认 `chrome.scripting.executeScript` 可在用户点击扩展形成的 `activeTab` 临时权限下，仅向当前网页注入随扩展打包的脚本；因此无需把私有 Web URL写进仓库，也无需让桥接脚本常驻所有 HTTPS 页面。
+- Chrome 官方安全建议要求把 content script 视为不可信输入源、校验消息发送者并限制可触发的特权动作；公共桥接继续采用严格枚举命令，不接受任意 URL、选择器、脚本、表单、社交动作或凭据。
+- `runtime.sendMessage` 使用 JSON 序列化且单条消息上限 64 MiB；公共视觉返回必须设置更低的应用级图片数量与总字节上限，不能把本地版的上限直接照搬到页面桥接。
+- 成熟产品的扩展引导共同点不是解释技术环境，而是先说“装了能完成什么”，再给单一的浏览器专属主按钮：Notion 直接使用“Install for Chrome”，1Password 使用“Download for Chrome”，Grammarly 的未启用页用“Add Grammarly to Chrome”并把安装后动作单列为“Enable extension”。
+- ArchResearch 应沿用这一结构：仅在用户触发图纸灵感时出现能力型标题“读取小红书图纸灵感需要 Chrome 扩展”，主按钮“立即安装 Chrome 扩展”；安装后同一位置切换为“连接当前网页”，并保留简短的“Cookie 和账号不会上传”说明。不要把 Python/Node/pnpm 等开发环境写进弹窗。
+- 用户随后把提醒时机改为进入主页面即检查：扩展缺失时弹出一次安装/连接说明；检测到扩展后不再出现。图纸灵感入口仍保留实时连接与权限状态，避免把“点过安装链接”误记为“已经可读”。
+- 私有 Web URL 不能写进仓库或扩展 manifest，因此公共页不使用 `externally_connectable` 或宽泛 HTTPS 常驻脚本。用户在扩展弹窗点击“连接当前 ArchResearch 网页”后，扩展在已授予的 optional host permission 下只为当前精确 HTTPS origin 动态注册轻量桥，并再次校验页面公共版 meta 标记。
+- 扩展侧小红书读取复用既有枚举 BrowserCommandExecutor：固定打开小红书搜索页、等待、枚举媒体、下滚一次、再次枚举并最终关闭标签。公共桥只返回最多 8 条去重后的笔记 URL、XHS CDN 缩略图 URL、标题与相邻可见文字；不返回 Cookie、账号、页面存储或任意截图载荷。
+- Edge 只接受 `visual_reference_search + researchSources=['xiaohongshu']` 组合及严格裁剪的 bridge observations；这些观测直接作为已检查来源进入逐字 quote 核验，不由 Worker 携带用户登录态重抓小红书。公开案例研究仍走原来的 public HTTPS 路径。

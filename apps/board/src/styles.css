@@ -4179,6 +4179,141 @@ h3 {
 }
 
 /* Docks, modals and drawers */
+.extension-install-backdrop {
+  align-items: center;
+  background: rgb(22 26 24 / 42%);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: var(--z-modal);
+}
+
+.extension-install-dialog {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line-strong);
+  box-shadow: 0 24px 80px rgb(22 26 24 / 22%);
+  display: grid;
+  gap: 18px;
+  max-height: calc(100vh - 48px);
+  max-width: 540px;
+  overflow: auto;
+  padding: 30px;
+  width: 100%;
+}
+
+.extension-install-dialog h2,
+.extension-install-dialog p {
+  margin: 0;
+}
+
+.extension-install-dialog h2 {
+  font-size: clamp(24px, 3vw, 34px);
+  letter-spacing: -0.035em;
+  line-height: 1.08;
+}
+
+.extension-install-eyebrow {
+  color: var(--color-action);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.extension-install-intro,
+.extension-install-boundary,
+.extension-install-steps p {
+  color: var(--color-ink-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.extension-install-steps {
+  border-bottom: 1px solid var(--color-line);
+  border-top: 1px solid var(--color-line);
+  display: grid;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.extension-install-steps li {
+  align-items: start;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 28px 1fr;
+  padding: 15px 0;
+}
+
+.extension-install-steps li + li {
+  border-top: 1px solid var(--color-line);
+}
+
+.extension-install-steps > li > span {
+  color: var(--color-action);
+  font-size: 11px;
+  font-weight: 750;
+  padding-top: 2px;
+}
+
+.extension-install-steps strong {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 3px;
+}
+
+.extension-install-boundary {
+  padding-left: 18px;
+  position: relative;
+}
+
+.extension-install-boundary::before {
+  background: var(--color-verified);
+  border-radius: 50%;
+  content: "";
+  height: 8px;
+  left: 0;
+  position: absolute;
+  top: 6px;
+  width: 8px;
+}
+
+.extension-install-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.extension-install-actions a,
+.extension-install-actions button {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px 14px;
+  text-decoration: none;
+}
+
+.extension-install-actions svg {
+  height: 15px;
+  width: 15px;
+}
+
+.extension-install-primary {
+  background: var(--color-action);
+  border: 1px solid var(--color-action);
+  color: #fff;
+  font-weight: 700;
+}
+
+.extension-install-primary:hover {
+  background: var(--color-action-hover);
+  color: #fff;
+}
+
 /* dock-rise carries the dock's translateX(50%) centering in every frame;
    keep it beside .collection-dock so the coupling stays visible. */
 @keyframes dock-rise {

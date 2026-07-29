@@ -1,12 +1,12 @@
 type UiController = {
-  handle(message: unknown): Promise<Record<string, unknown>>;
+  handle(message: unknown, sender: unknown): Promise<Record<string, unknown>>;
 };
 
 type SendResponse = (response: unknown) => void;
 
 export function createUiMessageHandler(controller: UiController) {
-  return (message: unknown, sendResponse: SendResponse): true => {
-    void controller.handle(message).then(
+  return (message: unknown, sender: unknown, sendResponse: SendResponse): true => {
+    void controller.handle(message, sender).then(
       (result) => sendResponse({ ok: true, result }),
       () =>
         sendResponse({

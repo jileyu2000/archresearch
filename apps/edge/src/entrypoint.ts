@@ -2,7 +2,7 @@ import type { CostGate } from './cost-gate'
 
 type ResearchMode = 'quick' | 'balanced' | 'deep'
 type ResearchGoal = 'precedent_research' | 'visual_reference_search'
-type ResearchSource = 'public_web'
+type ResearchSource = 'public_web' | 'xiaohongshu'
 
 interface ResearchSubquestion {
   id: string
@@ -15,6 +15,13 @@ interface BriefFile {
   dataUrl: string
 }
 
+interface BrowserVisualSource {
+  sourceUrl: string
+  title: string
+  imageUrl: string | null
+  adjacentText: string
+}
+
 interface StartResearchPayload {
   workspaceId: string
   question: string
@@ -22,6 +29,7 @@ interface StartResearchPayload {
   mode: ResearchMode
   referenceUrl?: string
   researchSources: ResearchSource[]
+  browserVisualSources?: BrowserVisualSource[]
   subquestions?: ResearchSubquestion[]
   briefFile?: BriefFile
   clientSessionId: string
@@ -91,6 +99,7 @@ function parsePayload(value: unknown): StartResearchPayload | null {
   const referenceUrl = candidate.referenceUrl
   const researchSources = candidate.researchSources
   const subquestions = candidate.subquestions
+  const browserVisualSources = candidate.browserVisualSources
   const briefFile = candidate.briefFile
   const clientSessionId = candidate.clientSessionId
   const turnstileToken = candidate.turnstileToken
@@ -122,11 +131,18 @@ function parsePayload(value: unknown): StartResearchPayload | null {
   }
   if (
     !Array.isArray(researchSources)
-    || researchSources.some((source) => source !== 'public_web')
+    || researchSources.some((source) => source !== 'public_web' && source !== 'xiaohongshu')
     || researchSources.length > 1
   ) {
     return null
   }
+  const normalizedBrowserVisualSources = normalizeBrowserVisualSources(browserVisualSources)
+  if (
+    (goal === 'visual_reference_search'
+      && (researchSources[0] !== 'xiaohongshu' || !normalizedBrowserVisualSources))
+    || (goal !== 'visual_reference_search'
+      && (researchSources.includes('xiaohongshu') || browserVisualSources !== undefined))
+  ) return null
   let normalizedSubquestions: ResearchSubquestion[] | undefined
   if (subquestions !== undefined) {
     if (!Array.isArray(subquestions) || subquestions.length < 1 || subquestions.length > 6) {
@@ -180,6 +196,7 @@ function parsePayload(value: unknown): StartResearchPayload | null {
     mode,
     referenceUrl: normalizedReferenceUrl,
     researchSources,
+    browserVisualSources: normalizedBrowserVisualSources,
     subquestions: normalizedSubquestions,
     briefFile: normalizedBriefFile,
     clientSessionId,
@@ -235,12 +252,74 @@ export function createStartResearchHandler(dependencies: StartResearchDependenci
         mode: payload.mode,
         referenceUrl: payload.referenceUrl,
         researchSources: payload.researchSources,
+        ...(payload.browserVisualSources
+          ? { browserVisualSources: payload.browserVisualSources }
+          : {}),
         subquestions: payload.subquestions,
         ...(payload.briefFile ? { briefFile: payload.briefFile } : {}),
         clientSessionId: payload.clientSessionId,
       },
     })
     return json({ runId, status: 'created' }, 202)
+  }
+}
+
+function normalizeBrowserVisualSources(value: unknown): BrowserVisualSource[] | undefined {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value) || value.length < 1 || value.length > 8) return undefined
+  const sources: BrowserVisualSource[] = []
+  for (const item of value) {
+    if (typeof item !== 'object' || item === null) return undefined
+    const source = item as Record<string, unknown>
+    if (
+      Object.keys(source).length !== 4
+      || typeof source.sourceUrl !== 'string'
+      || !isXiaohongshuNoteUrl(source.sourceUrl)
+      || typeof source.title !== 'string'
+      || source.title.trim().length < 1
+      || source.title.length > 240
+      || (source.imageUrl !== null
+        && (typeof source.imageUrl !== 'string' || !isXiaohongshuImageUrl(source.imageUrl)))
+      || typeof source.adjacentText !== 'string'
+      || source.adjacentText.trim().length < 1
+      || source.adjacentText.length > 1_000
+    ) return undefined
+    sources.push({
+      sourceUrl: source.sourceUrl,
+      title: source.title.trim(),
+      imageUrl: source.imageUrl,
+      adjacentText: source.adjacentText.trim(),
+    })
+  }
+  return sources
+}
+
+function isXiaohongshuNoteUrl(value: string) {
+  return isBoundedHttpsUrl(value, (url) => {
+    const host = url.hostname.toLowerCase().replace(/\.$/u, '')
+    return (
+      (host === 'xiaohongshu.com' || host.endsWith('.xiaohongshu.com'))
+      && ['/explore/', '/discovery/item/', '/search_result/'].some(
+        (prefix) => url.pathname.startsWith(prefix),
+      )
+    )
+  })
+}
+
+function isXiaohongshuImageUrl(value: string) {
+  return isBoundedHttpsUrl(value, (url) => {
+    const host = url.hostname.toLowerCase().replace(/\.$/u, '')
+    return host === 'xhscdn.com' || host.endsWith('.xhscdn.com')
+  })
+}
+
+function isBoundedHttpsUrl(value: string, predicate: (url: URL) => boolean) {
+  if (value.length > 2_048) return false
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && !url.username && !url.password && predicate(url)
+  } catch {
+    return false
   }
 }
 

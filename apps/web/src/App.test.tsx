@@ -6,7 +6,13 @@ import {
   type ApiClient,
   type ResearchRun,
 } from '../../board/src/api/client'
+import { requestBrowserBridge } from '../../board/src/browserBridge'
 import { App } from './App'
+
+vi.mock('../../board/src/browserBridge', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../board/src/browserBridge')>(),
+  requestBrowserBridge: vi.fn(),
+}))
 
 const workspace = {
   id: 'workspace-studio',
@@ -48,6 +54,11 @@ function mockClient(overrides: Partial<ApiClient> = {}): ApiClient {
 describe('public ArchResearch product', () => {
   beforeEach(() => {
     window.localStorage.clear()
+    vi.mocked(requestBrowserBridge).mockResolvedValue({
+      paired: true,
+      connection: 'connected',
+      researchPermission: true,
+    })
   })
 
   it('uses the same local-product home, project directory, collections, and data tools', async () => {
@@ -80,7 +91,7 @@ describe('public ArchResearch product', () => {
     expect(screen.getByRole('button', { name: /图纸灵感/ })).toBeVisible()
   })
 
-  it('keeps public visual research functional without a local extension', async () => {
+  it('uses the connected Chrome extension for public Xiaohongshu research', async () => {
     render(
       <App
         client={mockClient()}
@@ -98,12 +109,31 @@ describe('public ArchResearch product', () => {
       expect(screen.getByRole('button', { name: '查找灵感' })).toBeEnabled()
     })
     expect(screen.getByRole('region', { name: '研究环境' })).toHaveTextContent(
-      '公开图纸来源检索已就绪',
+      '小红书图纸检索已就绪',
     )
-    expect(screen.queryByRole('button', {
-      name: /连接 Chrome 读取高清图纸/,
-    })).not.toBeInTheDocument()
-    expect(screen.queryByText(/小红书|原笔记/)).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '研究环境' })).toHaveTextContent(
+      '使用你已登录的小红书查找公开笔记',
+    )
+    expect(screen.queryByRole('dialog', { name: '安装 Chrome 扩展' })).not.toBeInTheDocument()
+  })
+
+  it('shows the install reminder on the public main page while the extension is missing', async () => {
+    vi.mocked(requestBrowserBridge).mockRejectedValue(new Error('bridge missing'))
+    render(
+      <App
+        client={mockClient()}
+        clientSessionId="device-session-test"
+        verificationToken="verified-token"
+        extensionInstallUrl="https://chromewebstore.google.com/detail/archresearch/example"
+      />,
+    )
+
+    const dialog = await screen.findByRole('dialog', { name: '安装 Chrome 扩展' })
+    expect(dialog).toHaveTextContent('读取小红书图纸灵感需要 Chrome 扩展')
+    expect(screen.getByRole('link', { name: '立即安装 Chrome 扩展' })).toHaveAttribute(
+      'href',
+      'https://chromewebstore.google.com/detail/archresearch/example',
+    )
   })
 
   it('shows the complete local result workbench on a public architecture result', async () => {

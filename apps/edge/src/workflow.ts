@@ -1,6 +1,6 @@
 export type ResearchMode = 'quick' | 'balanced' | 'deep'
 export type ResearchGoal = 'precedent_research' | 'visual_reference_search'
-export type ResearchSource = 'public_web'
+export type ResearchSource = 'public_web' | 'xiaohongshu'
 export type WorkflowStage =
   | 'planning'
   | 'searching'
@@ -18,12 +18,20 @@ export interface ResearchWorkflowInput {
   mode: ResearchMode
   referenceUrl?: string
   researchSources: ResearchSource[]
+  browserVisualSources?: BrowserVisualSource[]
   subquestions?: Array<PlannedSubquestion & { rationale: string }>
   briefFile?: {
     filename: string
     dataUrl: string
   }
   clientSessionId: string
+}
+
+export interface BrowserVisualSource {
+  sourceUrl: string
+  title: string
+  imageUrl: string | null
+  adjacentText: string
 }
 
 export interface PlannedSubquestion {
@@ -36,6 +44,8 @@ export interface SearchCandidate {
   url: string
   title: string
   subquestionId?: string
+  providedText?: string
+  imageUrl?: string | null
 }
 
 export interface InspectedSource extends SearchCandidate {

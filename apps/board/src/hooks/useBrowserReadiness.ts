@@ -47,9 +47,26 @@ export function useBrowserReadiness({
   const loadBrowserReadiness = useCallback(async (
     shouldApply: () => boolean = () => true,
   ) => {
-    if (demoMode || publicEdition) return
+    if (demoMode) return
     const requestId = readinessRequestRef.current + 1
     readinessRequestRef.current = requestId
+    if (publicEdition) {
+      try {
+        const status = await requestBrowserBridge({ type: 'status' })
+        if (readinessRequestRef.current !== requestId || !shouldApply()) return
+        setBrowserReadinessError('')
+        setPreflightBridgeStatus(status)
+        setBrowserConnected(status.connection === 'connected')
+      } catch {
+        if (readinessRequestRef.current !== requestId || !shouldApply()) return
+        setBrowserReadinessError('')
+        setPreflightBridgeStatus(null)
+        setBrowserConnected(false)
+      }
+      setXiaohongshuSearchAvailable(false)
+      setBrowserReadinessLoading(false)
+      return
+    }
     const [apiResult, bridgeResult] = await Promise.allSettled([
       apiClient.getBrowserStatus(),
       requestBrowserBridge({ type: 'status' }),
@@ -71,11 +88,11 @@ export function useBrowserReadiness({
   }, [demoMode, publicEdition])
 
   const refreshBrowserReadiness = useCallback(async () => {
-    if (demoMode || publicEdition) return
+    if (demoMode) return
     setBrowserReadinessLoading(true)
     setBrowserReadinessError('')
     await loadBrowserReadiness()
-  }, [demoMode, loadBrowserReadiness, publicEdition])
+  }, [demoMode, loadBrowserReadiness])
 
   useEffect(() => {
     let active = true
@@ -109,6 +126,27 @@ export function useBrowserReadiness({
     readinessRequestRef.current = requestId
     setBrowserConnecting(true)
     setBrowserPairingStatus('正在检查当前页面的 Chrome 扩展…')
+    if (publicEdition) {
+      try {
+        const status = await requestBrowserBridge({ type: 'status' })
+        if (readinessRequestRef.current !== requestId) return
+        setPreflightBridgeStatus(status)
+        setBrowserConnected(status.connection === 'connected')
+        setBrowserPairingStatus(
+          status.researchPermission
+            ? 'Chrome 扩展已连接，可以读取小红书公开笔记'
+            : '扩展已安装；请在浏览器工具栏打开 ArchResearch，允许网页读取',
+        )
+      } catch {
+        if (readinessRequestRef.current !== requestId) return
+        setBrowserConnected(false)
+        setPreflightBridgeStatus(null)
+        setBrowserPairingStatus('尚未检测到扩展。安装后请在浏览器工具栏打开 ArchResearch，选择“连接当前 ArchResearch 网页”。')
+      } finally {
+        setBrowserConnecting(false)
+      }
+      return
+    }
     try {
       const bridgeStatus = await requestBrowserBridge({ type: 'status' })
       if (readinessRequestRef.current !== requestId) return
@@ -170,7 +208,7 @@ export function useBrowserReadiness({
     } finally {
       setBrowserConnecting(false)
     }
-  }, [onAnnouncement])
+  }, [onAnnouncement, publicEdition])
 
   useEffect(() => {
     if (
@@ -195,7 +233,21 @@ export function useBrowserReadiness({
   ])
 
   const ensureBrowserResearchAccess = useCallback(async (requireConnected = false) => {
-    if (publicEdition) return true
+    if (publicEdition) {
+      if (!requireConnected) return true
+      try {
+        const status = await requestBrowserBridge({ type: 'status' })
+        setPreflightBridgeStatus(status)
+        setBrowserConnected(status.connection === 'connected')
+        if (status.connection === 'connected' && status.researchPermission) return true
+        onError('小红书研究需要 Chrome 扩展的网页读取权限。请打开浏览器工具栏中的 ArchResearch，连接当前网页并允许读取。')
+      } catch {
+        setPreflightBridgeStatus(null)
+        setBrowserConnected(false)
+        onError('小红书研究需要安装 ArchResearch Chrome 扩展。安装后连接当前网页，再开始研究。')
+      }
+      return false
+    }
     if (requireConnected && xiaohongshuSearchAvailable) {
       setBrowserPairingStatus('')
       return true
@@ -236,6 +288,7 @@ export function useBrowserReadiness({
     return false
   }, [browserConnected, onError, publicEdition, xiaohongshuSearchAvailable])
 
+  const extensionDetected = preflightBridgeStatus !== null
   const browserBridgeAvailable = preflightBridgeStatus?.connection === 'connected'
     || (preflightBridgeStatus?.paired === true && preflightBridgeStatus.connection === 'connecting')
   const browserReadinessState = browserReadinessLoading
@@ -252,10 +305,14 @@ export function useBrowserReadiness({
               ? 'ready'
               : 'permission'
   const researchEnvironmentReady = publicEdition
-    || xiaohongshuSearchAvailable
-    || browserReadinessState === 'ready'
+    ? browserReadinessState === 'ready'
+    : xiaohongshuSearchAvailable || browserReadinessState === 'ready'
   const researchEnvironmentTitle = publicEdition
-    ? '公开图纸来源检索已就绪'
+    ? researchEnvironmentReady
+      ? '小红书图纸检索已就绪'
+      : extensionDetected
+        ? '扩展还需要网页读取权限'
+        : '需要 Chrome 扩展'
     : browserReadinessState === 'loading'
     ? '正在检查研究环境'
     : researchEnvironmentReady
@@ -264,7 +321,11 @@ export function useBrowserReadiness({
         ? '研究环境状态未知'
         : '研究环境待连接'
   const researchEnvironmentDetail = publicEdition
-    ? '通过公开建筑与设计来源查找图纸，不读取你的登录状态'
+    ? researchEnvironmentReady
+      ? '使用你已登录的小红书查找公开笔记 · Cookie 和账号不会上传'
+      : extensionDetected
+        ? '打开浏览器工具栏的 ArchResearch，连接当前网页并允许读取'
+        : '安装扩展后，使用你已登录的小红书读取公开笔记'
     : xiaohongshuSearchAvailable
     ? browserReadinessState === 'ready'
       ? '小红书负责查找灵感 · Chrome 可读取当前页面高清图'
@@ -282,9 +343,10 @@ export function useBrowserReadiness({
     permission: 'Chrome 读取当前页面需授权：点击浏览器工具栏的 ArchResearch，选择“允许网页读取”，再点“刷新”',
     ready: 'Chrome 可读取当前页面高清图 · 登录小红书后可搜索笔记',
   }[browserReadinessState]
-  const showBrowserConnectAction = !publicEdition
-    && !browserReadinessLoading
-    && (browserConnected !== true || !browserBridgeAvailable)
+  const showBrowserConnectAction = !browserReadinessLoading
+    && (publicEdition
+      ? browserReadinessState !== 'ready'
+      : browserConnected !== true || !browserBridgeAvailable)
 
   return {
     browserConnected,
@@ -293,6 +355,7 @@ export function useBrowserReadiness({
     browserReadinessError,
     browserReadinessLoading,
     browserReadinessState,
+    extensionDetected,
     ensureBrowserResearchAccess,
     handleConnectBrowser,
     loadBrowserReadiness,

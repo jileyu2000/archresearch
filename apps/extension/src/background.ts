@@ -12,6 +12,11 @@ import {
 import { ExtensionController } from "./extension-controller";
 import { PairingStore } from "./pairing-store";
 import { BrowserPermissionService } from "./permissions";
+import { PublicXiaohongshuSearch } from "./public-xiaohongshu-search";
+import {
+  isPublicWebCommand,
+  PublicWebController,
+} from "./public-web-controller";
 
 type BackgroundChromeApi = ConstructorParameters<typeof ChromeBrowserPort>[0] & {
   alarms: {
@@ -24,6 +29,7 @@ type BackgroundChromeApi = ConstructorParameters<typeof ChromeBrowserPort>[0] & 
     local: ConstructorParameters<typeof PairingStore>[0];
   };
   permissions: ConstructorParameters<typeof BrowserPermissionService>[0];
+  scripting: ConstructorParameters<typeof PublicWebController>[0]["scripting"];
   runtime: {
     onMessage: {
       addListener(
@@ -63,10 +69,30 @@ export function startBackground(
       ),
     browserPort.recoverOrphanedTabs(),
   );
-  const handleUiMessage = createUiMessageHandler(controller);
+  const publicController = new PublicWebController(
+    api as unknown as ConstructorParameters<typeof PublicWebController>[0],
+    permissions,
+    new PublicXiaohongshuSearch(executor),
+  );
+  const handleUiMessage = createUiMessageHandler({
+    handle: async (message, sender) => {
+      if (
+        typeof message === "object"
+        && message !== null
+        && "type" in message
+        && message.type === "ui.status"
+      ) {
+        return await publicController.statusForActivePage()
+          .catch(async () => await controller.handle(message));
+      }
+      return isPublicWebCommand(message)
+        ? await publicController.handle(message, sender)
+        : await controller.handle(message);
+    },
+  });
 
-  api.runtime.onMessage.addListener((message, _sender, sendResponse) =>
-    handleUiMessage(message, sendResponse),
+  api.runtime.onMessage.addListener((message, sender, sendResponse) =>
+    handleUiMessage(message, sender, sendResponse),
   );
   api.tabs.onRemoved.addListener(createManagedTabRemovalHandler(executor));
   api.alarms.create(RECONNECT_ALARM, { periodInMinutes: 1 });
