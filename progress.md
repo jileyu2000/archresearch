@@ -999,3 +999,7 @@
 - 聚焦回归通过 Board 128 / Web 4 / Extension 28；权威 `scripts/verify.ps1` exit 0，通过 360 API / 190 Board / 189 Extension / 12 Web / 28 Edge / 8 packaged E2E。首次完整门禁调用只因工具等待窗口设为 1 秒而被外部终止，随后用长任务方式完整重跑成功。
 - coverage 通过：Board 79.01/76.42/84.28/83.18，Extension 83.43/78.54/85.40/85.73。版本面统一为 2.1.4；扩展包 `.artifacts/releases/archresearch-chrome-extension-only-v2.1.4.zip` 为 22,312 bytes，根目录含 `manifest.json`，SHA-256 `A360D2A24199A94D502AD8E8D27CDEFCB88147FA850A2F77A2F6F20929EDBEBD`。
 - 系统 Chrome 本地生产界面 QA 实际展开四步安装说明；2048×983 视口下页面和弹窗横向溢出均为 0，下载、检查连接和暂不安装三个控件均为 44px。截图视觉检查通过，未调用内部浏览器；测试标签已清理。
+- 提交 `0bddf05` 推送到 `codex/fix-extension-onboarding`，GitHub connector 创建 PR 仍因 integration 403 失败，认证 `gh` CLI 成功创建 PR #2。push/PR 两套 fresh Windows Hosted CI `30487265492`、`30487306820` 分别以 12:52、13:56 通过；PR #2 已合入 `main`，merge commit 为 `45763fb`。
+- annotated `v2.1.4` tag 精确指向 `45763fb`；正式 Release “ArchResearch Chrome 扩展组件 v2.1.4”只附 `archresearch-chrome-extension-only-v2.1.4.zip`，GitHub digest 与本地 SHA-256 一致，Release 无私有网页地址并直接包含完整手动安装步骤。
+- 生产 Worker 已部署为 `06b96723-281c-4375-b816-32f21b8f2e40`。线上主页 200，CSP、noindex/noarchive 与 frame deny 生效，正式 Turnstile 非测试占位；生产 bundle 含“查看安装方法”和 v2.1.4 下载链接，附件 200 且 Content-Length 22,312。
+- 线上系统 Chrome 标签创建成功，但 DOM 读取连续两次超时并重置控制会话；按用户禁用内部浏览器的约束停止重试，测试标签已清理。未调用内部浏览器、未绕过 Turnstile、未创建真实研究。M165 其余发布与线上 smoke complete。
