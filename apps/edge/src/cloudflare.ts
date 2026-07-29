@@ -20,11 +20,16 @@ import {
   type WorkflowStageRunner,
 } from './workflow'
 import { SqlCostLedger } from './sql-cost-ledger'
+import {
+  cleanupVisualPreviews,
+  readVisualPreview,
+} from './visual-preview-store'
 
 export interface CloudflareEnvironment {
   ASSETS: Fetcher
   COST_GUARD: DurableObjectNamespace<CostGuardDurableObject>
   RESEARCH_WORKFLOW: Workflow<ResearchWorkflowInput>
+  VISUAL_PREVIEWS: R2Bucket
   START_RATE_LIMITER: RateLimit
   PROVIDER_API_KEY: string
   PROVIDER_BASE_URL: string
@@ -292,6 +297,11 @@ export class ResearchWorkflow extends WorkflowEntrypoint<
           }),
           new PublicPageReader(),
           Number(this.env.WEB_SEARCH_CALL_USD),
+          async (objectKey) => await readVisualPreview(
+            this.env.VISUAL_PREVIEWS,
+            input.runId,
+            objectKey,
+          ),
         ).services
     const stageRunner: WorkflowStageRunner = {
       do: async (stage, callback) => await step.do(stage, {
@@ -299,11 +309,14 @@ export class ResearchWorkflow extends WorkflowEntrypoint<
         timeout: '5 minutes',
         sensitive: 'output',
       }, callback),
+      waitForEvent: async (name, options) => await step.waitForEvent(name, options),
     }
 
     try {
       return await runResearchWorkflow(input, services, checkpoints, stageRunner)
     } finally {
+      await cleanupVisualPreviews(this.env.VISUAL_PREVIEWS, input.runId)
+        .catch(() => undefined)
       await costGate.settle({
         runId: input.runId,
         actualCostUsd: estimatedCostByMode[input.mode],

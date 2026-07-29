@@ -4,11 +4,16 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from './App'
-import { BrowserBridgeError, requestBrowserBridge } from './browserBridge'
+import {
+  BrowserBridgeError,
+  requestBrowserBridge,
+  requestPublicBrowserBridgeStatus,
+} from './browserBridge'
 
 vi.mock('./browserBridge', async (importOriginal) => ({
   ...await importOriginal<typeof import('./browserBridge')>(),
   requestBrowserBridge: vi.fn(),
+  requestPublicBrowserBridgeStatus: vi.fn(),
 }))
 
 function jsonResponse(body: unknown, status = 200) {
@@ -692,6 +697,12 @@ describe('research board', () => {
       connection: 'connected',
       researchPermission: true,
     })
+    vi.mocked(requestPublicBrowserBridgeStatus).mockReset().mockResolvedValue({
+      paired: true,
+      connection: 'connected',
+      researchPermission: true,
+      visualProtocol: 2,
+    })
   })
 
   afterEach(() => {
@@ -1002,7 +1013,7 @@ describe('research board', () => {
     }))
     renderBoard('', 'public')
 
-    expect(await screen.findByText('公共研究工具')).toBeVisible()
+    expect(await screen.findByText('建筑研究工具')).toBeVisible()
     await user.click(screen.getByRole('button', {
       name: /图纸灵感.*配色、线型、版式与分析图/,
     }))
@@ -1014,6 +1025,60 @@ describe('research board', () => {
       '使用你已登录的小红书查找公开笔记',
     )
     expect(screen.queryByRole('dialog', { name: '安装 Chrome 扩展' })).not.toBeInTheDocument()
+  })
+
+  it('uses the same visual-research stages and Xiaohongshu result wording in public', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', createLiveFetch({
+      initialStatus: 'inspecting',
+      goal: 'visual_reference_search',
+      subquestions: visualDirectionSubquestions,
+      candidateOverrides: visualCandidateOverrides,
+    }))
+    renderBoard('', 'public')
+
+    await startVisualResearch(user)
+
+    expect(await screen.findByText('正在读取笔记图片并判断图纸类型与风格')).toBeVisible()
+    expect(screen.queryByText(/正在读取公开来源页面/)).not.toBeInTheDocument()
+  })
+
+  it('uses the same Xiaohongshu result organization in public', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', createLiveFetch({
+      goal: 'visual_reference_search',
+      subquestions: visualDirectionSubquestions,
+      candidateOverrides: visualCandidateOverrides,
+    }))
+    renderBoard('', 'public')
+
+    await startVisualResearch(user)
+
+    expect(await screen.findByText(
+      '这次只比较图纸的画面表达，并保留每张图的原笔记来源。',
+    )).toBeVisible()
+    const inspirationBoard = screen.getByRole('region', { name: '视觉灵感板' })
+    expect(within(inspirationBoard).getByRole('heading', {
+      name: '小红书制图灵感',
+    })).toBeVisible()
+    expect(within(inspirationBoard).getByRole('link', { name: '打开原笔记' })).toBeVisible()
+    expect(within(inspirationBoard).queryByText(/公开来源|打开原来源/)).not.toBeInTheDocument()
+  })
+
+  it('links the default install action directly to the versioned Chrome extension component', async () => {
+    vi.mocked(requestBrowserBridge).mockRejectedValue(
+      new BrowserBridgeError('unavailable', 'bridge missing'),
+    )
+    vi.stubGlobal('fetch', createLiveFetch())
+    renderBoard()
+
+    const dialog = await screen.findByRole('dialog', { name: '安装 Chrome 扩展' })
+    expect(within(dialog).getByRole('link', {
+      name: '立即安装 Chrome 扩展',
+    })).toHaveAttribute(
+      'href',
+      'https://github.com/jileyu2000/archresearch/releases/download/v2.1.3/archresearch-chrome-extension-only-v2.1.3.zip',
+    )
   })
 
   it('uses the idempotent default-workspace initializer on a fresh install', async () => {

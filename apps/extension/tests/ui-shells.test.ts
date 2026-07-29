@@ -10,6 +10,8 @@ describe.each([
     const html = readFileSync(resolve(import.meta.dirname, file), "utf8");
 
     expect(html).toContain(`src="${entry}"`);
+    expect(html).toContain("<title>ArchResearch Chrome 扩展</title>");
+    expect(html).toContain("ArchResearch Chrome 扩展");
     expect(html).toContain('data-role="pair-form"');
     expect(html).toContain('data-command="permissions.request"');
     expect(html).toContain('data-command="permissions.revoke"');

@@ -1,4 +1,7 @@
-import type { PublicXiaohongshuSearch } from "./public-xiaohongshu-search";
+import type {
+  PublicVisualDirection,
+  PublicVisualResearchResult,
+} from "./public-xiaohongshu-search";
 
 const PUBLIC_SCRIPT_ID = "archresearch-public-board";
 const PUBLIC_SCRIPT_FILE = "assets/publicBoardBridge.js";
@@ -32,7 +35,9 @@ type PublicPermission = {
   hasResearchAccess(): Promise<boolean>;
 };
 
-type PublicSearch = Pick<PublicXiaohongshuSearch, "run">;
+type PublicSearch = {
+  run(directions: PublicVisualDirection[]): Promise<PublicVisualResearchResult>;
+};
 
 export function isPublicWebCommand(value: unknown): boolean {
   return isRecord(value)
@@ -56,7 +61,7 @@ export class PublicWebController {
     const granted = await this.permissions.hasResearchAccess();
     if (command.type === "public.status") return status(granted);
     if (!granted) throw new Error("Research permission is required");
-    return await this.search.run(command.query);
+    return await this.search.run(command.directions);
   }
 
   async statusForActivePage(): Promise<Record<string, unknown>> {
@@ -117,7 +122,7 @@ export class PublicWebController {
 type PublicCommand =
   | { type: "ui.public.connect" }
   | { type: "public.status" }
-  | { type: "public.xiaohongshu.search"; query: string };
+  | { type: "public.xiaohongshu.research"; directions: PublicVisualDirection[] };
 
 function parseCommand(value: unknown): PublicCommand {
   if (!isRecord(value) || typeof value.type !== "string") {
@@ -130,13 +135,11 @@ function parseCommand(value: unknown): PublicCommand {
     return { type: value.type };
   }
   if (
-    value.type === "public.xiaohongshu.search"
-    && hasExactKeys(value, ["type", "query"])
-    && typeof value.query === "string"
-    && value.query.trim().length > 0
-    && value.query.length <= 500
+    value.type === "public.xiaohongshu.research"
+    && hasExactKeys(value, ["type", "directions"])
+    && isVisualDirections(value.directions)
   ) {
-    return { type: value.type, query: value.query };
+    return { type: value.type, directions: value.directions };
   }
   throw new Error("Unapproved public Web command");
 }
@@ -146,7 +149,27 @@ function status(researchPermission: boolean): Record<string, unknown> {
     paired: true,
     connection: "connected",
     research_permission: researchPermission,
+    visual_protocol: 2,
   };
+}
+
+function isVisualDirections(value: unknown): value is PublicVisualDirection[] {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 6) return false;
+  const ids = new Set<string>();
+  return value.every((item) => {
+    if (
+      !isRecord(item)
+      || !hasExactKeys(item, ["id", "query"])
+      || typeof item.id !== "string"
+      || !/^[A-Za-z0-9_-]{1,80}$/u.test(item.id)
+      || ids.has(item.id)
+      || typeof item.query !== "string"
+      || item.query.trim().length < 1
+      || item.query.length > 500
+    ) return false;
+    ids.add(item.id);
+    return true;
+  });
 }
 
 function readSecureOrigin(value: string): string {

@@ -10,6 +10,10 @@ describe("Manifest V3 security boundary", () => {
   it("declares temporary host access as optional", () => {
     expect(manifest.manifest_version).toBe(3);
     expect(manifest.minimum_chrome_version).toBe("116");
+    expect(manifest.name).toBe("ArchResearch Chrome 扩展");
+    expect(manifest.action).toMatchObject({
+      default_title: "ArchResearch Chrome 扩展",
+    });
     expect(manifest.optional_host_permissions).toEqual(["<all_urls>"]);
     expect(manifest).not.toHaveProperty("host_permissions");
     expect(manifest.content_scripts).toEqual([

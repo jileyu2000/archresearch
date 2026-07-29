@@ -628,3 +628,31 @@
 - 私有 Web URL 不能写进仓库或扩展 manifest，因此公共页不使用 `externally_connectable` 或宽泛 HTTPS 常驻脚本。用户在扩展弹窗点击“连接当前 ArchResearch 网页”后，扩展在已授予的 optional host permission 下只为当前精确 HTTPS origin 动态注册轻量桥，并再次校验页面公共版 meta 标记。
 - 扩展侧小红书读取复用既有枚举 BrowserCommandExecutor：固定打开小红书搜索页、等待、枚举媒体、下滚一次、再次枚举并最终关闭标签。公共桥只返回最多 8 条去重后的笔记 URL、XHS CDN 缩略图 URL、标题与相邻可见文字；不返回 Cookie、账号、页面存储或任意截图载荷。
 - Edge 只接受 `visual_reference_search + researchSources=['xiaohongshu']` 组合及严格裁剪的 bridge observations；这些观测直接作为已检查来源进入逐字 quote 核验，不由 Worker 携带用户登录态重抓小红书。公开案例研究仍走原来的 public HTTPS 路径。
+
+## 2026-07-29 M164 parity and release-naming recovery
+
+- 用户把验收目标明确为“网页版要和本地版完全一致”。可执行定义是用户可见功能、研究流程、研究深度和结果组织等价；运行基础设施仍按既定产品合同分离：本地版为 Windows/Chrome、BYOK、SQLite/本机文件，网页端为浏览器本地持久化、Cloudflare 执行和服务端 Secret。
+- 现有 Board 与 `PublicApiClient` 已覆盖工作区、历史、任务书、两类研究、完整结果、收藏、对照、导出、表达规范、保留期和备份；尚不能宣称完整等价，因为公共小红书桥只执行一次固定搜索、一次下滚并返回最多 8 条卡片。
+- 本地视觉研究的现行合同更深：先规划多个方向，每方向最多尝试 4 帖并目标获得 3 篇 usable，每帖最多 4 图，全任务共享 48 个逐图检查槽位与 48 MiB；M164 需要两阶段网页流程，把方向规划、Chrome 分方向逐帖检查和 Edge 综合串成有界且可恢复的同等流程，不能只提高 8 条上限。
+- GitHub 当前 `v2.1.2` Release 标题与正文会让完整项目、网页和扩展附件混淆。M164 要把手工附件明确命名为 `archresearch-chrome-extension-only-v2.1.2.zip`，Release 只描述 Chrome 扩展组件；GitHub 自动 Source code ZIP/TAR 继续作为完整仓库快照，不冒充安装程序。私有网页地址及网页展示内容不得进入仓库、Release 或 metadata。
+- 规划恢复脚本第一次被系统 `python` 的 Microsoft Store alias 拦截，第二次发现 `py` 不存在；改用 Codex bundled Python 后成功恢复 32 条未同步上下文。两次失败均未改文件或外部状态。
+- 完整 `ApiClient` 方法矩阵已由 TypeScript 的 `satisfies ApiClient` 约束：`PublicApiClient` 实现了浏览器状态、备份恢复、工作区、Run、任务书、结果/Board、事件、收藏、拒绝、导出和表达规范全部方法。现阶段的等价缺口不是缺少方法，而是视觉研究获取与投影语义不足，以及少量 `publicEdition` 文案分支。
+- Edge 当前在 Workflow 内规划方向，但 `PublicApiClient.startResearch()` 在创建 Workflow 之前只用整条用户问题调用扩展一次；扩展 `PublicXiaohongshuSearch` 只检查搜索结果页，不打开笔记详情。随后 Edge 只是把最多 8 条卡片按索引轮流分配给计划方向，`analyze` 也只读取相邻文字，没有逐图视觉分类。
+- 浏览器枚举协议已经具备实现深读所需的安全动作：固定 `open_url`、`wait`、`enumerate_media`、`scroll`、`capture_region` 和 `close_tab`，无需新增任意 selector、脚本或点击动作。公共协议可以在继续保持枚举边界的前提下升级为“多个已规划方向 → 每方向最多 4 帖 → 每帖最多 4 图”。
+- M164 首次并行搜索因无 `.openai/hosting.json` 时 `rg` exit 1 导致组合调用丢弃输出；随后确认仓库没有 Sites 配置，继续使用现有 Wrangler 发布链。另一次读取误假设 `apps/extension/manifest.json`，实际路径为 `apps/extension/public/manifest.json`；两次均为只读失败。
+
+## 2026-07-29 M164 two-stage implementation review
+
+- v2 readiness 测试夹具迁移后，Board 114、Web 4、Extension 21、Edge 16 项定向回归全绿；旧扩展因缺少 `visual_protocol: 2` 会被诚实判定为不可用。
+- 不必要的公共版可见分支已经由红绿合同定位：品牌副标题、视觉 inspecting/verifying 文案、视觉结果说明和来源名称仍显示“公共/原始来源”，默认安装地址仍落在 GitHub Release 总页。它们不是基础设施差异，应与本地版统一为建筑研究工具、小红书和原笔记，并让安装动作直达版本化 extension-only ZIP。
+- 两阶段实现当前让 `PublicApiClient` 以 500 ms × 120 次等待 planning checkpoint，最多约 60 秒；Edge 单阶段允许 5 分钟。真实模型规划可能合法超过 60 秒，发布前需要把客户端等待窗口与 Workflow 边界对齐。
+- 扩展截图预览当前随 `xiaohongshu_visual_sources` Workflow 事件整体上传，应用预算为 48 MiB；最终快照只返回 XHS CDN `imageUrl`，不返回或浏览器本地保留 `previewDataUrl`。发布前必须核对 Cloudflare Workflow 事件载荷限制，并确认结果页在防盗链场景仍能显示逐图预览。
+
+## 2026-07-29 M164 Workflow payload correction
+
+- Cloudflare 官方限制确认 Workflow 事件载荷上限为 1 MiB；48 MiB 截图不能直接进入 `sendEvent()`。现行兼容架构是浏览器上传后由 Worker 写入私有 R2，Workflow 事件只携带对象键和受限元数据，分析阶段按键读取，完成、失败或取消后清理。
+- R2 只保存单次视觉研究的临时截图，不改变长期数据边界；浏览器在上传前把同一截图存入 IndexedDB，最终结果按 `candidateId` 恢复本地预览，以避免小红书 CDN 防盗链导致结果图片失效。
+- Edge 侧 R2 写入、对象键事件、分析读取和终态清理已有未提交实现；Web `PublicApiClient` 尚未完成 IndexedDB preview store、结果 hydration、失败清理与 5 分钟规划等待窗口，因此当前代码还不是可发布状态。
+- 审查发现浏览器响应原先只校验 `direction_id` 的格式，没有校验它属于本次规划；Edge 过滤陌生方向后会重新编号，导致 IndexedDB 本地截图与终态 `candidateId` 错配。现已用失败行为测试固定为只接受请求方向集合。
+- 公共扩展深读最坏路径在 6 个方向下可能超过原 3 分钟页面等待；现已把浏览器桥等待改为 8 分钟，低于 Workflow 10 分钟事件上限并为上传/调度保留 2 分钟，不再让网页先于合法云端阶段放弃。
+- Cloudflare 账号当前尚未启用 R2，`wrangler r2 bucket list` 返回 code 10042；这不是代码或绑定错误，必须先在 Dashboard 接受 R2 服务后才能创建 `archresearch-visual-previews` 及生命周期规则，生产部署在此之前不可执行。

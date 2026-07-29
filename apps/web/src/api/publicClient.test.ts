@@ -101,18 +101,69 @@ describe('public product client', () => {
     client.close()
   })
 
-  it('reads bounded Xiaohongshu cards through Chrome before starting public visual research', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      runId: '55555555-5555-4555-8555-555555555555',
-      status: 'created',
-    }), {
-      status: 202,
-      headers: { 'content-type': 'application/json' },
-    }))
-    const xiaohongshuSearch = vi.fn().mockResolvedValue([{
+  it('resumes a planned visual workflow with direction-bound Chrome observations', async () => {
+    const runId = '55555555-5555-4555-8555-555555555555'
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        runId,
+        status: 'created',
+        visualUploadToken: 'scoped-upload-token',
+      }), {
+        status: 202,
+        headers: { 'content-type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        runId,
+        status: 'planning',
+        checkpointStage: 'planning',
+        visualDirections: [{
+          id: 'linework',
+          query: '社区图书馆 精细线稿 轴测图',
+        }],
+      }), {
+        headers: { 'content-type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        runId,
+        workspaceId: 'workspace-placeholder',
+        question: '社区图书馆如何用蓝色轴测图表达公共流线？',
+        goal: 'visual_reference_search',
+        mode: 'quick',
+        status: 'completed',
+        subquestions: [{
+          id: 'linework',
+          question: '精细线稿轴测图',
+          rationale: '比较线型与编号层级',
+        }],
+        summary: '细线和蓝色编号适合表达公共流线。',
+        sections: [{
+          id: 'linework',
+          title: '精细线稿轴测图',
+          facts: [{
+            candidateId: 'visual-1',
+            statement: '细线和蓝色编号强调公共流线。',
+            sourceUrl: 'https://www.xiaohongshu.com/explore/note-1',
+            quote: '蓝色轴测图，使用细线与编号组织信息。',
+            sourceTitle: '蓝色轴测图',
+            imageUrl: 'https://sns-webpic-qc.xhscdn.com/note-1.webp',
+            assetType: 'axonometric',
+          }],
+        }],
+        coverage: {
+          coverageSatisfied: true,
+          enrichmentSatisfied: true,
+          gaps: [],
+        },
+      }), {
+        headers: { 'content-type': 'application/json' },
+      }))
+    const xiaohongshuResearch = vi.fn().mockResolvedValue([{
+      directionId: 'linework',
       sourceUrl: 'https://www.xiaohongshu.com/explore/note-1',
       title: '蓝色轴测图',
       imageUrl: 'https://sns-webpic-qc.xhscdn.com/note-1.webp',
+      previewDataUrl: 'data:image/png;base64,aW1hZ2U=',
       adjacentText: '蓝色轴测图，使用细线与编号组织信息。',
     }])
     const client = createPublicApiClient({
@@ -121,7 +172,7 @@ describe('public product client', () => {
       fetch: fetchMock,
       clientSessionId: 'device-session-test',
       initialVerificationToken: 'verified-token',
-      xiaohongshuSearch,
+      xiaohongshuResearch,
     })
     const workspace = await client.createWorkspace({ name: '图纸研究' })
 
@@ -133,21 +184,113 @@ describe('public product client', () => {
       researchSources: ['xiaohongshu'],
     })
 
-    expect(xiaohongshuSearch).toHaveBeenCalledWith(
-      '社区图书馆如何用蓝色轴测图表达公共流线？',
-    )
-    const request = fetchMock.mock.calls[0]?.[1] as RequestInit
-    expect(JSON.parse(String(request.body))).toMatchObject({
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3))
+    expect(xiaohongshuResearch).toHaveBeenCalledWith([{
+      id: 'linework',
+      query: '社区图书馆 精细线稿 轴测图',
+    }])
+    const startRequest = fetchMock.mock.calls[0]?.[1] as RequestInit
+    expect(JSON.parse(String(startRequest.body))).toMatchObject({
       goal: 'visual_reference_search',
       researchSources: ['xiaohongshu'],
-      browserVisualSources: [{
+    })
+    expect(JSON.parse(String(startRequest.body))).not.toHaveProperty('browserVisualSources')
+    expect(fetchMock.mock.calls[2]?.[0]).toBe(`/api/runs/${runId}/visual-sources`)
+    const uploadRequest = fetchMock.mock.calls[2]?.[1] as RequestInit
+    expect(JSON.parse(String(uploadRequest.body))).toEqual({
+      clientSessionId: 'device-session-test',
+      uploadToken: 'scoped-upload-token',
+      sources: [{
+        directionId: 'linework',
         sourceUrl: 'https://www.xiaohongshu.com/explore/note-1',
         title: '蓝色轴测图',
         imageUrl: 'https://sns-webpic-qc.xhscdn.com/note-1.webp',
+        previewDataUrl: 'data:image/png;base64,aW1hZ2U=',
         adjacentText: '蓝色轴测图，使用细线与编号组织信息。',
       }],
     })
+    await client.getRun(runId)
+    await expect(client.getResults(runId)).resolves.toEqual([
+      expect.objectContaining({
+        image_url: 'data:image/png;base64,aW1hZ2U=',
+      }),
+    ])
     client.close()
+  })
+
+  it('keeps waiting beyond one minute for a valid visual planning checkpoint', async () => {
+    const runId = '66666666-6666-4666-8666-666666666666'
+    let statusRequests = 0
+    let finishRequest!: (value: 'upload' | 'cancel') => void
+    const finished = new Promise<'upload' | 'cancel'>((resolve) => {
+      finishRequest = resolve
+    })
+    const timeout = vi.spyOn(window, 'setTimeout').mockImplementation((callback) => {
+      queueMicrotask(() => {
+        if (typeof callback === 'function') callback()
+      })
+      return 1 as unknown as ReturnType<typeof window.setTimeout>
+    })
+    const fetchMock = vi.fn().mockImplementation((
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      const path = String(input)
+      if (path === '/api/runs') {
+        return Promise.resolve(new Response(JSON.stringify({
+          runId,
+          status: 'created',
+          visualUploadToken: 'scoped-upload-token',
+        }), {
+          status: 202,
+          headers: { 'content-type': 'application/json' },
+        }))
+      }
+      if (path === `/api/runs/${runId}`) {
+        if (init?.method === 'DELETE') {
+          finishRequest('cancel')
+          return Promise.resolve(new Response(null, { status: 204 }))
+        }
+        statusRequests += 1
+        return Promise.resolve(new Response(JSON.stringify({
+          runId,
+          status: 'planning',
+          checkpointStage: 'planning',
+          ...(statusRequests > 120
+            ? { visualDirections: [{ id: 'linework', query: '社区图书馆 线稿轴测图' }] }
+            : {}),
+        }), {
+          headers: { 'content-type': 'application/json' },
+        }))
+      }
+      if (path === `/api/runs/${runId}/visual-sources`) {
+        finishRequest('upload')
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
+      return Promise.reject(new Error(`unexpected request ${path}`))
+    })
+    const client = createPublicApiClient({
+      indexedDB,
+      databaseName: databaseName('slow-visual-planning'),
+      fetch: fetchMock,
+      clientSessionId: 'device-session-test',
+      initialVerificationToken: 'verified-token',
+      xiaohongshuResearch: vi.fn().mockResolvedValue([]),
+    })
+    const workspace = await client.createWorkspace({ name: '图纸研究' })
+
+    await client.startResearch({
+      workspaceId: workspace.id,
+      question: '社区图书馆如何用线稿轴测图表达公共流线？',
+      goal: 'visual_reference_search',
+      mode: 'quick',
+      researchSources: ['xiaohongshu'],
+    })
+
+    await expect(finished).resolves.toBe('upload')
+    expect(statusRequests).toBe(121)
+    client.close()
+    timeout.mockRestore()
   })
 
   it('hydrates a completed cloud run into the full local result contract', async () => {

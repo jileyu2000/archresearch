@@ -39,6 +39,7 @@ describe("public Web extension controller", () => {
       paired: true,
       connection: "connected",
       research_permission: true,
+      visual_protocol: 2,
     });
     expect(api.scripting.registerContentScripts).toHaveBeenCalledWith([{
       id: "archresearch-public-board",
@@ -72,6 +73,7 @@ describe("public Web extension controller", () => {
       paired: true,
       connection: "connected",
       research_permission: true,
+      visual_protocol: 2,
     });
   });
 
@@ -98,11 +100,18 @@ describe("public Web extension controller", () => {
     }]);
     const sources = {
       sources: [{
+        direction_id: "section",
         source_url: "https://www.xiaohongshu.com/explore/note-1",
         title: "剖面表达",
-        image_url: null,
+        image_url: "https://sns-webpic-qc.xhscdn.com/note-1.webp",
+        preview_data_url: "data:image/png;base64,aW1hZ2U=",
         adjacent_text: "剖面表达",
       }],
+      budget: {
+        image_count: 1,
+        preview_bytes: 30,
+        exhausted: false,
+      },
     };
     const search = { run: vi.fn().mockResolvedValue(sources) };
     const controller = new PublicWebController(
@@ -112,12 +121,14 @@ describe("public Web extension controller", () => {
     );
 
     await expect(controller.handle({
-      type: "public.xiaohongshu.search",
-      query: "社区中心剖面表达",
+      type: "public.xiaohongshu.research",
+      directions: [{ id: "section", query: "社区中心剖面表达" }],
     }, {
       tab: { id: 41, url: "https://research.example.com/workspace" },
     })).resolves.toEqual(sources);
-    expect(search.run).toHaveBeenCalledWith("社区中心剖面表达");
+    expect(search.run).toHaveBeenCalledWith([
+      { id: "section", query: "社区中心剖面表达" },
+    ]);
 
     await expect(controller.handle({ type: "public.status" }, {
       tab: { id: 42, url: "https://attacker.example.com/" },
@@ -137,8 +148,8 @@ describe("public Web extension controller", () => {
     );
 
     await expect(controller.handle({
-      type: "public.xiaohongshu.search",
-      query: "剖面",
+      type: "public.xiaohongshu.research",
+      directions: [{ id: "section", query: "剖面" }],
       url: "https://example.com",
     }, {
       tab: { id: 41, url: "https://research.example.com/" },

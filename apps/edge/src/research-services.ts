@@ -1,5 +1,6 @@
 import type { ResponsesProvider } from './provider'
 import type {
+  ArchitectureAssetType,
   CoverageReport,
   EvidenceFinding,
   InspectedSource,
@@ -36,6 +37,15 @@ interface FindingsPayload {
 
 interface SummaryPayload {
   summary: string
+}
+
+interface VisualClassificationsPayload {
+  classifications: Array<{
+    candidateId: string
+    assetType: ArchitectureAssetType
+    relevance: number
+    observations: string[]
+  }>
 }
 
 const subquestionCountByMode = {
@@ -122,6 +132,31 @@ export function buildCoverageReport(
     coverageSatisfied: plan.length > 0
       && plan.every((subquestion) => covered.has(subquestion.id)),
     enrichmentSatisfied: distinctSources >= requiredSources,
+    gaps,
+  }
+}
+
+export function buildVisualCoverageReport(
+  plan: PlannedSubquestion[],
+  findings: EvidenceFinding[],
+): CoverageReport {
+  const notesByDirection = new Map<string, Set<string>>()
+  for (const finding of findings) {
+    const notes = notesByDirection.get(finding.subquestionId) ?? new Set<string>()
+    notes.add(finding.sourceUrl)
+    notesByDirection.set(finding.subquestionId, notes)
+  }
+  const gaps: string[] = []
+  for (const direction of plan) {
+    const count = notesByDirection.get(direction.id)?.size ?? 0
+    if (count < 3) {
+      gaps.push(`${direction.question}：还需要 ${3 - count} 篇可用小红书笔记`)
+    }
+  }
+  return {
+    coverageSatisfied: plan.length > 0
+      && plan.every((direction) => (notesByDirection.get(direction.id)?.size ?? 0) > 0),
+    enrichmentSatisfied: plan.length > 0 && gaps.length === 0,
     gaps,
   }
 }
@@ -285,6 +320,46 @@ const findingsSchema = {
   required: ['findings'],
 }
 
+const visualClassificationsSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    classifications: {
+      type: 'array',
+      maxItems: 4,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          candidateId: { type: 'string' },
+          assetType: {
+            type: 'string',
+            enum: [
+              'plan',
+              'section',
+              'elevation',
+              'site_plan',
+              'axonometric',
+              'circulation',
+              'analysis_diagram',
+              'render',
+              'photograph',
+            ],
+          },
+          relevance: { type: 'integer', minimum: 1, maximum: 5 },
+          observations: {
+            type: 'array',
+            maxItems: 4,
+            items: { type: 'string' },
+          },
+        },
+        required: ['candidateId', 'assetType', 'relevance', 'observations'],
+      },
+    },
+  },
+  required: ['classifications'],
+}
+
 const summarySchema = {
   type: 'object',
   additionalProperties: false,
@@ -298,6 +373,7 @@ export function createLiveResearchServices(
   provider: ResponsesProvider,
   pageReader: PublicPageReader,
   webSearchCallUsd: number,
+  readVisualPreview: (objectKey: string) => Promise<string | null> = async () => null,
 ) {
   let costUsd = 0
   const account = <T>(response: { data: T; costUsd: number }) => {
@@ -347,13 +423,17 @@ export function createLiveResearchServices(
 
     async search(input, plan) {
       const visual = input.goal === 'visual_reference_search'
-      if (visual && input.browserVisualSources?.length) {
-        return input.browserVisualSources.map((source, index) => ({
-          subquestionId: plan[index % plan.length]?.id,
+      if (visual) {
+        return (input.browserVisualSources ?? [])
+          .filter((source) => plan.some(({ id }) => id === source.directionId))
+          .map((source, index) => ({
+          candidateId: `visual-${index + 1}`,
+          subquestionId: source.directionId,
           url: source.sourceUrl,
           title: source.title,
           providedText: source.adjacentText,
           imageUrl: source.imageUrl,
+          previewObjectKey: source.previewObjectKey,
         }))
       }
       const response = await provider.generateStructured<CandidatePayload>({
@@ -386,11 +466,13 @@ export function createLiveResearchServices(
       const provided = candidates
         .filter((candidate) => candidate.providedText)
         .map((candidate) => ({
+          candidateId: candidate.candidateId,
           url: candidate.url,
           title: candidate.title,
           subquestionId: candidate.subquestionId,
           text: candidate.providedText!,
           imageUrl: candidate.imageUrl,
+          previewObjectKey: candidate.previewObjectKey,
         }))
       const remote = candidates.filter((candidate) => !candidate.providedText)
       if (remote.length === 0) return provided
@@ -402,6 +484,80 @@ export function createLiveResearchServices(
 
     async analyze(input, plan, sources) {
       const visual = input.goal === 'visual_reference_search'
+      if (visual) {
+        const findings: EvidenceFinding[] = []
+        for (let index = 0; index < sources.length; index += 4) {
+          const batch = sources.slice(index, index + 4)
+          const content: Array<
+            | { type: 'input_text'; text: string }
+            | { type: 'input_image'; image_url: string }
+          > = [{
+            type: 'input_text',
+            text: JSON.stringify({
+              question: input.question,
+              directions: plan,
+              candidates: batch.map((source) => ({
+                candidateId: source.candidateId,
+                directionId: source.subquestionId,
+                title: source.title,
+                adjacentText: source.text,
+              })),
+            }),
+          }]
+          for (const source of batch) {
+            const preview = source.previewObjectKey
+              ? await readVisualPreview(source.previewObjectKey)
+              : null
+            content.push({
+              type: 'input_image',
+              image_url: preview ?? source.imageUrl ?? '',
+            })
+          }
+          const response = await provider.generateStructured<VisualClassificationsPayload>({
+            schemaName: 'visual_classifications',
+            schema: visualClassificationsSchema,
+            instructions: [
+              '你是建筑图纸视觉分类器，只根据给定图片判断可见的图纸类型与表达语言。',
+              '每个 candidateId 最多返回一项；无法看清或与方向无关时不要返回。',
+              'observations 只描述图中可见的线型、配色、纹理、构图、光影或注释。',
+              '不得确认项目事实、图片归属、版权或账号信息。',
+            ].join('\n'),
+            input: [{ role: 'user', content }],
+            maximumOutputTokens: 1800,
+          })
+          const classifications = account(response).classifications
+          const sourceById = new Map(
+            batch
+              .filter((source) => source.candidateId)
+              .map((source) => [source.candidateId!, source]),
+          )
+          const accepted = new Set<string>()
+          for (const classification of classifications) {
+            const source = sourceById.get(classification.candidateId)
+            const observation = classification.observations
+              .map(normalizedText)
+              .find(Boolean)
+            if (
+              !source
+              || accepted.has(classification.candidateId)
+              || classification.relevance < 3
+              || !observation
+              || !source.subquestionId
+            ) continue
+            accepted.add(classification.candidateId)
+            findings.push({
+              candidateId: classification.candidateId,
+              subquestionId: source.subquestionId,
+              statement: observation,
+              sourceUrl: source.url,
+              quote: source.text,
+              imageUrl: source.imageUrl,
+              assetType: classification.assetType,
+            })
+          }
+        }
+        return findings
+      }
       const sourcePayload = sources.map((source) => ({
         url: source.url,
         title: source.title,
@@ -434,8 +590,10 @@ export function createLiveResearchServices(
       return verifyEvidenceFindings(findings, sources)
     },
 
-    async checkCoverage(plan, findings) {
-      return buildCoverageReport(plan, findings)
+    async checkCoverage(input, plan, findings) {
+      return input.goal === 'visual_reference_search'
+        ? buildVisualCoverageReport(plan, findings)
+        : buildCoverageReport(plan, findings)
     },
 
     async compose(input, plan, findings, coverage) {
@@ -465,18 +623,30 @@ export function createLiveResearchServices(
           title: subquestion.question,
           facts: findings
             .filter((finding) => finding.subquestionId === subquestion.id)
-            .map(({ statement, sourceUrl, quote }) => {
-              const visualSource = input.browserVisualSources?.find(
-                (source) => source.sourceUrl === sourceUrl,
-              )
+            .map(({
+              candidateId,
+              statement,
+              sourceUrl,
+              quote,
+              imageUrl,
+              assetType,
+            }) => {
+              const visualSourceIndex = candidateId?.match(/^visual-(\d+)$/)?.[1]
+              const visualSources = (input.browserVisualSources ?? [])
+                .filter((source) => plan.some(({ id }) => id === source.directionId))
+              const visualSource = visualSourceIndex
+                ? visualSources[Number(visualSourceIndex) - 1]
+                : undefined
               return {
+                candidateId,
                 statement,
                 sourceUrl,
                 quote,
+                assetType,
                 ...(visualSource
                   ? {
                       sourceTitle: visualSource.title,
-                      imageUrl: visualSource.imageUrl,
+                      imageUrl: imageUrl ?? visualSource.imageUrl,
                     }
                   : {}),
               }
@@ -527,8 +697,10 @@ export function createMockResearchServices(): ResearchServices {
     async verify(findings, sources) {
       return verifyEvidenceFindings(findings, sources)
     },
-    async checkCoverage(plan, findings) {
-      return buildCoverageReport(plan, findings)
+    async checkCoverage(input, plan, findings) {
+      return input.goal === 'visual_reference_search'
+        ? buildVisualCoverageReport(plan, findings)
+        : buildCoverageReport(plan, findings)
     },
     async compose(_input, plan, findings) {
       return {

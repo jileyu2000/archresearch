@@ -929,3 +929,34 @@
 - annotated tag `v2.1.2` 指向 `c74571f`；正式 GitHub Release 已发布，`v2.1.2` 是 latest。附件 `archresearch-extension-v2.1.2.zip` 为 21,075 bytes，GitHub digest 与本地 SHA-256 均为 `76253847468248E027F2747DEB638B576A961FB0C5F7BD1A4EB584C97E2B7C81`；Release 未包含 Worker URL、Secret、本地数据或备份。
 - Release 复核第一次请求了 `gh release view` 不支持的 `isLatest` 字段，并同时用零次重定向请求 `/releases/latest`，两处均以只读错误结束；随后改用受支持字段与 GitHub releases/latest API，确认最新版本、tag 落点、附件状态和 digest。未修改 Release 或文件。
 - M163 complete。剩余外部事项不是代码发布阻塞：真人完成生产 Turnstile 后执行一次 Quick 真实研究；未来如需真正一键安装，提交 Chrome Web Store 审核。
+
+## 2026-07-29 M164 start
+
+- 按恢复协议完整读取 `HANDOFF.md`、`AGENTS.md`、活动计划和 `findings.md`/`progress.md` 末尾；session catchup 使用 Codex bundled Python 成功恢复上一会话未同步上下文。
+- `git status --short --branch` 显示分支 `codex/archresearch-v2-1` 跟踪 `origin/main`，无 tracked 或 staged 改动；只存在既有未跟踪 `.artifacts/qa/` 与 `.artifacts/releases/`，全部保留。`git diff --stat` 为空。
+- 立项 M164：把网页/本地等价定义锁定到用户可见功能、流程、深度和结果组织，保留既定基础设施差异；当前首要行为缺口为小红书多方向逐帖多图检查，发布层缺口为扩展组件与完整源码命名混淆。
+- 下一步：建立完整行为矩阵并定位 `publicEdition`、`ApiClient`、Extension/Edge 视觉协议的差异；随后先写失败测试，再修改生产代码。
+- GitHub `v2.1.2` Release 已原位完成扩展专属命名修正，tag 未移动：标题改为“ArchResearch Chrome 扩展组件 v2.1.2”，上传 `archresearch-chrome-extension-only-v2.1.2.zip` 后删除旧名附件；新附件 21,075 bytes，SHA-256 仍为 `76253847468248E027F2747DEB638B576A961FB0C5F7BD1A4EB584C97E2B7C81`。
+- Release 正文已删除全部网页介绍与链接，只说明扩展用途、Chrome 开发者模式安装步骤和 Chrome Web Store 边界；同时明确 GitHub 自动 Source code ZIP/TAR 是完整仓库快照，不是安装程序或扩展附件。复核显示 Release 非 draft/非 prerelease，唯一手工附件名称、label、digest 均正确。
+- 代码审计完成首轮矩阵：`PublicApiClient` 覆盖完整 `ApiClient` 方法面；阻断等价的是视觉 Run 在云端规划前只做一次浏览器搜索、扩展不进入笔记详情、Edge 不做逐图分类。下一步写协议/获取/Edge 投影红灯测试。
+
+## 2026-07-29 M164 two-stage implementation recovery
+
+- 新会话严格按 `HANDOFF.md` → `AGENTS.md` → `task_plan.md` → `findings.md` → `progress.md` 顺序恢复，并运行 planning catchup。首次 catchup 被系统 `python` 的 Microsoft Store alias 拦截；没有重复同一路径，改用 Codex bundled Python 后恢复 74 条未同步上下文。
+- 闪退前的两阶段实现仍完整保留：21 个生产/测试文件与三份规划记录有未提交修改，约 1,620 行新增；staged 0，`git diff --check` 通过，既有 `.artifacts/qa/` 与 `.artifacts/releases/` 全部保留。
+- 已验证的定向基线为 Edge 16 项、Extension 21 项、Web 6 项与四端 typecheck 通过。现有失败集中在 Board/Web UI 测试仍只模拟 v1 `requestBrowserBridge()`，而生产 hook 已改用 v2 `requestPublicBrowserBridgeStatus()`，导致新版扩展在测试中被误判为未安装。
+- 当前唯一下一步：迁移 Board/Web readiness mocks 与 controller 精确状态断言，先让四个定向套件转绿；随后清理不必要的公共版可见文案分支，并执行四端全量回归。
+
+## 2026-07-29 M164 R2 recovery
+
+- 本次恢复完整读取 `HANDOFF.md`、`AGENTS.md`、M164 计划和两份记录末尾；catchup 的系统 `python` alias 与缺失 `py` 两次调用失败，随后使用 Codex bundled Python 成功恢复 36 条未同步上下文，两次失败均无文件副作用。
+- 当前为 29 个跟踪文件修改、1 个新 `visual-preview-store.ts`、staged 0；`.artifacts/qa/` 和 `.artifacts/releases/` 原样保留。R2/Workflow 修复已部分写入 Edge，Web `PublicApiClient` 仍停留在 IndexedDB v1、60 秒 planning polling 和 `public-browser-v1`。
+- 下一步：完成浏览器本地 preview store 与最终结果 hydration，迁移残留 `previewDataUrl` Workflow 测试，补 R2 store 单元合同，然后运行 Web/Edge 定向测试与四端 typecheck。
+- `PublicApiClient` 已升级 IndexedDB v2，按 Run 暂存截图、终态按 `candidateId` 回填结果并清理，上传失败/取消同步清理；planning polling 提升到 1200 次，备份 schema revision 更新为 `public-browser-v2`。Web 7 项定向测试与 typecheck 通过。
+- 首次 Web 并行检查发现慢规划测试的 `setTimeout` spy 返回裸数字，与 Node `Timeout` 类型不兼容；改为显式 `ReturnType<typeof window.setTimeout>` 后通过，生产逻辑未改。
+- Edge 新增 R2 store 4 项合同并迁移 Workflow 字段；当前 8 files / 28 tests、lint、typecheck 全绿。Board 新增陌生方向拒绝红灯并最小修复，focused 5 tests 与 typecheck 全绿。
+- 版本面已统一为 2.1.3；扩展 manifest、Chrome action、popup 与 side panel 均明确命名为“ArchResearch Chrome 扩展”。根 `pnpm build`、coverage 与 `scripts/verify.ps1` 全绿：360 API / 188 Board / 187 Extension / 12 Web / 28 Edge / 8 packaged E2E。
+- `verify.ps1` 首次只在发布合同仍写死 2.1.2 处失败；合同升级为 2.1.3 并同时纳入 Web/Edge package 后完整重跑 exit 0。Web lint 另曾发现无效初值，收敛为等价的 Promise catch 后八项静态检查全绿。
+- 已生成 `.artifacts/releases/archresearch-chrome-extension-only-v2.1.3.zip`：22,226 bytes，manifest 位于根、版本 2.1.3、名称明确为 Chrome 扩展，SHA-256 `36920AA1875F62124EE3896CA9C46B468981D480E18D754F9F8F3AD9B9925ED6`。
+- 本机系统 Chrome headless QA 覆盖 1440×1000 与 390×844 的安装提醒、主页、个人收藏和备份页：全部横向溢出 0、弹窗控件不小于 44px、console/page error 0，安装直链指向 2.1.3 extension-only ZIP。两轮检查器超时分别来自错误要求主页存在品牌 h1、错误要求移动端隐藏副标题可见，修正断言后产品无需修改。
+- Cloudflare R2 检查首次在根包找不到 Wrangler，改用 Edge 锁定版本后到达账户并返回 code 10042（R2 未启用）；未创建桶或部署。下一步可先完成 GitHub 显式范围发布，生产 Worker 必须等用户在 Dashboard 启用 R2。

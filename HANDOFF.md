@@ -38,7 +38,8 @@
 - M157 项目主页提交为 `cdb97f0`：README 已改为长期通用的 ArchResearch 项目主页，竞赛要求只作为信息组织参考，不再出现参赛、投稿或评审专属定位；目标用户、痛点、场景价值、架构、人机协同、完成度、截图、安装和演示入口均保留。Hosted CI run `30368067949` 通过 fresh coverage、360/177/165/8 与完整门禁。
 - M162 完整迁移已发布：Web 不再维护简化 UI，而是直接渲染本地 Board；`PublicApiClient` 用 IndexedDB 完成本地 `ApiClient` 合同，Edge 承担 Turnstile、设备/IP 近似配额、CostGuard Durable Object、七阶段 Workflow、Provider Responses API client、公开 HTTPS 页读取和 evidence/coverage/enrichment 双门槛。无 R2 或 Browser Rendering 默认依赖。
 - M163 公共小红书桥接已发布：公共页只可发送 `status` 与 `xiaohongshu_search` 两个严格动作，扩展以用户手势为当前 HTTPS 公共 origin 动态注册 content script，并用用户已登录的小红书页面做有界只读搜索；Cookie、账号和密码不上传。主页缺少扩展时立即提醒，检测到桥后不再弹出。
-- 最新完整验证：根级 `scripts/verify.ps1` exit 0（192.3 秒），通过 360 API / 183 Board / 186 Extension / 11 Web / 18 Edge / 8 packaged E2E，以及 Ruff/format、strict Mypy、lint/typecheck/build、安全检查与 Wrangler dry-run。根级 coverage 同时通过，Extension 为 83.47/78.21/84.88/85.68。本机 1440×1000 和 390×844 Chrome headless QA 覆盖安装提醒与主页，横向溢出 0、产品 console/page error 0；已生成待发布的 `2.1.2` 扩展 ZIP，真正一键安装仍需 Chrome Web Store 审核。
+- M164 将公共小红书桥升级为与本地版等深的两阶段流程：Workflow 先规划最多 6 个视觉方向，扩展每方向最多尝试 4 帖、目标 3 篇 usable、每帖最多 4 图，全任务共享 48 图/48 MiB。截图不进入 1 MiB 上限的 Workflow 事件；Worker 临时写私有 R2、事件只传对象键，模型分析后清理，浏览器 IndexedDB v2 按 `candidateId` 保留本地预览并写入终态结果。该改动尚未部署，Cloudflare 账号需先在 Dashboard 启用 R2。
+- 最新完整验证：M164 本地候选版本 2.1.3 的 `scripts/verify.ps1` exit 0，通过 360 API / 188 Board / 187 Extension / 12 Web / 28 Edge / 8 packaged E2E；coverage 为 Board 78.87/76.23/84.06/83.03、Extension 83.39/78.57/85.29/85.71。系统 Chrome 1440×1000 与 390×844 QA 覆盖安装提醒、主页、个人收藏和备份页，横向溢出及 console/page error 均为 0。扩展专属 ZIP 已生成但尚未发布；R2 未启用，当前未提交、未推送、未部署。
 - 本工作区由多个 agent 会话并发写入（长期约束）：提交前后必须重读 `git status`，另一会话仍在写同名文件时暂停提交。
 
 ## 当前唯一主线
@@ -53,6 +54,7 @@
 8. **M158/M159/M160 当前状态**：Cloudflare 官方审计、双版本范围合同、Edge 有界执行、浏览器本地长期数据、离线测试和既有生产部署均已完成。CostGuard SQLite 保留预留/实际用量记录和停机开关，不按金额拒绝；公开页读取默认采用 Worker `fetch` + `HTMLRewriter`，不使用 R2 或 Browser Rendering。
 9. **M162 已 complete**：公共入口直接复用本地 Board，个人收藏、完整结果工具、任务书、历史、表达规范和备份均已接通。提交 `896945a`、Hosted CI `30433096343`、生产 Worker 版本 `051c4e0c-4e9f-45c8-be0c-99194b16cf7b` 和 `v2.1.1` Release 均已闭合；生产桌面/390px、完整案例对照和静态素材 smoke 通过。网页 URL 继续禁止写入 GitHub。M161 唯一剩余是由真人完成正式 Turnstile 后跑一次 Quick 真实研究，自动化不得绕过。
 10. **M163 已 complete**：公共 Web 与 GitHub 本地版共用主页安装提醒、扩展连接状态和小红书视觉读取协议；严格消息/来源校验、动态 exact-origin 注册、有界搜索、Web/Edge 接入、coverage、全量门禁、打包 E2E、1440/390px QA 与 `2.1.2` ZIP 全部完成。提交 `c74571f` 的 Hosted CI `30438474678` success，生产 Worker 版本 `dc0eb528-a8c3-4ca2-88fa-c6131f866d3c` smoke 全绿，annotated tag 与正式 `v2.1.2` Release 已发布。站外 ZIP 仍需开发者模式加载；真正一键安装是后续 Chrome Web Store 外部审核事项。
+11. **M164 in progress**：网页与本地版的用户可见功能继续共用同一 Board；公共小红书已实现规划后逐方向、逐帖、逐图深读，Cloudflare 事件载荷改为 R2 对象键，IndexedDB 保留最终可显示预览。2.1.3 本地完整门禁、coverage、打包 E2E 与桌面/移动 QA 全绿。当前唯一外部阻塞是 Cloudflare 账号 R2 未启用（code 10042）；启用后创建桶和生命周期规则，再完成 GitHub/Hosted CI/Release、Worker 部署和线上 smoke。
 
 ## 工作区保护
 
@@ -61,4 +63,4 @@
 
 ## 给新对话的第一句话
 
-> 继续 ArchResearch。先完整读取 HANDOFF.md，再读取 AGENTS.md；随后按 HANDOFF 顺序恢复 task_plan.md、findings.md、progress.md，并运行 `git status --short --branch`。不要重做已完成工作，不要恢复 Firecrawl，也不要调用会导致桌面应用闪退的内部浏览器。M163 公共小红书桥接、主页安装提醒、生产部署、Hosted CI 和 GitHub `v2.1.2` Release 均已完成；当前没有代码发布动作。外部待办只有真人完成正式 Turnstile 后执行一次 Quick 真实研究，以及未来提交 Chrome Web Store 以获得真正一键安装。生产 Web URL 不得进入仓库或 Release。保留所有修改和未跟踪文件，不得 reset、checkout、clean 或 `git add -A`。
+> 继续 ArchResearch。先完整读取 HANDOFF.md，再读取 AGENTS.md；随后按 HANDOFF 顺序恢复 task_plan.md、findings.md、progress.md，并运行 `git status --short --branch`。不要重做已完成工作，不要恢复 Firecrawl，也不要调用会导致桌面应用闪退的内部浏览器。M164 的 2.1.3 本地候选已完成网页/本地用户可见等价、小红书逐帖逐图深读、R2 对象键事件、IndexedDB 本地预览、完整门禁和桌面/移动 QA；当前尚未提交或部署。唯一下一步是用户先在 Cloudflare Dashboard 启用 R2，然后创建 `archresearch-visual-previews` 与生命周期规则，完成 GitHub/Hosted CI/Release、部署和 smoke。生产 Web URL 不得进入仓库或 Release。保留所有修改和未跟踪文件，不得 reset、checkout、clean 或 `git add -A`。

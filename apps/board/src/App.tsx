@@ -170,7 +170,7 @@ export default function App({
   edition = 'local',
   verificationControl,
   verificationReady = true,
-  extensionInstallUrl = 'https://github.com/jileyu2000/archresearch/releases/latest',
+  extensionInstallUrl = 'https://github.com/jileyu2000/archresearch/releases/download/v2.1.3/archresearch-chrome-extension-only-v2.1.3.zip',
 }: AppProps) {
   const publicEdition = edition === 'public'
   const demoDepth = useMemo(() => demoDepthFromSearch(window.location.search), [])
@@ -1023,13 +1023,7 @@ export default function App({
   const isVisualResearch = activeRun?.goal === 'visual_reference_search'
   const currentStageLabels = isVisualResearch ? visualStageLabels : stageLabels
   const currentStageDescriptions = isVisualResearch
-    ? publicEdition
-      ? {
-          ...visualActiveStageDescriptions,
-          inspecting: '正在读取公开来源页面并判断图纸类型与风格',
-          verifying: '正在核对原始来源和可见图像内容',
-        }
-      : visualActiveStageDescriptions
+    ? visualActiveStageDescriptions
     : activeStageDescriptions
   const researchSubquestions = demoMode
     ? (demoProfile?.subquestions ?? [])
@@ -1044,12 +1038,8 @@ export default function App({
         if (!legacyQuestionShape) return subquestion
         return {
           ...subquestion,
-          question: publicEdition
-            ? `方向 ${index + 1}：${subquestion.question.trim().replace(/[?？]+$/, '')}`
-            : `旧版灵感分组 ${index + 1}`,
-          rationale: publicEdition
-            ? subquestion.rationale
-            : '这条历史任务按旧规则生成；重新查找会围绕你指定的图纸类型比较不同风格。',
+          question: `旧版灵感分组 ${index + 1}`,
+          rationale: '这条历史任务按旧规则生成；重新查找会围绕你指定的图纸类型比较不同风格。',
         }
       })
     : researchSubquestions
@@ -1235,9 +1225,7 @@ export default function App({
           <span className="brand-mark" aria-hidden="true"><LayoutGrid /></span>
           <div><strong>ArchResearch</strong><span>{demoMode
             ? `演示数据 · ${modeLabels[mode]}`
-            : publicEdition
-              ? '公共研究工具'
-              : '本地研究工具'}</span></div>
+            : '建筑研究工具'}</span></div>
         </div>
         <div className="header-actions">
           {homeViewOpen && !demoMode && (
@@ -1504,11 +1492,7 @@ export default function App({
               <span>{demoMode ? `${modeLabels[mode]}演示` : '本次研究任务'}</span>
               <h1>{researchQuestion}</h1>
               {isVisualResearch && (
-                <p>
-                  {publicEdition
-                    ? '这次只比较图纸的画面表达，并保留每张图的原始来源。'
-                    : '这次只比较图纸的画面表达，并保留每张图的原笔记来源。'}
-                </p>
+                <p>这次只比较图纸的画面表达，并保留每张图的原笔记来源。</p>
               )}
               {demoMode && (
                 <div className="demo-depth-contract" role="group" aria-label={`${modeLabels[mode]}说明`}>
@@ -1641,7 +1625,6 @@ export default function App({
 
             {visualInspirationResults.length > 0 && (
               <VisualInspirationBoard
-                sourceName={publicEdition ? '公开来源' : '小红书'}
                 isVisualResearch={isVisualResearch}
                 postCount={visualInspirationNoteCount}
                 inspirationResults={visualInspirationResults}

@@ -62,6 +62,16 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | M161 public deployment and dual-edition release | in_progress | `archresearch-web` 已用当前非 mock 源码重新部署为版本 `c17dc24c-28ce-44c3-9c0f-b52a9f4fd95e`；主页/API/安全头、生产 Turnstile、缺 token 拒绝及桌面/390px loaded QA 已通过。Web Edition 源码、Chrome-only README 边界和 fresh build 顺序修复已推送 `main`，Hosted CI `30424872745` 全绿。剩余是由真人完成 Turnstile 后执行一次 Quick 真实研究验收，再决定新版本 tag/Release；URL 只私下交付，不进入 GitHub README、Release、About 或仓库文档。 |
 | M162 Web Edition full local-product transfer | complete | 公共入口直接复用本地 Board 的同一套 React 页面、样式、导航和结果工作台，只通过 `PublicApiClient` 替换持久化与云端执行；工作区、两类研究、PDF/URL、进度/诊断、完整结果、收藏、对照/导出/分享、表达规范、保留期和 JSON 备份矩阵全部闭合。提交 `896945a` 已推送 `main`，Hosted CI `30433096343` 全绿；生产 Worker 版本 `051c4e0c-4e9f-45c8-be0c-99194b16cf7b` 的桌面/390px smoke、完整结果对照与静态素材均通过，正式 `v2.1.1` Release 已发布。 |
 | M163 public Web Xiaohongshu bridge | complete | 严格协议、动态公共页连接、扩展内有界小红书搜索、Web/Edge 输入与主页面安装提醒均已发布；根级 coverage 与完整门禁通过 360 API / 183 Board / 186 Extension / 11 Web / 18 Edge / 8 packaged E2E。提交 `c74571f` 的 Hosted CI `30438474678` success；生产 Worker 版本 `dc0eb528-a8c3-4ca2-88fa-c6131f866d3c` 的主页/API/安全头/Turnstile/1440/390 smoke 全绿；annotated `v2.1.2` tag、正式 Release 与扩展 ZIP 已发布。 |
+| M164 Web/local user-visible parity and extension-only release naming | in_progress | 用户可见功能、同源界面、多方向逐帖逐图、共享 48 图/48 MiB、R2 对象键事件、IndexedDB 本地预览、扩展专属命名与 2.1.3 本地完整门禁均已闭合。当前唯一部署阻塞是 Cloudflare 账号尚未启用 R2（API code 10042）；启用后需创建 `archresearch-visual-previews`、设置临时对象生命周期、完成 GitHub/Hosted CI/Release、部署和线上 smoke。 |
+
+### M164 验收合同
+
+1. 功能矩阵 → 验证：逐项对照所有 `publicEdition` 分支、完整 `ApiClient` 操作、两类研究入口、历史/收藏/结果/对照/导出/表达规范/保留期/备份；每项要么行为等价，要么仅记录不可避免且不降低用户能力的基础设施差异。
+2. 小红书研究深度 → 验证：网页端先形成多个视觉方向，再按方向搜索并逐帖检查；每方向最多尝试 4 帖、目标 3 篇 usable，每帖最多 4 图，全任务共享 48 个图像槽位与 48 MiB 上限，部分结果和每阶段检查点可保留。
+3. 浏览器安全 → 验证：桥接协议继续严格枚举，不接受脚本、任意 selector、凭据、社交动作或通用表单；Cookie、账号和小红书登录态始终留在用户 Chrome。
+4. 扩展专属命名 → 验证：Release 标题、正文、手工附件名与网页安装动作均明确这是 Chrome 扩展组件；网页安装按钮直达扩展附件，不能把 GitHub 自动 Source code ZIP/TAR 描述成安装包；Release 正文不提及或链接私有网页。
+5. 红绿与回归 → 验证：生产代码前先写失败行为测试；完成后通过 Extension/Board/Web/Edge 定向测试、coverage、`scripts/verify.ps1`、打包 MV3 E2E、桌面/移动 Playwright QA、敏感 URL 扫描、Hosted CI、生产部署与线上 smoke。
+6. 版本发布 → 验证：不移动或重写已发布的 `v2.1.2` tag；完整等价改动使用新版本，显式 stage/commit/push，Release 只附版本化的 extension-only ZIP。
 
 ## External acceptance gates
 

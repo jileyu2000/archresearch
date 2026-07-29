@@ -4,6 +4,7 @@ import { apiClient } from '../api/client'
 import {
   BrowserBridgeError,
   requestBrowserBridge,
+  requestPublicBrowserBridgeStatus,
   resolveBrowserEndpoint,
   type BrowserBridgeStatus,
 } from '../browserBridge'
@@ -52,7 +53,7 @@ export function useBrowserReadiness({
     readinessRequestRef.current = requestId
     if (publicEdition) {
       try {
-        const status = await requestBrowserBridge({ type: 'status' })
+        const status = await requestPublicBrowserBridgeStatus()
         if (readinessRequestRef.current !== requestId || !shouldApply()) return
         setBrowserReadinessError('')
         setPreflightBridgeStatus(status)
@@ -128,7 +129,7 @@ export function useBrowserReadiness({
     setBrowserPairingStatus('正在检查当前页面的 Chrome 扩展…')
     if (publicEdition) {
       try {
-        const status = await requestBrowserBridge({ type: 'status' })
+        const status = await requestPublicBrowserBridgeStatus()
         if (readinessRequestRef.current !== requestId) return
         setPreflightBridgeStatus(status)
         setBrowserConnected(status.connection === 'connected')
@@ -236,7 +237,7 @@ export function useBrowserReadiness({
     if (publicEdition) {
       if (!requireConnected) return true
       try {
-        const status = await requestBrowserBridge({ type: 'status' })
+        const status = await requestPublicBrowserBridgeStatus()
         setPreflightBridgeStatus(status)
         setBrowserConnected(status.connection === 'connected')
         if (status.connection === 'connected' && status.researchPermission) return true
