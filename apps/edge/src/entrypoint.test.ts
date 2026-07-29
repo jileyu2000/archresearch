@@ -10,8 +10,17 @@ function researchRequest(turnstileToken = 'valid-token') {
       'cf-connecting-ip': '203.0.113.8',
     },
     body: JSON.stringify({
+      workspaceId: 'workspace-studio',
       question: '社区图书馆如何用剖面组织安静与开放空间？',
+      goal: 'precedent_research',
       mode: 'balanced',
+      referenceUrl: 'https://www.archdaily.com/reference-project',
+      researchSources: [],
+      subquestions: [{
+        id: 'section',
+        question: '剖面如何组织开放与安静空间？',
+        rationale: '核对高差与距离',
+      }],
       clientSessionId: 'device-session-1',
       turnstileToken,
     }),
@@ -85,8 +94,17 @@ describe('public research entrypoint', () => {
       id: 'run-accepted',
       params: {
         runId: 'run-accepted',
+        workspaceId: 'workspace-studio',
         question: '社区图书馆如何用剖面组织安静与开放空间？',
+        goal: 'precedent_research',
         mode: 'balanced',
+        referenceUrl: 'https://www.archdaily.com/reference-project',
+        researchSources: [],
+        subquestions: [{
+          id: 'section',
+          question: '剖面如何组织开放与安静空间？',
+          rationale: '核对高差与距离',
+        }],
         clientSessionId: 'device-session-1',
       },
     })

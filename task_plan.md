@@ -60,6 +60,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | M159 browser-local history and public research UX | complete | 公开页第一屏、三档研究、开始/轮询/取消、结果与最近记录均完成；IndexedDB 记录、版本化备份、OPFS 附件 adapter 及其离线测试完成。桌面与 390px loaded QA 无横向溢出；清站点数据、无痕模式和换设备丢失边界已在界面明确。 |
 | M160 edge research orchestration and bounded execution | complete | typed 七阶段 plan/execute/verify/synthesize、短期 Workflow 状态、取消/恢复、逐字引文核验、coverage + enrichment 双门槛、Turnstile、入口配额、有界查询/页面/Token/时间与 kill switch 已完成。用户取消每日/单次美元金额拒绝后，CostGuard SQLite 只记录预留与实际用量；Edge 7 files / 16 tests 及根级完整门禁全绿。实际部署核验归 M161。 |
 | M161 public deployment and dual-edition release | in_progress | `archresearch-web` 已用当前非 mock 源码重新部署为版本 `c17dc24c-28ce-44c3-9c0f-b52a9f4fd95e`；主页/API/安全头、生产 Turnstile、缺 token 拒绝及桌面/390px loaded QA 已通过。Web Edition 源码、Chrome-only README 边界和 fresh build 顺序修复已推送 `main`，Hosted CI `30424872745` 全绿。剩余是由真人完成 Turnstile 后执行一次 Quick 真实研究验收，再决定新版本 tag/Release；URL 只私下交付，不进入 GitHub README、Release、About 或仓库文档。 |
+| M162 Web Edition full local-product transfer | in_progress | 公共入口已直接复用本地 Board 的同一套 React 页面、样式、导航和结果工作台，只通过 `PublicApiClient` 替换持久化与云端执行；工作区、两类研究、PDF/URL、进度/诊断、完整结果、收藏、对照/导出/分享、表达规范、保留期和 JSON 备份矩阵均已实现。Board 179 / Web 9 / Edge 16 tests、根级完整门禁和 1440/390px Worker 形态 QA 全绿；剩余是提交、生产重部署与线上 smoke 后发布修订版 Release。 |
 
 ## External acceptance gates
 
@@ -115,6 +116,17 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 5. 测试先行 → 验证：生产代码前先见缺少 Web Edition 边界/模块的红灯；默认测试只使用 mock/fixture，不调用真实模型、Cloudflare 账户或公开网页。
 6. 第一阶段交付 → 验证：Cloudflare 配置、typed contracts、IndexedDB adapter、费用闸门、实际 Worker 路由壳与 mock Workflow 骨架可在离线测试中运行；Web/Edge lint/typecheck/unit/build 与既有本地版定向回归全绿。OPFS、浏览器 QA、根级门禁与安全审查在基础测试闭合后继续执行。
 7. 链接隔离 → 验证：仓库公开内容、构建产物源码映射、Release 与 About 均不包含 Web Edition URL；该地址只出现在私下提交材料。
+
+### M162 验收合同
+
+1. 产品边界 → 验证：`apps/web/PRODUCT.md` 明确 Web Edition 是现有本地产品的公共部署，不是独立设计或简化演示版；本地版的页面、导航、命名和工作流是唯一产品基线，Edition 差异只能来自已验证的基础设施限制。
+2. 个人收藏 → 验证：首页和结果页均可进入独立“个人收藏”页面；页面具有建筑方案/图纸灵感标签、空状态、按原研究问题整理的建筑结果及删除动作。
+3. 收藏持久性 → 验证：终态结果可直接或批量加入收藏；收藏保存标题、事实、来源和原问题快照，不依赖临时 Workflow；IndexedDB 关闭重开及 JSON 导入导出后仍可回看，旧版收藏记录继续可读。
+4. 完整迁移矩阵 → 验证：首页头部与工作区、建筑设计研究/图纸灵感、任务书与案例页、最近研究、进度/重试/覆盖诊断、建筑/视觉结果、对照/导出/分享/表达工具、收藏与备份逐项对齐本地版；不能以“Web Edition”名义删除功能。
+5. 同源界面 → 验证：公共入口直接渲染本地 Board 产品代码与设计系统，不维护第二套近似 UI；Edition 分支只处理公开来源、Turnstile、云端执行和浏览器本地数据。
+6. 长期历史 → 验证：Run、结果、收藏、表达规范、任务书和备份保存在当前浏览器；云端三日检查点消失后，终态研究仍能从浏览器本地重新打开。
+5. 视觉与无障碍 → 验证：沿用根 `DESIGN.md` 的绘图桌/网格、品牌、排版和交互语义；键盘焦点可见，状态不只依赖颜色，390px 无横向溢出并尊重 reduced motion。
+6. 发布门禁 → 验证：Web 定向测试先红后绿，Web lint/typecheck/test/build、Edge 合同回归和根 `scripts/verify.ps1` 全绿；部署后复核主页/API/安全头/Turnstile 与桌面/390px loaded UI。URL 仍只私下交付。
 
 ### M121 试点执行计划（已完成，2026-07-27 模拟验收）
 

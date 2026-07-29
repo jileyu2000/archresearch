@@ -1,4 +1,12 @@
-import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  type FormEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import {
   ArrowLeft,
   Bookmark,
@@ -151,7 +159,18 @@ function browserWasUnavailableForSource(events: TraceEvent[], sourceUrl: string)
   })
 }
 
-export default function App() {
+type AppProps = {
+  edition?: 'local' | 'public'
+  verificationControl?: ReactNode
+  verificationReady?: boolean
+}
+
+export default function App({
+  edition = 'local',
+  verificationControl,
+  verificationReady = true,
+}: AppProps) {
+  const publicEdition = edition === 'public'
   const demoDepth = useMemo(() => demoDepthFromSearch(window.location.search), [])
   const demoMode = demoDepth !== null
   const demoProfile = useMemo(() => (
@@ -208,6 +227,7 @@ export default function App() {
     showBrowserConnectAction,
   } = useBrowserReadiness({
     demoMode,
+    publicEdition,
     onAnnouncement: setAnnouncement,
     onError: setActionError,
   })
@@ -635,9 +655,11 @@ export default function App() {
 
   async function startResearchRun(subquestions?: ResearchSubquestion[]) {
     const researchSources: ResearchSource[] = goal === 'visual_reference_search'
-      ? ['xiaohongshu']
+      ? [publicEdition ? 'public_web' : 'xiaohongshu']
       : []
     if (
+      !publicEdition
+      &&
       goal === 'visual_reference_search'
       && !(await ensureBrowserResearchAccess(true))
     ) return
@@ -736,7 +758,7 @@ export default function App() {
   async function handleRetry() {
     if (!activeRun) return
     setActionError('')
-    if (!(await ensureBrowserResearchAccess(
+    if (!publicEdition && !(await ensureBrowserResearchAccess(
       activeRun.researchSources?.includes('xiaohongshu') ?? false,
     ))) return
     const requestId = currentRunRequest()
@@ -990,7 +1012,13 @@ export default function App() {
   const isVisualResearch = activeRun?.goal === 'visual_reference_search'
   const currentStageLabels = isVisualResearch ? visualStageLabels : stageLabels
   const currentStageDescriptions = isVisualResearch
-    ? visualActiveStageDescriptions
+    ? publicEdition
+      ? {
+          ...visualActiveStageDescriptions,
+          inspecting: '正在读取公开来源页面并判断图纸类型与风格',
+          verifying: '正在核对原始来源和可见图像内容',
+        }
+      : visualActiveStageDescriptions
     : activeStageDescriptions
   const researchSubquestions = demoMode
     ? (demoProfile?.subquestions ?? [])
@@ -1005,24 +1033,36 @@ export default function App() {
         if (!legacyQuestionShape) return subquestion
         return {
           ...subquestion,
-          question: `旧版灵感分组 ${index + 1}`,
-          rationale: '这条历史任务按旧规则生成；重新查找会围绕你指定的图纸类型比较不同风格。',
+          question: publicEdition
+            ? `方向 ${index + 1}：${subquestion.question.trim().replace(/[?？]+$/, '')}`
+            : `旧版灵感分组 ${index + 1}`,
+          rationale: publicEdition
+            ? subquestion.rationale
+            : '这条历史任务按旧规则生成；重新查找会围绕你指定的图纸类型比较不同风格。',
         }
       })
     : researchSubquestions
-  const visualInspirationResults = visibleResults.filter((result) => visualPlatformName(result.sourceUrl))
+  const visualInspirationResults = visibleResults.filter((result) => (
+    result.visualReference || visualPlatformName(result.sourceUrl)
+  ))
   const visualInspirationNoteCount = new Set(
     visualInspirationResults.map((result) => result.sourceUrl),
   ).size
   const caseResults = visibleResults.filter(
-    (result) => !visualPlatformName(result.sourceUrl) && result.analysisReady,
+    (result) => !result.visualReference
+      && !visualPlatformName(result.sourceUrl)
+      && result.analysisReady,
   )
   const subquestionSummaries = displayResearchSubquestions.map((subquestion) => {
     const assets = results.filter(
       (result) => supportsSubquestion(result, subquestion.id, researchSubquestions),
     )
-    const caseAssets = assets.filter((result) => !visualPlatformName(result.sourceUrl))
-    const inspirationAssets = assets.filter((result) => visualPlatformName(result.sourceUrl))
+    const caseAssets = assets.filter((result) => (
+      !result.visualReference && !visualPlatformName(result.sourceUrl)
+    ))
+    const inspirationAssets = assets.filter((result) => (
+      result.visualReference || visualPlatformName(result.sourceUrl)
+    ))
     return {
       ...subquestion,
       caseAssetCount: caseAssets.length,
@@ -1182,7 +1222,11 @@ export default function App() {
       <header className="app-header">
         <div className="app-brand">
           <span className="brand-mark" aria-hidden="true"><LayoutGrid /></span>
-          <div><strong>ArchResearch</strong><span>{demoMode ? `演示数据 · ${modeLabels[mode]}` : '本地研究工具'}</span></div>
+          <div><strong>ArchResearch</strong><span>{demoMode
+            ? `演示数据 · ${modeLabels[mode]}`
+            : publicEdition
+              ? '公共研究工具'
+              : '本地研究工具'}</span></div>
         </div>
         <div className="header-actions">
           {homeViewOpen && !demoMode && (
@@ -1219,6 +1263,7 @@ export default function App() {
       <section className="board-workspace" aria-label="研究工作区">
         <DataManagementPage
           open={dataManagementOpen}
+          publicEdition={publicEdition}
           workspaceCount={workspaces.length}
           runCount={recentRuns.length}
           isRunActive={isRunActive}
@@ -1237,6 +1282,9 @@ export default function App() {
             files={files}
             referenceUrl={referenceUrl}
             demoMode={demoMode}
+            publicEdition={publicEdition}
+            verificationControl={verificationControl}
+            verificationReady={verificationReady}
             activeWorkspaceId={activeWorkspaceId}
             briefReviewLoading={briefReviewLoading}
             researchStarting={researchStarting}
@@ -1297,7 +1345,14 @@ export default function App() {
             <div className="run-status-actions">
               {isRunActive && <button className="research-cancel" type="button" onClick={() => void handleCancel()}>取消研究</button>}
               {activeRun && ['partial', 'blocked', 'failed', 'cancelled'].includes(activeRun.status) && (
-                <button className="research-retry" type="button" onClick={() => void handleRetry()}>{retryActionLabel(activeRun)}</button>
+                <button
+                  className="research-retry"
+                  type="button"
+                  disabled={publicEdition && !verificationReady}
+                  onClick={() => void handleRetry()}
+                >
+                  {retryActionLabel(activeRun)}
+                </button>
               )}
               {isRunActive && <details>
                 <summary>查看研究进度</summary>
@@ -1308,6 +1363,20 @@ export default function App() {
                 </ol>
               </details>}
             </div>
+          </section>
+        )}
+
+        {publicEdition
+          && resultViewOpen
+          && !verificationReady
+          && activeRun
+          && ['partial', 'blocked', 'failed', 'cancelled'].includes(activeRun.status) && (
+          <section className="public-verification public-verification--result" aria-label="重试人机校验">
+            <div>
+              <CircleDashed aria-hidden="true" />
+              <span>继续研究前请重新完成人机校验</span>
+            </div>
+            {verificationControl}
           </section>
         )}
 
@@ -1346,19 +1415,21 @@ export default function App() {
               {browserPairingStatus && <small className="browser-pairing-status" aria-live="polite">{browserPairingStatus}</small>}
             </div>
             <div className="drawing-recovery-actions">
-              {browserConnected !== true && (
+              {!publicEdition && browserConnected !== true && (
                 <button type="button" disabled={browserConnecting} onClick={() => void handleConnectBrowser()}>
                   <MonitorUp aria-hidden="true" />{browserConnecting ? '正在打开 Chrome…' : '在 Chrome 中连接图纸提取扩展'}
                 </button>
               )}
-              <button type="button" onClick={() => void refreshBrowserConnection()}>
+              {!publicEdition && <button type="button" onClick={() => void refreshBrowserConnection()}>
                 <RefreshCw aria-hidden="true" />检查连接
-              </button>
+              </button>}
               <button
                 className="button-primary"
                 type="button"
-                disabled={browserConnected !== true || rerunStarting}
-                onClick={() => void handleRerunWithBrowser()}
+                disabled={(publicEdition && !verificationReady)
+                  || (!publicEdition && browserConnected !== true)
+                  || rerunStarting}
+                onClick={() => void (publicEdition ? handleRetry() : handleRerunWithBrowser())}
               >
                 {rerunStarting ? '正在重新研究…' : '重新研究'}
               </button>
@@ -1417,7 +1488,13 @@ export default function App() {
             <header className="result-task-heading">
               <span>{demoMode ? `${modeLabels[mode]}演示` : '本次研究任务'}</span>
               <h1>{researchQuestion}</h1>
-              {isVisualResearch && <p>这次只比较图纸的画面表达，并保留每张图的原笔记来源。</p>}
+              {isVisualResearch && (
+                <p>
+                  {publicEdition
+                    ? '这次只比较图纸的画面表达，并保留每张图的原始来源。'
+                    : '这次只比较图纸的画面表达，并保留每张图的原笔记来源。'}
+                </p>
+              )}
               {demoMode && (
                 <div className="demo-depth-contract" role="group" aria-label={`${modeLabels[mode]}说明`}>
                   <strong>{modeLabels[mode]}</strong>
@@ -1549,6 +1626,7 @@ export default function App() {
 
             {visualInspirationResults.length > 0 && (
               <VisualInspirationBoard
+                sourceName={publicEdition ? '公开来源' : '小红书'}
                 isVisualResearch={isVisualResearch}
                 postCount={visualInspirationNoteCount}
                 inspirationResults={visualInspirationResults}

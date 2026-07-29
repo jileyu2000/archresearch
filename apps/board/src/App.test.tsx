@@ -634,14 +634,14 @@ function createTerminalSubmitHydrationRaceFetch() {
   return { fetchMock, releaseHydration, hydrationGate }
 }
 
-function renderBoard(search = '') {
+function renderBoard(search = '', edition: 'local' | 'public' = 'local') {
   window.history.replaceState({}, '', `/${search}`)
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
   return render(
     <QueryClientProvider client={queryClient}>
-      <App />
+      <App edition={edition} />
     </QueryClientProvider>,
   )
 }
@@ -992,6 +992,27 @@ describe('research board', () => {
     expect(screen.queryByText('这里只检查 Chrome 连接与网页读取权限，不会开始研究。')).not.toBeInTheDocument()
     expect(screen.queryByRole('group', { name: '研究目标' })).not.toBeInTheDocument()
     expect(screen.queryByText('Kamala Narayana Temple Survey')).not.toBeInTheDocument()
+  })
+
+  it('keeps the same product surface in the public edition without asking for a local extension', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', createLiveFetch({
+      browserConnected: false,
+      xiaohongshuSearchAvailable: false,
+    }))
+    renderBoard('', 'public')
+
+    expect(await screen.findByText('公共研究工具')).toBeVisible()
+    await user.click(screen.getByRole('button', {
+      name: /图纸灵感.*配色、线型、版式与分析图/,
+    }))
+
+    expect(screen.getByRole('region', { name: '研究环境' })).toHaveTextContent(
+      '公开图纸来源检索已就绪',
+    )
+    expect(screen.queryByRole('button', {
+      name: /连接 Chrome 读取高清图纸/,
+    })).not.toBeInTheDocument()
   })
 
   it('uses the idempotent default-workspace initializer on a fresh install', async () => {

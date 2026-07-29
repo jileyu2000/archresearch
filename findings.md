@@ -587,3 +587,23 @@
 - GitHub 首次 Web Edition 提交 `d684c87` 的 Hosted CI run `30423739118` 通过 setup、Chromium、coverage、360 API、177 Board、165 Extension、Web 7 与 Edge 16 tests，最终只在并行 root build 失败：fresh runner 尚无 `apps/web/dist` 时，Edge Wrangler 与 Web build 同时启动并先读取静态目录。本地残留 dist 曾掩盖该竞态。
 - 根级 build 已改为 Web → Board → Extension → Edge 的明确顺序，并新增发布合同守卫该依赖。移开现有 Web dist 后的 fresh root build 与完整 199.6 秒本地门禁均通过；产品 bundle 和 Cloudflare 部署不需要改变。
 - 修复提交 `5a068f3` 的 Hosted CI run `30424872745` 在 fresh Windows runner 12m6s 全绿，setup、Chromium、coverage 与完整 repository gate 全部成功；公开网页源码与 Chrome-only README 边界至此已在 GitHub `main` 获得远端证明。
+
+## 2026-07-29 Web Edition parity diagnosis
+
+- 用户对已部署页面的直接验收确认：当前 Web 首页与本地版信息架构不一致，且没有个人收藏入口或可用收藏流程；此前“公开网页完整发布”的表述不准确。
+- `apps/web/src/lib/history.ts` 已创建 IndexedDB `collections` object store，并把 collections 放入 JSON 备份，但 `App.tsx` 的 `HistoryPort` 没有暴露 `listCollections`、`saveCollection` 或删除能力，任何界面都不可能使用这份存储。
+- 当前 `BrowserCollectionRecord` 仅有 run/result 引用、原问题和保存时间，没有标题、证据事实或来源快照；即使手工写入，也无法在 Run/临时状态之外独立回看。
+- 本地版合同和实现已经明确：个人收藏是独立整页、首页入口、建筑方案/图纸灵感标签、按原问题和研究方向组织，并支持结果直接与批量收藏；Web Edition 的浏览器本地存储足以实现这部分，不属于 Cloudflare 或 Chrome 能力限制。
+
+## 2026-07-29 M162 同源迁移结论
+
+- “把本地版转移到公共发布”不能通过继续补齐另一套 Web UI 达成；两套 JSX/CSS 即使短期看起来相似，也会再次出现导航、收藏和结果工具漂移。M162 因此改为公共入口直接渲染 `apps/board/src/App.tsx` 与同一份 `styles.css`，Web 只提供 Edition props、Turnstile 和 `ApiClient` adapter。
+- Cloudflare 只保留有界执行和三日阶段检查点；工作区、终态 Run、结果、Board 选择、收藏、用户状态、表达规范、任务书和备份均在当前浏览器 IndexedDB。公共客户端对终态 Run 优先读取本地记录，并在云端 404 时回退本地，避免短期检查点过期破坏长期历史。
+- 公共版唯一可见差异是诚实的能力边界：公开 HTTPS 来源替代本地小红书/Chrome 扩展，任务书上限 4 MB，研究启动需要 Turnstile；公共界面不得出现“小红书”“原笔记”“旧版灵感分组”等本地专属或迁移痕迹。
+- Web Vite 的 public directory 直接复用 Board 静态素材，因此网格背景和完整演示图不再靠手工复制；生产 dry-run 实际读取 20 个静态文件。
+- `impeccable` 上下文检查发现 `apps/web` 缺少自己的 `PRODUCT.md`。现已以本地 `apps/board/PRODUCT.md`、根 `DESIGN.md` 和用户“应完整对齐本地版”的验收意见为事实来源补齐 Web 产品合同，明确其不是简化表单或 lite 版。
+- 图纸灵感的本地高质量链路依赖用户已登录的 Chrome/小红书和扩展；Web 可在同一入口明确说明不可用边界，但不能用这一差异解释个人收藏、备份、历史或结果工具的缺失。
+- 首轮实现把本地版的蓝色研究任务台、稳定品牌头、独立备份页和独立收藏页迁入 Web；图纸灵感入口仍可发现，但明确标记为本地 Chrome 版专属，没有在公开版伪造登录态读取。
+- 收藏现在保存 `kind/title/facts` 快照并按原问题分组；直接收藏、批量选择、删除和备份恢复共用同一 IndexedDB 记录。`listCollections()` 会在读取时补齐第一版无快照记录为“历史收藏”，避免既有浏览器数据升级后崩溃。
+- Playwright 使用本机 Chrome headless 直接检查本地 Vite 页面，未调用会闪退的应用内浏览器。1440px 首页/收藏/结果与 390px 首页/收藏均无横向溢出，结果导航会回到页面顶部；console/page error 为 0，390px 未发现宽高都小于 44px 的按钮。
+- 用户把迁移标准收紧为“本地产品整体转移到公共发布”。本地 `App.tsx` 当前还包含工作区、任务书/案例页预审、建筑/图纸灵感双目标、保留期限、进度与覆盖诊断、案例分析/视觉结果、对照、表达规范、私有/分享导出、来源检查等 Web 尚未具备的路径；首片收藏修复不能视为最终发布候选。

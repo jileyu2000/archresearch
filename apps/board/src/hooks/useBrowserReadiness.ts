@@ -10,6 +10,7 @@ import {
 
 type UseBrowserReadinessOptions = {
   demoMode: boolean
+  publicEdition?: boolean
   onAnnouncement: (message: string) => void
   onError: (message: string) => void
 }
@@ -22,10 +23,13 @@ function apiMessage(error: unknown) {
 
 export function useBrowserReadiness({
   demoMode,
+  publicEdition = false,
   onAnnouncement,
   onError,
 }: UseBrowserReadinessOptions) {
-  const [browserConnected, setBrowserConnected] = useState<boolean | null>(null)
+  const [browserConnected, setBrowserConnected] = useState<boolean | null>(
+    publicEdition ? true : null,
+  )
   const [xiaohongshuSearchAvailable, setXiaohongshuSearchAvailable] = useState(false)
   const [browserReadinessLoading, setBrowserReadinessLoading] = useState(!demoMode)
   const [browserReadinessError, setBrowserReadinessError] = useState('')
@@ -43,7 +47,7 @@ export function useBrowserReadiness({
   const loadBrowserReadiness = useCallback(async (
     shouldApply: () => boolean = () => true,
   ) => {
-    if (demoMode) return
+    if (demoMode || publicEdition) return
     const requestId = readinessRequestRef.current + 1
     readinessRequestRef.current = requestId
     const [apiResult, bridgeResult] = await Promise.allSettled([
@@ -64,14 +68,14 @@ export function useBrowserReadiness({
       bridgeResult.status === 'fulfilled' ? bridgeResult.value : null,
     )
     setBrowserReadinessLoading(false)
-  }, [demoMode])
+  }, [demoMode, publicEdition])
 
   const refreshBrowserReadiness = useCallback(async () => {
-    if (demoMode) return
+    if (demoMode || publicEdition) return
     setBrowserReadinessLoading(true)
     setBrowserReadinessError('')
     await loadBrowserReadiness()
-  }, [demoMode, loadBrowserReadiness])
+  }, [demoMode, loadBrowserReadiness, publicEdition])
 
   useEffect(() => {
     let active = true
@@ -191,6 +195,7 @@ export function useBrowserReadiness({
   ])
 
   const ensureBrowserResearchAccess = useCallback(async (requireConnected = false) => {
+    if (publicEdition) return true
     if (requireConnected && xiaohongshuSearchAvailable) {
       setBrowserPairingStatus('')
       return true
@@ -229,7 +234,7 @@ export function useBrowserReadiness({
     }
     onError('Chrome 首次使用需要你确认网页读取权限。连接会自动完成，无需输入任何代码；请点击浏览器工具栏的 ArchResearch，选择“允许网页读取”，再回来开始研究。授权后不会每次重复询问。')
     return false
-  }, [browserConnected, onError, xiaohongshuSearchAvailable])
+  }, [browserConnected, onError, publicEdition, xiaohongshuSearchAvailable])
 
   const browserBridgeAvailable = preflightBridgeStatus?.connection === 'connected'
     || (preflightBridgeStatus?.paired === true && preflightBridgeStatus.connection === 'connecting')
@@ -246,15 +251,21 @@ export function useBrowserReadiness({
             : preflightBridgeStatus.researchPermission
               ? 'ready'
               : 'permission'
-  const researchEnvironmentReady = xiaohongshuSearchAvailable || browserReadinessState === 'ready'
-  const researchEnvironmentTitle = browserReadinessState === 'loading'
+  const researchEnvironmentReady = publicEdition
+    || xiaohongshuSearchAvailable
+    || browserReadinessState === 'ready'
+  const researchEnvironmentTitle = publicEdition
+    ? '公开图纸来源检索已就绪'
+    : browserReadinessState === 'loading'
     ? '正在检查研究环境'
     : researchEnvironmentReady
       ? '研究环境已就绪'
       : browserReadinessState === 'unknown'
         ? '研究环境状态未知'
         : '研究环境待连接'
-  const researchEnvironmentDetail = xiaohongshuSearchAvailable
+  const researchEnvironmentDetail = publicEdition
+    ? '通过公开建筑与设计来源查找图纸，不读取你的登录状态'
+    : xiaohongshuSearchAvailable
     ? browserReadinessState === 'ready'
       ? '小红书负责查找灵感 · Chrome 可读取当前页面高清图'
       : browserReadinessState === 'permission'
@@ -271,7 +282,8 @@ export function useBrowserReadiness({
     permission: 'Chrome 读取当前页面需授权：点击浏览器工具栏的 ArchResearch，选择“允许网页读取”，再点“刷新”',
     ready: 'Chrome 可读取当前页面高清图 · 登录小红书后可搜索笔记',
   }[browserReadinessState]
-  const showBrowserConnectAction = !browserReadinessLoading
+  const showBrowserConnectAction = !publicEdition
+    && !browserReadinessLoading
     && (browserConnected !== true || !browserBridgeAvailable)
 
   return {

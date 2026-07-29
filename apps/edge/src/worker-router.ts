@@ -16,7 +16,7 @@ export function withSecurityHeaders(response: Response) {
       "script-src 'self' https://challenges.cloudflare.com",
       "frame-src https://challenges.cloudflare.com",
       "connect-src 'self' https://challenges.cloudflare.com",
-      "img-src 'self' data:",
+      "img-src 'self' data: https:",
       "style-src 'self' 'unsafe-inline'",
       "base-uri 'none'",
       "form-action 'self'",

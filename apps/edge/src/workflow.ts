@@ -1,4 +1,6 @@
 export type ResearchMode = 'quick' | 'balanced' | 'deep'
+export type ResearchGoal = 'precedent_research' | 'visual_reference_search'
+export type ResearchSource = 'public_web'
 export type WorkflowStage =
   | 'planning'
   | 'searching'
@@ -10,8 +12,17 @@ export type WorkflowStage =
 
 export interface ResearchWorkflowInput {
   runId: string
+  workspaceId: string
   question: string
+  goal: ResearchGoal
   mode: ResearchMode
+  referenceUrl?: string
+  researchSources: ResearchSource[]
+  subquestions?: Array<PlannedSubquestion & { rationale: string }>
+  briefFile?: {
+    filename: string
+    dataUrl: string
+  }
   clientSessionId: string
 }
 
@@ -29,6 +40,7 @@ export interface SearchCandidate {
 
 export interface InspectedSource extends SearchCandidate {
   text: string
+  imageUrl?: string | null
 }
 
 export interface EvidenceFinding {
@@ -47,7 +59,10 @@ export interface CoverageReport {
 export interface ResearchSection {
   id: string
   title: string
-  facts: Array<Pick<EvidenceFinding, 'statement' | 'sourceUrl' | 'quote'>>
+  facts: Array<Pick<EvidenceFinding, 'statement' | 'sourceUrl' | 'quote'> & {
+    sourceTitle?: string
+    imageUrl?: string | null
+  }>
 }
 
 export interface ComposedResearch {
@@ -119,13 +134,27 @@ export async function runResearchWorkflow(
   checkpoints: CheckpointStore,
   stageRunner: WorkflowStageRunner = immediateStageRunner,
 ) {
-  const plan = await stageRunner.do('planning', async () => await services.plan(input))
-  await checkpoints.save('planning', { subquestionCount: plan.length })
+  const plan = await stageRunner.do('planning', async () => (
+    input.subquestions?.length && !input.briefFile
+      ? input.subquestions.map(({ id, question }) => ({ id, question, searchQuery: question }))
+      : await services.plan(input)
+  ))
+  await checkpoints.save('planning', {
+    subquestionCount: plan.length,
+    subquestions: plan,
+  })
 
-  const candidates = await stageRunner.do(
+  const searchedCandidates = await stageRunner.do(
     'searching',
     async () => await services.search(input, plan),
   )
+  const candidates = input.referenceUrl
+    ? [{
+        url: input.referenceUrl,
+        title: '用户指定案例页',
+        subquestionId: plan[0]?.id,
+      }, ...searchedCandidates]
+    : searchedCandidates
   await checkpoints.save('searching', { candidateCount: candidates.length })
 
   const sources = await stageRunner.do(
@@ -144,7 +173,10 @@ export async function runResearchWorkflow(
     'verifying',
     async () => await services.verify(analyzed, sources),
   )
-  await checkpoints.save('verifying', { verifiedFindingCount: verified.length })
+  await checkpoints.save('verifying', {
+    verifiedFindingCount: verified.length,
+    findings: verified,
+  })
 
   const coverage = await stageRunner.do(
     'gap_check',
@@ -154,26 +186,53 @@ export async function runResearchWorkflow(
     coverageSatisfied: coverage.coverageSatisfied,
     enrichmentSatisfied: coverage.enrichmentSatisfied,
     gapCount: coverage.gaps.length,
+    coverage,
   })
 
   const composed = await stageRunner.do(
     'composing',
     async () => await services.compose(input, plan, verified, coverage),
   )
-  const evidenceBound = composed.sections.every(hasBoundEvidence)
+  const sourceByUrl = new Map(sources.map((source) => [source.url, source]))
+  const enriched = {
+    ...composed,
+    sections: composed.sections.map((section) => ({
+      ...section,
+      rationale: input.subquestions?.find(({ id }) => id === section.id)?.rationale,
+      facts: section.facts.map((fact) => {
+        const source = sourceByUrl.get(fact.sourceUrl)
+        return {
+          ...fact,
+          sourceTitle: source?.title,
+          imageUrl: source?.imageUrl ?? null,
+        }
+      }),
+    })),
+  }
+  const evidenceBound = enriched.sections.every(hasBoundEvidence)
   const completed = coverage.coverageSatisfied
     && coverage.enrichmentSatisfied
     && evidenceBound
   await checkpoints.save('composing', {
-    sectionCount: composed.sections.length,
+    sectionCount: enriched.sections.length,
     evidenceBound,
+    composed: enriched,
   })
 
   return {
     runId: input.runId,
+    workspaceId: input.workspaceId,
+    question: input.question,
+    goal: input.goal,
+    mode: input.mode,
+    subquestions: plan.map((subquestion) => ({
+      ...subquestion,
+      rationale: input.subquestions?.find(({ id }) => id === subquestion.id)?.rationale
+        ?? '根据公开来源核对这一研究方向。',
+    })),
     status: completed ? 'completed' as const : 'partial' as const,
-    summary: composed.summary,
-    sections: composed.sections,
+    summary: enriched.summary,
+    sections: enriched.sections,
     coverage: {
       ...coverage,
       gaps: evidenceBound

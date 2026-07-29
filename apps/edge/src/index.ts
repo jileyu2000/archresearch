@@ -34,7 +34,12 @@ function sanitizeWorkflowOutput(value: unknown): ResearchRunSnapshot | null {
   const output = value as Record<string, unknown>
   if (
     typeof output.runId !== 'string'
+    || typeof output.workspaceId !== 'string'
+    || typeof output.question !== 'string'
+    || (output.goal !== 'precedent_research' && output.goal !== 'visual_reference_search')
+    || (output.mode !== 'quick' && output.mode !== 'balanced' && output.mode !== 'deep')
     || (output.status !== 'completed' && output.status !== 'partial')
+    || !Array.isArray(output.subquestions)
     || typeof output.summary !== 'string'
     || !Array.isArray(output.sections)
     || typeof output.coverage !== 'object'
@@ -44,7 +49,12 @@ function sanitizeWorkflowOutput(value: unknown): ResearchRunSnapshot | null {
   }
   return {
     runId: output.runId,
+    workspaceId: output.workspaceId,
+    question: output.question,
+    goal: output.goal,
+    mode: output.mode,
     status: output.status,
+    subquestions: output.subquestions as ResearchRunSnapshot['subquestions'],
     summary: output.summary,
     sections: output.sections as ResearchRunSnapshot['sections'],
     coverage: output.coverage as ResearchRunSnapshot['coverage'],
@@ -92,11 +102,23 @@ async function handleApi(request: Request, environment: CloudflareEnvironment) {
         const output = sanitizeWorkflowOutput(status.output)
         return output ? json(output) : json({ runId, status: 'failed' })
       }
-      if (status.status === 'errored') return json({ runId, status: 'failed' })
+      const checkpoint = await new DurableCostGateClient(
+        environment.COST_GUARD,
+      ).getCheckpoint(runId)
+      if (status.status === 'errored') {
+        return json({
+          runId,
+          status: 'failed',
+          checkpointStage: checkpoint?.stage ?? null,
+        })
+      }
       if (status.status === 'terminated') return json({ runId, status: 'cancelled' })
       return json({
         runId,
-        status: status.status === 'queued' ? 'created' : 'searching',
+        status: status.status === 'queued'
+          ? 'created'
+          : checkpoint?.stage ?? 'planning',
+        checkpointStage: checkpoint?.stage ?? null,
       })
     } catch {
       return json({ error: 'run_not_found' }, 404)

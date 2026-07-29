@@ -25,8 +25,11 @@ describe('Worker API route shell', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
+        workspaceId: 'workspace-studio',
         question: '社区图书馆如何用剖面组织安静与开放空间？',
+        goal: 'precedent_research',
         mode: 'balanced',
+        researchSources: [],
         clientSessionId: 'route-shell-device-1',
         turnstileToken: 'valid-token',
       }),
@@ -34,6 +37,9 @@ describe('Worker API route shell', () => {
 
     expect(response.status).toBe(429)
     expect(await response.json()).toEqual({ error: 'service_paused' })
+    expect(response.headers.get('content-security-policy')).toContain(
+      "img-src 'self' data: https:",
+    )
     expect(assets.fetch).not.toHaveBeenCalled()
     expect(workflows.create).not.toHaveBeenCalled()
   })

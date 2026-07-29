@@ -11,7 +11,13 @@ interface StructuredRequest {
   schemaName: string
   schema: Record<string, unknown>
   instructions: string
-  input: string
+  input: string | Array<{
+    role: 'user'
+    content: Array<
+      | { type: 'input_text'; text: string }
+      | { type: 'input_file'; filename: string; file_data: string }
+    >
+  }>
   maximumOutputTokens: number
   tools?: Array<Record<string, unknown>>
   fixedToolCostUsd?: number

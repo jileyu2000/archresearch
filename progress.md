@@ -873,3 +873,21 @@
 - 修复后的完整 `scripts/verify.ps1` exit 0，耗时 199.6 秒：360 API / 177 Board / 165 Extension / 8 packaged E2E、Web 4 files / 7 tests、Edge 7 files / 16 tests 与全部静态/类型/构建门禁通过。下一步提交并推送两处 CI 修复及记录，等待新 Hosted CI。
 - CI 修复与记录以提交 `5a068f3` 推送 `origin/main`。Hosted CI run `30424872745` 在 12m6s 后 success，fresh Web assets 顺序、coverage 与完整 repository gate 全部通过。
 - 当前公开网页和 GitHub `main` 源码均已发布；正式 tag/Release 暂不创建，因为仍需真人完成生产 Turnstile 并跑一个有界 Quick 真实研究。
+
+## 2026-07-29 Web Edition feature-parity correction
+
+- 用户截图验收发现已部署 Web 页面并非本地版功能等价实现：界面信息架构不同，个人收藏和多项本地版核心入口缺失。已承认此前“完整发布”判断错误，并立项 M162 作为发布缺陷修复。
+- 新增 `apps/web/PRODUCT.md`，把 Web Edition 定义为免安装、浏览器本地持久化的完整版本，而不是简化演示；同时列明本地 Chrome 扩展/登录态能力是允许的窄降级边界。
+- 代码审计确认收藏存储和备份数据壳已存在，但 Web UI 完全未接入，收藏记录也缺少独立快照。下一步先新增个人收藏专页、结果直接/批量收藏、删除和备份恢复的失败行为测试，确认红灯后再修改生产代码。
+- 红灯精确覆盖缺少个人收藏入口/专页、结果直接收藏、收藏快照、删除、备份恢复、第一版旧收藏读取；实现后 Web 为 4 files / 11 tests 全绿，lint、typecheck、production build 与 `git diff --check` 通过。
+- 首页已改为与本地版同源的蓝色研究任务台和功能入口，头部提供“备份与恢复 / 个人收藏”；个人收藏为建筑方案/图纸灵感双标签整页，建筑结果按原研究问题分组，结果页支持直接与批量收藏。
+- 本地 Chrome headless 完成 1440px 与 390px loaded QA：首页、收藏、结果和数据页均无横向溢出，console/page error 0，移动按钮可达 44px；结果/页面切换会归位顶部。下一步运行根级完整门禁，随后审查、提交、推送并重新部署生产 Worker。
+- 用户进一步明确：“就是把本地的转移到公共发布”。因此上述收藏与界面修复只算迁移首片，不再按“独立 Web 产品的浏览器兼容子集”收口；重新部署暂停，后续必须完成本地版全功能矩阵后再发布。
+
+## 2026-07-29 M162 full local-product transfer
+
+- Web 公共入口已删除独立简化页面，改为直接复用本地 Board App、设计系统与全部结果组件；`PublicApiClient` 以 IndexedDB 实现完整本地 `ApiClient` 合同，Cloudflare 只承担公开来源的七阶段 Workflow。
+- 红绿补齐工作区、PDF 任务书、URL、两类研究、完整结果映射、视觉图片、阶段检查点、取消/重试、直接/批量收藏、个人收藏双标签、对照/JSON 导出/分享、表达规范、180 天/永久保留和版本化 JSON 备份恢复。云端检查点过期后，已完成研究仍从浏览器本地打开。
+- 定向验证为 Board 179/179、Web 9/9、Edge 16/16；三端 lint/typecheck/build 与 Edge production dry-run 全绿。根级 `scripts/verify.ps1` exit 0，耗时 197.7 秒：360 API / 179 Board / 165 Extension / 9 Web / 16 Edge / 8 packaged E2E，以及 Ruff/format、strict Mypy、完整构建和安全门禁全部通过。
+- Wrangler mock 形态下的 Chrome headless 1440×1000 与 390×844 QA 覆盖首页、完整案例结果、视觉结果、直接/批量收藏、个人收藏和备份；横向溢出 0、console/page error 0。公共结果不再出现“小红书 / 原笔记 / 旧版灵感分组”，`studio-grid.svg` 与完整 demo 素材均返回 200。
+- 当前尚未提交或重新部署；下一步显式范围审查、提交并推送，再以该提交部署生产 Worker、执行线上 smoke 并发布修订版 GitHub Release。生产 URL 继续只在私下交付，不写入仓库或 Release。

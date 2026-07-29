@@ -4,7 +4,7 @@ import { runResearchWorkflow } from './workflow'
 
 describe('mock Evidence-Grounded Plan-and-Execute workflow', () => {
   it('checkpoints all seven stages and completes only with evidence-bound facts', async () => {
-    const checkpoints: string[] = []
+    const checkpoints: Array<{ stage: string; summary: Record<string, unknown> }> = []
     const services = {
       plan: vi.fn().mockResolvedValue([
         { id: 'section', question: '剖面如何组织开放与安静空间？' },
@@ -16,6 +16,7 @@ describe('mock Evidence-Grounded Plan-and-Execute workflow', () => {
         {
           url: 'https://example.com/library',
           title: 'Courtyard Library',
+          imageUrl: 'https://example.com/library-section.jpg',
           text: 'Reading rooms step away from the public atrium across the section.',
         },
       ]),
@@ -50,19 +51,22 @@ describe('mock Evidence-Grounded Plan-and-Execute workflow', () => {
     const result = await runResearchWorkflow(
       {
         runId: 'run-mock',
+        workspaceId: 'workspace-studio',
         question: '社区图书馆如何用剖面组织安静与开放空间？',
+        goal: 'precedent_research',
         mode: 'balanced',
+        researchSources: [],
         clientSessionId: 'device-session-1',
       },
       services,
       {
-        save: async (stage) => {
-          checkpoints.push(stage)
+        save: async (stage, summary) => {
+          checkpoints.push({ stage, summary })
         },
       },
     )
 
-    expect(checkpoints).toEqual([
+    expect(checkpoints.map(({ stage }) => stage)).toEqual([
       'planning',
       'searching',
       'inspecting',
@@ -71,8 +75,18 @@ describe('mock Evidence-Grounded Plan-and-Execute workflow', () => {
       'gap_check',
       'composing',
     ])
+    expect(checkpoints.find(({ stage }) => stage === 'verifying')?.summary).toMatchObject({
+      verifiedFindingCount: 1,
+      findings: [expect.objectContaining({
+        sourceUrl: 'https://example.com/library',
+      })],
+    })
     expect(result).toMatchObject({
       runId: 'run-mock',
+      workspaceId: 'workspace-studio',
+      question: '社区图书馆如何用剖面组织安静与开放空间？',
+      goal: 'precedent_research',
+      mode: 'balanced',
       status: 'completed',
       coverage: {
         coverageSatisfied: true,
@@ -81,6 +95,8 @@ describe('mock Evidence-Grounded Plan-and-Execute workflow', () => {
     })
     expect(result.sections[0]?.facts[0]).toEqual(expect.objectContaining({
       sourceUrl: 'https://example.com/library',
+      sourceTitle: 'Courtyard Library',
+      imageUrl: 'https://example.com/library-section.jpg',
       quote: expect.stringContaining('public atrium'),
     }))
   })
@@ -106,8 +122,11 @@ describe('mock Evidence-Grounded Plan-and-Execute workflow', () => {
     const result = await runResearchWorkflow(
       {
         runId: 'run-partial',
+        workspaceId: 'workspace-studio',
         question: '旧厂房如何组织新旧结构？',
+        goal: 'precedent_research',
         mode: 'quick',
+        researchSources: [],
         clientSessionId: 'device-session-2',
       },
       services,

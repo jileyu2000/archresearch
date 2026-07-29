@@ -13,7 +13,7 @@
 ## 产品与不可逆决策
 
 - 产品是面向建筑学生与青年设计师的本地优先实时研究 Agent，不建设案例库或全局向量索引。产品行为的权威描述在 `apps/board/PRODUCT.md` 与 `DESIGN.md`；用户文案词汇由 `apps/board/src/copy-glossary.test.ts` 源码级守卫，版式结构由 `apps/board/src/design-system.test.ts` 按单一 860px/620px 媒体块切片守卫。
-- M158 起新增独立 Cloudflare Web Edition：本地版继续 Windows/Chrome、BYOK、SQLite 与本机文件；网页端由项目方承担模型费用，Key 只在 Cloudflare Secret。当前网页端已将 Run、evidence-bound result 和 collection 写入当前浏览器 IndexedDB，并提供版本化 JSON 导入/导出；OPFS 本地附件存储尚未实现。云端只允许短期 Workflow 状态与费用预留，不建立平台级长期历史。Web URL 只私下交给评委，禁止写入 GitHub。
+- M158 起新增独立 Cloudflare Web Edition：本地版继续 Windows/Chrome、BYOK、SQLite 与本机文件；网页端由项目方承担模型费用，Key 只在 Cloudflare Secret。M162 起网页端直接复用本地 Board 的同一套页面、样式、导航和结果工作台，Edition 差异只限公开来源、Turnstile、云端有界执行与浏览器本地持久化。工作区、Run、结果、收藏、Board、表达规范、任务书和备份都在当前浏览器 IndexedDB；云端只保留三日短期 Workflow 检查点与费用预留，不建立平台级长期历史。Web URL 只私下交给评委，禁止写入 GitHub。
 - 公开建筑网站使用进程内 Direct Playwright；登录态小红书默认使用 `@jackwener/opencli@1.8.6` Browser Bridge。**不再使用 Firecrawl**（M41 移除）、**无 Pinterest**（M94 移除）、**无来源反查/TinEye**（M113 移除），三者都不得恢复。
 - 所有模型统一为 `gpt-5.6-sol`，推理强度 `medium`，base `https://suoxie.codes/v1`。API Key 只在 Windows 凭据管理器（`ArchResearch/suoxie` / `api-key`），不得打印或迁移。
 - ArchDaily、Designboom、Dezeen、Divisare、ArchDaily China 与项目官网负责落地案例与方案证据，按查询轮换站点；小红书只负责制图/配色/形体/分析图灵感，始终 `aggregator / visual_lead`，不能单独证明项目事实。图纸灵感 XHS-only fail-closed：OpenCLI 失败才回退扩展，两条路径都不可用时诚实终止，绝不降级为通用网页素材；固定 48 个逐图检查槽位 / 48 MiB，每方向按 rank 最多试 4 帖、累计 3 篇 usable。
@@ -36,8 +36,8 @@
 - M123 本地发布基线已闭合：API / Board / Extension / manifest 均为 2.1.0；fresh setup/start/update、隔离备份预检与当前发布证据均完成。当前清单为 `docs/release-evidence-2026-07-28.md`，旧清单与 10 张旧 PNG 仅保留为历史材料。最终 tag 落点 `2a92539` 的 Hosted CI run `30334270656` 已在 Windows fresh runner 通过 Chromium 安装、coverage 与完整 348/177/165/8 门禁。
 - M155/M156 公开产品架构提交为 `010eceb`：Evidence-Grounded Plan-and-Execute 四模块边界、行为合同、README 信息维度、architecture/demo 文档已推送 `main`。Hosted CI run `30362938145` 在 fresh Windows runner 通过 coverage、360/177/165/8 与完整门禁。
 - M157 项目主页提交为 `cdb97f0`：README 已改为长期通用的 ArchResearch 项目主页，竞赛要求只作为信息组织参考，不再出现参赛、投稿或评审专属定位；目标用户、痛点、场景价值、架构、人机协同、完成度、截图、安装和演示入口均保留。Hosted CI run `30368067949` 通过 fresh coverage、360/177/165/8 与完整门禁。
-- M158 当前未提交 Web Edition 基础位于 `apps/web` 与 `apps/edge`。网页端是 React/Vite 研究工作台，默认不要求或存储用户 API Key；Edge 端已有静态资源 + `/api/*` 路由、Turnstile 服务端校验、设备/IP 近似配额、CostGuard Durable Object、七阶段 Workflow、Provider Responses API client、公开 HTTPS 页直接抓取与 `HTMLRewriter` 文本抽取。完成结果必须同时满足 evidence-bound、coverage 和 enrichment；无 R2 或 Browser Rendering 默认依赖。尚未部署、未创建 Cloudflare 资源或 Secret、未调用真实 Provider/真实研究流程。
-- 最新 Web/Edge 离线验证：Web 为 4 files / 7 tests，Edge 为 7 files / 16 tests；两端 lint/typecheck/build 全绿。根级 `scripts/verify.ps1` 也已通过 360 API / 177 Board / 165 Extension / 8 packaged E2E、Web/Edge 测试与 Edge dry-run；桌面和 390px loaded QA 无横向溢出。
+- M162 当前未提交的完整迁移位于 `apps/board`、`apps/web` 与 `apps/edge`。Web 不再维护简化 UI，而是直接渲染本地 Board；`PublicApiClient` 用 IndexedDB 完成本地 `ApiClient` 合同，Edge 承担 Turnstile、设备/IP 近似配额、CostGuard Durable Object、七阶段 Workflow、Provider Responses API client、公开 HTTPS 页读取和 evidence/coverage/enrichment 双门槛。无 R2 或 Browser Rendering 默认依赖。
+- 最新完整验证：根级 `scripts/verify.ps1` exit 0（197.7 秒），通过 360 API / 179 Board / 165 Extension / 9 Web / 16 Edge / 8 packaged E2E，以及 Ruff/format、strict Mypy、lint/typecheck/build、安全检查与 Wrangler dry-run。Wrangler mock 的 1440×1000 和 390×844 Chrome headless QA 覆盖首页、完整结果、收藏和备份，横向溢出 0、console/page error 0；20 个生产静态素材均进入构建。
 - 本工作区由多个 agent 会话并发写入（长期约束）：提交前后必须重读 `git status`，另一会话仍在写同名文件时暂停提交。
 
 ## 当前唯一主线
@@ -49,8 +49,8 @@
 5. **M155 已 complete**：`agent/planning.py`、`execution.py`、`verification.py`、`synthesis.py` 与唯一 `workflow.py` orchestrator 形成明确 Evidence-Grounded Plan-and-Execute 边界；27 个迁出函数、2 个类型类、2 个常量和 53 个保留定义经 AST 对比均为零函数体差异，运行语义不变。
 6. **M156 已 complete**：GitHub README 已按完整项目说明维度覆盖场景价值、Agent 架构、人机协同/纠偏、完成度、边界、访问步骤、3 个测试问题和真实截图；本地与 Hosted CI 全绿，durable 基线未变。
 7. **M157 已 complete**：README 已从竞赛投稿语境修正为长期通用项目主页，只保留“建筑竞赛”作为真实用户使用场景；项目主页提交 `cdb97f0` 的本地完整门禁与 Hosted CI `30368067949` 全绿。
-8. **M158/M159/M160 当前状态**：Cloudflare 官方审计、双版本范围合同、`apps/web`/`apps/edge` 最小实现、OPFS adapter、离线测试、根级门禁和桌面/移动 QA 已完成；本地版与网页端代码均可构建。M160 在取消每日/单次美元金额拒绝后已通过 Edge 7 files / 16 tests 与完整根级门禁；CostGuard SQLite 保留预留/实际用量记录和停机开关，不再按金额拒绝。公开页读取默认采用 Worker `fetch` + `HTMLRewriter`，不使用 R2 或 Browser Rendering；长期历史只进 IndexedDB，附件只进 OPFS。
-9. 当前部署恢复点：`archresearch-web` 已用当前非 mock 源码重新部署为版本 `c17dc24c-28ce-44c3-9c0f-b52a9f4fd95e`；四个 Secret 名称、Workflow/DO/限流绑定存在，值未读取。线上主页/API/安全头、生产 Turnstile、缺 token 拒绝与桌面/390px loaded QA 已通过。Web Edition 源码与 README Chrome-only 边界已推送 `main`；fresh root build 顺序修复提交 `5a068f3` 的 Hosted CI `30424872745` 全绿。自动化不得绕过 Turnstile，当前唯一产品验收是由真人完成验证后跑一个 Quick 真实研究。网页 URL 不得写入 GitHub；新版本 tag/Release 尚未创建。
+8. **M158/M159/M160 当前状态**：Cloudflare 官方审计、双版本范围合同、Edge 有界执行、浏览器本地长期数据、离线测试和既有生产部署均已完成。CostGuard SQLite 保留预留/实际用量记录和停机开关，不按金额拒绝；公开页读取默认采用 Worker `fetch` + `HTMLRewriter`，不使用 R2 或 Browser Rendering。
+9. **M162 当前状态**：完整本地产品迁移已在未提交工作树实现并通过仓库总门禁与 Worker 形态桌面/移动 QA；公共入口直接复用本地 Board，个人收藏、完整结果工具、任务书、历史、表达规范和备份均已接通。下一步是显式提交、推送、生产重部署和线上 smoke，之后创建修订版 tag/Release。当前生产仍是旧简化界面的版本 `c17dc24c-28ce-44c3-9c0f-b52a9f4fd95e`；网页 URL 继续禁止写入 GitHub。
 
 ## 工作区保护
 

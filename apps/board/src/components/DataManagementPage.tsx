@@ -17,6 +17,7 @@ import {
 
 interface DataManagementPageProps {
   open: boolean
+  publicEdition?: boolean
   workspaceCount: number
   runCount: number
   isRunActive: boolean
@@ -40,6 +41,7 @@ function backupAgeInDays(record: LastBackupRecord | null) {
 
 export function DataManagementPage({
   open,
+  publicEdition = false,
   workspaceCount,
   runCount,
   isRunActive,
@@ -165,7 +167,9 @@ export function DataManagementPage({
           <small>
             {isRunActive
               ? '研究进行中，完成后可备份。'
-              : '保存为 .zip 文件。'}
+              : publicEdition
+                ? '保存为 .json 文件。'
+                : '保存为 .zip 文件。'}
           </small>
         </div>
       </section>
@@ -176,11 +180,13 @@ export function DataManagementPage({
           <p>恢复会替换当前全部数据，不会合并。</p>
         </div>
         <div className="data-restore-controls">
-          <label htmlFor="workspace-backup-file">选择备份文件（.zip）</label>
+          <label htmlFor="workspace-backup-file">
+            {publicEdition ? '选择备份文件（.json）' : '选择备份文件（.zip）'}
+          </label>
           <input
             id="workspace-backup-file"
             type="file"
-            accept=".zip,application/zip"
+            accept={publicEdition ? '.json,application/json' : '.zip,application/zip'}
             disabled={Boolean(dataOperation) || isRunActive}
             onChange={(event) => {
               const file = event.target.files?.[0] ?? null

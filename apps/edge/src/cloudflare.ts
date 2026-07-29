@@ -16,6 +16,7 @@ import {
 import {
   runResearchWorkflow,
   type ResearchWorkflowInput,
+  type WorkflowStage,
   type WorkflowStageRunner,
 } from './workflow'
 import { SqlCostLedger } from './sql-cost-ledger'
@@ -54,6 +55,21 @@ export class CostGuardDurableObject extends DurableObject<CloudflareEnvironment>
 
   async fetch(request: Request) {
     const path = new URL(request.url).pathname
+    const checkpointRunId = path.match(/^\/checkpoints\/([^/]+)$/)?.[1]
+    if (request.method === 'GET' && checkpointRunId) {
+      const checkpoint = await this.ctx.storage.get<{
+        stage: WorkflowStage
+        summary: Record<string, unknown>
+        updatedAt: string
+        expiresAt: number
+      }>(`checkpoint:${checkpointRunId}`)
+      if (!checkpoint) return json({ error: 'not_found' }, 404)
+      if (checkpoint.expiresAt <= Date.now()) {
+        await this.ctx.storage.delete(`checkpoint:${checkpointRunId}`)
+        return json({ error: 'not_found' }, 404)
+      }
+      return json(checkpoint)
+    }
     if (request.method === 'GET' && path === '/snapshot') {
       return json(this.ledger.snapshot())
     }
@@ -81,6 +97,37 @@ export class CostGuardDurableObject extends DurableObject<CloudflareEnvironment>
       const input = await request.json() as { enabled: boolean }
       if (typeof input.enabled !== 'boolean') return json({ error: 'invalid_request' }, 400)
       return json(this.ledger.setEnabled(input.enabled))
+    }
+
+    if (path === '/checkpoints') {
+      const input = await request.json() as {
+        runId?: unknown
+        stage?: unknown
+        summary?: unknown
+      }
+      if (
+        typeof input.runId !== 'string'
+        || ![
+          'planning',
+          'searching',
+          'inspecting',
+          'analyzing',
+          'verifying',
+          'gap_check',
+          'composing',
+        ].includes(String(input.stage))
+        || typeof input.summary !== 'object'
+        || input.summary === null
+      ) {
+        return json({ error: 'invalid_request' }, 400)
+      }
+      await this.ctx.storage.put(`checkpoint:${input.runId}`, {
+        stage: input.stage as WorkflowStage,
+        summary: input.summary as Record<string, unknown>,
+        updatedAt: new Date().toISOString(),
+        expiresAt: Date.now() + 3 * 86_400_000,
+      })
+      return new Response(null, { status: 204 })
     }
 
     return json({ error: 'not_found' }, 404)
@@ -129,6 +176,30 @@ export class DurableCostGateClient implements CostGate {
       body: JSON.stringify({ enabled }),
     })
     return await response.json() as { enabled: boolean }
+  }
+
+  async saveCheckpoint(
+    runId: string,
+    stage: WorkflowStage,
+    summary: Record<string, unknown>,
+  ) {
+    await this.stub.fetch('https://cost-guard/checkpoints', {
+      method: 'POST',
+      body: JSON.stringify({ runId, stage, summary }),
+    })
+  }
+
+  async getCheckpoint(runId: string) {
+    const response = await this.stub.fetch(
+      `https://cost-guard/checkpoints/${encodeURIComponent(runId)}`,
+    )
+    if (response.status === 404) return null
+    if (!response.ok) throw new Error('Checkpoint lookup failed.')
+    return await response.json() as {
+      stage: WorkflowStage
+      summary: Record<string, unknown>
+      updatedAt: string
+    }
   }
 }
 
@@ -197,10 +268,6 @@ export class PublicQuotaLimiter {
   }
 }
 
-const noOpCheckpoints = {
-  save: async () => undefined,
-}
-
 export class ResearchWorkflow extends WorkflowEntrypoint<
   CloudflareEnvironment,
   ResearchWorkflowInput
@@ -208,6 +275,11 @@ export class ResearchWorkflow extends WorkflowEntrypoint<
   async run(event: Readonly<WorkflowEvent<ResearchWorkflowInput>>, step: WorkflowStep) {
     const input = event.payload
     const costGate = new DurableCostGateClient(this.env.COST_GUARD)
+    const checkpoints = {
+      save: async (stage: WorkflowStage, summary: Record<string, unknown>) => {
+        await costGate.saveCheckpoint(input.runId, stage, summary)
+      },
+    }
     const services = this.env.MOCK_MODE === 'true'
       ? createMockResearchServices()
       : createLiveResearchServices(
@@ -230,7 +302,7 @@ export class ResearchWorkflow extends WorkflowEntrypoint<
     }
 
     try {
-      return await runResearchWorkflow(input, services, noOpCheckpoints, stageRunner)
+      return await runResearchWorkflow(input, services, checkpoints, stageRunner)
     } finally {
       await costGate.settle({
         runId: input.runId,

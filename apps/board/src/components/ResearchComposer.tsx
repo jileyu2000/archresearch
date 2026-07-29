@@ -1,4 +1,4 @@
-import type { FormEvent, RefObject } from 'react'
+import type { FormEvent, ReactNode, RefObject } from 'react'
 import {
   ArrowUp,
   Check,
@@ -32,6 +32,9 @@ type ResearchComposerProps = {
   files: File[]
   referenceUrl: string
   demoMode: boolean
+  publicEdition?: boolean
+  verificationControl?: ReactNode
+  verificationReady?: boolean
   activeWorkspaceId: string
   briefReviewLoading: boolean
   researchStarting: boolean
@@ -69,6 +72,9 @@ export function ResearchComposer({
   files,
   referenceUrl,
   demoMode,
+  publicEdition = false,
+  verificationControl,
+  verificationReady = true,
   activeWorkspaceId,
   briefReviewLoading,
   researchStarting,
@@ -181,7 +187,12 @@ export function ResearchComposer({
               <button
                 className="research-submit"
                 type="submit"
-                disabled={briefReviewLoading || researchStarting || isRunActive || loading || (!demoMode && !activeWorkspaceId)}
+                disabled={briefReviewLoading
+                  || researchStarting
+                  || isRunActive
+                  || loading
+                  || (!demoMode && !activeWorkspaceId)
+                  || (publicEdition && !verificationReady)}
               >
                 {isRunActive
                   ? '研究进行中…'
@@ -197,6 +208,15 @@ export function ResearchComposer({
           </div>
           {composerError && <p className="research-submit-error" role="alert">{composerError}</p>}
         </div>
+        {publicEdition && (
+          <section className="public-verification" aria-label="人机校验">
+            <div>
+              {verificationReady ? <Check aria-hidden="true" /> : <CircleDashed aria-hidden="true" />}
+              <span>{verificationReady ? '已完成人机校验' : '开始研究前请完成人机校验'}</span>
+            </div>
+            {verificationControl}
+          </section>
+        )}
         {goal === 'precedent_research' && researchOptionsOpen && (
           <section className="research-options" aria-label="可选项目资料">
             <p className="research-options-intro">
@@ -242,12 +262,12 @@ export function ResearchComposer({
                 </div>
               </div>
               <div className="research-preflight-actions">
-                {showBrowserConnectAction && (
+                {!publicEdition && showBrowserConnectAction && (
                   <button type="button" disabled={browserConnecting} onClick={() => void onConnectBrowser()}>
                     <MonitorUp aria-hidden="true" />{browserConnecting ? '正在连接 Chrome…' : '连接 Chrome 读取高清图纸'}
                   </button>
                 )}
-                <button
+                {!publicEdition && <button
                   className="research-preflight-refresh"
                   type="button"
                   aria-label="刷新环境状态"
@@ -255,7 +275,7 @@ export function ResearchComposer({
                   onClick={() => void onRefreshBrowserReadiness()}
                 >
                   <RefreshCw aria-hidden="true" /><span aria-hidden="true">{browserReadinessLoading ? '检查中…' : '刷新'}</span>
-                </button>
+                </button>}
               </div>
             </header>
             {(browserReadinessError || browserPairingStatus) && (
@@ -268,7 +288,14 @@ export function ResearchComposer({
         <div className="research-run-actions">
           {isRunActive && <button className="research-cancel" type="button" onClick={() => void onCancel()}>取消研究</button>}
           {activeRun && ['partial', 'blocked', 'failed', 'cancelled'].includes(activeRun.status) && (
-            <button className="research-retry" type="button" onClick={() => void onRetry()}>{retryActionLabel(activeRun)}</button>
+            <button
+              className="research-retry"
+              type="button"
+              disabled={publicEdition && !verificationReady}
+              onClick={() => void onRetry()}
+            >
+              {retryActionLabel(activeRun)}
+            </button>
           )}
         </div>
       </form>
