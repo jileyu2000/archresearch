@@ -969,3 +969,4 @@
 - annotated `v2.1.3` tag 精确指向 `37be809`；正式 Release 标题为“ArchResearch Chrome 扩展组件 v2.1.3”，唯一附件 `archresearch-chrome-extension-only-v2.1.3.zip` 为 22,226 bytes，SHA-256 与 GitHub digest 一致：`36920AA1875F62124EE3896CA9C46B468981D480E18D754F9F8F3AD9B9925ED6`。ZIP 根目录包含 `manifest.json`，名称/版本为“ArchResearch Chrome 扩展”/`2.1.3`；Release 未含私有网页地址。
 - 发布后 R2 再次检查仍为 Cloudflare code 10042。当前唯一下一步是用户在 Dashboard 启用 R2；启用后创建 `archresearch-visual-previews`、设置三日生命周期、部署 Worker，并以系统 Chrome 完成线上 desktop/mobile smoke。未调用内部浏览器。
 - 记录提交前的首轮机密扫描因正则把正常的公开仓库 URL 误判为异常；未暂存或推送。改为逐行列出新增 URL 后，仅发现该公开仓库地址，新增行不含 token、密钥或私有网页地址。
+- 最后一次只读 Release 汇总误请求 `gh release view` 不支持的 `isLatest` 字段，命令在读取前退出；改用 GitHub `releases/latest` API 复核，不修改远端或工作树。
