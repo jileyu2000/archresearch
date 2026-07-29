@@ -34,6 +34,17 @@ if ($workflow -match 'OPENAI_API_KEY|ARCHRESEARCH_PROVIDER_MODE\s*:\s*live') {
     throw "Default CI must not require or enable live provider credentials."
 }
 
+$rootPackage = Get-Content -Raw -LiteralPath (Join-Path $workspace "package.json") |
+    ConvertFrom-Json
+$rootBuild = [string]$rootPackage.scripts.build
+$webBuild = "pnpm --filter @archresearch/web build"
+$edgeBuild = "pnpm --filter @archresearch/edge build"
+$webBuildIndex = $rootBuild.IndexOf($webBuild, [StringComparison]::Ordinal)
+$edgeBuildIndex = $rootBuild.IndexOf($edgeBuild, [StringComparison]::Ordinal)
+if ($webBuildIndex -lt 0 -or $edgeBuildIndex -lt 0 -or $webBuildIndex -ge $edgeBuildIndex) {
+    throw "The root build must create Web assets before the Edge Wrangler build consumes them."
+}
+
 $verifyScript = Get-Content -Raw -LiteralPath (Join-Path $workspace "scripts\verify.ps1")
 if ($verifyScript -notmatch 'release\.tests\.ps1') {
     throw "The authoritative gate must include release workflow contracts."

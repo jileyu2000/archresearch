@@ -863,3 +863,11 @@
 - 线上主页 200、HTML/CSP/noindex 正常，公开配置有非测试 Turnstile site key，缺 token 的 `/api/runs` 请求返回 400。Playwright 桌面/390px 页面均完整加载、关键控件可见、横向溢出 0；验收浏览器已关闭。
 - 线上检查错误记录：首次主页变量误用 PowerShell 保留 `$HOME`，改用任务专用变量后取得有效结果；一次 README 定向检查在 `apps/edge` 子目录使用错误相对路径；Wrangler 4.114 不支持 `triggers list` 且旧 `deployments view` 已改名；Playwright `networkidle` 因 Turnstile 持续网络活动超时，改用 DOM/关键控件就绪。均未改写数据或造成额外部署。
 - 自动化没有点击或绕过 Turnstile。M161 还需真人完成一次验证并跑一个 Quick 真实研究；GitHub 源码发布随后执行。
+
+## 2026-07-29 GitHub Web Edition publish and CI repair
+
+- Web Edition、README Chrome-only 边界与规划记录以提交 `d684c87` 推送到 `origin/main`；53 个显式路径、5,521 insertions，部署 URL、Secret、数据库与备份均未入库。
+- Hosted CI run `30423739118` 在 16m45s 后失败；setup、Chromium、coverage、360 API、177 Board、165 Extension、Web 7、Edge 16 全部通过，唯一失败是 root recursive build 并行启动 Edge 时 fresh runner 尚无 `apps/web/dist`。
+- 发布合同先新增 Web build 必须早于 Edge build 的断言并精确红灯；根 `package.json` 随后改为 Web → Board → Extension → Edge 的显式构建顺序，合同转绿。
+- 组合式 fresh-build 移动/恢复命令和递归删除旧 dist 两次被执行策略在运行前拒绝，均未改文件；改为分步将旧 dist 移开、执行根 build、把旧目录移动到系统临时位置。缺少 dist 的根 build 成功，临时备份可恢复。
+- 修复后的完整 `scripts/verify.ps1` exit 0，耗时 199.6 秒：360 API / 177 Board / 165 Extension / 8 packaged E2E、Web 4 files / 7 tests、Edge 7 files / 16 tests 与全部静态/类型/构建门禁通过。下一步提交并推送两处 CI 修复及记录，等待新 Hosted CI。

@@ -584,3 +584,5 @@
 - 当前已验证源码随后重新部署成功，版本为 `c17dc24c-28ce-44c3-9c0f-b52a9f4fd95e`，配置明确为 `MOCK_MODE=false`；静态资源无变化，Worker、Workflow、Durable Object、六次/分钟限流和四个既有 Secret 继续绑定。
 - 线上主页返回 200，CSP 与 `X-Robots-Tag: noindex, nofollow, noarchive` 生效；`/api/config` 返回非 Cloudflare 测试占位的 site key，缺 Turnstile token 的研究请求返回 400。桌面与 390px Chromium 均无横向溢出。
 - Turnstile iframe 的两条 `%c%d ... NaN` console error 来自 `challenges.cloudflare.com`，不是 ArchResearch bundle。真实 Quick 研究仍需真人完成验证码；自动化不得绕过人机验证。
+- GitHub 首次 Web Edition 提交 `d684c87` 的 Hosted CI run `30423739118` 通过 setup、Chromium、coverage、360 API、177 Board、165 Extension、Web 7 与 Edge 16 tests，最终只在并行 root build 失败：fresh runner 尚无 `apps/web/dist` 时，Edge Wrangler 与 Web build 同时启动并先读取静态目录。本地残留 dist 曾掩盖该竞态。
+- 根级 build 已改为 Web → Board → Extension → Edge 的明确顺序，并新增发布合同守卫该依赖。移开现有 Web dist 后的 fresh root build 与完整 199.6 秒本地门禁均通过；产品 bundle 和 Cloudflare 部署不需要改变。
