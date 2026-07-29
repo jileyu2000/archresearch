@@ -142,6 +142,25 @@ export function requestPublicBrowserBridgeStatus(
   })
 }
 
+export function subscribePublicBrowserBridgeReady(
+  listener: () => void,
+): () => void {
+  function receive(event: MessageEvent<unknown>) {
+    if (event.source !== window || event.origin !== window.location.origin) return
+    if (
+      !isRecord(event.data)
+      || !hasExactKeys(event.data, ['channel', 'protocol_version', 'action'])
+      || event.data.channel !== 'archresearch.extension'
+      || event.data.protocol_version !== 2
+      || event.data.action !== 'ready'
+    ) return
+    listener()
+  }
+
+  window.addEventListener('message', receive)
+  return () => window.removeEventListener('message', receive)
+}
+
 export function requestXiaohongshuResearch(
   directions: BrowserVisualDirection[],
   timeoutMs = 8 * 60 * 1_000,

@@ -211,6 +211,25 @@ describe("extension popup and side-panel UI", () => {
     expect(requestResearchPermission).toHaveBeenCalledOnce();
   });
 
+  it("does not blame a valid public page when reconnecting fails", async () => {
+    const sendMessage = vi
+      .fn()
+      .mockResolvedValueOnce(statusResponse)
+      .mockRejectedValueOnce(new Error("registration still active"));
+    mountBridgeUi(document, { sendMessage, requestResearchPermission });
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+
+    (document.querySelector(
+      '[data-command="public.connect"]',
+    ) as HTMLButtonElement).click();
+
+    await vi.waitFor(() =>
+      expect(document.querySelector('[data-role="error"]')?.textContent).toBe(
+        "连接没有完成。请保持 ArchResearch 网页为当前标签后重试；若网页提醒已关闭，则连接已经生效。",
+      ),
+    );
+  });
+
   it("sends the loopback endpoint and one-time code for pairing", async () => {
     const sendMessage = vi.fn().mockResolvedValue(statusResponse);
     mountBridgeUi(document, { sendMessage, requestResearchPermission });

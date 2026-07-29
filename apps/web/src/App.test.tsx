@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -136,7 +136,14 @@ describe('public ArchResearch product', () => {
 
     const dialog = await screen.findByRole('dialog', { name: '安装 Chrome 扩展' })
     expect(dialog).toHaveTextContent('读取小红书图纸灵感需要 Chrome 扩展')
-    expect(screen.getByRole('link', { name: '立即安装 Chrome 扩展' })).toHaveAttribute(
+    expect(within(dialog).queryByRole('link', {
+      name: '下载扩展安装包',
+    })).not.toBeInTheDocument()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '查看安装方法' }))
+
+    expect(within(dialog).getByText('在地址栏输入 chrome://extensions 并回车。')).toBeVisible()
+    expect(within(dialog).getByRole('link', { name: '下载扩展安装包' })).toHaveAttribute(
       'href',
       'https://chromewebstore.google.com/detail/archresearch/example',
     )

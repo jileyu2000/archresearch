@@ -68,7 +68,7 @@ if ($edgeConfig.assets.run_worker_first -ne $true) {
     throw "Every Web Edition response must pass through the Worker security-header wrapper."
 }
 
-$expectedVersion = "2.1.3"
+$expectedVersion = "2.1.4"
 $boardPackage = Get-Content -Raw -LiteralPath (Join-Path $workspace "apps\board\package.json") |
     ConvertFrom-Json
 $webPackage = Get-Content -Raw -LiteralPath (Join-Path $workspace "apps\web\package.json") |

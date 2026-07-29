@@ -63,6 +63,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | M162 Web Edition full local-product transfer | complete | 公共入口直接复用本地 Board 的同一套 React 页面、样式、导航和结果工作台，只通过 `PublicApiClient` 替换持久化与云端执行；工作区、两类研究、PDF/URL、进度/诊断、完整结果、收藏、对照/导出/分享、表达规范、保留期和 JSON 备份矩阵全部闭合。提交 `896945a` 已推送 `main`，Hosted CI `30433096343` 全绿；生产 Worker 版本 `051c4e0c-4e9f-45c8-be0c-99194b16cf7b` 的桌面/390px smoke、完整结果对照与静态素材均通过，正式 `v2.1.1` Release 已发布。 |
 | M163 public Web Xiaohongshu bridge | complete | 严格协议、动态公共页连接、扩展内有界小红书搜索、Web/Edge 输入与主页面安装提醒均已发布；根级 coverage 与完整门禁通过 360 API / 183 Board / 186 Extension / 11 Web / 18 Edge / 8 packaged E2E。提交 `c74571f` 的 Hosted CI `30438474678` success；生产 Worker 版本 `dc0eb528-a8c3-4ca2-88fa-c6131f866d3c` 的主页/API/安全头/Turnstile/1440/390 smoke 全绿；annotated `v2.1.2` tag、正式 Release 与扩展 ZIP 已发布。 |
 | M164 Web/local user-visible parity and extension-only release naming | complete | 用户可见功能、同源界面、多方向逐帖逐图、共享 48 图/48 MiB、R2 对象键事件、IndexedDB 本地预览、扩展专属命名、PR #1、两套 Hosted CI 与 `v2.1.3` 扩展专属 Release 均已闭合。私有 R2 桶与三日生命周期已启用，生产 Worker 已部署为 `c7144317-8daa-4e8f-ae57-5ccf79fc8a41`；HTTP、安全头、正式 Turnstile 配置和系统 Chrome 1440×1000 / 390×844 线上 smoke 全部通过。 |
+| M165 extension installation and connection onboarding | in_progress | 修正两个首用断点：①“立即安装”直接下载 ZIP 却没有后续说明；②扩展已安装、网页读取已授权后，当前页仍未连接、提醒不关闭且重复连接误报失败。主页先展示安装方法再明确下载；扩展连接当前页立即生效且重复连接幂等，网页检测成功后自动关闭提醒。完成 Board/Web/Extension 红绿回归、桌面/390px QA、重新打包发布、部署与线上 smoke。 |
 
 ### M164 验收合同
 
@@ -72,6 +73,16 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 4. 扩展专属命名 → 验证：Release 标题、正文、手工附件名与网页安装动作均明确这是 Chrome 扩展组件；网页安装按钮直达扩展附件，不能把 GitHub 自动 Source code ZIP/TAR 描述成安装包；Release 正文不提及或链接私有网页。
 5. 红绿与回归 → 验证：生产代码前先写失败行为测试；完成后通过 Extension/Board/Web/Edge 定向测试、coverage、`scripts/verify.ps1`、打包 MV3 E2E、桌面/移动 Playwright QA、敏感 URL 扫描、Hosted CI、生产部署与线上 smoke。
 6. 版本发布 → 验证：不移动或重写已发布的 `v2.1.2` tag；完整等价改动使用新版本，显式 stage/commit/push，Release 只附版本化的 extension-only ZIP。
+
+### M165 验收合同
+
+1. 诚实动作 → 验证：主提醒不再把站外 ZIP 描述成“一键安装”；首次主动作只展开安装方法，不触发下载或新页面。
+2. 完整步骤 → 验证：下载前可读到“下载并解压 → 打开 `chrome://extensions` → 开启开发者模式并加载已解压目录 → 连接当前网页”，并明确选择直接包含 `manifest.json` 的文件夹。
+3. 渐进披露 → 验证：熟悉流程的用户可从步骤页下载，已安装用户可直接检查连接，暂不安装仍能退出；不新增第二层弹窗。
+4. 视觉与无障碍 → 验证：沿用现有绘图桌弹窗和按钮词汇；键盘可操作，1440×1000 与 390×844 无横向溢出，关键控件至少 44px。
+5. 发布闭环 → 验证：Board/Web 行为测试先红后绿，lint/typecheck/build 与相关完整门禁通过；显式提交推送、部署 Worker，并用系统 Chrome 复核线上流程。内部浏览器继续禁用。
+6. 立即连接 → 验证：用户在已经打开的公共页点击扩展“连接当前 ArchResearch 网页”后，桥接脚本无需刷新即可注入当前标签，网页状态切换为已连接并自动关闭安装提醒。
+7. 幂等与诚实错误 → 验证：对已经连接的同一公共页重复点击连接仍返回成功；只有页面缺少公共版标记、权限被拒或脚本真实失败时才显示对应错误，不能把已连接状态误报为“不是公共版”。
 
 ## External acceptance gates
 

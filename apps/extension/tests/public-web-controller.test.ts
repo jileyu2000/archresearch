@@ -57,6 +57,29 @@ describe("public Web extension controller", () => {
     });
   });
 
+  it("reuses an existing registration when reconnecting the same public page", async () => {
+    const api = chromeApi();
+    api.scripting.getRegisteredContentScripts.mockResolvedValue([{
+      id: "archresearch-public-board",
+      matches: ["https://research.example.com/*"],
+    }]);
+    const controller = new PublicWebController(
+      api,
+      { hasResearchAccess: vi.fn().mockResolvedValue(true) },
+      { run: vi.fn() },
+    );
+
+    await expect(
+      controller.handle({ type: "ui.public.connect" }, {}),
+    ).resolves.toMatchObject({ connection: "connected" });
+    expect(api.scripting.unregisterContentScripts).not.toHaveBeenCalled();
+    expect(api.scripting.registerContentScripts).not.toHaveBeenCalled();
+    expect(api.scripting.executeScript).toHaveBeenLastCalledWith({
+      target: { tabId: 41 },
+      files: ["assets/publicBoardBridge.js"],
+    });
+  });
+
   it("reports the registered public page instead of an unrelated local pairing", async () => {
     const api = chromeApi();
     api.scripting.getRegisteredContentScripts.mockResolvedValue([{

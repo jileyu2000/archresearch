@@ -89,16 +89,22 @@ export class PublicWebController {
     const existing = await this.api.scripting.getRegisteredContentScripts({
       ids: [PUBLIC_SCRIPT_ID],
     });
-    if (existing.length > 0) {
-      await this.api.scripting.unregisterContentScripts({ ids: [PUBLIC_SCRIPT_ID] });
+    const match = `${origin}/*`;
+    const alreadyRegistered = existing.some((script) =>
+      script.matches?.includes(match)
+    );
+    if (!alreadyRegistered) {
+      if (existing.length > 0) {
+        await this.api.scripting.unregisterContentScripts({ ids: [PUBLIC_SCRIPT_ID] });
+      }
+      await this.api.scripting.registerContentScripts([{
+        id: PUBLIC_SCRIPT_ID,
+        js: [PUBLIC_SCRIPT_FILE],
+        matches: [match],
+        persistAcrossSessions: true,
+        runAt: "document_end",
+      }]);
     }
-    await this.api.scripting.registerContentScripts([{
-      id: PUBLIC_SCRIPT_ID,
-      js: [PUBLIC_SCRIPT_FILE],
-      matches: [`${origin}/*`],
-      persistAcrossSessions: true,
-      runAt: "document_end",
-    }]);
     await this.api.scripting.executeScript({
       target: { tabId: tab.id },
       files: [PUBLIC_SCRIPT_FILE],

@@ -161,6 +161,11 @@ describe("public Web Board bridge", () => {
     startPublicBoardBridge(scope as unknown as Window, runtime);
     startPublicBoardBridge(scope as unknown as Window, runtime);
     expect(scope.addEventListener).toHaveBeenCalledOnce();
+    expect(scope.postMessage).toHaveBeenCalledWith({
+      channel: "archresearch.extension",
+      protocol_version: 2,
+      action: "ready",
+    }, scope.location.origin);
 
     listener?.({
       source: scope,

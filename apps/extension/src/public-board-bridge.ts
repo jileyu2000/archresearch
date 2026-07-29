@@ -35,12 +35,13 @@ export async function forwardPublicBoardBridgeRequest(
 export function startPublicBoardBridge(scope: Window, runtime: RuntimePort): void {
   const marker = "__archresearchPublicBridgeStarted";
   const state = scope as unknown as Record<string, unknown>;
-  if (
-    state[marker] === true
-    ||
-    !isSecureOrigin(scope.location.origin)
+  if (!isSecureOrigin(scope.location.origin)
     || !scope.document.querySelector('meta[name="archresearch-edition"][content="public"]')
   ) return;
+  if (state[marker] === true) {
+    announceReady(scope);
+    return;
+  }
   state[marker] = true;
   scope.addEventListener("message", (event) => {
     if (event.source !== scope || event.origin !== scope.location.origin) return;
@@ -51,6 +52,15 @@ export function startPublicBoardBridge(scope: Window, runtime: RuntimePort): voi
       () => scope.postMessage(bridgeError(readRequestId(event.data)), event.origin),
     );
   });
+  announceReady(scope);
+}
+
+function announceReady(scope: Window): void {
+  scope.postMessage({
+    channel: EXTENSION_CHANNEL,
+    protocol_version: 2,
+    action: "ready",
+  }, scope.location.origin);
 }
 
 function parseRequest(value: unknown, origin: string): ParsedRequest | null {
