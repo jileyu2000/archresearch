@@ -891,3 +891,11 @@
 - 定向验证为 Board 179/179、Web 9/9、Edge 16/16；三端 lint/typecheck/build 与 Edge production dry-run 全绿。根级 `scripts/verify.ps1` exit 0，耗时 197.7 秒：360 API / 179 Board / 165 Extension / 9 Web / 16 Edge / 8 packaged E2E，以及 Ruff/format、strict Mypy、完整构建和安全门禁全部通过。
 - Wrangler mock 形态下的 Chrome headless 1440×1000 与 390×844 QA 覆盖首页、完整案例结果、视觉结果、直接/批量收藏、个人收藏和备份；横向溢出 0、console/page error 0。公共结果不再出现“小红书 / 原笔记 / 旧版灵感分组”，`studio-grid.svg` 与完整 demo 素材均返回 200。
 - 当前尚未提交或重新部署；下一步显式范围审查、提交并推送，再以该提交部署生产 Worker、执行线上 smoke 并发布修订版 GitHub Release。生产 URL 继续只在私下交付，不写入仓库或 Release。
+
+## 2026-07-29 M162 publish closure
+
+- 39 个显式范围路径以提交 `896945a` 推送到 GitHub `main`；未使用 `git add -A`，敏感信息和私有 Worker URL 扫描均为 0 命中。
+- 生产 Worker 已从旧简化界面更新为版本 `051c4e0c-4e9f-45c8-be0c-99194b16cf7b`，上传 17 个新增/修改素材；`MOCK_MODE=false`，既有 Workflow、DO、限流和四个 Secret 绑定继续生效。
+- 生产 Chrome headless smoke：主页 200、CSP/noindex/frame denial、正式 Turnstile 配置、桌面/390px 横向溢出 0；首页、两类研究、个人收藏双标签、完整案例结果、9 个案例选择、案例对照弹窗和静态素材均通过。两条 `%c%d ... NaN` console 信息来自 Cloudflare Turnstile 第三方脚本，产品代码无 console/page error。
+- Hosted CI run `30433096343` 在 fresh Windows runner 17 分 44 秒后 success，覆盖率与完整仓库门禁全部通过。annotated tag `v2.1.1` 和正式 GitHub Release 已发布；Release 未包含 Worker URL、本地数据、Secret 或附件。
+- M162 complete。自动化没有绕过正式 Turnstile，也没有为验收创建真实研究；M161 剩余的人工作业仍是完成 Turnstile 后执行一次 Quick 真实研究。
