@@ -970,3 +970,4 @@
 - 发布后 R2 再次检查仍为 Cloudflare code 10042。当前唯一下一步是用户在 Dashboard 启用 R2；启用后创建 `archresearch-visual-previews`、设置三日生命周期、部署 Worker，并以系统 Chrome 完成线上 desktop/mobile smoke。未调用内部浏览器。
 - 记录提交前的首轮机密扫描因正则把正常的公开仓库 URL 误判为异常；未暂存或推送。改为逐行列出新增 URL 后，仅发现该公开仓库地址，新增行不含 token、密钥或私有网页地址。
 - 最后一次只读 Release 汇总误请求 `gh release view` 不支持的 `isLatest` 字段，命令在读取前退出；改用 GitHub `releases/latest` API 复核，不修改远端或工作树。
+- 用户授权协助启用 R2。系统 Chrome 的首次 Cloudflare 页面连接超时并重置，未提交任何操作；连接恢复后已到达 Cloudflare R2 的付款资料页。该页需要用户本人填写并确认账单资料，未代填、未提交付款信息；标签页已保留为 handoff，等待用户确认 R2 已启用后再创建桶和部署。
