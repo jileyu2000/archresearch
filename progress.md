@@ -795,3 +795,71 @@
 - 门禁后工作区仍只有 README、task plan、findings、progress 四个预期 Markdown 文件，`git diff --check` exit 0；最终逐行 diff 审查确认公开页面只改变定位措辞，规划记录只登记 M157 决策、错误与验收证据。
 - README 与三份规划记录以提交 `cdb97f0` 推送到 `origin/main`；只显式 stage 四个 Markdown 文件，未使用 `git add -A`，未纳入 `.archresearch`、数据库、备份、凭据或无关文件。
 - Hosted CI run `30368067949` 精确对应 `cdb97f0`，13 分 52 秒后 success：fresh setup、Playwright Chromium、frontend coverage 与完整 repository gate 全部通过。M157 验收已闭合，下一步仅提交 HANDOFF/规划完成记录并等待其 CI。
+
+## M158 Cloudflare Web Edition 启动
+
+- 用户授权新增完整公网实时研究版：Cloudflare 承担模型调用，项目方支付费用；GitHub 本地安装版继续 BYOK 并与网页版分离。长期历史默认存在各用户浏览器，云端仅允许有 TTL 的运行中状态。
+- 恢复时工作树干净，`codex/archresearch-v2-1` 与 `origin/main` 同步；本地版当前权威基线仍为 360 API / 177 Board / 165 Extension / 8 packaged E2E。
+- M158 先做官方 Cloudflare 能力审计、双版本范围合同、数据/密钥/费用边界、失败行为测试与最小 mock 骨架；未经后续安全门禁不得部署、写 Secret、调用真实模型或创建 Live Run。
+- `impeccable` 要求的项目内 `.claude/skills/impeccable/scripts/context.mjs` 不存在，首次 context 命令以 `MODULE_NOT_FOUND` 退出且未修改文件；下一次改用已安装技能目录中的脚本，不重复该路径。
+- 已完成仓库只读盘点：工作树仅有 `task_plan.md`、`findings.md`、`progress.md` 三个预期规划修改；仓库没有 Cloudflare/Wrangler/IndexedDB/OPFS 生产实现，也没有 `.openai/hosting.json`。现有包边界仍是 `apps/api`、`apps/board`、`apps/extension`。
+- Cloudflare 官方审计确认采用 Worker 入口 + Workflows 长任务 + Durable Object 精确费用闸门 + R2 临时对象 + Browser Rendering 有界抓取；Rate Limiting 仅作近似防滥用，不能承担消费核算。
+- 用户明确 Web Edition URL 不得写入 GitHub，只私下交给评委；该约束已加入范围、产品、设计与 M161 验收合同。
+- `AGENTS.md`、`apps/board/PRODUCT.md` 与 `DESIGN.md` 已正式允许独立 Web Edition，同时锁定本地版 BYOK/SQLite 默认行为。下一步按红绿合同新增 Web Edition 的缺模块测试，先确认失败再写生产代码。
+- Web/Edge 测试脚手架安装时第一次被供应链策略拒绝 `workerd` 构建；已把这一明确 Cloudflare 本地运行时加入现有 `allowBuilds`，没有交互批准其他包，第二次安装通过。
+- 红灯已确认：Web history suite 只因缺少 `src/lib/history` 失败；Edge 三组 suite 只因缺少 `cost-gate`、`entrypoint`、`workflow` 失败。未调用 Cloudflare、Provider 或公开网页，生产实现尚未出现。
+
+## M158 当前实现恢复与验证
+
+- 当前工作树保留用户所有既有修改：10 个已跟踪修改与未跟踪 `apps/web/`、`apps/edge/`，分支为 `codex/archresearch-v2-1...origin/main`，staged 0。没有 reset、checkout、clean、stage、commit、push、部署或 Cloudflare 资源/Secret 创建。
+- Web Edition 已从初始红灯骨架推进到最小可测实现：`apps/web` 提供无需用户 Key 的研究工作台、浏览器 IndexedDB Run/result/collection 历史及 JSON 导入导出；`apps/edge` 提供 Worker API 壳、Workflows、CostGuard DO、Turnstile/配额/费用闸门、Provider client、直接公开页抽取与证据双门槛。OPFS 本地附件存储尚未实现。
+- 本会话仅执行离线确定性复验：Web `vitest run` 通过 3 files / 6 tests；Edge `vitest run` 通过 5 files / 13 tests。此前记录的 Web lint/typecheck/build、Edge lint/typecheck 与 Wrangler dry-run 仍为最近的静态/构建验证；根级门禁和浏览器 QA 尚未针对本轮 Web Edition 运行。
+- 当前唯一下一步：先给真实 Worker 路由壳和 `CostGuardDurableObject` SQLite 持久化新增失败行为测试；确认红灯后才实施最小修复并重跑 Edge 离线套件。不得调用真实模型、创建真实研究、部署或创建 Secret。
+- `HANDOFF.md`、`task_plan.md`、`findings.md` 已同步为上述真实状态、验证结果与唯一下一步；本次停在交接记录，不开始该测试工作。
+
+## M158 Worker route and SQLite ledger contract
+
+- 已先新增 `worker-router.test.ts` 与 `sql-cost-ledger.test.ts`，确认精确红灯为两个尚不存在的生产模块；未运行真实 Worker、Provider 或 Cloudflare API。
+- `worker-router.ts` 接管生产 Worker 的 `/api/*` 与静态资源分发并保留安全头；`SqlCostLedger` 接管 CostGuard 的 SQLite 日账本、预留、结算、释放与 kill switch 状态。
+- 复验 `pnpm --filter @archresearch/edge test` 为 7 files / 15 tests 通过，随后 typecheck、lint 和 `git diff --check` 均通过。未 stage、commit、push、部署或创建资源。
+
+## 2026-07-29 Web Edition release-prep closure
+
+- 新增 OPFS 附件 adapter 及 1 项行为测试；Web 现为 4 files / 7 tests，typecheck、lint、build 全绿。
+- 新增费用终态幂等合同；Edge 现为 7 files / 16 tests。根级 `scripts/verify.ps1` 已纳入 Web/Edge，完整门禁 exit 0：360 API / 177 Board / 165 Extension / 8 packaged E2E，并完成两端构建。
+- 启动 Vite 进行桌面与 390px 浏览器 QA；两种尺寸无横向溢出，console 无产品错误。QA 服务已停止，浏览器会话已关闭。
+- `wrangler whoami` 成功但 `archresearch-web` 不存在。实际部署暂停在独立 Provider Secret、Turnstile credentials 和 hostname；未创建外部资源、未写 Secret、未 stage/commit/push。
+
+## 2026-07-29 Web Edition no-monetary-cap recovery
+
+- 按 `HANDOFF.md` 顺序完整恢复 HANDOFF/AGENTS、活动计划、findings/progress 末尾与 `git status --short --branch`；工作树仍是 12 个 tracked 修改和未跟踪 `apps/web`/`apps/edge`，staged 0，全部保留。
+- planning-with-files catchup 首次被系统 Python 的 Microsoft Store alias 拦截；没有重复同一失败，改用 Codex bundled Python 后成功恢复 53 条未同步上下文。
+- 用户明确取消 Web Edition 的美元金额上限。当前实现已移除每日/单次金额拒绝与 Wrangler 金额变量，保留入口频率限制、有界查询/页面/Token/时间和紧急停机；下一步先跑完整门禁，再部署免费 workers.dev 版本并配置服务端 Secret，不触发真实研究。
+
+## 2026-07-29 Web Edition no-monetary-cap verification
+
+- 新会话按恢复协议保留 12 个 tracked 修改与未跟踪 `apps/web`/`apps/edge`，staged 0；未使用会闪退的内部浏览器。
+- Edge 定向复核通过 7 files / 16 tests、lint、typecheck 与 Wrangler production dry-run；金额上限变量和金额拒绝分支均不存在，六次/分钟入口限流、有界执行、CostGuard 记账与 `SERVICE_ENABLED` 停机开关保留。
+- 根级 `scripts/verify.ps1` exit 0，耗时 205.2 秒：360 API / 177 Board / 165 Extension / 8 packaged E2E、Web 4 files / 7 tests、Edge 7 files / 16 tests，以及 Ruff/format、strict Mypy、lint/typecheck/test/build 和 Edge dry-run 全绿。
+- 首次把状态、staged 计数和私有 URL 扫描拼在同一条 PowerShell 命令时因正则引号解析以 exit 1 结束且无输出；改为两个独立只读命令后，`git diff --check` 通过、staged 0，仓库中没有具体 Web Edition 部署地址。
+- M160 已完成。未调用真实 Provider、未创建 Live Run、未部署、未创建 Cloudflare 资源或 Secret；M161 仍只阻塞于独立 Provider Secret、Turnstile site/secret 与最终 hostname。
+
+## 2026-07-29 GitHub publish audit
+
+- `gh` 已登录 `jileyu2000`。远端仓库 `jileyu2000/archresearch` 的 `main` 与本地 `HEAD` 同为 `433d239`，最新 verify run `30369444309` success。
+- GitHub Release 仍为 `v2.1.0`（提交 `2a92539`）；后续 Agent 架构和项目主页修改已在 `main`，但没有新 tag/Release。当前 Web/Edge 修改尚未 commit 或 push。
+- 待发布候选为 52 个路径（12 tracked 修改 + 40 untracked）；敏感文件名与内容扫描为 0 命中。未 stage、commit、push 或创建 Release，下一步需要用户明确选择“只提交到 main”还是“同时创建新版本 Release”。
+
+## 2026-07-29 Cloudflare deployment recovery
+
+- 用户将优先级改为先完成并发布公开网页，之后再把本地版改为无需预装 Python/Node/pnpm 的 Windows 安装程序；Chrome 只作为本地浏览器能力依赖，公开版只需要普通浏览器。
+- 只读账户审计发现 `archresearch-web` 已存在并有 7 个版本/部署，四个必需 Secret 名称全部存在；未读取或输出 Secret 值。该状态与旧 HANDOFF 不一致，说明上一会话在闪退前已经部署但未完成记录。
+- M161 保持 in progress。下一步识别生产路由并进行线上静态/API/Turnstile/真实研究验收；只有确认当前部署与本地已验证源码一致后才视为公开网页发布完成。
+
+## 2026-07-29 Cloudflare production publish
+
+- README 已明确：本地安装版的网页读取、扩展和小红书登录态链路仅支持 Google Chrome，不支持 Edge/Firefox/Safari；Cloudflare Web Edition 不依赖本地扩展。
+- 当前 Web build 与 `wrangler deploy` 成功，生产版本为 `c17dc24c-28ce-44c3-9c0f-b52a9f4fd95e`，`MOCK_MODE=false`，Workflow/DO/六次每分钟限流与 Secret 绑定均生效；生产 URL 未写入仓库文件。
+- 线上主页 200、HTML/CSP/noindex 正常，公开配置有非测试 Turnstile site key，缺 token 的 `/api/runs` 请求返回 400。Playwright 桌面/390px 页面均完整加载、关键控件可见、横向溢出 0；验收浏览器已关闭。
+- 线上检查错误记录：首次主页变量误用 PowerShell 保留 `$HOME`，改用任务专用变量后取得有效结果；一次 README 定向检查在 `apps/edge` 子目录使用错误相对路径；Wrangler 4.114 不支持 `triggers list` 且旧 `deployments view` 已改名；Playwright `networkidle` 因 Turnstile 持续网络活动超时，改用 DOM/关键控件就绪。均未改写数据或造成额外部署。
+- 自动化没有点击或绕过 Turnstile。M161 还需真人完成一次验证并跑一个 Quick 真实研究；GitHub 源码发布随后执行。

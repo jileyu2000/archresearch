@@ -56,6 +56,10 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | M155 evidence-grounded agent boundaries | complete | `agent/planning.py`、`execution.py`、`verification.py` 与 `synthesis.py` 已按红绿合同形成明确边界；七阶段 orchestrator、API/schema、checkpoint、取消/恢复、查询预算、gap 补查、失败保留与 evidence-bound 双门槛不变。完整门禁 360 API / 177 Board / 165 Extension / 8 packaged E2E 全绿；durable 为 4/15/13 permanent/0 active/14 collections/2 inputs。 |
 | M156 competition GitHub presentation and publish | complete | GitHub 访客页覆盖场景价值、Agent 架构、工作流/工具、创新、完成度、访问方式、3 个测试问题和人机协同边界；architecture/demo 文档同步四模块、双门槛和现行三档。公开产品提交 `010eceb` 已推送 `main`；本地完整门禁与 Hosted CI `30362938145` 均通过 360/177/165/8，durable 仍为 4/15/13 permanent/0 active/14 collections/2 inputs。 |
 | M157 project-first GitHub presentation | complete | README 已恢复为 ArchResearch 的长期通用项目主页，竞赛要求仅作为信息组织参考；参赛、投稿和评审专属定位已删除，真实建筑竞赛使用场景与目标用户、痛点、场景价值、Agent 架构、人机协同、完成度、截图、安装、演示和验证入口均保留。完整本地门禁与 Hosted CI `30368067949` 通过 360/177/165/8，项目主页提交为 `cdb97f0`。 |
+| M158 Cloudflare Web Edition contract and foundation | in_progress | 双版本范围合同、`apps/web`/`apps/edge` 基础与首轮离线测试已完成：网页工作台不要求用户 Key，浏览器 IndexedDB 保存 Run/result/collection 并支持版本化 JSON 导入导出；Worker 路由、Turnstile、设备/IP 配额、CostGuard DO、七阶段 Workflow、Provider client 与 `fetch` + `HTMLRewriter` 公开页读取已就位。未部署、未创建 Secret/资源、未调用真实模型或真实研究流程。 |
+| M159 browser-local history and public research UX | complete | 公开页第一屏、三档研究、开始/轮询/取消、结果与最近记录均完成；IndexedDB 记录、版本化备份、OPFS 附件 adapter 及其离线测试完成。桌面与 390px loaded QA 无横向溢出；清站点数据、无痕模式和换设备丢失边界已在界面明确。 |
+| M160 edge research orchestration and bounded execution | complete | typed 七阶段 plan/execute/verify/synthesize、短期 Workflow 状态、取消/恢复、逐字引文核验、coverage + enrichment 双门槛、Turnstile、入口配额、有界查询/页面/Token/时间与 kill switch 已完成。用户取消每日/单次美元金额拒绝后，CostGuard SQLite 只记录预留与实际用量；Edge 7 files / 16 tests 及根级完整门禁全绿。实际部署核验归 M161。 |
+| M161 public deployment and dual-edition release | in_progress | `archresearch-web` 已用当前非 mock 源码重新部署为版本 `c17dc24c-28ce-44c3-9c0f-b52a9f4fd95e`；主页/API/安全头、生产 Turnstile、缺 token 拒绝及桌面/390px loaded QA 已通过。README 已明确本地版仅支持 Google Chrome。剩余是由真人完成 Turnstile 后执行一次 Quick 真实研究验收，并发布 GitHub 源码版本；URL 只私下交付，不进入 GitHub README、Release、About 或仓库文档。 |
 
 ## External acceptance gates
 
@@ -101,6 +105,16 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 2. 信息完整 → 验证：目标用户、真实痛点、使用场景、实际价值、Evidence-Grounded Plan-and-Execute 架构、人机协同、完成度、截图、安装、演示和测试入口继续保留。
 3. 外科范围 → 验证：不改生产代码、测试合同、架构或 durable 数据；公开差异不含凭据、数据库、备份 ZIP 或无关文件。
 4. 发布门禁 → 验证：Markdown 链接与图片有效，`git diff --check` 和独立 diff 审查通过；完整离线门禁通过后显式 stage，推送 `main` 并等待 Hosted CI 成功。
+
+### M158 验收合同
+
+1. 双版本边界 → 验证：现有 Windows/Chrome 本地版继续 BYOK、本机 SQLite 与完整浏览器能力；Cloudflare Web Edition 是独立部署目标，不改变本地 API、数据库或扩展默认行为。
+2. 密钥与费用 → 验证：网页 bundle、浏览器存储、响应和 Trace 中均无项目方 Key；只有通过 Turnstile、配额、单次预算和全局费用熔断的请求才能到达服务端 Provider client。
+3. 数据驻留 → 验证：当前长期 Run/result/collection/history 默认只写 IndexedDB，并提供版本化导出/导入；OPFS 附件 adapter 作为后续边界单独验收。Cloudflare 只持有有明确 retention 的 Workflow 状态和费用预留，不建立平台级长期历史。
+4. 真实研究语义 → 验证：官方 Cloudflare 能力能够支持有界长任务、公开 HTTPS 页直接读取和逐阶段恢复；默认路径使用 `fetch` + `HTMLRewriter`，不依赖 R2/Browser Rendering。无法在边缘安全复现的本地浏览器/XHS 能力必须明确降级，不能用静态演示冒充实时研究。
+5. 测试先行 → 验证：生产代码前先见缺少 Web Edition 边界/模块的红灯；默认测试只使用 mock/fixture，不调用真实模型、Cloudflare 账户或公开网页。
+6. 第一阶段交付 → 验证：Cloudflare 配置、typed contracts、IndexedDB adapter、费用闸门、实际 Worker 路由壳与 mock Workflow 骨架可在离线测试中运行；Web/Edge lint/typecheck/unit/build 与既有本地版定向回归全绿。OPFS、浏览器 QA、根级门禁与安全审查在基础测试闭合后继续执行。
+7. 链接隔离 → 验证：仓库公开内容、构建产物源码映射、Release 与 About 均不包含 Web Edition URL；该地址只出现在私下提交材料。
 
 ### M121 试点执行计划（已完成，2026-07-27 模拟验收）
 

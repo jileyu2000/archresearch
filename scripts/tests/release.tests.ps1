@@ -38,6 +38,24 @@ $verifyScript = Get-Content -Raw -LiteralPath (Join-Path $workspace "scripts\ver
 if ($verifyScript -notmatch 'release\.tests\.ps1') {
     throw "The authoritative gate must include release workflow contracts."
 }
+foreach ($webContract in @(
+    '@archresearch/web test',
+    '@archresearch/web typecheck',
+    '@archresearch/edge test',
+    '@archresearch/edge typecheck',
+    '@archresearch/edge build'
+)) {
+    if ($verifyScript -notmatch [regex]::Escape($webContract)) {
+        throw "The authoritative gate must include Web/Edge contract: $webContract."
+    }
+}
+
+$edgeConfig = Get-Content -Raw -LiteralPath (
+    Join-Path $workspace "apps\edge\wrangler.jsonc"
+) | ConvertFrom-Json
+if ($edgeConfig.assets.run_worker_first -ne $true) {
+    throw "Every Web Edition response must pass through the Worker security-header wrapper."
+}
 
 $expectedVersion = "2.1.0"
 $boardPackage = Get-Content -Raw -LiteralPath (Join-Path $workspace "apps\board\package.json") |

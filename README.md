@@ -91,6 +91,8 @@ flowchart TB
 
 环境要求：Windows 11、Chrome、Python 3.12、Node.js 24、pnpm 11。
 
+本地安装版的网页读取、扩展和小红书登录态研究目前仅支持 **Google Chrome**；不支持 Edge、Firefox 或 Safari。Cloudflare Web Edition 不使用本地扩展，只需要现代浏览器访问。
+
 ```powershell
 Copy-Item .env.example .env
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/setup.ps1

@@ -15,6 +15,8 @@ coverage/
 # Local runtime
 .env*
 !.env.example
+.dev.vars*
+.wrangler/
 *.db
 *.sqlite3
 .archresearch/

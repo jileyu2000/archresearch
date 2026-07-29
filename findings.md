@@ -520,3 +520,67 @@
 - 当前 README 的“参赛定位”、海之子杯/投稿方向/评审跳转、“作品简介（100 字内）”、“技术说明模板要求”、“当前参赛版本”和“评审访问与演示”会让访客误解项目专为竞赛制作，必须改为普通项目语言。
 - “课程设计、建筑竞赛或毕业设计”是产品的真实使用场景，不属于竞赛投稿定位，应保留；Agent 四模块、截图、安装、演示、测试问题和已知边界也都继续保留。
 - 本轮不需要改架构、产品代码或运行功能；验收重点是公开表达、Markdown 完整性、敏感信息边界和发布后 Hosted CI。
+
+## 2026-07-29 M158 Cloudflare Web Edition 用户决定
+
+- 用户明确要求建设可公开访问、可实时研究的完整 Cloudflare 网页版；网页版模型费用由项目方承担，评审无需配置 Key。GitHub 继续提供独立的一键安装本地版，本地版由每位用户自行配置 Key，两种版本不能混淆。
+- 网页版长期研究记录要求保存在各自使用者本机。浏览器环境中的可实现语义是同一站点 origin 下的 IndexedDB/OPFS，而不是任意可见文件夹；清除站点数据、无痕模式、换浏览器或换设备会丢失，因此版本化导出/导入是必要功能。
+- 真实长任务不能做到云端绝对零状态：浏览器关闭后仍需继续/恢复时，Cloudflare 必须保存最小化、带 TTL 的运行中 checkpoint 和临时素材；完成结果传回浏览器后删除。长期历史、收藏和项目目录不建立平台级案例库。
+- 项目方 Key 绝不能进入网页 bundle、IndexedDB、日志或客户端请求。公开匿名入口必须先经过 Turnstile、设备/IP 配额、单次查询/页面/时间/Token 预算、每日总费用熔断和紧急 kill switch，否则公开 URL 会直接暴露项目方成本。
+- 现有 `AGENTS.md` 仍把范围限定为本地优先 V2.1；M158 必须先把“保留本地版并新增独立 Web Edition”写成明确仓库合同，不能暗中把本地产品改造成 SaaS。
+- 用户追加约束：Web Edition 虽允许所有持有链接者在线使用，但其地址不得出现在 GitHub README、Release、About 或仓库文档，只私下提交给评委。GitHub 继续作为本地安装版和项目资源展示页。
+
+## 2026-07-29 M158 Cloudflare 官方能力审计
+
+- Workers Paid 的单次 HTTP 请求默认 30 秒 CPU、可配置到 5 分钟，内存 128 MB；等待网络不计 CPU，但客户端断开后普通 `waitUntil()` 最多延续约 30 秒。因此研究流程不能依赖单条 HTTP 连接，入口只负责校验和创建任务。来源：<https://developers.cloudflare.com/workers/platform/limits/>。
+- Workflows 原生提供跨分钟、小时或更久的 durable step、自动重试、暂停和实例生命周期，适合七阶段 plan/execute/verify/synthesize；每一步仍需服从 Worker CPU 与外部资源预算。来源：<https://developers.cloudflare.com/workflows/>。
+- Durable Objects 是全局费用预留和 kill switch 的正确单写者边界；Worker Rate Limiting binding 是边缘位置内最终一致的近似限流，官方明确不应当作精确 accounting，因此只能做入口防滥用，不能替代精确费用账本。来源：<https://developers.cloudflare.com/durable-objects/platform/limits/>、<https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/>。
+- Browser Rendering/Browser Run 在 Paid 计划按使用计费并有并发、启动速率与闲置超时限制；每次研究必须限制页面数、并发和会话存活时间，不能为匿名用户提供无界 crawl。来源：<https://developers.cloudflare.com/browser-rendering/platform/limits/>。
+- Turnstile token 必须由服务端 Siteverify 验证，token 五分钟过期且只能使用一次；入口还需校验 action/hostname，不能只相信前端 widget 成功。来源：<https://developers.cloudflare.com/turnstile/get-started/server-side-validation/>。
+- Provider Key 与 Turnstile secret 使用 Worker Secret，禁止写入 `vars`、Wrangler 配置或 Git；公开 bundle 只允许非敏感 site key。来源：<https://developers.cloudflare.com/workers/configuration/secrets/>。
+- 选定拓扑：静态 Web 工作台 + API Worker 作为唯一公网入口；Turnstile/近似速率限制先行，CostGuard Durable Object 原子预留预算后才创建 Research Workflow；Workflow 保存最小 checkpoint，临时大对象写有生命周期规则的 R2，完成结果交付浏览器 IndexedDB/OPFS 后清理。默认测试全部以 in-memory fake bindings 运行。
+
+## 2026-07-29 M158 当前实现与恢复结论
+
+- 先前的 R2/Browser Rendering 默认拓扑已被当前实现取代。`apps/edge` 的默认公开页读取为受限 HTTPS `fetch`、每页 32,000 字符上限、最多 3 个并发、`HTMLRewriter` 去除脚本/导航等噪声后抽取正文；不配置 R2 或 Browser Rendering binding。
+- `apps/web` 已实现第一屏研究工作台、快速/形成方案依据/跨案例论证三档、开始/轮询/取消、结果与最近记录。长期 Run、evidence-bound result、collection 当前仅写 IndexedDB；版本化 JSON 可导入导出。OPFS 附件存储尚未实现，不应在公开说明或交接中称为已交付。
+- `apps/edge` 已有静态资源 + `/api/*` 路由、same-origin 检查、CSP/noindex 等响应头、Turnstile 服务端校验、设备/IP 近似配额、`CostGuardDurableObject` 精确预留、七阶段 Workflow、Provider Responses client、逐字 quote 实存核验与 coverage + enrichment 双门槛。Quick/Balanced/Deep 的最大模型费用预留为 `$0.20/$0.60/$1.20`，默认日上限 `$2`。
+- Workflow 成功状态保留 1 天、异常状态保留 3 天。CostGuard 会以每个 Run 的最大预留结算，避免重试或失败少计模型成本；这只控制项目方承担的 Provider 费用，不是向用户收费。
+- 本会话重跑的离线验证：`pnpm --filter @archresearch/web test` 为 3 files / 6 tests 通过；`pnpm --filter @archresearch/edge test` 为 5 files / 13 tests 通过。此前 Web lint/typecheck/build、Edge lint/typecheck 与 Wrangler dry-run 已通过；根级回归、实际 Worker 路由壳/DO 持久化合同、OPFS adapter、浏览器 QA 与安全审查尚未执行。
+- 未部署、未创建 Cloudflare 资源或 Secret、未调用真实 Provider 或真实研究流程；Web URL 未写入仓库。
+
+## 2026-07-29 M158 Worker 路由与 SQLite 费用合同
+
+- Worker 专用 `cloudflare:workers` 模块不能由 Node Vitest 直接加载；尝试加入 Cloudflare Vitest pool 时因现有供应链策略拒绝未批准的 `sharp` 构建而终止。未批准该构建，也未保留该开发依赖。
+- 为保持完全离线且可复现，静态资源/API 分发和响应安全头抽为 `worker-router.ts`，生产 `index.ts` 仍是唯一 Worker 入口。路由合同确认 `/api/runs` 的费用拒绝不会落入静态资源，也不会创建 Workflow。
+- CostGuard 的日账本及预留改用 Durable Object SQLite 的 `storage.sql`；`SqlCostLedger` 同步执行余额读取和预留写入，避免在一次 DO 事件内因 await 交错。合同确认同一 SQLite 状态经对象重建后仍拒绝超出日上限的第二笔预留。
+- 红灯为两个缺失生产模块；最小实现后 Edge 离线集为 7 files / 15 tests，并通过 typecheck、lint 与 `git diff --check`。未调用 Provider、真实研究或 Cloudflare 资源。
+
+## 2026-07-29 Web Edition 发布前闭合
+
+- OPFS adapter `apps/web/src/lib/attachments.ts` 已实现：目录名固定、附件 id 受限、写入/读取/显式删除均为浏览器本机文件系统操作；离线合同通过，不上传 Worker 或进入 JSON 备份。
+- Web 包补充标准 `dev` script；Web/Edge 均通过生产 build。移动 390px 与默认桌面 loaded QA 的 `scrollWidth === clientWidth`，无横向溢出。
+- 权威 `scripts/verify.ps1` 已接入 Web test/typecheck/build 与 Edge test/typecheck/build。全量门禁通过：360 API、177 Board、165 Extension、8 packaged E2E、Web 4 files/7 tests、Edge 7 files/16 tests，以及 lint、类型和构建。
+- `wrangler whoami` 确认账号 `53156bb4a7b3c742c8d132fb798faad8` 已登录；只读查询确认 `archresearch-web` 尚不存在。未部署、未创建 Worker/DO/Workflow、未写 Secret。
+- 发布阻塞是外部输入而非代码：Provider API Key 必须是允许迁移到 Cloudflare Secret 的独立密钥，Turnstile 需要 site key、secret 和部署 hostname。本地 Windows 凭据按架构规则不能直接迁移，不能用猜测值或 mock 模式冒充实时公网版。
+
+## 2026-07-29 Web Edition 金额上限决策更新
+
+- 用户明确要求“不设 key 使用费用上限 / 不要费用上限”。这只取消按美元金额的每日总额和单次模式预留拒绝，不取消六次/分钟的入口反滥用限制、有界查询/页面/Token/运行时间或紧急服务停机能力。
+- 网页使用者继续不提供 Key；项目方 Provider Key 只进入 Cloudflare Secret。CostGuard SQLite 账本仍记录预留与实际用量，但不得再因金额达到某个阈值拒绝研究。
+- 取消金额拒绝后的代码审查与验证确认：Wrangler 仍绑定六次/分钟入口限流、Workflow、CostGuard Durable Object 和 `SERVICE_ENABLED` 停机开关；Edge 定向 7 files / 16 tests、lint、typecheck、production dry-run 以及根级完整门禁均通过。较早记录中的 `$0.20/$0.60/$1.20` 单次预留和 `$2` 日上限已被本决策取代，不再是现行拒绝合同。
+
+## 2026-07-29 GitHub 发布状态审计
+
+- GitHub 远端 `main` 与本地 `HEAD` 当前同为 `433d239`（`Close project-first README milestone`）；对应 Hosted CI run `30369444309` 成功。M155 Agent 边界与 M157 项目主页修改已经进入公开 `main`。
+- 正式 Release 仍只有 `v2.1.0`，其提交为 `2a92539`；因此 `2a92539..433d239` 的 Agent 架构、公开说明与规划闭合记录虽在 `main`，但尚无后续版本 tag/Release。
+- M158–M160 Web Edition 仍是本地未提交工作树：12 个 tracked 修改、40 个未跟踪文件、staged 0。候选 52 文件的敏感文件名/内容扫描未发现 Key、Token、数据库、SQLite、ZIP 或具体 Web 部署地址；这不等于已获 Git 发布授权。
+
+## 2026-07-29 Cloudflare 部署恢复审计
+
+- 交接中的“目标 Worker 不存在、Secret 尚未创建”已被账户只读查询推翻：`archresearch-web` 实际存在，2026-07-29 03:52–03:56Z 有 7 个版本/部署，来源包含首次上传、四次 Secret 变更和后续部署。
+- `wrangler secret list` 只读确认 `ADMIN_CONTROL_TOKEN`、`PROVIDER_API_KEY`、`TURNSTILE_SECRET_KEY`、`TURNSTILE_SITE_KEY` 四个名称全部存在；Secret 值不可读且未被读取。上一会话显然在闪退前已执行部署，但规划文件未同步。
+- 资源存在不等于发布完成；仍需确认生产路由/URL、线上静态页面、`/api/config`、Turnstile hostname 匹配、非 mock Provider 路径和真实研究终态，再决定是否用当前已验证源码重部署。
+- 当前已验证源码随后重新部署成功，版本为 `c17dc24c-28ce-44c3-9c0f-b52a9f4fd95e`，配置明确为 `MOCK_MODE=false`；静态资源无变化，Worker、Workflow、Durable Object、六次/分钟限流和四个既有 Secret 继续绑定。
+- 线上主页返回 200，CSP 与 `X-Robots-Tag: noindex, nofollow, noarchive` 生效；`/api/config` 返回非 Cloudflare 测试占位的 site key，缺 Turnstile token 的研究请求返回 400。桌面与 390px Chromium 均无横向溢出。
+- Turnstile iframe 的两条 `%c%d ... NaN` console error 来自 `challenges.cloudflare.com`，不是 ArchResearch bundle。真实 Quick 研究仍需真人完成验证码；自动化不得绕过人机验证。
