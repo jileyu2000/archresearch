@@ -923,3 +923,9 @@
 - 新增 8 个安全边界测试后 Extension 为 19 files / 186 tests；coverage 提升至 statements 83.47、branches 78.21、functions 84.88、lines 85.68，四项均高于既有门槛。测试覆盖桥重复启动/来源过滤/运行时失败、公共页权限/HTTPS/旧注册替换，以及小红书空查询/无效 tab/畸形媒体/清理失败；生产代码未改。
 - 根级 `pnpm test:coverage`、Extension lint/typecheck 与 `git diff --check` 通过；随后完整 `scripts/verify.ps1` exit 0，耗时 192.3 秒：360 API / 183 Board / 186 Extension / 11 Web / 18 Edge / 8 packaged E2E，以及 Ruff/format、strict Mypy、四端 lint/typecheck/build、安全检查与 Wrangler production dry-run 全绿。
 - 当前唯一下一步：提交并推送覆盖率修复，等待新的 Hosted CI 成功后，才部署生产 Worker、执行线上 smoke、打 annotated `v2.1.2` tag 并发布带扩展 ZIP 的 GitHub Release。
+- 覆盖率修复提交 `c74571f` 已推送 `main`；第二轮 Hosted CI `30438474678` 在 fresh Windows runner 21 分 43 秒后 success，coverage、全新依赖/Chromium、完整仓库门禁和 post-job 全部通过。
+- 生产 Worker 已部署为版本 `dc0eb528-a8c3-4ca2-88fa-c6131f866d3c`，`MOCK_MODE=false`，既有 Workflow、Durable Object、六次/分钟限流与四个 Secret 绑定继续生效。线上主页 200、CSP/noindex/frame denial、正式 Turnstile 配置和缺 token 400 正常。
+- 生产 Chrome headless smoke 覆盖 1440×1000 与 390×844：主页面首次安装弹窗可见，按钮进入 GitHub latest Release，公共版 meta 标记正确；弹窗与关闭后的主页横向溢出均为 0，产品 console/page error 0。自动化未点击/绕过 Turnstile，也未创建真实研究。
+- annotated tag `v2.1.2` 指向 `c74571f`；正式 GitHub Release 已发布，`v2.1.2` 是 latest。附件 `archresearch-extension-v2.1.2.zip` 为 21,075 bytes，GitHub digest 与本地 SHA-256 均为 `76253847468248E027F2747DEB638B576A961FB0C5F7BD1A4EB584C97E2B7C81`；Release 未包含 Worker URL、Secret、本地数据或备份。
+- Release 复核第一次请求了 `gh release view` 不支持的 `isLatest` 字段，并同时用零次重定向请求 `/releases/latest`，两处均以只读错误结束；随后改用受支持字段与 GitHub releases/latest API，确认最新版本、tag 落点、附件状态和 digest。未修改 Release 或文件。
+- M163 complete。剩余外部事项不是代码发布阻塞：真人完成生产 Turnstile 后执行一次 Quick 真实研究；未来如需真正一键安装，提交 Chrome Web Store 审核。

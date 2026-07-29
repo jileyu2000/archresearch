@@ -28,7 +28,7 @@
 
 ## 当前已验证基线
 
-- 分支 `codex/archresearch-v2-1` 跟踪 `origin/main`，公开仓库为 `https://github.com/jileyu2000/archresearch`。本地安装基线 `v2.1.0` 指向 `2a92539`；完整公共产品迁移 Release `v2.1.1` 指向已验证提交 `896945a`。后续仍按显式路径 stage，备份 ZIP 不得入库。
+- 分支 `codex/archresearch-v2-1` 跟踪 `origin/main`，公开仓库为 `https://github.com/jileyu2000/archresearch`。本地安装基线 `v2.1.0` 指向 `2a92539`；公共小红书桥接 Release `v2.1.2` 指向已验证提交 `c74571f`，并附带版本化 Chrome 扩展 ZIP。后续仍按显式路径 stage，备份 ZIP 不得入库。
 - 权威门禁 `scripts/verify.ps1`：**360 API / 177 Board / 165 Extension / 8 packaged E2E**，加 Ruff/format、strict Mypy、两端 lint/typecheck/build、进程/安全/评测检查。PowerShell 5 会吞中间失败，脚本末行成功文案不能单独作为证明。另有根级 `pnpm test:coverage`：Board 78.17/72.39/80.50/81.78 与 Extension 82.69/76.52/83.96/84.73 为最低阈值；M122 完成后 Board 实测为 80.01/75.75/84.77/83.80。
 - 进程脚本必须保持无 WMI/CIM（MSIX pwsh 加载 MMI 失败会杀掉自己拉起的服务）：监听发现用 `netstat -ano`，命令行读 PEB。
 - 持久数据基线：**4 workspaces / 15 Runs（13 条 permanent + 2 条仍沿用既有到期日的模拟试点 Run）/ active 0 / 14 条收藏 / 2 条 input artifacts**。2026-07-27 12:04 新增的 3 条收藏属于既有“城市社区共享中心”Run，与 M152 的隔离图纸/《耕织图》问题不同，是并发外部变化，已按工作区保护规则保留。新建 Run 默认 180 天；M152 未创建或改写 durable Run。《城市社区共享中心》8 问全部 completed 零缺口（M137）；`76f52c79`（三档验收 Deep）与 `ff16988d`（任务书 Standard）是现行验收声明的底层证据，不是失败记录。模拟产物去留待用户决定。
@@ -37,7 +37,7 @@
 - M155/M156 公开产品架构提交为 `010eceb`：Evidence-Grounded Plan-and-Execute 四模块边界、行为合同、README 信息维度、architecture/demo 文档已推送 `main`。Hosted CI run `30362938145` 在 fresh Windows runner 通过 coverage、360/177/165/8 与完整门禁。
 - M157 项目主页提交为 `cdb97f0`：README 已改为长期通用的 ArchResearch 项目主页，竞赛要求只作为信息组织参考，不再出现参赛、投稿或评审专属定位；目标用户、痛点、场景价值、架构、人机协同、完成度、截图、安装和演示入口均保留。Hosted CI run `30368067949` 通过 fresh coverage、360/177/165/8 与完整门禁。
 - M162 完整迁移已发布：Web 不再维护简化 UI，而是直接渲染本地 Board；`PublicApiClient` 用 IndexedDB 完成本地 `ApiClient` 合同，Edge 承担 Turnstile、设备/IP 近似配额、CostGuard Durable Object、七阶段 Workflow、Provider Responses API client、公开 HTTPS 页读取和 evidence/coverage/enrichment 双门槛。无 R2 或 Browser Rendering 默认依赖。
-- M163 当前未提交的公共小红书桥接位于 Board/Web/Edge/Extension：公共页只可发送 `status` 与 `xiaohongshu_search` 两个严格动作，扩展以用户手势为当前 HTTPS 公共 origin 动态注册 content script，并用用户已登录的小红书页面做有界只读搜索；Cookie、账号和密码不上传。主页缺少扩展时立即提醒，检测到桥后不再弹出。
+- M163 公共小红书桥接已发布：公共页只可发送 `status` 与 `xiaohongshu_search` 两个严格动作，扩展以用户手势为当前 HTTPS 公共 origin 动态注册 content script，并用用户已登录的小红书页面做有界只读搜索；Cookie、账号和密码不上传。主页缺少扩展时立即提醒，检测到桥后不再弹出。
 - 最新完整验证：根级 `scripts/verify.ps1` exit 0（192.3 秒），通过 360 API / 183 Board / 186 Extension / 11 Web / 18 Edge / 8 packaged E2E，以及 Ruff/format、strict Mypy、lint/typecheck/build、安全检查与 Wrangler dry-run。根级 coverage 同时通过，Extension 为 83.47/78.21/84.88/85.68。本机 1440×1000 和 390×844 Chrome headless QA 覆盖安装提醒与主页，横向溢出 0、产品 console/page error 0；已生成待发布的 `2.1.2` 扩展 ZIP，真正一键安装仍需 Chrome Web Store 审核。
 - 本工作区由多个 agent 会话并发写入（长期约束）：提交前后必须重读 `git status`，另一会话仍在写同名文件时暂停提交。
 
@@ -52,7 +52,7 @@
 7. **M157 已 complete**：README 已从竞赛投稿语境修正为长期通用项目主页，只保留“建筑竞赛”作为真实用户使用场景；项目主页提交 `cdb97f0` 的本地完整门禁与 Hosted CI `30368067949` 全绿。
 8. **M158/M159/M160 当前状态**：Cloudflare 官方审计、双版本范围合同、Edge 有界执行、浏览器本地长期数据、离线测试和既有生产部署均已完成。CostGuard SQLite 保留预留/实际用量记录和停机开关，不按金额拒绝；公开页读取默认采用 Worker `fetch` + `HTMLRewriter`，不使用 R2 或 Browser Rendering。
 9. **M162 已 complete**：公共入口直接复用本地 Board，个人收藏、完整结果工具、任务书、历史、表达规范和备份均已接通。提交 `896945a`、Hosted CI `30433096343`、生产 Worker 版本 `051c4e0c-4e9f-45c8-be0c-99194b16cf7b` 和 `v2.1.1` Release 均已闭合；生产桌面/390px、完整案例对照和静态素材 smoke 通过。网页 URL 继续禁止写入 GitHub。M161 唯一剩余是由真人完成正式 Turnstile 后跑一次 Quick 真实研究，自动化不得绕过。
-10. **M163 发布中**：公共 Web 与 GitHub 本地版共用主页安装提醒、扩展连接状态和小红书视觉读取协议；严格消息/来源校验、动态 exact-origin 注册、有界搜索、Web/Edge 接入、coverage、全量门禁、打包 E2E、1440/390px QA 与 `2.1.2` ZIP 均已完成。首个 Hosted CI `30437662350` 只因新增模块拉低旧 coverage 门槛失败；补齐边界测试后本地门槛与完整门禁全绿。唯一下一步是推送该测试修复、等待第二轮 Hosted CI，再部署 Worker、做线上 smoke 并发布 `v2.1.2` Release；生产 URL 不得进入仓库或 Release。
+10. **M163 已 complete**：公共 Web 与 GitHub 本地版共用主页安装提醒、扩展连接状态和小红书视觉读取协议；严格消息/来源校验、动态 exact-origin 注册、有界搜索、Web/Edge 接入、coverage、全量门禁、打包 E2E、1440/390px QA 与 `2.1.2` ZIP 全部完成。提交 `c74571f` 的 Hosted CI `30438474678` success，生产 Worker 版本 `dc0eb528-a8c3-4ca2-88fa-c6131f866d3c` smoke 全绿，annotated tag 与正式 `v2.1.2` Release 已发布。站外 ZIP 仍需开发者模式加载；真正一键安装是后续 Chrome Web Store 外部审核事项。
 
 ## 工作区保护
 
@@ -61,4 +61,4 @@
 
 ## 给新对话的第一句话
 
-> 继续 ArchResearch。先完整读取 HANDOFF.md，再读取 AGENTS.md；随后按 HANDOFF 顺序恢复 task_plan.md、findings.md、progress.md，并运行 `git status --short --branch`。不要重做已完成工作，不要恢复 Firecrawl，也不要调用会导致桌面应用闪退的内部浏览器。M163 公共小红书桥接、主页安装提醒、完整门禁、Chrome headless QA 与 `2.1.2` 扩展 ZIP 已完成，唯一下一步是显式范围审查、提交/推送、Hosted CI、Worker 部署/线上 smoke 和 GitHub `v2.1.2` Release。生产 Web URL 不得进入仓库或 Release；真正一键安装仍需 Chrome Web Store 审核。保留所有修改和未跟踪文件，不得 reset、checkout、clean 或 `git add -A`。
+> 继续 ArchResearch。先完整读取 HANDOFF.md，再读取 AGENTS.md；随后按 HANDOFF 顺序恢复 task_plan.md、findings.md、progress.md，并运行 `git status --short --branch`。不要重做已完成工作，不要恢复 Firecrawl，也不要调用会导致桌面应用闪退的内部浏览器。M163 公共小红书桥接、主页安装提醒、生产部署、Hosted CI 和 GitHub `v2.1.2` Release 均已完成；当前没有代码发布动作。外部待办只有真人完成正式 Turnstile 后执行一次 Quick 真实研究，以及未来提交 Chrome Web Store 以获得真正一键安装。生产 Web URL 不得进入仓库或 Release。保留所有修改和未跟踪文件，不得 reset、checkout、clean 或 `git add -A`。
