@@ -1047,3 +1047,4 @@
 - `scripts/tests/release.tests.ps1` 已通过，新增文档关键合同和 README 相对链接均存在，`git diff --check` 无错误。M167 的本地实现与相关验证已完成，下一步发布到 GitHub 并等待 Hosted CI。
 - GitHub 发布前检查确认 `gh` 已认证为 `jileyu2000`，远端为 `jileyu2000/archresearch`、默认分支 `main`。工作树中只有 M167 的 README、两份新说明、发布合同和规划记录需要提交；`.artifacts/build`、QA 与 Release 产物继续明确排除。
 - 独立 Markdown 链接检查确认 README 和两份新说明的全部本地链接存在；复跑 release contracts 与 `git diff --check` 继续通过。一次临时检查脚本因 README 位于仓库根目录、父路径为空而在 `Join-Path` 处停止，改用 `.` 作为根文件基准后通过，不是仓库代码或文档故障。
+- 提交 `193f397` 已推送到 `codex/simplify-readme-installation`。GitHub 连接器创建 PR 时因 integration 权限返回 403，按发布 skill 回退到已认证 `gh`，成功创建 draft PR #5；两套 Hosted `verify` 已启动。PR 临时正文文件已从 `.artifacts` 删除，既有本地构建、QA 与 Release 产物未提交。
