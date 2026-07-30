@@ -61,6 +61,22 @@ def probe_provider(
     )
 
 
+def configure_provider(
+    api_key: str,
+    *,
+    data_dir: Path,
+    keyring_backend: KeyringBackend,
+    client_factory: ClientFactory | None = None,
+) -> ProbeResult:
+    normalized_key = api_key.strip()
+    if not normalized_key:
+        raise ProviderConfigurationError("API key is required")
+    config = SuoxieProviderConfig()
+    probe = probe_provider(normalized_key, config, client_factory)
+    commit_provider_config(data_dir, config, normalized_key, keyring_backend)
+    return probe
+
+
 def main(
     argv: Sequence[str] | None = None,
     *,
@@ -82,21 +98,22 @@ def main(
         print("API Key 不能为空。", file=error_stream)
         return 2
 
-    config = SuoxieProviderConfig()
     try:
-        probe = probe_provider(api_key, config, client_factory)
+        backend = keyring_backend or get_windows_keyring()
+        probe = configure_provider(
+            api_key,
+            data_dir=arguments.data_dir,
+            keyring_backend=backend,
+            client_factory=client_factory,
+        )
+    except ProviderConfigurationError:
+        print("安全保存失败：Windows 凭据管理器或本地配置不可用。", file=error_stream)
+        return 1
     except Exception:
         print(
             "连接测试失败：请检查 Key，以及中转站对 Responses 结构化输出的支持。",
             file=error_stream,
         )
-        return 1
-
-    try:
-        backend = keyring_backend or get_windows_keyring()
-        commit_provider_config(arguments.data_dir, config, api_key, backend)
-    except ProviderConfigurationError:
-        print("安全保存失败：Windows 凭据管理器或本地配置不可用。", file=error_stream)
         return 1
 
     print(

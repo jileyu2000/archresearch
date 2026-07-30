@@ -64,6 +64,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | M163 public Web Xiaohongshu bridge | complete | 严格协议、动态公共页连接、扩展内有界小红书搜索、Web/Edge 输入与主页面安装提醒均已发布；根级 coverage 与完整门禁通过 360 API / 183 Board / 186 Extension / 11 Web / 18 Edge / 8 packaged E2E。提交 `c74571f` 的 Hosted CI `30438474678` success；生产 Worker 版本 `dc0eb528-a8c3-4ca2-88fa-c6131f866d3c` 的主页/API/安全头/Turnstile/1440/390 smoke 全绿；annotated `v2.1.2` tag、正式 Release 与扩展 ZIP 已发布。 |
 | M164 Web/local user-visible parity and extension-only release naming | complete | 用户可见功能、同源界面、多方向逐帖逐图、共享 48 图/48 MiB、R2 对象键事件、IndexedDB 本地预览、扩展专属命名、PR #1、两套 Hosted CI 与 `v2.1.3` 扩展专属 Release 均已闭合。私有 R2 桶与三日生命周期已启用，生产 Worker 已部署为 `c7144317-8daa-4e8f-ae57-5ccf79fc8a41`；HTTP、安全头、正式 Turnstile 配置和系统 Chrome 1440×1000 / 390×844 线上 smoke 全部通过。 |
 | M165 extension installation and connection onboarding | complete | 首动作已改为同弹窗“查看安装方法”，四步安装流程和 extension-only 下载边界完整；公共桥用严格 v2 ready 通知当前页，同 origin 重复连接不再注销重注册。PR #2 两套 fresh Windows CI、`v2.1.4` annotated tag/正式 Release、22,312-byte 扩展 ZIP、生产 Worker `06b96723-281c-4375-b816-32f21b8f2e40` 与线上 HTTP/安全头/正式 Turnstile/下载 smoke 均已闭合；系统 Chrome 本地视觉 QA 通过，线上 Chrome DOM 控制连续超时后按既定禁用内部浏览器规则停止重试。 |
+| M166 Windows one-click local installer | in_progress | 自包含运行时、API/生产 Board、Key-only 首次配置、per-user 安装/快捷方式/卸载、独立扩展包与 CI 构建合同均已实现；本地 coverage、365/190/189/12/28/8 全门禁、真实安装、精简 PATH 启动、v2.1.4→v2.2.0 升级和数据保留全绿。扩展不在安装包，由本地页面提示单独下载并手动配置。剩余 PR/fresh Hosted CI、合并、v2.2.0 tag/Release 和发布后 Worker 下载链接部署。 |
 
 ### M164 验收合同
 
@@ -83,6 +84,16 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 5. 发布闭环 → 验证：Board/Web 行为测试先红后绿，lint/typecheck/build 与相关完整门禁通过；显式提交推送、部署 Worker，并用系统 Chrome 复核线上流程。内部浏览器继续禁用。
 6. 立即连接 → 验证：用户在已经打开的公共页点击扩展“连接当前 ArchResearch 网页”后，桥接脚本无需刷新即可注入当前标签，网页状态切换为已连接并自动关闭安装提醒。
 7. 幂等与诚实错误 → 验证：对已经连接的同一公共页重复点击连接仍返回成功；只有页面缺少公共版标记、权限被拒或脚本真实失败时才显示对应错误，不能把已连接状态误报为“不是公共版”。
+
+### M166 验收合同
+
+1. 单一安装入口 → 验证：GitHub Release 提供明确命名的 Windows x64 `.exe` 安装程序；普通用户不需要下载源码或运行 PowerShell。
+2. 零开发环境依赖 → 验证：在没有 Python、Node、pnpm、PowerShell 7 的 fresh Windows 环境中完成安装、启动、研究服务健康检查与卸载；Chrome 是唯一外部运行依赖。
+3. 首次配置 → 验证：首次启动只要求输入 Provider Key，输入隐藏、不得进入命令行/日志/配置文件；测试成功后保存到 Windows Credential Manager，失败时不落盘。
+4. 本地页面 → 验证：桌面/开始菜单入口幂等启动本地 API 和生产 Board，并用 Chrome 打开实际 loopback 地址；重复启动只复用健康进程，不产生多套服务。
+5. 扩展独立安装 → 验证：Windows 安装包不包含扩展文件；本地页面检测不到扩展时与网页版一样展示安装提醒、完整安装方法和独立扩展下载入口，连接成功后不再弹出。不得静默安装、强制策略安装或把站外 ZIP 伪装成 Web Store 一键安装。
+6. 数据与更新 → 验证：研究数据、收藏、Key 与扩展权限不随应用更新被覆盖；卸载默认保留用户数据并提供明确的可选删除边界。
+7. 构建与发布 → 验证：安装器构建可复现，产物版本/哈希/内容合同有自动测试；现有 API/Board/Extension/Web/Edge 门禁、packaged E2E、fresh installer smoke、GitHub CI、PR、tag 与 Release 全部通过。
 
 ## External acceptance gates
 
