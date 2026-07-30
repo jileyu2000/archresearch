@@ -39,7 +39,7 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/stop.ps1
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/configure-provider.ps1
 ```
 
-脚本会要求 API 接口地址和 API Key，先用两者测试连接，再保存接口地址并将 Key 写入 Windows 凭据管理器。地址可指向中转站、DeepSeek、Kimi 或自建服务，不按域名白名单限制；Key 不写入 `.env`、日志或仓库。当前研究链路需要 OpenAI-compatible Responses 结构化输出能力，测试失败时不会保存任一项。
+脚本会要求 API 接口地址和 API Key，先从上游模型列表自动获取候选模型，再依次测试 Responses 与 Chat Completions 结构化输出；成功后保存接口地址、选中模型和协议，并将 Key 写入 Windows 凭据管理器。地址可指向中转站、DeepSeek、Kimi 或自建服务，不按域名白名单限制；Key 不写入 `.env`、日志或仓库。上游不提供模型列表或没有兼容模型时不会保存任一项；图片分析仍要求选中模型支持视觉输入。
 
 不要提交含 Key 的文件。
 

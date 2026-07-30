@@ -54,6 +54,19 @@ def test_provider_config_accepts_any_http_compatible_endpoint(base_url: str) -> 
     assert config.vision_model == "gpt-5.6-sol"
 
 
+def test_provider_config_preserves_the_negotiated_protocol_and_custom_models() -> None:
+    config = ProviderConfig(
+        base_url="https://api.deepseek.com/v1",
+        research_model="deepseek-chat",
+        vision_model="deepseek-chat",
+        api_protocol="chat_completions",
+    )
+
+    assert config.research_model == "deepseek-chat"
+    assert config.vision_model == "deepseek-chat"
+    assert config.api_protocol == "chat_completions"
+
+
 @pytest.mark.parametrize(
     "base_url",
     [
@@ -85,6 +98,7 @@ def test_successful_commit_stores_key_only_in_keyring(tmp_path: Path) -> None:
         "base_url": "https://api.deepseek.com/v1",
         "research_model": "gpt-5.6-sol",
         "vision_model": "gpt-5.6-sol",
+        "api_protocol": "responses",
     }
 
 
@@ -148,3 +162,4 @@ def test_existing_provider_config_remains_loadable_after_endpoint_generalization
     assert config is not None
     assert config.provider == "suoxie"
     assert str(config.base_url) == "https://suoxie.codes/v1"
+    assert config.api_protocol == "responses"

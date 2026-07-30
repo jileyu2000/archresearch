@@ -14,8 +14,8 @@ catch {
 
 Write-Host "ArchResearch API setup"
 Write-Host "Provider: OpenAI-compatible API"
-Write-Host "Model: gpt-5.6-sol (reasoning: medium)"
-Write-Host "The endpoint and Key are tested with a small potentially billable structured-output probe before saving."
+Write-Host "ArchResearch automatically discovers a compatible model from the upstream model list."
+Write-Host "The endpoint and Key are tested with small potentially billable structured-output probes before saving."
 
 $baseUrl = (Read-Host "Enter API base URL").Trim()
 $secureKey = Read-Host "Enter API Key (input is hidden)" -AsSecureString

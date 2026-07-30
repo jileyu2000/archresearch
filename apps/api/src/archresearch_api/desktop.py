@@ -194,7 +194,7 @@ def prompt_for_provider_config(
     ttk.Label(surface, text="连接你的研究接口", style="Title.TLabel").pack(anchor="w")
     ttk.Label(
         surface,
-        text="填写接口地址和 Key。连接测试成功后会自动打开 ArchResearch。",
+        text="填写接口地址和 Key。程序会从上游自动获取可用模型并测试连接。",
         style="Body.TLabel",
         wraplength=430,
         justify="left",
@@ -226,7 +226,9 @@ def prompt_for_provider_config(
         command=toggle_key_visibility,
     ).pack(anchor="w")
 
-    status_value = tk.StringVar(value="连接成功后保存接口地址；Key 只存入 Windows 凭据管理器。")
+    status_value = tk.StringVar(
+        value="连接成功后保存接口地址与选中模型；Key 只存入 Windows 凭据管理器。"
+    )
     status_label = ttk.Label(
         surface,
         textvariable=status_value,
@@ -261,7 +263,7 @@ def prompt_for_provider_config(
         endpoint_entry.state(["disabled"])
         key_entry.state(["disabled"])
         status_label.configure(foreground="#5e6661")
-        status_value.set("正在测试接口连接，请稍候…")
+        status_value.set("正在获取上游模型并测试接口连接，请稍候…")
         root.update_idletasks()
         try:
             configure_provider(
@@ -276,7 +278,7 @@ def prompt_for_provider_config(
             status_value.set("安全保存失败。请确认 Windows 凭据管理器可用后重试。")
         except Exception:
             status_label.configure(foreground="#a63827")
-            status_value.set("连接验证失败。请检查接口地址、Key 和接口兼容性后重试。")
+            status_value.set("连接验证失败。请确认上游提供模型列表及结构化输出后重试。")
         else:
             configured = True
             key_value.set("")
@@ -424,6 +426,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             port=selected_port,
             log_level="warning",
             access_log=False,
+            log_config=None,
         )
     finally:
         clear_recorded_desktop_port(data_dir, selected_port)

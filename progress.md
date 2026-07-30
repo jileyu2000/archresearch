@@ -1080,4 +1080,33 @@
 - 用户决定改为“API 接口地址 + API Key”双项配置。M169 先以 Provider/CLI/启动、Windows 首次界面与 README 合同获得红灯，再把本地 `ProviderConfig` 泛化为用户必填 HTTP(S) 地址（无供应商、域名或公网白名单），保存前用该地址与 Key 执行既有结构化输出能力探测。旧梭子蟹本地配置继续可读；新配置与 Key 只有探测成功后才写入。定向 Python 28 项、Windows installer contracts、release contracts、Ruff、format 与 strict Mypy 全绿；下一步完整门禁、重建安装器并做首次配置实机验收。
 - M169 权威 `scripts/verify.ps1` 完整重跑 exit 0：379 API / 191 Board / 189 Extension / 12 Web / 28 Edge / 8 packaged E2E，连同 release/installer/Provider/process/autostart/evaluation 合同、Ruff、strict Mypy、全部 TypeScript lint/typecheck/test/build 和 Wrangler dry-run 均通过。`HANDOFF.md` 已收敛为本地用户端点与 Key、Web 端独立 Cloudflare Provider 的真实架构；下一步重建 v2.2.1 安装器与扩展 ZIP，并做最终 Windows 实机配置和图标验收。
 - 最终 `v2.2.1` 安装器重建、独立扩展 ZIP 重建、真实静默安装/精简 PATH 自检/扩展排除/卸载 smoke 均通过。经用户当次 Windows UI 授权，实机安装后首次配置窗口显示“连接你的研究接口”、API 接口地址与 API Key 两个输入框、连接测试说明、可读的“验证并开始使用”/“取消”按钮及新的蓝图图标；空白提交显示“请输入 API 接口地址后再继续”，未输入用户地址或 Key。标题栏可见新图标，空白配置窗已关闭；测试安装暂保留在本机，未写入配置或用户数据，若需卸载必须另获用户确认。
-- M168/M169 已作为本地提交 `aa9920f`（`Fix local installer startup and provider setup`）收口：暂存范围不含 `.artifacts`、本地数据或凭据，`git diff --cached --check` 与新增行的密钥模式扫描均通过。当前下一步如需发布，是推送分支、创建 PR、等待 Hosted CI 后再合并/tag/Release；在用户明确授权前不改变远端状态。
+- M168/M169 本地提交后来 amend 为当前真实提交 `7486c75`（`Fix local installer startup and provider setup`）：范围不含 `.artifacts`、本地数据或凭据，尚未推送、创建 PR、合并、tag、Release 或部署 Worker。
+
+## 2026-07-31 M170 windowed launcher logging recovery
+
+- 用户实机使用自己的第二家中转站通过连接测试后，安装版在启动本地 Uvicorn 时崩溃；截图错误为 `Unable to configure formatter 'default'` / `NoneType ... isatty`。第二家接口已经通过能力探测，崩溃不是新的连接失败。
+- 只读恢复完成：`HANDOFF.md`、`AGENTS.md`、活动计划和最近 findings/progress 已读取；分支为 `codex/fix-installer-port-conflict`，HEAD `7486c75`，tracked 工作树干净，仅有三个既有 `.artifacts` 未跟踪目录。
+- planning catchup 再次调用系统 `python` alias 失败（Microsoft Store alias，无 PATH Python）；未重复同一命令。一次 `rg` 读取命令因 Windows 不接受传入的 `*.py` 路径参数而 exit 1，已改用目录搜索。
+- 下一步：先在 `apps/api/tests/test_desktop.py` 写失败行为测试，要求安装版 Uvicorn 不加载默认控制台日志配置；红灯后最小加入 `log_config=None`，再执行定向与完整验证。
+- 用户追加要求提升第一家中转站一类接口的兼容性。审计确认固定模型名与 Responses-only 是现行主要限制，而公开建筑检索已有独立本地 Chrome 路径；M171 将先以模型配置、协议协商和统一 adapter 行为测试取得红灯，再实现最小兼容层。
+- 用户进一步明确模型名称必须从上游获取、不能自行填写。尚未写生产代码；已把测试与计划修正为 `/models` 自动发现和有界能力探测，首次配置继续只输入接口地址与 Key。
+- 红灯证据成立：windowed desktop 测试因缺少 `log_config` 失败；Provider 测试证明旧实现固定 `gpt-5.6-sol`、拒绝 `api_protocol` 且不回退 Chat；新 adapter 模块不存在；Windows/配置脚本/README 合同均因缺少自动模型发现说明失败。
+- 最小实现已加入 `log_config=None`、上游模型发现、最多 6 个候选的 Responses→Chat Completions 协商、持久化模型/协议和统一结构化 adapter。首轮 35 项 Python 定向测试及 Windows installer/configure-provider/release contracts 转绿；Ruff check 与 strict Mypy 通过，formatter 已机械整理 5 个文件。
+- 补强后的 37 项定向测试通过：首个模型不兼容时继续探测第二个、旧配置缺少协议字段时默认 Responses、Chat adapter 同时覆盖纯文本和图像输入。静态复核为 Ruff/format、strict Mypy、三组 PowerShell 合同与 `git diff --check` 全绿。
+- 权威 `scripts/verify.ps1` exit 0：388 API / 191 Board / 189 Extension / 12 Web / 28 Edge / 8 packaged E2E，并通过 release/installer/Provider/process/autostart/evaluation、Ruff、strict Mypy、全部 TypeScript lint/typecheck/test/build 与 Wrangler dry-run。默认测试未调用真实 Provider。
+- `v2.2.1` 安装器和独立扩展 ZIP 已重建。安装器 69,686,394 bytes，SHA-256 `3C55C55AF66052EA7A05F041BD9506392317836010785BDB78D234FC7E1385FB`，Authenticode `NotSigned`；扩展 ZIP 22,317 bytes，SHA-256 `9327F89BD3B4CEB149F4FA28F2A986B39A88E18DB91FCDD833B8EF1CEA4D60AD`。
+- 新 onedir 在精简 PATH 下 `--self-test` exit 0，递归扫描未发现扩展 `manifest.json`。本机已有 ArchResearch 安装，正式 package smoke 会按脚本合同拒绝覆盖；下一步需用户明确授权用新安装器升级现有程序，再验证已保存配置可直接启动且不再出现 Uvicorn formatter 崩溃。不得读取或打印用户端点与 Key。
+
+## 2026-07-31 M172 Web visual research failure recovery
+
+- 用户截图显示公共 Web 的“小红书图纸灵感” Run 已进入 `failed` 终态。未读取浏览器 IndexedDB、用户 Key 或端点，也未调用内部浏览器；Cloudflare 只读部署列表确认当前生产版本仍为 `0d94ed1e-7807-49fd-b2fc-73c2f00bc1c9`。
+- 代码审计发现视觉分析阶段统一使用 5 分钟 Workflow step 上限，但最多要串行处理 48 个图像槽位（每批 4 张）。该上限可在正常 Provider 延迟下把尚未完成的 Run 误判为失败。
+- 已先修改 Edge Workflow 行为测试并加入 `workflowStageTimeout()`，随后让 `ResearchWorkflow` 使用 `20 minutes` 的分析上限、其他阶段仍为 `5 minutes`。`pnpm exec vitest run src/workflow.test.ts` 4/4、Edge typecheck 与 lint 均通过。
+- 当前未部署、未创建新的真实 Run、未提交本轮改动。下一步先补 Provider 视觉请求的大小/失败边界测试与错误阶段可定位检查，再运行 Edge/Web 定向门禁；只有用户明确继续公开发布时才部署 Worker。
+
+## 2026-07-31 packaged startup recovery
+
+- 用户已明确授权覆盖现有安装。第一次实际启动暴露出此前静态 `--self-test` 未覆盖的迁移错误：PyInstaller `base_library.zip` 中的 `database.py` 找不到资源根目录的 `alembic.ini`，Uvicorn 在 lifespan 前以 exit 3 结束。
+- 已先加入冻结 `_MEIPASS` 资源路径失败测试，再让 `Database.migrate()` 从 `_MEIPASS/alembic.ini` 读取配置；源码模式路径保持不变。Ruff、迁移、桌面和 Provider 启动定向测试全绿。
+- v2.2.1 安装器已重建并覆盖现有安装；`--self-test`、`/desktop-health` 和 `/health` 实际启动 smoke 均通过，验证后已停止测试进程。未读取或打印用户端点与 Key。
+- 下一步：运行完整 `scripts/verify.ps1`，显式 stage 源码/测试/文档，提交并推送本地与 Edge 修改；发布 v2.2.1 资产后再部署 Worker，避免网页扩展下载链接指向不存在的 Release。

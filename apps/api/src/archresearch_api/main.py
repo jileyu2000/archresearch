@@ -30,6 +30,7 @@ from .providers import (
 )
 from .public_pages import LocalBrowserPageParser, PublicPageParser
 from .run_gate import ResearchRunGate
+from .structured_output import adapt_structured_client
 from .visual import MockVisualClassifier, OpenAIVisualClassifier, VisualClassifier
 from .xiaohongshu import OpenCliXiaohongshuSearch, XiaohongshuSearch
 
@@ -72,11 +73,15 @@ def create_app(
             from openai import OpenAI
 
             openai_client_factory = OpenAI
-        shared_client = openai_client_factory(
+        raw_client = openai_client_factory(
             api_key=stored_runtime.api_key,
             base_url=str(stored_runtime.config.base_url).rstrip("/"),
             timeout=OPENAI_REQUEST_TIMEOUT_SECONDS,
             max_retries=OPENAI_MAX_RETRIES,
+        )
+        shared_client = adapt_structured_client(
+            raw_client,
+            stored_runtime.config.api_protocol,
         )
     provider = research_provider
     if provider is None:

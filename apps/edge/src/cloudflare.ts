@@ -15,6 +15,7 @@ import {
 } from './research-services'
 import {
   runResearchWorkflow,
+  workflowStageTimeout,
   type ResearchWorkflowInput,
   type WorkflowStage,
   type WorkflowStageRunner,
@@ -306,7 +307,7 @@ export class ResearchWorkflow extends WorkflowEntrypoint<
     const stageRunner: WorkflowStageRunner = {
       do: async (stage, callback) => await step.do(stage, {
         retries: { limit: 2, delay: '5 seconds', backoff: 'exponential' },
-        timeout: '5 minutes',
+        timeout: workflowStageTimeout(stage),
         sensitive: 'output',
       }, callback),
       waitForEvent: async (name, options) => await step.waitForEvent(name, options),

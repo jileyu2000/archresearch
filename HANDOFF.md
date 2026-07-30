@@ -58,7 +58,8 @@
 11. **M164 已 complete**：网页与本地版的用户可见功能继续共用同一 Board；公共小红书已实现规划后逐方向、逐帖、逐图深读，Cloudflare 事件载荷改为 R2 对象键，IndexedDB 保留最终可显示预览。`37be809` 的两套 Hosted CI、annotated `v2.1.3` tag、扩展专属正式 Release、R2 桶、三日生命周期和生产 Worker 版本 `c7144317-8daa-4e8f-ae57-5ccf79fc8a41` 均已上线。系统 Chrome 1440×1000 / 390×844 线上安装提醒、主页、个人收藏、备份恢复与 console smoke 全绿；未调用内部浏览器。
 12. **M165 已 complete**：主页不再用“立即安装”误导站外 ZIP 为一键安装，同弹窗先展示完整四步方法再下载；公共桥在当前页注入后发送严格 v2 ready，Board 自动关闭提醒，同 origin 重复连接保持幂等。PR #2、两套 Hosted CI、annotated `v2.1.4`、扩展专属 Release 和生产 Worker `06b96723-281c-4375-b816-32f21b8f2e40` 均已上线。唯一跨阶段未完成项仍是 M161 的真人 Turnstile Quick 研究验收。
 13. **M166 complete**：GitHub Windows x64 一键安装程序与独立扩展 ZIP 已通过本地/Hosted CI、真实安装/升级/卸载并正式发布 `v2.2.0`。安装包自带本地运行时、API 与生产 Board；扩展不放进安装包，本地页面复用网页版的缺失提醒和独立安装说明。生产 Worker 已部署为 `0d94ed1e-7807-49fd-b2fc-73c2f00bc1c9`，主页 200、CSP/noindex/frame deny、正式 Turnstile、v2.2.0 bundle 链接和 22,331-byte GitHub 附件均通过。当前代码交付外唯一保留项仍是 M161 的真人 Turnstile Quick 研究验收，自动化不得绕过。
-14. **M168/M169 local implementation complete**：提交 `aa9920f` 已完成安装版动态回环端口恢复、首次配置按钮可读性与图标重做；本地 Provider 已从固定梭子蟹 Key-only 改为用户填写接口地址 + Key，并在保存前进行能力探测。完整门禁 exit 0：379 API / 191 Board / 189 Extension / 12 Web / 28 Edge / 8 packaged E2E；重建安装器 smoke 与 Windows 首次配置/图标实机验收也已通过。提交尚未推送、未创建 PR、未合并/tag/Release 或部署 Worker；外部发布需用户另行授权。
+14. **M168/M169 local implementation complete**：当前本地提交 `7486c75` 已完成安装版动态回环端口恢复、首次配置按钮可读性与图标重做；本地 Provider 已从固定梭子蟹 Key-only 改为用户填写接口地址 + Key，并在保存前进行能力探测。此前完整门禁 exit 0：379 API / 191 Board / 189 Extension / 12 Web / 28 Edge / 8 packaged E2E；提交尚未推送、未创建 PR、未合并/tag/Release 或部署 Worker。
+15. **M170/M171 in progress**：用户实机通过连接测试后，PyInstaller windowed 启动器因 Uvicorn 默认控制台 formatter 读取空 `stderr` 崩溃；修复已用红绿测试加入 `log_config=None`。兼容层现从上游 `/models` 自动取得候选，不要求用户填写模型名；最多探测 6 个非 embedding/音频候选，先 Responses 后 Chat Completions，成功模型与协议写本地 JSON，Key 仍只在凭据管理器。完整门禁 exit 0：388 API / 191 Board / 189 Extension / 12 Web / 28 Edge / 8 packaged E2E。重建安装器 SHA-256 `3C55C55AF66052EA7A05F041BD9506392317836010785BDB78D234FC7E1385FB`，扩展 ZIP SHA-256 `9327F89BD3B4CEB149F4FA28F2A986B39A88E18DB91FCDD833B8EF1CEA4D60AD`；新 onedir 自检通过且不含扩展。当前改动未提交；本机已有安装，需用户明确授权升级后才能完成 package/真实启动 smoke。
 
 ## 工作区保护
 
@@ -67,4 +68,4 @@
 
 ## 给新对话的第一句话
 
-> 继续 ArchResearch。先完整读取 HANDOFF.md，再读取 AGENTS.md；随后按 HANDOFF 顺序恢复 task_plan.md、findings.md、progress.md，并运行 `git status --short --branch`。不要重做已完成工作，不要恢复 Firecrawl，也不要调用会导致桌面应用闪退的内部浏览器。`aa9920f` 已完成 M168/M169 本地实现和所有本地/实机验收；当前若用户授权发布，则按显式范围推送 `codex/fix-installer-port-conflict`、创建 PR、等待 Hosted CI，再合并/tag/Release/Worker 部署。扩展不得放入 Windows 安装包；生产 Web URL 不得进入仓库或 Release。保留所有修改和未跟踪文件，不得 reset、checkout、clean 或 `git add -A`。
+> 继续 ArchResearch。先完整读取 HANDOFF.md，再读取 AGENTS.md；随后按 HANDOFF 顺序恢复 task_plan.md、findings.md、progress.md，并运行 `git status --short --branch`。不要重做已完成工作，不要恢复 Firecrawl，也不要调用会导致桌面应用闪退的内部浏览器。`7486c75` 是尚未推送的 M168/M169 基线；工作树中的 M170/M171 已通过 388/191/189/12/28/8 完整门禁并重建安装器，当前唯一下一步是取得用户明确授权后升级现有测试安装，验证已保存配置直接启动且无 Uvicorn formatter 崩溃，再提交。扩展不得放入 Windows 安装包；生产 Web URL 不得进入仓库或 Release。保留所有修改和未跟踪文件，不得 reset、checkout、clean 或 `git add -A`。

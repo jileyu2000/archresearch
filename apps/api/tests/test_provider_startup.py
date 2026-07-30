@@ -107,3 +107,35 @@ def test_missing_stored_credential_keeps_deterministic_mock_mode(tmp_path: Path)
     assert app.state.research_provider.name == "mock"
     assert app.state.visual_classifier.name == "mock-vision"
     assert calls == 0
+
+
+def test_startup_adapts_a_negotiated_chat_completions_client(tmp_path: Path) -> None:
+    write_provider_config(
+        tmp_path,
+        ProviderConfig(
+            base_url="https://api.deepseek.com/v1",
+            research_model="deepseek-chat",
+            vision_model="deepseek-chat",
+            api_protocol="chat_completions",
+        ),
+    )
+    keyring = FakeKeyring()
+    keyring.set_password(SERVICE, ACCOUNT, "sk-stored")
+    raw_client = FakeOpenAIClient()
+
+    app = create_app(
+        Settings(
+            _env_file=None,
+            database_url=f"sqlite:///{(tmp_path / 'chat.db').as_posix()}",
+            data_dir=tmp_path,
+            provider_mode="mock",
+        ),
+        keyring_backend=keyring,
+        openai_client_factory=lambda **_: raw_client,
+    )
+
+    assert app.state.research_provider.model == "deepseek-chat"
+    assert app.state.visual_classifier.model == "deepseek-chat"
+    assert app.state.research_provider.client is app.state.visual_classifier.client
+    assert app.state.research_provider.client is not raw_client
+    assert app.state.research_provider.client.raw_client is raw_client

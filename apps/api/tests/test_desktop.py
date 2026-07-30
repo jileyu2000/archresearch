@@ -1,6 +1,7 @@
 import socket
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -124,3 +125,48 @@ def test_desktop_ignores_a_stale_record_before_reusing_the_default_instance(
     )
 
     assert find_running_desktop_port(tmp_path) == 8000
+
+
+def test_windowed_desktop_server_does_not_load_console_logging(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    board_dir = tmp_path / "board"
+    board_dir.mkdir()
+    (board_dir / "index.html").write_text("<!doctype html>", encoding="utf-8")
+    data_dir = tmp_path / "data"
+    captured: dict[str, object] = {}
+
+    class DormantThread:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        def start(self) -> None:
+            pass
+
+    monkeypatch.setattr(desktop_module, "bundled_resource_root", lambda: tmp_path)
+    monkeypatch.setattr(desktop_module, "installed_data_dir", lambda: data_dir)
+    monkeypatch.setattr(desktop_module, "get_windows_keyring", object)
+    monkeypatch.setattr(desktop_module, "find_running_desktop_port", lambda _path: None)
+    monkeypatch.setattr(
+        desktop_module,
+        "load_provider_runtime",
+        lambda *_args: SimpleNamespace(),
+    )
+    monkeypatch.setattr(desktop_module, "select_desktop_port", lambda: 49152)
+    monkeypatch.setattr(desktop_module, "create_desktop_app", lambda **_kwargs: object())
+    monkeypatch.setattr(desktop_module, "record_desktop_port", lambda *_args: None)
+    monkeypatch.setattr(desktop_module, "clear_recorded_desktop_port", lambda *_args: None)
+    monkeypatch.setattr(desktop_module.threading, "Thread", DormantThread)
+    monkeypatch.setattr(
+        desktop_module.uvicorn,
+        "run",
+        lambda _app, **kwargs: captured.update(kwargs),
+    )
+    monkeypatch.setattr(sys, "stdout", None)
+    monkeypatch.setattr(sys, "stderr", None)
+
+    assert desktop_module.main([]) == 0
+    assert captured["host"] == "127.0.0.1"
+    assert captured["port"] == 49152
+    assert captured["log_config"] is None

@@ -1,8 +1,10 @@
 from pathlib import Path
 
+import pytest
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 
+import archresearch_api.database as database_module
 from alembic import command
 from archresearch_api.database import Database
 
@@ -138,3 +140,35 @@ def test_unversioned_retention_schema_is_upgraded_with_workspace_archival(
     Database(url).migrate()
 
     assert "archived_at" in {column["name"] for column in inspect(engine).get_columns("workspaces")}
+
+
+def test_database_migrate_reads_alembic_config_from_frozen_resource_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    resource_root = tmp_path / "bundle"
+    resource_root.mkdir()
+    (resource_root / "alembic.ini").write_text(
+        "[alembic]\nscript_location = %(here)s/alembic\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(database_module.sys, "_MEIPASS", str(resource_root), raising=False)
+    monkeypatch.setattr(
+        database_module,
+        "__file__",
+        str(resource_root / "base_library.zip" / "archresearch_api" / "database.py"),
+    )
+    captured: dict[str, object] = {}
+
+    def capture_upgrade(config: Config, revision: str) -> None:
+        captured["config"] = config
+        captured["revision"] = revision
+
+    monkeypatch.setattr(database_module.command, "upgrade", capture_upgrade)
+
+    Database("sqlite:///:memory:").migrate()
+
+    config = captured["config"]
+    assert isinstance(config, Config)
+    assert Path(config.get_main_option("script_location")).resolve() == resource_root / "alembic"
+    assert captured["revision"] == "head"

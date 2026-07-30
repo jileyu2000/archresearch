@@ -5,13 +5,14 @@ import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, field_validator
 
 SERVICE = "ArchResearch/suoxie"
 ACCOUNT = "api-key"
 CONFIG_FILENAME = "provider.json"
+DEFAULT_PROVIDER_MODEL = "gpt-5.6-sol"
 
 
 class ProviderConfigurationError(RuntimeError):
@@ -36,8 +37,9 @@ class ProviderConfig(BaseModel):
     provider: str = Field(default="openai-compatible", min_length=1, max_length=100)
     name: str = Field(default="OpenAI 兼容 API", min_length=1, max_length=100)
     base_url: AnyHttpUrl
-    research_model: str = Field(default="gpt-5.6-sol", min_length=1, max_length=100)
-    vision_model: str = Field(default="gpt-5.6-sol", min_length=1, max_length=100)
+    research_model: str = Field(default=DEFAULT_PROVIDER_MODEL, min_length=1, max_length=100)
+    vision_model: str = Field(default=DEFAULT_PROVIDER_MODEL, min_length=1, max_length=100)
+    api_protocol: Literal["responses", "chat_completions"] = "responses"
 
     @field_validator("base_url")
     @classmethod

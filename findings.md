@@ -742,3 +742,31 @@
 - 地址仍必须是带协议和主机的 HTTP(S) URL，且不接受把用户名、密码嵌入 URL 的格式；这是 URL 格式与凭据泄露边界，不是供应商限制。用户可填本机回环地址。
 - ArchResearch 当前的研究执行客户端依赖 OpenAI-compatible Responses 的结构化输出与既定模型调用方式。配置页因此不能只做“URL 可访问”检查，而必须用用户填写的地址和 Key 进行真实能力探测；探测失败不保存新地址或 Key，并提示检查接口兼容性。这样不把 DeepSeek/Kimi/中转站的域名预先排除，也不把实际不可用的接口误标为已连接。
 - 旧 `provider.json` 中的 `provider: suoxie`、梭子蟹名称、端点和已存 Windows 凭据仍可读取，避免升级让现有用户失去既有本地配置；新配置写为 `openai-compatible` / `OpenAI 兼容 API`，端点只存本地 JSON，Key 仍只存 Windows Credential Manager。
+
+## 2026-07-31 M170 windowed launcher logging crash
+
+- 用户使用第二家中转站通过首次配置连接测试后，冻结版立即弹出 `Unable to configure formatter 'default'`；堆栈落在 `uvicorn.logging.DefaultFormatter.__init__` 对 `stream.isatty()` 的调用，实际异常为 `AttributeError: 'NoneType' object has no attribute 'isatty'`。
+- PyInstaller 的 windowed/no-console 进程可令 `sys.stdout` 与 `sys.stderr` 为 `None`。`desktop.py` 当前调用 `uvicorn.run()` 时未覆盖 `log_config`，因此 Uvicorn 仍加载面向控制台的默认 `LOGGING_CONFIG`。这发生在 Provider 能力探测成功并保存配置之后，与第二家中转站是否可连接无关。
+- 第一家中转站失败不代表地址被白名单限制；现行探测要求服务兼容项目实际使用的 OpenAI Responses 结构化输出和当前模型。不同中转站可能只兼容 Chat Completions、缺少结构化输出或不提供当前模型，应显示探测返回的兼容性错误，不能把“HTTP 可访问”等同于 ArchResearch 可用。
+- 最小修复是在安装版 `uvicorn.run()` 中显式传入 `log_config=None`，继续保留 `log_level="warning"` 与 `access_log=False`。先用行为测试固定该调用合同，再重建并实机验证。
+
+## 2026-07-31 M171 compatibility scope
+
+- 仅允许任意接口地址并不等于能调用任意服务：当前配置把研究/视觉模型固定为 `gpt-5.6-sol`，探测和全部生产调用又只使用 `client.responses.parse`。直接 DeepSeek、Kimi 或只实现 `/chat/completions` 的中转站会因模型名或协议不匹配失败。
+- 本地正式案例检索已经由 `LocalBrowserPageParser` 通过系统 Chrome 和固定只读搜索路径承担；Workflow 检测到该 `PublicSearchProvider` 后不会调用模型的 `web_search` 工具。因此 Chat Completions 兼容层只需覆盖规划、页面分析、综合和视觉结构化输出，不需要虚构通用模型搜索能力。
+- 用户明确要求模型名从上游获取，不允许用户手填。最小可用的兼容提升因此是调用 `/models` 获取模型 ID，过滤 embedding、音频、图像生成等明显非对话模型后，对有界候选依次协商 Responses 与 Chat Completions。运行时必须复用已验证模型与协议，不能让探测走 Chat 而生产仍硬编码 Responses。
+- Chat Completions adapter 需要把 Responses 风格的 `input_text` / `input_image` 转为 chat 的 `text` / `image_url` content，并把 `text_format` 映射为 SDK 的 Pydantic `response_format`。`reasoning` 不是通用 OpenAI-compatible 参数，Chat 路径应忽略；图像是否可用仍由具体模型决定。
+
+## 2026-07-31 M172 Web visual research failure diagnosis
+
+- 用户提供的线上截图显示“小红书图纸灵感” Run 已进入 `failed` 终态，文案为“搜索失败，已找到的图纸已保留”；没有 Run ID 或 Cloudflare 历史日志，不能仅凭截图判断 Provider 具体错误。
+- 只读审计确认视觉路径不是普通 Web Search：Workflow 先等待 `xiaohongshu-visual-sources` 事件，扩展最多返回 48 个逐图槽位；Worker 将 R2 预览读回后，在 `createLiveResearchServices().analyze()` 中每 4 张图串行调用一次结构化视觉模型。
+- 根因候选中已确认一项代码缺口：Cloudflare `ResearchWorkflow` 给所有 `step.do` 阶段统一 `timeout: '5 minutes'`。视觉分析最多 12 批模型请求，正常慢接口会在仍有待处理图片时被 Workflow 判为 errored，入口随后只能把它压成 `status: failed`。现有测试只有单批视觉分析，未覆盖该上限。
+- 最小修复已加入 `workflowStageTimeout()`：`analyzing` 使用 20 分钟，其余阶段保持 5 分钟；Edge Workflow 回归测试锁定该映射，Edge lint/typecheck 与 workflow tests 已通过。尚未证明生产失败是否还包含 Provider 载荷/模型兼容性问题，下一步需补充生产级请求边界测试并做部署后验收。
+
+## 2026-07-31 M170 packaged startup recovery
+
+- 用户授权升级后，`v2.2.1` 安装器第一次真实启动仍以退出码 3 结束；`--self-test` 只能证明静态资源存在，不能覆盖 FastAPI lifespan。
+- 隔离 console 调试包捕获到真实异常：`alembic.util.exc.CommandError: No 'script_location' key found in configuration.` PyInstaller 将 `archresearch_api.database` 放在 `base_library.zip`，`Path(__file__).parents[2] / "alembic.ini"` 因而指向不存在的压缩包路径；这与 Provider、Key 或 Uvicorn formatter 无关。
+- 新增冻结运行时红绿测试，`Database.migrate()` 在存在 `sys._MEIPASS` 时从资源根目录读取 `alembic.ini`，开发模式继续使用源码 `apps/api/alembic.ini`。迁移测试 6/6、桌面/Provider 启动定向测试 17/17 通过。
+- 重建安装器后覆盖现有安装：安装器 exit 0、`--self-test` exit 0；已保存配置启动后 `/desktop-health` 返回 `ArchResearch` / `2.2.1` / `8000`，`/health` 返回 `ok` 与已保存 Provider 模式，证明窗口化服务持续运行。新安装器 SHA-256 为 `FEC335DB8BE9F7E2943BE40F264EBDBD64AE673F1F37CA34051747EDC4661A68`；扩展 ZIP 未改变，仍为 `9327F89BD3B4CEB149F4FA28F2A986B39A88E18DB91FCDD833B8EF1CEA4D60AD`。

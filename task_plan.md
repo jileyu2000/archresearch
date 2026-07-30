@@ -66,8 +66,11 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | M165 extension installation and connection onboarding | complete | 首动作已改为同弹窗“查看安装方法”，四步安装流程和 extension-only 下载边界完整；公共桥用严格 v2 ready 通知当前页，同 origin 重复连接不再注销重注册。PR #2 两套 fresh Windows CI、`v2.1.4` annotated tag/正式 Release、22,312-byte 扩展 ZIP、生产 Worker `06b96723-281c-4375-b816-32f21b8f2e40` 与线上 HTTP/安全头/正式 Turnstile/下载 smoke 均已闭合；系统 Chrome 本地视觉 QA 通过，线上 Chrome DOM 控制连续超时后按既定禁用内部浏览器规则停止重试。 |
 | M166 Windows one-click local installer | complete | 自包含运行时、API/生产 Board、Key-only 首次配置、per-user 安装/快捷方式/卸载、独立扩展包与 CI 构建合同均已完成；本地与三套 fresh Hosted CI、真实安装、精简 PATH、v2.1.4→v2.2.0 升级和数据保留全绿。PR #3 已合并，annotated `v2.2.0`、Windows 安装器与独立扩展 ZIP 正式 Release 已发布，生产 Worker 已切到存在的 v2.2.0 下载链接并通过 HTTP/安全头/附件 smoke。 |
 | M167 README installation simplification | complete | 不改变 Windows/Chrome/Key、扩展独立安装、私有 Web URL 禁止公开等既有原则；对照成熟桌面应用与浏览器扩展项目，已把普通用户下载/安装前置并压缩为三步，源码开发与扩展安装细节迁入独立文档，发布文案合同、Markdown 本地链接与差异检查均已通过。 |
-| M168 installed launcher port-conflict recovery | in_progress | 真实安装首次启动发现源码开发服务占用固定 `8000` 时，安装版只弹错并退出。先安全停止当前旧服务恢复用户使用，再以行为测试驱动启动器自动选择空闲回环端口，同时保留对已验证安装版健康进程的幂等复用。 |
-| M169 user-supplied Provider endpoint and key | in_progress | 本地首次配置改为同时填写 API 接口地址与 API Key；地址仅要求可解析为 HTTP(S) URL，不按梭子蟹、DeepSeek、Kimi 或公网域名白名单限制。提交前先用该地址和 Key 执行能力探测，成功后才保存端点配置与凭据；Web Edition 继续使用其独立的 Cloudflare Provider 配置。 |
+| M168 installed launcher port-conflict recovery | complete | 真实安装首次启动发现源码开发服务占用固定 `8000` 时，安装版只弹错并退出；已改为安全验证旧实例、冲突时选择空闲回环端口并把同一端口传给 API、健康检查、Chrome 和扩展，完整门禁与真实安装启动 smoke 通过。 |
+| M169 user-supplied Provider endpoint and key | complete | 本地首次配置同时填写 API 接口地址与 API Key；地址仅要求可解析为 HTTP(S) URL，不按供应商或域名白名单限制。提交前用当前地址和 Key 执行能力探测，成功后才保存端点配置与凭据；Web Edition 继续使用独立的 Cloudflare Provider 配置，完整门禁通过。 |
+| M170 windowed launcher logging recovery | complete | PyInstaller 无控制台进程不再加载 Uvicorn 默认 formatter，避免 `stderr=None` 崩溃；另修复冻结运行时从 `_MEIPASS` 读取 Alembic 配置，重建安装器并用已保存配置验证 `/desktop-health` 与 `/health` 持续可用。 |
+| M171 OpenAI-compatible protocol negotiation | complete | 自定义接口不再被固定模型与 Responses-only 探测挡住：程序从上游 `/models` 自动取得候选模型，优先探测 Responses、失败再探测 Chat Completions，并持久化验证成功的模型与协议；Python/PowerShell 合同与完整门禁通过。 |
+| M172 Web visual research timeout recovery | in_progress | 线上图纸灵感 Run 进入失败终态。审计发现视觉分析最多处理 48 个图像槽位，却与其他阶段共用 5 分钟 Workflow step 上限；先用回归测试固定分析阶段的独立上限，再验证 Provider 请求与生产部署。 |
 
 ### M164 验收合同
 
@@ -121,6 +124,25 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 2. 地址不按供应商限制 → 验证：自定义 HTTP/HTTPS、中转站、DeepSeek、Kimi 以及本机回环地址均可通过配置模型；只拒绝缺少协议/主机或把凭据嵌入 URL 的明显格式错误。
 3. 先测后存 → 验证：能力探测收到用户填写的 `base_url` 和 Key；探测失败保留原配置/凭据，探测成功才写入新端点与 Key。
 4. 首次界面诚实 → 验证：Windows 配置窗同时显示“API 接口地址”和“API Key”，状态文案说明会先测试连接，README/开发脚本同步两项配置和 OpenAI-compatible 能力边界。
+
+### M170 验收合同
+
+1. 无控制台启动 → 验证：即使冻结版运行时 `sys.stdout` / `sys.stderr` 为 `None`，启动器也不初始化 Uvicorn 默认控制台 formatter，服务仍绑定选定的回环端口。
+2. Provider 结果不混淆 → 验证：能力探测成功与随后本地服务启动是两个独立阶段；启动器日志崩溃不得误报为接口连接失败。未通过探测的中转站继续显示真实兼容性错误，不按域名放行或拦截。
+3. 回归与安装包 → 验证：先取得 `test_desktop.py` 红灯，再做最小实现；通过 Python 定向测试、Ruff、strict Mypy、安装器合同、完整门禁、重建安装 smoke，并在用户授权后实机升级启动。不得读取、打印或改写用户现有端点和 Key。
+
+### M171 验收合同
+
+1. 上游模型发现 → 验证：Windows 首次配置仍只要求接口地址与 Key；程序从上游 `/models` 获取模型 ID，过滤明显非对话模型并在有界候选内自动选择通过能力探测的模型。用户不手填或猜测模型名；既有配置继续按已保存模型启动。
+2. 协议协商 → 验证：先尝试 Responses 结构化输出；仅在失败后尝试 Chat Completions 结构化输出，成功协议写入配置。两种协议均用 Pydantic schema 校验真实返回，不以普通 HTTP 200 冒充可用。
+3. 统一运行路径 → 验证：研究规划、网页分析、综合和图像分类继续调用同一结构化客户端接口；Chat Completions adapter 正确转换文本与图像输入、输出 token 参数并丢弃不通用的 reasoning 参数。公开建筑检索继续使用现有本地 Chrome，不要求模型端点提供 Web Search。
+4. 诚实边界 → 验证：上游不提供模型列表或候选的两种协议都失败时，不保存端点、模型或 Key；错误提示明确说明模型发现或结构化输出兼容性。视觉输入仍要求所选模型本身支持图片，程序不得伪称所有 DeepSeek/Kimi 模型都具备视觉能力。
+
+### M172 验收合同
+
+1. 视觉分析时间边界 → 验证：最多 48 个图像槽位按每批 4 张分析时，`analyzing` 使用独立的 20 分钟 Workflow step 上限；规划、搜索、读取、核验、缺口检查和综合继续使用 5 分钟上限。
+2. 失败阶段可定位 → 验证：定向 Edge/Workflow 测试覆盖视觉分析超时配置；不调用真实 Provider、不创建新的 Live Run 作为默认测试。
+3. 发布闭环 → 验证：Edge/Web 定向测试、类型检查、lint、构建与完整门禁通过后，才部署 Worker；部署后用用户授权的真实 Web Run 验收，私有 URL 不写入仓库。
 
 ## External acceptance gates
 
@@ -219,7 +241,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 - React + Vite instead of Next.js: the board is a local SPA with no SSR requirement.
 - FastAPI + SQLAlchemy + SQLite; no PostgreSQL, Redis, S3, Celery, Docker, Qdrant, LangGraph, or multi-agent runtime.
 - Direct OpenAI Responses API with strict schemas; custom local trace to control sensitive data. Research and visual classification default to `gpt-5.6-sol` with `medium` reasoning; both remain environment-overridable.
-- The `suoxie` relay key is accepted only through hidden PowerShell input and stored in Windows Credential Manager; provider JSON contains no secret. Never print or migrate the key.
+- 本地版由用户提供 OpenAI-compatible API 接口地址与 Key；端点只存本地 `provider.json`，Key 只存 Windows Credential Manager，绝不打印或迁移。旧 `suoxie` 配置仅保留兼容读取。
 - Project automation defaults to PowerShell 7 (`pwsh`); Windows PowerShell 5.1 only for explicit compatibility checks. Process scripts must stay WMI/CIM-free (MSIX pwsh cannot load MMI): listener discovery via `netstat -ano`, command lines via PEB.
 - All browser commands are enumerated JSON messages; no arbitrary selectors, JavaScript, credentials, social actions, or general form submission.
 - Retention: new Runs default to one semester (180 days) from creation with a per-record permanent toggle; cancelling permanent restarts 180 days from that action, while existing rows keep their stored expiry. Assets/claims use 7 days and sources/query metadata/trace 30 days unless their Run is permanent. `keep_forever` protects the Run **and all its child evidence** from every expiry clock (M141). Personal collections are snapshots that survive Run expiry; saving is additive and never deletes an existing collection (M145).

@@ -20,6 +20,12 @@ export type WorkflowStage =
   | 'gap_check'
   | 'composing'
 
+export type WorkflowTimeout = `${number} ${'seconds' | 'minutes'}` | number
+
+export function workflowStageTimeout(stage: WorkflowStage): WorkflowTimeout {
+  return stage === 'analyzing' ? '20 minutes' : '5 minutes'
+}
+
 export interface ResearchWorkflowInput {
   runId: string
   workspaceId: string
