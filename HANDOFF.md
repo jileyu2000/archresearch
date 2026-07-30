@@ -14,9 +14,9 @@
 
 - 产品是面向建筑学生与青年设计师的本地优先实时研究 Agent，不建设案例库或全局向量索引。产品行为的权威描述在 `apps/board/PRODUCT.md` 与 `DESIGN.md`；用户文案词汇由 `apps/board/src/copy-glossary.test.ts` 源码级守卫，版式结构由 `apps/board/src/design-system.test.ts` 按单一 860px/620px 媒体块切片守卫。
 - M158 起新增独立 Cloudflare Web Edition：本地版继续 Windows/Chrome、BYOK、SQLite 与本机文件；网页端由项目方承担模型费用，Key 只在 Cloudflare Secret。M162 起网页端直接复用本地 Board 的同一套页面、样式、导航和结果工作台，Edition 差异只限公开来源、Turnstile、云端有界执行与浏览器本地持久化。工作区、Run、结果、收藏、Board、表达规范、任务书和备份都在当前浏览器 IndexedDB；云端只保留三日短期 Workflow 检查点与费用预留，不建立平台级长期历史。Web URL 只私下交给评委，禁止写入 GitHub。
-- 公开建筑网站使用进程内 Direct Playwright；登录态小红书默认使用 `@jackwener/opencli@1.8.6` Browser Bridge。**不再使用 Firecrawl**（M41 移除）、**无 Pinterest**（M94 移除）、**无来源反查/TinEye**（M113 移除），三者都不得恢复。
+- 公开建筑网站使用进程内 Direct Playwright。源码开发环境可用 `@jackwener/opencli@1.8.6` Browser Bridge；Windows 安装版不携带 Node/OpenCLI，登录态小红书由用户单独安装并连接的 ArchResearch Chrome 扩展承担。**不再使用 Firecrawl**（M41 移除）、**无 Pinterest**（M94 移除）、**无来源反查/TinEye**（M113 移除），三者都不得恢复。
 - 所有模型统一为 `gpt-5.6-sol`，推理强度 `medium`，base `https://suoxie.codes/v1`。API Key 只在 Windows 凭据管理器（`ArchResearch/suoxie` / `api-key`），不得打印或迁移。
-- ArchDaily、Designboom、Dezeen、Divisare、ArchDaily China 与项目官网负责落地案例与方案证据，按查询轮换站点；小红书只负责制图/配色/形体/分析图灵感，始终 `aggregator / visual_lead`，不能单独证明项目事实。图纸灵感 XHS-only fail-closed：OpenCLI 失败才回退扩展，两条路径都不可用时诚实终止，绝不降级为通用网页素材；固定 48 个逐图检查槽位 / 48 MiB，每方向按 rank 最多试 4 帖、累计 3 篇 usable。
+- ArchDaily、Designboom、Dezeen、Divisare、ArchDaily China 与项目官网负责落地案例与方案证据，按查询轮换站点；小红书只负责制图/配色/形体/分析图灵感，始终 `aggregator / visual_lead`，不能单独证明项目事实。图纸灵感 XHS-only fail-closed：源码环境可先用 OpenCLI 再回退扩展，Windows 安装版直接使用扩展；可用路径全部失败时诚实终止，绝不降级为通用网页素材。固定 48 个逐图检查槽位 / 48 MiB，每方向按 rank 最多试 4 帖、累计 3 篇 usable。
 - 正式方案案例按项目组织：每条事实绑定自己的 URL 与逐字引文；同项目可合并，一次定向补查最多两个可信文字页；`transfer` 是明确标注的设计转译；模型 relevance 只排序。正文分析还必须确认案例在可比较尺度上直接回答当前子问题，纯类比不进入正式案例；Quick 至少需要 3 个正式项目。图片只是可选预览与出处入口，不证明机制、不参与准入。
 - 深度是语义合同（拆解规模、逐题覆盖、分析义务），不是许可交浅答案：M124 起 coverage 与 enrichment 同时达标才 `completed`，有用但不足的结果诚实 `partial`。对外三档为“快速找方向 / 形成方案依据 / 做跨案例论证”，内部请求值 `quick/balanced/deep` 不变。
 - 保留语义（M149 更新）：新 Run 从创建日起默认保留一学期（180 天）、可逐条永久；取消永久后从操作日起重新获得 180 天，既有记录不静默迁移。**`keep_forever` 同时豁免 Run 行与其全部子数据**（资产/证据 7 天、来源 30 天的独立时钟，M141）。个人收藏是独立快照，Run 过期不删收藏；**保存是纯累加动作**，新批次绝不删除任何既有收藏（M145 废除了 M93 的同题替换）。结果页每个案例有直接收藏动作，多选仍用于批量收藏与对照；删除永远只由用户显式执行。
@@ -40,6 +40,7 @@
 - M163 公共小红书桥接已发布：公共页只可发送 `status` 与 `xiaohongshu_search` 两个严格动作，扩展以用户手势为当前 HTTPS 公共 origin 动态注册 content script，并用用户已登录的小红书页面做有界只读搜索；Cookie、账号和密码不上传。主页缺少扩展时立即提醒，检测到桥后不再弹出。
 - M164 将公共小红书桥升级为与本地版等深的两阶段流程：Workflow 先规划最多 6 个视觉方向，扩展每方向最多尝试 4 帖、目标 3 篇 usable、每帖最多 4 图，全任务共享 48 图/48 MiB。截图不进入 1 MiB 上限的 Workflow 事件；Worker 临时写私有 R2、事件只传对象键，模型分析后清理，浏览器 IndexedDB v2 按 `candidateId` 保留本地预览并写入终态结果。私有 R2 桶、三日生命周期与生产 Worker 版本 `c7144317-8daa-4e8f-ae57-5ccf79fc8a41` 已部署；HTTP、安全头和正式 Turnstile 配置通过。
 - 最新完整验证：M165 的 `scripts/verify.ps1` exit 0，通过 360 API / 190 Board / 189 Extension / 12 Web / 28 Edge / 8 packaged E2E；coverage 为 Board 79.01/76.42/84.28/83.18、Extension 83.43/78.54/85.40/85.73。系统 Chrome 本地生产界面已展开四步安装说明，2048×983 横向溢出 0、三个操作控件均为 44px；PR #2 的两套 fresh Windows Hosted CI（`30487265492`、`30487306820`）均成功。`v2.1.4` 正式 Release 已发布 22,312-byte extension-only ZIP，生产 Worker 已部署为 `06b96723-281c-4375-b816-32f21b8f2e40`，线上 HTTP、安全头、正式 Turnstile、bundle 与附件 smoke 全绿。线上系统 Chrome DOM 控制连续超时后按禁用内部浏览器规则停止，测试标签已清理。
+- M166 本地预发布验证：版本面统一 `2.2.0`；`scripts/verify.ps1` exit 0，通过 365 API / 190 Board / 189 Extension / 12 Web / 28 Edge / 8 packaged E2E，coverage 与 M165 基线一致。69,700,290-byte Windows 安装器完成真实 per-user 安装、精简 PATH 自检、快捷方式、无扩展 manifest、卸载及 v2.1.4→v2.2.0 数据保留验证；22,316-byte extension-only ZIP 独立生成。安装器未签名，Release 必须明确 SmartScreen/未知发布者边界。
 - 本工作区由多个 agent 会话并发写入（长期约束）：提交前后必须重读 `git status`，另一会话仍在写同名文件时暂停提交。
 
 ## 当前唯一主线
@@ -56,6 +57,7 @@
 10. **M163 已 complete**：公共 Web 与 GitHub 本地版共用主页安装提醒、扩展连接状态和小红书视觉读取协议；严格消息/来源校验、动态 exact-origin 注册、有界搜索、Web/Edge 接入、coverage、全量门禁、打包 E2E、1440/390px QA 与 `2.1.2` ZIP 全部完成。提交 `c74571f` 的 Hosted CI `30438474678` success，生产 Worker 版本 `dc0eb528-a8c3-4ca2-88fa-c6131f866d3c` smoke 全绿，annotated tag 与正式 `v2.1.2` Release 已发布。站外 ZIP 仍需开发者模式加载；真正一键安装是后续 Chrome Web Store 外部审核事项。
 11. **M164 已 complete**：网页与本地版的用户可见功能继续共用同一 Board；公共小红书已实现规划后逐方向、逐帖、逐图深读，Cloudflare 事件载荷改为 R2 对象键，IndexedDB 保留最终可显示预览。`37be809` 的两套 Hosted CI、annotated `v2.1.3` tag、扩展专属正式 Release、R2 桶、三日生命周期和生产 Worker 版本 `c7144317-8daa-4e8f-ae57-5ccf79fc8a41` 均已上线。系统 Chrome 1440×1000 / 390×844 线上安装提醒、主页、个人收藏、备份恢复与 console smoke 全绿；未调用内部浏览器。
 12. **M165 已 complete**：主页不再用“立即安装”误导站外 ZIP 为一键安装，同弹窗先展示完整四步方法再下载；公共桥在当前页注入后发送严格 v2 ready，Board 自动关闭提醒，同 origin 重复连接保持幂等。PR #2、两套 Hosted CI、annotated `v2.1.4`、扩展专属 Release 和生产 Worker `06b96723-281c-4375-b816-32f21b8f2e40` 均已上线。唯一跨阶段未完成项仍是 M161 的真人 Turnstile Quick 研究验收。
+13. **M166 in progress**：GitHub 本地版 Windows x64 一键安装程序与独立扩展 ZIP 已实现并通过本地全门禁、真实安装/升级/卸载；安装包自带本地运行时、API 与生产 Board，用户不再准备 Python、Node、pnpm 或 PowerShell。扩展不放进安装包，本地页面复用网页版的缺失提醒和独立安装说明。唯一下一步是显式提交并创建 draft PR，等待 fresh Hosted CI 后合并、发布 `v2.2.0` 两个清晰附件，再部署 Worker 让网页下载链接生效。
 
 ## 工作区保护
 
@@ -64,4 +66,4 @@
 
 ## 给新对话的第一句话
 
-> 继续 ArchResearch。先完整读取 HANDOFF.md，再读取 AGENTS.md；随后按 HANDOFF 顺序恢复 task_plan.md、findings.md、progress.md，并运行 `git status --short --branch`。不要重做已完成工作，不要恢复 Firecrawl，也不要调用会导致桌面应用闪退的内部浏览器。M165 已 complete：四步扩展安装引导、当前页 ready 自动关闭提醒、同 origin 幂等连接、完整门禁、PR #2、两套 Hosted CI、`v2.1.4` 扩展专属 Release 与生产 Worker 均已上线；线上 HTTP/安全头/Turnstile/bundle/附件 smoke 全绿。代码交付外仍保留 M161 的真人 Turnstile Quick 研究验收；自动化不得绕过。生产 Web URL 不得进入仓库或 Release。保留所有修改和未跟踪文件，不得 reset、checkout、clean 或 `git add -A`。
+> 继续 ArchResearch。先完整读取 HANDOFF.md，再读取 AGENTS.md；随后按 HANDOFF 顺序恢复 task_plan.md、findings.md、progress.md，并运行 `git status --short --branch`。不要重做已完成工作，不要恢复 Firecrawl，也不要调用会导致桌面应用闪退的内部浏览器。M166 的 Windows 一键安装器、Key-only 首次配置、独立扩展 ZIP、CI 合同和本地完整安装/升级/卸载验证已完成；唯一下一步是 draft PR → fresh Hosted CI → 合并 → `v2.2.0` 双附件 Release → Worker 部署。扩展不得放入 Windows 安装包，生产 Web URL 不得进入仓库或 Release。保留所有修改和未跟踪文件，不得 reset、checkout、clean 或 `git add -A`。

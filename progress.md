@@ -1003,3 +1003,31 @@
 - annotated `v2.1.4` tag 精确指向 `45763fb`；正式 Release “ArchResearch Chrome 扩展组件 v2.1.4”只附 `archresearch-chrome-extension-only-v2.1.4.zip`，GitHub digest 与本地 SHA-256 一致，Release 无私有网页地址并直接包含完整手动安装步骤。
 - 生产 Worker 已部署为 `06b96723-281c-4375-b816-32f21b8f2e40`。线上主页 200，CSP、noindex/noarchive 与 frame deny 生效，正式 Turnstile 非测试占位；生产 bundle 含“查看安装方法”和 v2.1.4 下载链接，附件 200 且 Content-Length 22,312。
 - 线上系统 Chrome 标签创建成功，但 DOM 读取连续两次超时并重置控制会话；按用户禁用内部浏览器的约束停止重试，测试标签已清理。未调用内部浏览器、未绕过 Turnstile、未创建真实研究。M165 其余发布与线上 smoke complete。
+
+## 2026-07-30 M166 start
+
+- 用户要求开始补齐 GitHub Windows 一键安装版，随后明确安装包不包含 Chrome 扩展。扩展继续由本地页面像网页版一样提示、独立下载并由用户手动配置；其余本地服务、运行环境、生产 Board、快捷方式与启动流程全部自动安装，首次业务配置只输入 Key。
+- planning catchup 使用 Codex bundled Python 恢复 25 条未同步上下文；`main` 与 `origin/main` 同步，工作树只保留既有未跟踪 `.artifacts/qa/` 与 `.artifacts/releases/`。
+- 当前下一步：审计本地启动、Provider 凭据、静态 Board 服务和 Windows 打包工具链，先建立安装产物/首次配置/启动幂等的失败合同，再选择最小的自包含运行时与安装器实现。
+- 首轮审计确认 Provider Key 已通过 Windows Credential Manager 安全存储，Board 客户端使用相对 `/v1`，但 FastAPI 尚未托管生产 Board；现有 `scripts/start.ps1` 仍是开发时双进程路径。一次打包工具探测因 PowerShell 管道语法错误未执行，未改变文件或系统状态；下一次改为无管道的逐项输出。
+- 第二轮审计确认本地 Board 已复用网页端扩展提醒；系统 Chrome 可直接供 Playwright 读取公开网页，不必捆绑 Chromium。当前机器只有 `winget`，没有 Inno Setup、NSIS 或 PyInstaller 命令；构建依赖需要锁定并由构建脚本/CI 明确安装，不能成为最终用户依赖。
+- 已选择 PyInstaller onedir + Inno Setup 的 Windows per-user 安装路线。`impeccable` 界面规范包已完整读取，但其声明的 `scripts/context.mjs` 与 `reference/` 资源未随当前 skill 安装，仅有 `SKILL.md`；辅助审计因此无法运行，错误为 `MODULE_NOT_FOUND`。后续直接复用现有 ArchResearch 视觉/文案系统并执行等价的 Key-only、错误态和键盘可用性检查。
+- M166 红灯合同已建立：`test_desktop.py` 要求 `%LOCALAPPDATA%` 数据目录、单端口 Board/API 与专用 desktop health；Provider 测试要求 GUI/CLI 共用“先验证、后保存”函数；`windows-installer.tests.ps1` 要求 onedir、Board/Alembic 入包、per-user 安装、开始菜单/桌面快捷方式，并明确禁止扩展进入安装包。Python 集合当前分别因 `archresearch_api.desktop` 和 `configure_provider` 不存在失败；安装器合同因构建脚本不存在失败，均是预期红灯。
+- 首次实现已加入共享 Provider 配置函数、`archresearch_api.desktop`、本地 8000 同源 Board/API、Key-only Tk 首次配置和安装版 Chrome URL。第一次绿灯运行暴露一个直接导入错误（误从 `urllib.error` 导入内置 `OSError`）及未使用的 `sys`；两者已删除，未涉及行为折中。
+- 桌面 Python 合同、相关浏览器路由回归、Ruff 与 strict Mypy 已转绿。PyInstaller/Inno 源码和构建脚本已加入；首次安装器合同运行只因测试要求源码中出现字面 `apps/board/dist`，而实现通过 `$boardRoot` + `Join-Path` 等价定位失败，现已把合同改为验证实际 `$addBoard` / `$addAlembic` 数据参数，不降低入包要求。
+- 第一次真实 PyInstaller onedir 已成功生成运行目录，但内置 `--self-test` 正确阻止了后续安装器编译：冻结数据实际位于 PyInstaller `_MEIPASS`，启动器仍按源码 `__file__` 层级取资源。已新增冻结资源根行为测试，下一步改用 `_MEIPASS` 后重打包。诊断期间误用了单次 `Get-CimInstance` 查看构建命令行；未造成进程或数据变化，后续轮询已恢复为 `Get-Process`，遵守项目禁止 CIM/WMI 的既定约束。
+- `_MEIPASS` 单元合同已转绿；第二次冻结启动通过 Windows 错误窗口确认了更早的入口问题：PyInstaller 把包内 `desktop.py` 当顶层脚本执行，导致相对导入没有 parent package。窗口只读错误为 `attempted relative import with no known parent package`，已关闭。下一条红灯合同要求使用极小的顶层 launcher，以绝对导入 `archresearch_api.desktop.main`。
+- package-safe launcher 合同与冻结资源自检已转绿，第三次 PyInstaller 运行成功。Inno 编译随后因默认安装中不存在可选 `Languages\ChineseSimplified.isl` 而退出 2；已删除该非必要语言文件依赖，安装向导先使用 Inno 内置英文，安装后的 Key 界面和 Board 仍为中文。当前 winget 安装的 Inno Setup 6.7.3 明确标注 non-commercial use；项目当前按公开非商业交付构建，未来商业分发需购买相应 Inno 许可或更换安装器工具。
+- Inno 直接复编成功生成 69,703,336-byte `ArchResearch-Windows-x64-Setup-v2.1.4.exe` 测试包。真实静默安装/self-test/快捷方式/卸载全绿；未捆绑 Chrome 扩展，安装目标约 225 MiB，卸载保留用户数据与既有 Startup 入口。首次 Key 窗口已由系统 Windows UI 只读截图检查，唯一输入项、隐藏输入、显示开关、凭据说明、验证/取消均存在；未输入 Key。说明行在当前缩放下末尾截断，已缩短并改为 fill-x。为释放 8000 暂停的开发 API/Board 已恢复，当前 8000 health ok、5173 HTTP 200。
+- 用户再次确认最终边界：安装器绝不捆绑扩展；本地页面像网页版一样提示用户单独下载并手动配置，其他运行组件自动安装。正式交付版本定为 `v2.2.0`，避免覆盖已经发布的扩展专属 `v2.1.4`。
+- 已先提升发布合同：CI 必须构建并上传名称明确的 Windows 安装程序，README 必须把 Chrome-only、无需开发环境和扩展分离写清，Board 安装链接必须指向 `v2.2.0` 独立扩展包。下一步运行合同确认红灯，再同步生产版本、文档和 CI。
+- 发布合同先按预期红在 CI 缺少安装器构建；随后 API、Board、Web、Edge、Extension、manifest 和下载链接统一升到 `2.2.0`，CI 新增 Inno Setup 安装、Windows 安装器构建和明确命名的 artifact 上传。更新后的 release contract 与 Board `App.test.tsx` 107 项均通过。
+- README 的普通用户首路径现为 Windows 11 + Google Chrome、双击 `ArchResearch-Windows-x64-Setup-v2.2.0.exe`、首次只填 Key；明确不需要 Python/Node/pnpm/PowerShell，扩展不在安装包中，由页面提供四步手动安装与连接说明。源码开发依赖和 OpenCLI 可选路径已移到开发者语境。
+- 版本残留扫描只命中依赖包自身的 `2.1.3` 和历史 V2.1 设计规格链接，没有产品面 `2.1.4` 残留。为确保页面指向的 `v2.2.0` 扩展附件一定可发布，下一条红灯要求 CI 用独立脚本生成并上传 `extension-only` ZIP，且该脚本不得调用或混入 Windows 安装器。
+- 独立扩展构建合同已转绿；实际产出 `archresearch-chrome-extension-only-v2.2.0.zip`，ZIP 根目录校验含 `manifest.json`，SHA-256 为 `C72BFD9C1884AD4977C532F38AB24123DB2EA9A56EFCC0B044C1BF04E5810600`。下一条安装 smoke 红灯要求 fresh Windows 真正安装、在精简 PATH 下运行内置自检、拒绝扩展 manifest、再执行卸载。
+- 安装 smoke 合同先红在脚本不存在；实现后 Windows 安装/快捷方式/精简 PATH 自检/无扩展 manifest/卸载全流程通过。最终 `ArchResearch-Windows-x64-Setup-v2.2.0.exe` 已构建，大小 69,700,290 bytes；独立扩展 ZIP 为 22,316 bytes，根目录列出 `manifest.json` 与扩展静态文件。
+- 一次只读哈希汇总因外层 PowerShell 提前展开内层变量而触发 parser error，未执行任何文件操作；改为单引号隔离后成功读取产物与工作树。下一步单独输出完整 SHA/签名状态，再运行权威门禁。
+- 最终安装器 SHA-256 为 `B63B3246261B9E01AFB5B864484A63C1FD2415DD4FBE4E1FFFE64B4C53DE71B2`，Authenticode 状态为 `NotSigned`；扩展哈希仍为 `C72BFD9C1884AD4977C532F38AB24123DB2EA9A56EFCC0B044C1BF04E5810600`。
+- coverage 通过：Board `79.01/76.42/84.28/83.18`，Extension `83.43/78.54/85.40/85.73`。首次完整门禁的行为阶段通过 365 API，但 Ruff format check 要求格式化 `__init__.py`、`main.py` 和 `test_desktop.py` 三个文件；下一步只运行标准格式化器后重跑，不改变合同。
+- Ruff 标准格式化后第二次权威 `scripts/verify.ps1` exit 0：365 API / 190 Board / 189 Extension / 12 Web / 28 Edge / 8 packaged E2E，并通过 release/installer/Provider/process/autostart/evaluation 合同、Ruff、strict Mypy、全部 TS lint/typecheck/test/build 与 Worker dry-run。下一步执行旧测试包到最终包的覆盖升级和数据保留检查。
+- `v2.1.4` 测试安装器到最终 `v2.2.0` 的真实覆盖升级通过：冻结程序自检成功，安装后的 Board bundle 精确包含 `v2.2.0` extension-only 下载链接，升级前 sentinel 保留。最终卸载移除程序目录并继续保留 sentinel；随后仅删除由本轮创建的 sentinel。M166 本地工程验收闭合，下一步提交、PR 与 fresh CI。

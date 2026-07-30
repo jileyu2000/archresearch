@@ -687,3 +687,20 @@
 - 修复采用固定且可校验的 v2 `ready` 消息：公共桥安装监听器后立即通知同页 Board，Board 收到同源、同 window、精确字段的消息后重新读取状态并关闭提醒。相同 origin 已注册时只重新注入当前标签，不注销或重注册；重复点击因此保持幂等。
 - `v2.1.4` 已作为扩展专属正式 Release 发布，Release 自身也提供解压、扩展管理页、开发者模式和选择 `manifest.json` 文件夹的完整说明；手工附件与 GitHub 自动 Source archives 的用途明确分开，未写入私有 Web URL。
 - 生产部署后系统 Chrome 可列出已打开的线上 ArchResearch 标签，但页面 DOM 读取连续两次超时并重置控制会话；按用户禁用内部浏览器与 Chrome 故障恢复规则停止页面级重试并清理测试标签。生产验收由成功的本地系统 Chrome视觉检查、两套 fresh Windows CI、线上 bundle/HTTP/安全头/Turnstile/附件 smoke 共同闭合。
+
+## 2026-07-30 M166 Windows installer scope
+
+- 用户重新确认此前未闭合的 GitHub 交付目标：下载 Windows 安装程序后双击安装，用户唯一需要配置的是 Key；不能要求 Python、Node、pnpm 或 PowerShell 7。
+- 用户随后明确修正范围：Windows 安装程序不包含 Chrome 扩展文件。扩展继续作为独立下载组件，由本地页面复用网页版的缺失提醒、四步安装说明与连接检查，用户自行下载并手动配置；连接成功后提醒消失。不得通过企业策略、强制注册表或宽泛启动参数绕过 Chrome 安全边界。
+- 运行形态仍是本机服务 + Chrome 界面，但“浏览器应用”不等于“需要开发环境”：生产 Board 应作为静态资源随本地服务交付，Python 后端应打包为自包含 Windows 可执行程序，Node/pnpm 只属于构建机。
+- 代码签名证书当前不在仓库；即使安装器功能完成，未签名 `.exe` 仍可能触发 Windows SmartScreen。不能伪称已消除该系统提示，正式消除需要项目方购买并保管代码签名证书。
+- 现有 Provider 层已经具备可复用的安全基础：只保存固定的梭子蟹模型配置，Key 经能力探针成功后写入 Windows Credential Manager（`ArchResearch/suoxie` / `api-key`），配置 JSON 不含 Key，失败会回滚。安装版需要把现有标准输入脚本替换为图形化 Key-only 首次配置入口，不应复制凭据逻辑。
+- Board 的 API 客户端已使用相对 `/v1`，适合同源随 FastAPI 静态托管；当前 `create_app()` 只挂载 API/浏览器路由和 `/health`，尚未托管生产 Board，因此安装版仍需补 SPA 静态文件与 fallback 合同。
+- 本地 Board 目前已经和网页版共用同一安装弹窗：只要页面未检测到扩展，便展示“查看安装方法”和版本化 extension-only Release 下载链接；检测到扩展后关闭。因此 M166 不需要新做另一套扩展 UI，只需保证安装版仍走该现有本地 edition 逻辑，并为安装产物补合同。
+- 本地公开网页读取使用 Python Playwright 的 `channel="chrome"` 启动系统 Chrome，不要求随包下载 Chromium；这与“Chrome 是唯一外部依赖”的安装合同一致。OpenCLI 小红书入口则依赖外部 Node 和仓库 `node_modules`，安装版不应携带这条开发时路径；Node 不存在时现有发现函数返回 `None`，小红书必须由用户单独安装并连接的扩展承担。
+- 扩展的本地 content script 匹配所有 `http://127.0.0.1/*` 和 `http://localhost/*` 端口，WebSocket 默认指向 API 8000；安装版可把 Board 与 API 同源收敛到 `127.0.0.1:8000`，无需保留 Vite 5173 进程，也不必修改扩展 host 权限。
+- 官方 PyInstaller 6.21 文档支持 Windows `onedir` 和 `--add-data`，适合把 Python 依赖、Alembic 迁移与 Board 静态产物收进自包含目录；Inno Setup 官方支持非管理员 per-user 安装、快捷方式、卸载与命令行编译。M166 采用 PyInstaller onedir + Inno Setup：避免 onefile 每次解压的启动开销，也让升级时由安装器原子替换程序目录，用户数据继续位于安装目录外。
+- 第一轮真实安装证明 per-user 方案成立：安装器无需管理员权限，程序落在 `%LOCALAPPDATA%\Programs\ArchResearch`，桌面与开始菜单根层各创建一个快捷方式；`--self-test` 成功，卸载后程序和两个新快捷方式移除，`%LOCALAPPDATA%\ArchResearch\data` 与既有登录自启快捷方式保留。安装目录只出现 Playwright 自身 `extension.js` 与 SQLAlchemy `cyextension` 名称，不含 Chrome 扩展目录、manifest 或 extension-only ZIP。
+- 当前安装器未代码签名，`Get-AuthenticodeSignature` 为 `NotSigned`；功能与哈希验证不受影响，但 Windows 仍可能显示 SmartScreen“未知发布者”。正式消除此提示需要项目方提供代码签名证书，不能由仓库代码伪造。
+- M166 正式发布版本应使用 `v2.2.0`：`v2.1.4` 已经是不可移动的扩展专属 Release，复用该版本名会让 Git tag、安装程序和下载提示发生歧义。`v2.2.0` Release 可同时附名称明确的 Windows 完整本地安装器与独立 Chrome 扩展 ZIP，但安装器内部必须没有 `manifest.json` 或扩展包。
+- 最终升级验证证明同一个 Inno `AppId` 会把测试 `v2.1.4` 程序覆盖为 `v2.2.0`，安装后静态 Board 精确包含 `v2.2.0` 独立扩展下载链接；`%LOCALAPPDATA%\ArchResearch\data` 中由验收创建的 sentinel 在升级和卸载后均保留。验收结束只删除该 sentinel，程序目录和快捷方式由正式卸载器移除。

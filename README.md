@@ -1,7 +1,7 @@
 # ArchResearch
 
 [![verify](https://github.com/jileyu2000/archresearch/actions/workflows/verify.yml/badge.svg)](https://github.com/jileyu2000/archresearch/actions/workflows/verify.yml)
-![version](https://img.shields.io/badge/version-2.1.2-2F5BFF)
+![version](https://img.shields.io/badge/version-2.2.0-2F5BFF)
 ![platform](https://img.shields.io/badge/platform-Windows%2011-171A18)
 
 > 把建筑设计问题变成有出处、能比较、可继续使用的案例答案与图纸灵感板。
@@ -89,9 +89,20 @@ flowchart TB
 
 ## 快速开始
 
-环境要求：Windows 11、Chrome、Python 3.12、Node.js 24、pnpm 11。
+普通用户只需要 **Windows 11 和 Google Chrome**。不需要安装 Python、Node.js、pnpm 或 PowerShell，也不需要执行命令。
 
-本地安装版的网页读取与小红书登录态研究目前仅支持 **Google Chrome**；不支持 Edge、Firefox 或 Safari。Cloudflare Web Edition 的建筑案例研究可直接使用，但图纸灵感同样需要 Google Chrome、ArchResearch 扩展和用户自己的小红书登录态；不需要 Python、Node、pnpm、PowerShell 或用户自己的 Provider Key。
+1. 在 [GitHub Releases](https://github.com/jileyu2000/archresearch/releases/latest) 下载 `ArchResearch-Windows-x64-Setup-v2.2.0.exe`。
+2. 双击安装程序。它会为当前 Windows 用户自动安装本地服务、完整界面、数据库和所需运行环境，并创建桌面与开始菜单快捷方式。
+3. 首次打开只需输入自己的 Provider Key。Key 验证成功后保存到 Windows 凭据管理器，不写入网页或配置文件。
+4. ArchResearch 会用 Google Chrome 打开本地页面 `http://127.0.0.1:8000/`。以后直接点击 ArchResearch 快捷方式即可。
+
+安装包不包含 Chrome 扩展。需要读取小红书登录态内容时，本地页面会像网页版一样显示安装说明，引导用户单独下载、解压和连接扩展；扩展被检测到后，这条提醒自动消失。这样既不会混淆“完整本地程序”和“浏览器扩展”，也不会绕过 Chrome 的手动授权要求。
+
+本地安装版的网页读取与小红书登录态研究目前仅支持 **Google Chrome**，不支持 Edge、Firefox 或 Safari。Windows 安装程序当前没有商业代码签名证书，首次运行时 Windows 可能显示“未知发布者”或 SmartScreen 提示；可在 Release 页面核对 SHA-256，代码签名完成前不能把该系统提示描述成已消除。
+
+### 从源码开发
+
+下面的环境和命令只供需要修改源码的开发者使用：Windows 11、Google Chrome、Python 3.12、Node.js 24、pnpm 11 和 PowerShell 7。
 
 ```powershell
 Copy-Item .env.example .env
@@ -99,13 +110,13 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/setup.ps1
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/start.ps1
 ```
 
-启动脚本会输出实际地址；默认是：
+开发启动脚本会输出实际地址；默认是：
 
 - 参考板：`http://127.0.0.1:5173`
 - API：`http://127.0.0.1:8000`
 - 扩展目录：`apps/extension/dist`
 
-要让 Windows 重启并登录后自动恢复本地页面，执行一次：
+源码开发环境如需在 Windows 登录后自动恢复服务，执行一次：
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/configure-autostart.ps1
@@ -121,32 +132,35 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/stop.ps1
 
 ### 更新已有安装
 
-在你已经通过下载新版本或自己的 Git 操作替换源码后，运行：
+安装版用户只需从 GitHub Release 下载新版本安装程序并再次运行。安装器会更新程序文件，保留 `%LOCALAPPDATA%\ArchResearch\data` 中的本地数据以及 Windows 凭据管理器中的 Key。
+
+源码开发者在已经通过自己的 Git 操作替换源码后，可运行：
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/update.ps1
 ```
 
-更新脚本不会执行 `git pull`、reset、checkout 或 clean。它只依次停止当前工作区服务、重新安装依赖并构建扩展、运行完整离线门禁，再启动验证通过的版本；若安装或验证失败，脚本立即停止，不会启动未通过门禁的版本。本地研究数据继续保存在 `.archresearch`，更新前也可先从“备份数据”页面下载独立 ZIP。
+该脚本不会执行 `git pull`、reset、checkout 或 clean。它只依次停止当前工作区服务、重新安装依赖并构建扩展、运行完整离线门禁，再启动验证通过的版本；若安装或验证失败，脚本立即停止，不会启动未通过门禁的版本。源码运行的数据继续保存在 `.archresearch`，更新前也可先从“备份数据”页面下载独立 ZIP。
 
 ### 安装扩展与配对
 
 进入 ArchResearch 主页面时会自动检查扩展；未检测到时显示安装与连接提醒。检测成功后不再弹出这条提醒。
 
-1. 打开 `chrome://extensions`，启用开发者模式。
-2. 选择“加载已解压的扩展程序”，使用 `apps/extension/dist`。
-3. 公共版：在目标网页打开浏览器工具栏中的 ArchResearch，选择“连接当前 ArchResearch 网页”。本地版：在参考板点击“一键连接浏览器”；手动地址和配对码只作为故障恢复入口。
-4. 首次使用时由 Chrome 确认网页读取权限；授权会保留，直到用户在扩展中主动撤销或卸载扩展。
+1. 在页面的扩展提醒中选择“查看安装方法”，下载名称包含 `chrome-extension-only` 的独立 ZIP；不要把它和 Windows 完整安装程序混淆。
+2. 解压 ZIP，确认所选文件夹的根目录直接包含 `manifest.json`。
+3. 打开 `chrome://extensions`，启用开发者模式，选择“加载已解压的扩展程序”，选中上一步的文件夹。源码开发者也可以选择 `apps/extension/dist`。
+4. 在浏览器工具栏打开“ArchResearch Chrome 扩展”。公共版选择“连接当前 ArchResearch 网页”；本地安装版在参考板点击“一键连接浏览器”。手动地址和配对码只作为故障恢复入口。
+5. 首次使用时由 Chrome 确认网页读取权限；授权会保留，直到用户在扩展中主动撤销或卸载扩展。
 
-Chrome Web Store 上架后，页面中的“立即安装 Chrome 扩展”会直接进入商店；在商店审核完成前，该按钮进入最新 GitHub Release 的扩展安装包页面。站外 ZIP 仍需按上面的 Chrome 开发者模式步骤加载，不能冒充商店的一键安装。
+Chrome Web Store 上架后，页面中的安装动作会直接进入商店；在商店审核完成前，安装说明提供最新 GitHub Release 的扩展 ZIP。站外 ZIP 仍需按上面的 Chrome 开发者模式步骤加载，不能冒充商店的一键安装。
 
 ### 启用小红书登录态研究
 
-1. 从 [Chrome Web Store](https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk) 安装一次 **OpenCLI Browser Bridge**。
-2. 在同一个 Chrome 中登录小红书。OpenCLI daemon 会在研究时按需启动，不需要每次配对。
-3. 可用 `pnpm opencli -- doctor` 检查 Bridge；项目已锁定 `@jackwener/opencli@1.8.6`，无需全局安装 CLI。
+1. 按上一节单独安装并连接 **ArchResearch Chrome 扩展**。
+2. 在同一个 Google Chrome 中登录小红书。
+3. 回到 ArchResearch 选择“图纸灵感”开始研究。安装版不要求 Node.js、OpenCLI 或额外 daemon。
 
-ArchResearch 扩展与 OpenCLI Bridge 职责不同：前者负责通用登录页面裁图和故障回退，后者是小红书的主搜索/轮播多图路径。两者都不会替用户点赞、收藏、评论或发布。
+源码开发环境仍可选择 OpenCLI Browser Bridge 作为本地加速路径；它不是 Windows 安装版的用户依赖。ArchResearch 只执行只读搜索和图片分析，不会替用户点赞、收藏、评论或发布。
 
 Chrome 的 `captureVisibleTab` 只接受用户手势产生的 `activeTab` 或 `<all_urls>` host permission。连续研究无法要求用户逐页点击，因此扩展从自身弹窗的直接用户手势请求可选的 `<all_urls>`，并保留到用户主动撤销或卸载扩展；实际导航、脚本注入和最终 URL 复核仍严格限制为公网 HTTP/HTTPS，不接受 `file:`、扩展页、回环或私网地址。研究终态仍会关闭扩展打开的标签页。
 
@@ -156,15 +170,15 @@ Chrome 的 `captureVisibleTab` 只接受用户手势产生的 `activeTab` 或 `<
 
 ## 模型与密钥
 
-默认 `ARCHRESEARCH_PROVIDER_MODE=mock`，不需要任何 Key，适合开发、测试和本地演示。
+Windows 安装版首次启动时只显示一个 Key 输入框。程序会隐藏输入并先执行一次小型、可能产生费用的 `gpt-5.6-sol + medium` 结构化输出测试；只有验证通过后，才把 Key 保存到 Windows 凭据管理器。失败时不会保存 Key，用户可直接修改并重试。
 
-梭子蟹中转站使用下面的安全配置命令。命令会隐藏输入，先执行一次小型、可能产生费用的 `gpt-5.6-sol + medium` 结构化输出测试；只有测试通过后，才把 Key 保存到 Windows 凭据管理器，并将不含密钥的模型配置写入本地工作区。已经启动 ArchResearch 时，配置完成后需要重启服务。
+源码开发环境默认 `ARCHRESEARCH_PROVIDER_MODE=mock`，不需要任何 Key，适合开发、测试和本地演示。开发者如需接入梭子蟹中转站，可使用同一套安全配置逻辑：
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/configure-provider.ps1
 ```
 
-公开建筑网站由 Direct Playwright 在不落盘的隔离上下文中提取正文、项目链接、图片 URL 和图注；图片、媒体和字体请求默认拦截以降低流量。小红书默认由 OpenCLI Browser Bridge 使用用户已登录的 Chrome 执行只读搜索和多图下载。每个灵感方向按 rank 最多尝试四篇笔记，累计三篇产生可用图的帖子后停止；每篇等距选取最多四图并合并为一次视觉分类。图纸灵感共享 48 个逐图检查槽位 / 48 MiB 预览预算。OpenCLI 不可用或返回空结果时回退 ArchResearch 扩展；两条小红书路径都不可用时诚实终止，不降级为通用网页素材。
+公开建筑网站由 Direct Playwright 使用系统 Google Chrome，在不落盘的隔离上下文中提取正文、项目链接、图片 URL 和图注；图片、媒体和字体请求默认拦截以降低流量。Windows 安装版的小红书研究由用户单独安装并连接的 ArchResearch 扩展读取登录态页面；源码开发环境还可选用 OpenCLI Browser Bridge。每个灵感方向按 rank 最多尝试四篇笔记，累计三篇产生可用图的帖子后停止；每篇等距选取最多四图并合并为一次视觉分类。图纸灵感共享 48 个逐图检查槽位 / 48 MiB 预览预算。可用的小红书读取路径全部失败时会诚实终止，不降级为通用网页素材。
 
 也可以通过本地 `.env` 启用其他 OpenAI 兼容配置。研究规划、已抓页面分析和视觉分类默认统一使用 `gpt-5.6-sol`，推理强度统一为 `medium`；模型名仍可分别覆盖。不要把 `.env` 或任何 Key 提交到 Git。
 
@@ -221,19 +235,21 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/validate-evaluation-fixtur
 
 ## 完成度与已知边界
 
-当前版本是可安装、可持久化、可备份恢复的 V2.1 系统，不是界面原型。Agent 四模块边界、七阶段 checkpoint、任务书流程、个人收藏、跨案例对照、权利门禁导出和 Chrome 扩展均已有行为测试。最新本地发布门禁为 **360 API / 177 Board / 165 Extension / 8 packaged E2E**，并包含 Ruff、strict Mypy、TypeScript lint/typecheck、production build、进程、安全和评测夹具检查；默认测试不调用真实模型或公开网页。完整证据见[发布验证记录](docs/release-evidence-2026-07-28.md)。
+当前版本是可安装、可持久化、可备份恢复的 V2.2 系统，不是界面原型。Windows 一键安装程序交付自包含本地服务与生产界面；Chrome 扩展保持独立下载。Agent 四模块边界、七阶段 checkpoint、任务书流程、个人收藏、跨案例对照、权利门禁导出和 Chrome 扩展均已有行为测试。发布门禁包含 Python 与 TypeScript 测试、Ruff、strict Mypy、lint/typecheck、production build、进程、安全、评测夹具、扩展 E2E 和 Windows 安装产物合同；默认测试不调用真实模型或公开网页。完整证据见[发布验证记录](docs/release-evidence-2026-07-28.md)。
 
-产品刻意保持本地优先边界：当前支持 Windows 11 + Chrome，一次只运行一个研究任务，不提供公网 SaaS；实时网页研究需要使用者主动配置自己的 OpenAI 兼容 Provider，并授予所需浏览器权限。小红书视觉研究还需要使用者自己的登录态和 OpenCLI Browser Bridge。未知或受限权利图片只能作为来源卡与链接交付，不能由 Agent 自动升级权利状态。
+产品刻意保持本地优先边界：当前支持 Windows 11 + Google Chrome，一次只运行一个研究任务；实时网页研究需要使用者主动配置自己的 OpenAI 兼容 Provider，并授予所需浏览器权限。小红书视觉研究还需要使用者自己的登录态和独立 ArchResearch Chrome 扩展。未知或受限权利图片只能作为来源卡与链接交付，不能由 Agent 自动升级权利状态。
 
 ## 访问与演示
 
-本仓库提供完整源码、安装说明和本地演示入口。按[快速开始](#快速开始)完成安装并启动后，参考板默认位于 `http://127.0.0.1:5173`。安装完成后的最短体验路径是直接打开三个纯本地回放入口：
+本仓库提供 Windows 安装程序、完整源码、安装说明和本地演示入口。按[快速开始](#快速开始)完成安装后，参考板默认位于 `http://127.0.0.1:8000/`。安装版的三个纯本地回放入口是：
 
-- 快速找方向：`http://127.0.0.1:5173/?demo=quick`
-- 形成方案依据：`http://127.0.0.1:5173/?demo=balanced`
-- 做跨案例论证：`http://127.0.0.1:5173/?demo=deep`
+- 快速找方向：`http://127.0.0.1:8000/?demo=quick`
+- 形成方案依据：`http://127.0.0.1:8000/?demo=balanced`
+- 做跨案例论证：`http://127.0.0.1:8000/?demo=deep`
 
 这些入口不需要 Key，不创建 Workspace 或 ResearchRun，也不请求外部供应商；它们只展示真实产品界面和固定示例数据，不冒充实时网页研究。需要验证持久化闭环时，打开不带 `?demo=` 的正常地址，在默认 `mock` 模式创建工作区和研究即可。
+
+从源码启动时，Vite 参考板仍位于 `http://127.0.0.1:5173/`，相同的 `?demo=` 参数继续可用。
 
 可直接复制的测试问题：
 
@@ -241,7 +257,7 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/validate-evaluation-fixtur
 | --- | --- | --- |
 | 建筑设计研究 | 寻找面积受限的社区微型图书馆通过家具、楼梯和夹层复合使用的剖面与室内照片。 | 快速找方向 |
 | 建筑设计研究 | 寻找中小型博物馆中观众、工作人员和藏品运输三套流线分离的平面和流线分析图。 | 做跨案例论证 |
-| 图纸灵感 | 我想出一张低饱和分层轴测图，帮我找保留结构与新增体量的颜色区分方式。 | 实时测试需登录态小红书与 OpenCLI Bridge |
+| 图纸灵感 | 我想出一张低饱和分层轴测图，帮我找保留结构与新增体量的颜色区分方式。 | 实时测试需登录态小红书与 ArchResearch Chrome 扩展 |
 
 任务书路径可在建筑设计研究中附加自己的 PDF，系统会先提取项目边界，再把确认后的子问题写入同一研究 Run。仓库另含[25 条版本化研究任务](fixtures/queries/README.md)；两条完整演示流程、预期证据边界和失败恢复路径见[演示流程](docs/demo-flows.md)。
 

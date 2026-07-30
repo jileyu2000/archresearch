@@ -20,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError,
 PROTOCOL_VERSION: Literal[1] = 1
 PAIRING_CODE_TTL_SECONDS = 300
 CHROME_BOARD_URL = "http://127.0.0.1:5173/?connect=chrome"
+INSTALLED_CHROME_BOARD_URL = "http://127.0.0.1:8000/?connect=chrome"
 
 BrowserAction = Literal[
     "open_url",
@@ -429,7 +430,7 @@ class BrowserBroker:
 
 
 def open_board_in_chrome(url: str) -> bool:
-    if os.name != "nt" or url != CHROME_BOARD_URL:
+    if os.name != "nt" or url not in {CHROME_BOARD_URL, INSTALLED_CHROME_BOARD_URL}:
         return False
     local_app_data = os.environ.get("LOCALAPPDATA")
     candidates = [

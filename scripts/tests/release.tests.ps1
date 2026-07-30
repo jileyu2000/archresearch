@@ -24,6 +24,12 @@ $workflowContracts = @(
     @{ Pattern = '\./scripts/setup\.ps1'; Message = "CI must prove setup.ps1 from a fresh checkout." }
     @{ Pattern = 'pnpm --dir apps/extension exec playwright install chromium'; Message = "CI must install Playwright Chromium for packaged Extension E2E." }
     @{ Pattern = '\./scripts/verify\.ps1'; Message = "CI must run the authoritative repository gate." }
+    @{ Pattern = '\./scripts/build-windows-installer\.ps1'; Message = "CI must build the self-contained Windows installer." }
+    @{ Pattern = '\./scripts/test-windows-installer-package\.ps1'; Message = "CI must install-smoke and uninstall the packaged Windows application." }
+    @{ Pattern = '\./scripts/build-extension-package\.ps1'; Message = "CI must build the separately distributed Chrome extension package." }
+    @{ Pattern = 'actions/upload-artifact@v4'; Message = "CI must upload the Windows installer artifact." }
+    @{ Pattern = 'ArchResearch-Windows-x64-Setup-v2\.2\.0\.exe'; Message = "CI must publish the clearly named v2.2.0 Windows installer artifact." }
+    @{ Pattern = 'archresearch-chrome-extension-only-v2\.2\.0\.zip'; Message = "CI must keep the clearly named v2.2.0 Chrome extension package separate." }
 )
 foreach ($contract in $workflowContracts) {
     if ($workflow -notmatch $contract.Pattern) {
@@ -32,6 +38,24 @@ foreach ($contract in $workflowContracts) {
 }
 if ($workflow -match 'OPENAI_API_KEY|ARCHRESEARCH_PROVIDER_MODE\s*:\s*live') {
     throw "Default CI must not require or enable live provider credentials."
+}
+
+$extensionBuildPath = Join-Path $workspace "scripts\build-extension-package.ps1"
+if (-not (Test-Path -LiteralPath $extensionBuildPath -PathType Leaf)) {
+    throw "Expected scripts/build-extension-package.ps1 to create the separate extension artifact."
+}
+$extensionBuild = Get-Content -Raw -LiteralPath $extensionBuildPath
+foreach ($extensionContract in @(
+    'archresearch-chrome-extension-only-v\$Version\.zip',
+    '@archresearch/extension',
+    'manifest\.json'
+)) {
+    if ($extensionBuild -notmatch $extensionContract) {
+        throw "The extension package builder is missing contract: $extensionContract"
+    }
+}
+if ($extensionBuild -match 'build-windows-installer|ArchResearch-Windows-x64-Setup') {
+    throw "The extension package builder must stay independent from the Windows installer."
 }
 
 $rootPackage = Get-Content -Raw -LiteralPath (Join-Path $workspace "package.json") |
@@ -68,7 +92,7 @@ if ($edgeConfig.assets.run_worker_first -ne $true) {
     throw "Every Web Edition response must pass through the Worker security-header wrapper."
 }
 
-$expectedVersion = "2.1.4"
+$expectedVersion = "2.2.0"
 $boardPackage = Get-Content -Raw -LiteralPath (Join-Path $workspace "apps\board\package.json") |
     ConvertFrom-Json
 $webPackage = Get-Content -Raw -LiteralPath (Join-Path $workspace "apps\web\package.json") |
@@ -100,6 +124,18 @@ $pythonApp = Get-Content -Raw -LiteralPath (
 foreach ($versionSource in @($pythonProject, $pythonPackage, $pythonApp)) {
     if ($versionSource -notmatch [regex]::Escape($expectedVersion)) {
         throw "Expected every API release surface to use version $expectedVersion."
+    }
+}
+
+$readme = Get-Content -Raw -LiteralPath (Join-Path $workspace "README.md")
+foreach ($readmeContract in @(
+    'Windows 11 和 Google Chrome',
+    'ArchResearch-Windows-x64-Setup-v2\.2\.0\.exe',
+    '安装包不包含 Chrome 扩展',
+    '不需要安装 Python、Node\.js、pnpm 或 PowerShell'
+)) {
+    if ($readme -notmatch $readmeContract) {
+        throw "README must document the one-click Windows install contract: $readmeContract"
     }
 }
 

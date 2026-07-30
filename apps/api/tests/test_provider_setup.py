@@ -10,6 +10,7 @@ import pytest
 from archresearch_api.provider_credentials import ACCOUNT, SERVICE, SuoxieProviderConfig
 from archresearch_api.provider_setup import (
     ProviderCapabilityError,
+    configure_provider,
     main,
     probe_provider,
 )
@@ -70,6 +71,24 @@ def test_probe_rejects_a_response_without_a_message() -> None:
 
     with pytest.raises(ProviderCapabilityError, match="structured output"):
         probe_provider("sk-test", SuoxieProviderConfig(), lambda **_: client)
+
+
+def test_shared_provider_setup_validates_before_saving_for_the_desktop(
+    tmp_path: Path,
+) -> None:
+    keyring = FakeKeyring()
+    client = FakeClient([SimpleNamespace(type="message")])
+
+    result = configure_provider(
+        "  sk-private-value  ",
+        data_dir=tmp_path,
+        keyring_backend=keyring,
+        client_factory=lambda **_: client,
+    )
+
+    assert result.capability == "responses.structured_output"
+    assert keyring.get_password(SERVICE, ACCOUNT) == "sk-private-value"
+    assert "sk-private-value" not in (tmp_path / "provider.json").read_text(encoding="utf-8")
 
 
 def test_cli_success_tests_before_storing_and_never_prints_the_key(tmp_path: Path) -> None:
