@@ -764,6 +764,13 @@
 - 根因候选中已确认一项代码缺口：Cloudflare `ResearchWorkflow` 给所有 `step.do` 阶段统一 `timeout: '5 minutes'`。视觉分析最多 12 批模型请求，正常慢接口会在仍有待处理图片时被 Workflow 判为 errored，入口随后只能把它压成 `status: failed`。现有测试只有单批视觉分析，未覆盖该上限。
 - 最小修复已加入 `workflowStageTimeout()`：`analyzing` 使用 20 分钟，其余阶段保持 5 分钟；Edge Workflow 回归测试锁定该映射，Edge lint/typecheck 与 workflow tests 已通过。尚未证明生产失败是否还包含 Provider 载荷/模型兼容性问题，下一步需补充生产级请求边界测试并做部署后验收。
 
+## 2026-07-31 M172/M170/M171 发布收口
+
+- 提交 `1695973` 同时包含本地安装器启动/迁移修复、Provider 模型与协议协商以及 Edge 视觉分析超时修复；Hosted `verify` Run `30572135856` 对该 SHA 成功。另一套同 SHA Run `30572207240` 在完整门禁阶段无进展，已取消，不作为失败代码证据。
+- annotated tag `v2.2.1` 已推送，正式 Release 已上传两个独立资产：`ArchResearch-Windows-x64-Setup-v2.2.1.exe`（69,689,547 bytes，SHA-256 `FEC335DB8BE9F7E2943BE40F264EBDBD64AE673F1F37CA34051747EDC4661A68`）与 `archresearch-chrome-extension-only-v2.2.1.zip`（22,317 bytes，SHA-256 `9327F89BD3B4CEB149F4FA28F2A986B39A88E18DB91FCDD833B8EF1CEA4D60AD`）。扩展仍不进入 Windows 安装包。
+- `archresearch-web` 已部署新 Worker 版本 `7784b800-0135-461f-a506-d2be1b34f2e0`。部署仅使用既有 Cloudflare 配置与 Secret 绑定，没有打印或迁移任何 Provider Key。线上主页、bundle、`/api/config` 均返回 200；bundle 包含 v2.2.1 扩展下载地址，`x-robots-tag`、`X-Frame-Options`、CSP frame deny/Turnstile 约束存在，配置响应不含 Provider Key。
+- 本轮未调用内部浏览器、未创建新的真实研究 Run；M161 的正式 Turnstile Quick 仍是需要真人资源的外部验收，不自动绕过。
+
 ## 2026-07-31 M170 packaged startup recovery
 
 - 用户授权升级后，`v2.2.1` 安装器第一次真实启动仍以退出码 3 结束；`--self-test` 只能证明静态资源存在，不能覆盖 FastAPI lifespan。

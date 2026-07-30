@@ -28,7 +28,7 @@
 
 ## 当前已验证基线
 
-- 公开仓库为 `https://github.com/jileyu2000/archresearch`。本地安装基线 `v2.1.0` 指向 `2a92539`；公共小红书桥接 Release `v2.1.2` 指向 `c74571f`；M164 `v2.1.3` 指向 `37be809`；M165 `v2.1.4` 指向 `45763fb`；M166 Windows 一键安装版 `v2.2.0` 指向 PR #3 合并提交 `bbc79ee`。后续仍按显式路径 stage，备份 ZIP 与安装产物不得入库。
+- 公开仓库为 `https://github.com/jileyu2000/archresearch`。本地安装基线 `v2.1.0` 指向 `2a92539`；公共小红书桥接 Release `v2.1.2` 指向 `c74571f`；M164 `v2.1.3` 指向 `37be809`；M165 `v2.1.4` 指向 `45763fb`；M166 Windows 一键安装版 `v2.2.0` 指向 PR #3 合并提交 `bbc79ee`；当前 `v2.2.1` 指向提交 `1695973`，已创建 annotated tag 与正式 Release。后续仍按显式路径 stage，备份 ZIP 与安装产物不得入库。
 - 权威门禁 `scripts/verify.ps1`：**360 API / 177 Board / 165 Extension / 8 packaged E2E**，加 Ruff/format、strict Mypy、两端 lint/typecheck/build、进程/安全/评测检查。PowerShell 5 会吞中间失败，脚本末行成功文案不能单独作为证明。另有根级 `pnpm test:coverage`：Board 78.17/72.39/80.50/81.78 与 Extension 82.69/76.52/83.96/84.73 为最低阈值；M122 完成后 Board 实测为 80.01/75.75/84.77/83.80。
 - 进程脚本必须保持无 WMI/CIM（MSIX pwsh 加载 MMI 失败会杀掉自己拉起的服务）：监听发现用 `netstat -ano`，命令行读 PEB。
 - 持久数据基线：**4 workspaces / 15 Runs（13 条 permanent + 2 条仍沿用既有到期日的模拟试点 Run）/ active 0 / 14 条收藏 / 2 条 input artifacts**。2026-07-27 12:04 新增的 3 条收藏属于既有“城市社区共享中心”Run，与 M152 的隔离图纸/《耕织图》问题不同，是并发外部变化，已按工作区保护规则保留。新建 Run 默认 180 天；M152 未创建或改写 durable Run。《城市社区共享中心》8 问全部 completed 零缺口（M137）；`76f52c79`（三档验收 Deep）与 `ff16988d`（任务书 Standard）是现行验收声明的底层证据，不是失败记录。模拟产物去留待用户决定。
@@ -41,6 +41,7 @@
 - M164 将公共小红书桥升级为与本地版等深的两阶段流程：Workflow 先规划最多 6 个视觉方向，扩展每方向最多尝试 4 帖、目标 3 篇 usable、每帖最多 4 图，全任务共享 48 图/48 MiB。截图不进入 1 MiB 上限的 Workflow 事件；Worker 临时写私有 R2、事件只传对象键，模型分析后清理，浏览器 IndexedDB v2 按 `candidateId` 保留本地预览并写入终态结果。私有 R2 桶、三日生命周期与生产 Worker 版本 `c7144317-8daa-4e8f-ae57-5ccf79fc8a41` 已部署；HTTP、安全头和正式 Turnstile 配置通过。
 - 最新完整验证：M165 的 `scripts/verify.ps1` exit 0，通过 360 API / 190 Board / 189 Extension / 12 Web / 28 Edge / 8 packaged E2E；coverage 为 Board 79.01/76.42/84.28/83.18、Extension 83.43/78.54/85.40/85.73。系统 Chrome 本地生产界面已展开四步安装说明，2048×983 横向溢出 0、三个操作控件均为 44px；PR #2 的两套 fresh Windows Hosted CI（`30487265492`、`30487306820`）均成功。`v2.1.4` 正式 Release 已发布 22,312-byte extension-only ZIP，生产 Worker 已部署为 `06b96723-281c-4375-b816-32f21b8f2e40`，线上 HTTP、安全头、正式 Turnstile、bundle 与附件 smoke 全绿。线上系统 Chrome DOM 控制连续超时后按禁用内部浏览器规则停止，测试标签已清理。
 - M166 已正式发布：版本面统一 `2.2.0`；本地 `scripts/verify.ps1` 通过 365 API / 190 Board / 189 Extension / 12 Web / 28 Edge / 8 packaged E2E，coverage 与 M165 基线一致。PR #3 push/PR CI `30516069001` / `30516103148` 与 main CI `30517007300` 全绿。Release 的 69,723,372-byte Windows 安装器 SHA-256 为 `5E34FB6A3C7A7B63449AEF87639F14ECA8295E8E34D21AAC2FB531ACE3422782`；22,331-byte extension-only ZIP SHA-256 为 `58522E4076BC0AF8522E5C4DFAC74526110927248C784275B66B421FE331032B`。安装器未签名，Release 已明确 SmartScreen/未知发布者边界。
+- M170/M171/M172 已正式收口：提交 `1695973` 的 Hosted Run `30572135856` 成功；`v2.2.1` Windows 安装器为 69,689,547 bytes、SHA-256 `FEC335DB8BE9F7E2943BE40F264EBDBD64AE673F1F37CA34051747EDC4661A68`，独立扩展 ZIP 为 22,317 bytes、SHA-256 `9327F89BD3B4CEB149F4FA28F2A986B39A88E18DB91FCDD833B8EF1CEA4D60AD`。安装器覆盖升级、`--self-test`、`/desktop-health`、`/health` 和扩展排除 smoke 均通过；Worker 版本 `7784b800-0135-461f-a506-d2be1b34f2e0` 已部署，主页/API/bundle/安全头 smoke 全绿。重复 Hosted Run `30572207240` 因无进展已取消。
 - 本工作区由多个 agent 会话并发写入（长期约束）：提交前后必须重读 `git status`，另一会话仍在写同名文件时暂停提交。
 
 ## 当前唯一主线
@@ -68,4 +69,4 @@
 
 ## 给新对话的第一句话
 
-> 继续 ArchResearch。先完整读取 HANDOFF.md，再读取 AGENTS.md；随后按 HANDOFF 顺序恢复 task_plan.md、findings.md、progress.md，并运行 `git status --short --branch`。不要重做已完成工作，不要恢复 Firecrawl，也不要调用会导致桌面应用闪退的内部浏览器。`7486c75` 是尚未推送的 M168/M169 基线；工作树中的 M170/M171 已通过 388/191/189/12/28/8 完整门禁并重建安装器，当前唯一下一步是取得用户明确授权后升级现有测试安装，验证已保存配置直接启动且无 Uvicorn formatter 崩溃，再提交。扩展不得放入 Windows 安装包；生产 Web URL 不得进入仓库或 Release。保留所有修改和未跟踪文件，不得 reset、checkout、clean 或 `git add -A`。
+> 继续 ArchResearch。先完整读取 HANDOFF.md，再读取 AGENTS.md；随后按 HANDOFF 顺序恢复 task_plan.md、findings.md、progress.md，并运行 `git status --short --branch`。不要重做已完成工作，不要恢复 Firecrawl，也不要调用会导致桌面应用闪退的内部浏览器。当前 `1695973` 已推送，`v2.2.1` Release 与独立扩展资产已发布，Worker 版本 `7784b800-0135-461f-a506-d2be1b34f2e0` 已部署，388/191/189/12/28/8 完整门禁与线上 HTTP smoke 已通过。唯一剩余是 M161 的真人 Turnstile Quick 研究验收；自动化不得绕过。扩展不得放入 Windows 安装包；生产 Web URL 不得进入仓库或 Release。保留所有修改和未跟踪文件，不得 reset、checkout、clean 或 `git add -A`。

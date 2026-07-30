@@ -1110,3 +1110,11 @@
 - 已先加入冻结 `_MEIPASS` 资源路径失败测试，再让 `Database.migrate()` 从 `_MEIPASS/alembic.ini` 读取配置；源码模式路径保持不变。Ruff、迁移、桌面和 Provider 启动定向测试全绿。
 - v2.2.1 安装器已重建并覆盖现有安装；`--self-test`、`/desktop-health` 和 `/health` 实际启动 smoke 均通过，验证后已停止测试进程。未读取或打印用户端点与 Key。
 - 下一步：运行完整 `scripts/verify.ps1`，显式 stage 源码/测试/文档，提交并推送本地与 Edge 修改；发布 v2.2.1 资产后再部署 Worker，避免网页扩展下载链接指向不存在的 Release。
+
+## 2026-07-31 发布与网页部署完成
+
+- 用户已授权覆盖安装；提交 `1695973` 已推送到 `codex/fix-installer-port-conflict`，本地完整门禁 exit 0（388 API / 191 Board / 189 Extension / 12 Web / 28 Edge / 8 packaged E2E）。同 SHA Hosted Run `30572135856` success；重复 Run `30572207240` 卡在完整门禁且无进展，已取消。
+- annotated tag `v2.2.1` 已创建并推送，GitHub Release 已发布。Windows 安装器 SHA-256 为 `FEC335DB8BE9F7E2943BE40F264EBDBD64AE673F1F37CA34051747EDC4661A68`；独立 Chrome 扩展 ZIP SHA-256 为 `9327F89BD3B4CEB149F4FA28F2A986B39A88E18DB91FCDD833B8EF1CEA4D60AD`。
+- 用户授权后的安装器覆盖升级、`--self-test`、`/desktop-health`（2.2.1 / 8000）与 `/health` 均通过；未读取或输出用户 API 地址、Key，扩展未打入安装器。
+- `archresearch-web` 已部署 Worker 版本 `7784b800-0135-461f-a506-d2be1b34f2e0`。线上主页、bundle、`/api/config` 均 200；bundle 精确包含 v2.2.1 extension-only 链接；noindex、frame deny、CSP/Turnstile 安全头和配置不泄露 Provider Key 的检查通过。
+- 本轮未调用内部浏览器、未创建新的 Live Run；M161 正式 Turnstile Quick 仍保留为真人外部验收。

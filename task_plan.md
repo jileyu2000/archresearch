@@ -56,10 +56,10 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | M155 evidence-grounded agent boundaries | complete | `agent/planning.py`、`execution.py`、`verification.py` 与 `synthesis.py` 已按红绿合同形成明确边界；七阶段 orchestrator、API/schema、checkpoint、取消/恢复、查询预算、gap 补查、失败保留与 evidence-bound 双门槛不变。完整门禁 360 API / 177 Board / 165 Extension / 8 packaged E2E 全绿；durable 为 4/15/13 permanent/0 active/14 collections/2 inputs。 |
 | M156 competition GitHub presentation and publish | complete | GitHub 访客页覆盖场景价值、Agent 架构、工作流/工具、创新、完成度、访问方式、3 个测试问题和人机协同边界；architecture/demo 文档同步四模块、双门槛和现行三档。公开产品提交 `010eceb` 已推送 `main`；本地完整门禁与 Hosted CI `30362938145` 均通过 360/177/165/8，durable 仍为 4/15/13 permanent/0 active/14 collections/2 inputs。 |
 | M157 project-first GitHub presentation | complete | README 已恢复为 ArchResearch 的长期通用项目主页，竞赛要求仅作为信息组织参考；参赛、投稿和评审专属定位已删除，真实建筑竞赛使用场景与目标用户、痛点、场景价值、Agent 架构、人机协同、完成度、截图、安装、演示和验证入口均保留。完整本地门禁与 Hosted CI `30368067949` 通过 360/177/165/8，项目主页提交为 `cdb97f0`。 |
-| M158 Cloudflare Web Edition contract and foundation | in_progress | 双版本范围合同、`apps/web`/`apps/edge` 基础与首轮离线测试已完成：网页工作台不要求用户 Key，浏览器 IndexedDB 保存 Run/result/collection 并支持版本化 JSON 导入导出；Worker 路由、Turnstile、设备/IP 配额、CostGuard DO、七阶段 Workflow、Provider client 与 `fetch` + `HTMLRewriter` 公开页读取已就位。未部署、未创建 Secret/资源、未调用真实模型或真实研究流程。 |
+| M158 Cloudflare Web Edition contract and foundation | complete | 双版本范围合同、`apps/web`/`apps/edge` 基础、浏览器 IndexedDB 长期数据、Turnstile、设备/IP 配额、CostGuard DO、七阶段 Workflow、Provider client 与 `fetch` + `HTMLRewriter` 公开页读取均已完成；生产部署与版本化发布由 M161/M172 收口。 |
 | M159 browser-local history and public research UX | complete | 公开页第一屏、三档研究、开始/轮询/取消、结果与最近记录均完成；IndexedDB 记录、版本化备份、OPFS 附件 adapter 及其离线测试完成。桌面与 390px loaded QA 无横向溢出；清站点数据、无痕模式和换设备丢失边界已在界面明确。 |
 | M160 edge research orchestration and bounded execution | complete | typed 七阶段 plan/execute/verify/synthesize、短期 Workflow 状态、取消/恢复、逐字引文核验、coverage + enrichment 双门槛、Turnstile、入口配额、有界查询/页面/Token/时间与 kill switch 已完成。用户取消每日/单次美元金额拒绝后，CostGuard SQLite 只记录预留与实际用量；Edge 7 files / 16 tests 及根级完整门禁全绿。实际部署核验归 M161。 |
-| M161 public deployment and dual-edition release | in_progress | `archresearch-web` 已用当前非 mock 源码重新部署为版本 `c17dc24c-28ce-44c3-9c0f-b52a9f4fd95e`；主页/API/安全头、生产 Turnstile、缺 token 拒绝及桌面/390px loaded QA 已通过。Web Edition 源码、Chrome-only README 边界和 fresh build 顺序修复已推送 `main`，Hosted CI `30424872745` 全绿。剩余是由真人完成 Turnstile 后执行一次 Quick 真实研究验收，再决定新版本 tag/Release；URL 只私下交付，不进入 GitHub README、Release、About 或仓库文档。 |
+| M161 public deployment and dual-edition release | in_progress | Web Edition 已持续以非 mock 源码部署，当前 `v2.2.1` 发布对应 Worker 版本 `7784b800-0135-461f-a506-d2be1b34f2e0`；主页/API/安全头、生产 Turnstile、缺 token 拒绝与 bundle 下载链接 smoke 通过，GitHub 不包含私有 Web URL。剩余仅是由真人完成正式 Turnstile 后执行一次 Quick 真实研究验收，自动化不绕过该外部门槛。 |
 | M162 Web Edition full local-product transfer | complete | 公共入口直接复用本地 Board 的同一套 React 页面、样式、导航和结果工作台，只通过 `PublicApiClient` 替换持久化与云端执行；工作区、两类研究、PDF/URL、进度/诊断、完整结果、收藏、对照/导出/分享、表达规范、保留期和 JSON 备份矩阵全部闭合。提交 `896945a` 已推送 `main`，Hosted CI `30433096343` 全绿；生产 Worker 版本 `051c4e0c-4e9f-45c8-be0c-99194b16cf7b` 的桌面/390px smoke、完整结果对照与静态素材均通过，正式 `v2.1.1` Release 已发布。 |
 | M163 public Web Xiaohongshu bridge | complete | 严格协议、动态公共页连接、扩展内有界小红书搜索、Web/Edge 输入与主页面安装提醒均已发布；根级 coverage 与完整门禁通过 360 API / 183 Board / 186 Extension / 11 Web / 18 Edge / 8 packaged E2E。提交 `c74571f` 的 Hosted CI `30438474678` success；生产 Worker 版本 `dc0eb528-a8c3-4ca2-88fa-c6131f866d3c` 的主页/API/安全头/Turnstile/1440/390 smoke 全绿；annotated `v2.1.2` tag、正式 Release 与扩展 ZIP 已发布。 |
 | M164 Web/local user-visible parity and extension-only release naming | complete | 用户可见功能、同源界面、多方向逐帖逐图、共享 48 图/48 MiB、R2 对象键事件、IndexedDB 本地预览、扩展专属命名、PR #1、两套 Hosted CI 与 `v2.1.3` 扩展专属 Release 均已闭合。私有 R2 桶与三日生命周期已启用，生产 Worker 已部署为 `c7144317-8daa-4e8f-ae57-5ccf79fc8a41`；HTTP、安全头、正式 Turnstile 配置和系统 Chrome 1440×1000 / 390×844 线上 smoke 全部通过。 |
@@ -70,7 +70,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | M169 user-supplied Provider endpoint and key | complete | 本地首次配置同时填写 API 接口地址与 API Key；地址仅要求可解析为 HTTP(S) URL，不按供应商或域名白名单限制。提交前用当前地址和 Key 执行能力探测，成功后才保存端点配置与凭据；Web Edition 继续使用独立的 Cloudflare Provider 配置，完整门禁通过。 |
 | M170 windowed launcher logging recovery | complete | PyInstaller 无控制台进程不再加载 Uvicorn 默认 formatter，避免 `stderr=None` 崩溃；另修复冻结运行时从 `_MEIPASS` 读取 Alembic 配置，重建安装器并用已保存配置验证 `/desktop-health` 与 `/health` 持续可用。 |
 | M171 OpenAI-compatible protocol negotiation | complete | 自定义接口不再被固定模型与 Responses-only 探测挡住：程序从上游 `/models` 自动取得候选模型，优先探测 Responses、失败再探测 Chat Completions，并持久化验证成功的模型与协议；Python/PowerShell 合同与完整门禁通过。 |
-| M172 Web visual research timeout recovery | in_progress | 线上图纸灵感 Run 进入失败终态。审计发现视觉分析最多处理 48 个图像槽位，却与其他阶段共用 5 分钟 Workflow step 上限；先用回归测试固定分析阶段的独立上限，再验证 Provider 请求与生产部署。 |
+| M172 Web visual research timeout recovery | complete | 线上图纸灵感 Run 的失败根因之一是视觉分析最多处理 48 个图像槽位，却与其他阶段共用 5 分钟 Workflow step 上限；已用回归测试固定 `analyzing` 为 20 分钟、其他阶段保持 5 分钟。Edge/Web 定向测试、完整门禁、`v2.2.1` Release 与 Worker 部署后的主页/API/安全头/bundle smoke 均通过；未创建新的 Live Run。 |
 
 ### M164 验收合同
 
@@ -142,7 +142,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 
 1. 视觉分析时间边界 → 验证：最多 48 个图像槽位按每批 4 张分析时，`analyzing` 使用独立的 20 分钟 Workflow step 上限；规划、搜索、读取、核验、缺口检查和综合继续使用 5 分钟上限。
 2. 失败阶段可定位 → 验证：定向 Edge/Workflow 测试覆盖视觉分析超时配置；不调用真实 Provider、不创建新的 Live Run 作为默认测试。
-3. 发布闭环 → 验证：Edge/Web 定向测试、类型检查、lint、构建与完整门禁通过后，才部署 Worker；部署后用用户授权的真实 Web Run 验收，私有 URL 不写入仓库。
+3. 发布闭环 → 验证：Edge/Web 定向测试、类型检查、lint、构建与完整门禁通过后才部署 Worker；部署后完成主页/API/安全头/bundle smoke，真实研究仍由 M161 的真人 Turnstile Quick 外部验收承担，私有 URL 不写入仓库。
 
 ## External acceptance gates
 
