@@ -704,3 +704,5 @@
 - 当前安装器未代码签名，`Get-AuthenticodeSignature` 为 `NotSigned`；功能与哈希验证不受影响，但 Windows 仍可能显示 SmartScreen“未知发布者”。正式消除此提示需要项目方提供代码签名证书，不能由仓库代码伪造。
 - M166 正式发布版本应使用 `v2.2.0`：`v2.1.4` 已经是不可移动的扩展专属 Release，复用该版本名会让 Git tag、安装程序和下载提示发生歧义。`v2.2.0` Release 可同时附名称明确的 Windows 完整本地安装器与独立 Chrome 扩展 ZIP，但安装器内部必须没有 `manifest.json` 或扩展包。
 - 最终升级验证证明同一个 Inno `AppId` 会把测试 `v2.1.4` 程序覆盖为 `v2.2.0`，安装后静态 Board 精确包含 `v2.2.0` 独立扩展下载链接；`%LOCALAPPDATA%\ArchResearch\data` 中由验收创建的 sentinel 在升级和卸载后均保留。验收结束只删除该 sentinel，程序目录和快捷方式由正式卸载器移除。
+- 正式 Release 使用 main CI `30517007300` 的产物而非先前本机构建，因此最终哈希与本地测试包不同；GitHub asset digest、下载大小和本地重算 SHA-256 三者一致。两个附件分别命名为 Windows 完整安装器与 `chrome-extension-only` ZIP，Release 说明同时区分 GitHub 自动 Source archives，未写入私有 Web URL。
+- Worker 只在 `v2.2.0` Release 附件确认 uploaded 后部署，避免网页 bundle 先指向 404。生产版本 `0d94ed1e-7807-49fd-b2fc-73c2f00bc1c9` 保留既有 R2/Workflow/CostGuard/限流/Secret；HTTP smoke 确认 v2.2.0 扩展附件 200 且 Content-Length 22,331。

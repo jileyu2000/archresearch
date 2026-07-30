@@ -28,7 +28,7 @@
 
 ## 当前已验证基线
 
-- 公开仓库为 `https://github.com/jileyu2000/archresearch`。本地安装基线 `v2.1.0` 指向 `2a92539`；公共小红书桥接 Release `v2.1.2` 指向 `c74571f`；M164 `v2.1.3` 指向 `37be809`；M165 `v2.1.4` 指向合并提交 `45763fb`，并附带明确的 Chrome 扩展 ZIP 与安装说明。后续仍按显式路径 stage，备份 ZIP 不得入库。
+- 公开仓库为 `https://github.com/jileyu2000/archresearch`。本地安装基线 `v2.1.0` 指向 `2a92539`；公共小红书桥接 Release `v2.1.2` 指向 `c74571f`；M164 `v2.1.3` 指向 `37be809`；M165 `v2.1.4` 指向 `45763fb`；M166 Windows 一键安装版 `v2.2.0` 指向 PR #3 合并提交 `bbc79ee`。后续仍按显式路径 stage，备份 ZIP 与安装产物不得入库。
 - 权威门禁 `scripts/verify.ps1`：**360 API / 177 Board / 165 Extension / 8 packaged E2E**，加 Ruff/format、strict Mypy、两端 lint/typecheck/build、进程/安全/评测检查。PowerShell 5 会吞中间失败，脚本末行成功文案不能单独作为证明。另有根级 `pnpm test:coverage`：Board 78.17/72.39/80.50/81.78 与 Extension 82.69/76.52/83.96/84.73 为最低阈值；M122 完成后 Board 实测为 80.01/75.75/84.77/83.80。
 - 进程脚本必须保持无 WMI/CIM（MSIX pwsh 加载 MMI 失败会杀掉自己拉起的服务）：监听发现用 `netstat -ano`，命令行读 PEB。
 - 持久数据基线：**4 workspaces / 15 Runs（13 条 permanent + 2 条仍沿用既有到期日的模拟试点 Run）/ active 0 / 14 条收藏 / 2 条 input artifacts**。2026-07-27 12:04 新增的 3 条收藏属于既有“城市社区共享中心”Run，与 M152 的隔离图纸/《耕织图》问题不同，是并发外部变化，已按工作区保护规则保留。新建 Run 默认 180 天；M152 未创建或改写 durable Run。《城市社区共享中心》8 问全部 completed 零缺口（M137）；`76f52c79`（三档验收 Deep）与 `ff16988d`（任务书 Standard）是现行验收声明的底层证据，不是失败记录。模拟产物去留待用户决定。
@@ -40,7 +40,7 @@
 - M163 公共小红书桥接已发布：公共页只可发送 `status` 与 `xiaohongshu_search` 两个严格动作，扩展以用户手势为当前 HTTPS 公共 origin 动态注册 content script，并用用户已登录的小红书页面做有界只读搜索；Cookie、账号和密码不上传。主页缺少扩展时立即提醒，检测到桥后不再弹出。
 - M164 将公共小红书桥升级为与本地版等深的两阶段流程：Workflow 先规划最多 6 个视觉方向，扩展每方向最多尝试 4 帖、目标 3 篇 usable、每帖最多 4 图，全任务共享 48 图/48 MiB。截图不进入 1 MiB 上限的 Workflow 事件；Worker 临时写私有 R2、事件只传对象键，模型分析后清理，浏览器 IndexedDB v2 按 `candidateId` 保留本地预览并写入终态结果。私有 R2 桶、三日生命周期与生产 Worker 版本 `c7144317-8daa-4e8f-ae57-5ccf79fc8a41` 已部署；HTTP、安全头和正式 Turnstile 配置通过。
 - 最新完整验证：M165 的 `scripts/verify.ps1` exit 0，通过 360 API / 190 Board / 189 Extension / 12 Web / 28 Edge / 8 packaged E2E；coverage 为 Board 79.01/76.42/84.28/83.18、Extension 83.43/78.54/85.40/85.73。系统 Chrome 本地生产界面已展开四步安装说明，2048×983 横向溢出 0、三个操作控件均为 44px；PR #2 的两套 fresh Windows Hosted CI（`30487265492`、`30487306820`）均成功。`v2.1.4` 正式 Release 已发布 22,312-byte extension-only ZIP，生产 Worker 已部署为 `06b96723-281c-4375-b816-32f21b8f2e40`，线上 HTTP、安全头、正式 Turnstile、bundle 与附件 smoke 全绿。线上系统 Chrome DOM 控制连续超时后按禁用内部浏览器规则停止，测试标签已清理。
-- M166 本地预发布验证：版本面统一 `2.2.0`；`scripts/verify.ps1` exit 0，通过 365 API / 190 Board / 189 Extension / 12 Web / 28 Edge / 8 packaged E2E，coverage 与 M165 基线一致。69,700,290-byte Windows 安装器完成真实 per-user 安装、精简 PATH 自检、快捷方式、无扩展 manifest、卸载及 v2.1.4→v2.2.0 数据保留验证；22,316-byte extension-only ZIP 独立生成。安装器未签名，Release 必须明确 SmartScreen/未知发布者边界。
+- M166 已正式发布：版本面统一 `2.2.0`；本地 `scripts/verify.ps1` 通过 365 API / 190 Board / 189 Extension / 12 Web / 28 Edge / 8 packaged E2E，coverage 与 M165 基线一致。PR #3 push/PR CI `30516069001` / `30516103148` 与 main CI `30517007300` 全绿。Release 的 69,723,372-byte Windows 安装器 SHA-256 为 `5E34FB6A3C7A7B63449AEF87639F14ECA8295E8E34D21AAC2FB531ACE3422782`；22,331-byte extension-only ZIP SHA-256 为 `58522E4076BC0AF8522E5C4DFAC74526110927248C784275B66B421FE331032B`。安装器未签名，Release 已明确 SmartScreen/未知发布者边界。
 - 本工作区由多个 agent 会话并发写入（长期约束）：提交前后必须重读 `git status`，另一会话仍在写同名文件时暂停提交。
 
 ## 当前唯一主线
@@ -57,7 +57,7 @@
 10. **M163 已 complete**：公共 Web 与 GitHub 本地版共用主页安装提醒、扩展连接状态和小红书视觉读取协议；严格消息/来源校验、动态 exact-origin 注册、有界搜索、Web/Edge 接入、coverage、全量门禁、打包 E2E、1440/390px QA 与 `2.1.2` ZIP 全部完成。提交 `c74571f` 的 Hosted CI `30438474678` success，生产 Worker 版本 `dc0eb528-a8c3-4ca2-88fa-c6131f866d3c` smoke 全绿，annotated tag 与正式 `v2.1.2` Release 已发布。站外 ZIP 仍需开发者模式加载；真正一键安装是后续 Chrome Web Store 外部审核事项。
 11. **M164 已 complete**：网页与本地版的用户可见功能继续共用同一 Board；公共小红书已实现规划后逐方向、逐帖、逐图深读，Cloudflare 事件载荷改为 R2 对象键，IndexedDB 保留最终可显示预览。`37be809` 的两套 Hosted CI、annotated `v2.1.3` tag、扩展专属正式 Release、R2 桶、三日生命周期和生产 Worker 版本 `c7144317-8daa-4e8f-ae57-5ccf79fc8a41` 均已上线。系统 Chrome 1440×1000 / 390×844 线上安装提醒、主页、个人收藏、备份恢复与 console smoke 全绿；未调用内部浏览器。
 12. **M165 已 complete**：主页不再用“立即安装”误导站外 ZIP 为一键安装，同弹窗先展示完整四步方法再下载；公共桥在当前页注入后发送严格 v2 ready，Board 自动关闭提醒，同 origin 重复连接保持幂等。PR #2、两套 Hosted CI、annotated `v2.1.4`、扩展专属 Release 和生产 Worker `06b96723-281c-4375-b816-32f21b8f2e40` 均已上线。唯一跨阶段未完成项仍是 M161 的真人 Turnstile Quick 研究验收。
-13. **M166 in progress**：GitHub 本地版 Windows x64 一键安装程序与独立扩展 ZIP 已实现并通过本地全门禁、真实安装/升级/卸载；安装包自带本地运行时、API 与生产 Board，用户不再准备 Python、Node、pnpm 或 PowerShell。扩展不放进安装包，本地页面复用网页版的缺失提醒和独立安装说明。唯一下一步是显式提交并创建 draft PR，等待 fresh Hosted CI 后合并、发布 `v2.2.0` 两个清晰附件，再部署 Worker 让网页下载链接生效。
+13. **M166 complete**：GitHub Windows x64 一键安装程序与独立扩展 ZIP 已通过本地/Hosted CI、真实安装/升级/卸载并正式发布 `v2.2.0`。安装包自带本地运行时、API 与生产 Board；扩展不放进安装包，本地页面复用网页版的缺失提醒和独立安装说明。生产 Worker 已部署为 `0d94ed1e-7807-49fd-b2fc-73c2f00bc1c9`，主页 200、CSP/noindex/frame deny、正式 Turnstile、v2.2.0 bundle 链接和 22,331-byte GitHub 附件均通过。当前代码交付外唯一保留项仍是 M161 的真人 Turnstile Quick 研究验收，自动化不得绕过。
 
 ## 工作区保护
 
@@ -66,4 +66,4 @@
 
 ## 给新对话的第一句话
 
-> 继续 ArchResearch。先完整读取 HANDOFF.md，再读取 AGENTS.md；随后按 HANDOFF 顺序恢复 task_plan.md、findings.md、progress.md，并运行 `git status --short --branch`。不要重做已完成工作，不要恢复 Firecrawl，也不要调用会导致桌面应用闪退的内部浏览器。M166 的 Windows 一键安装器、Key-only 首次配置、独立扩展 ZIP、CI 合同和本地完整安装/升级/卸载验证已完成；唯一下一步是 draft PR → fresh Hosted CI → 合并 → `v2.2.0` 双附件 Release → Worker 部署。扩展不得放入 Windows 安装包，生产 Web URL 不得进入仓库或 Release。保留所有修改和未跟踪文件，不得 reset、checkout、clean 或 `git add -A`。
+> 继续 ArchResearch。先完整读取 HANDOFF.md，再读取 AGENTS.md；随后按 HANDOFF 顺序恢复 task_plan.md、findings.md、progress.md，并运行 `git status --short --branch`。不要重做已完成工作，不要恢复 Firecrawl，也不要调用会导致桌面应用闪退的内部浏览器。M166 已 complete：Windows 一键安装器、Key-only 首次配置、独立扩展 ZIP、三套 Hosted CI、PR #3、annotated `v2.2.0` 双附件 Release 与 Worker 下载链接均已上线；扩展不得放入 Windows 安装包。代码交付外仍保留 M161 的真人 Turnstile Quick 研究验收，自动化不得绕过。生产 Web URL 不得进入仓库或 Release。保留所有修改和未跟踪文件，不得 reset、checkout、clean 或 `git add -A`。
