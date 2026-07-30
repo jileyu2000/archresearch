@@ -11,8 +11,8 @@ from pydantic import BaseModel, ConfigDict
 
 from .provider_credentials import (
     KeyringBackend,
+    ProviderConfig,
     ProviderConfigurationError,
-    SuoxieProviderConfig,
     commit_provider_config,
     get_windows_keyring,
 )
@@ -39,7 +39,7 @@ class ProviderProbePayload(BaseModel):
 
 def probe_provider(
     api_key: str,
-    config: SuoxieProviderConfig,
+    config: ProviderConfig,
     client_factory: ClientFactory | None = None,
 ) -> ProbeResult:
     factory = client_factory or _create_openai_client
@@ -62,6 +62,7 @@ def probe_provider(
 
 
 def configure_provider(
+    base_url: str,
     api_key: str,
     *,
     data_dir: Path,
@@ -71,7 +72,7 @@ def configure_provider(
     normalized_key = api_key.strip()
     if not normalized_key:
         raise ProviderConfigurationError("API key is required")
-    config = SuoxieProviderConfig()
+    config = ProviderConfig.model_validate({"base_url": base_url.strip()})
     probe = probe_provider(normalized_key, config, client_factory)
     commit_provider_config(data_dir, config, normalized_key, keyring_backend)
     return probe
@@ -88,10 +89,16 @@ def main(
 ) -> int:
     parser = argparse.ArgumentParser(description="Configure the ArchResearch relay provider")
     parser.add_argument("--data-dir", type=Path, default=Path(".archresearch"))
+    parser.add_argument("--base-url", default="")
     arguments = parser.parse_args(argv)
     input_stream = stdin or sys.stdin
     output_stream = stdout or sys.stdout
     error_stream = stderr or sys.stderr
+
+    base_url = arguments.base_url.strip()
+    if not base_url:
+        print("API 接口地址不能为空。", file=error_stream)
+        return 2
 
     api_key = input_stream.readline().strip()
     if not api_key:
@@ -101,6 +108,7 @@ def main(
     try:
         backend = keyring_backend or get_windows_keyring()
         probe = configure_provider(
+            base_url,
             api_key,
             data_dir=arguments.data_dir,
             keyring_backend=backend,
@@ -111,7 +119,7 @@ def main(
         return 1
     except Exception:
         print(
-            "连接测试失败：请检查 Key，以及中转站对 Responses 结构化输出的支持。",
+            "连接测试失败：请检查接口地址、Key，以及服务对 Responses 结构化输出的支持。",
             file=error_stream,
         )
         return 1

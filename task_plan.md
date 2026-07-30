@@ -66,6 +66,8 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | M165 extension installation and connection onboarding | complete | 首动作已改为同弹窗“查看安装方法”，四步安装流程和 extension-only 下载边界完整；公共桥用严格 v2 ready 通知当前页，同 origin 重复连接不再注销重注册。PR #2 两套 fresh Windows CI、`v2.1.4` annotated tag/正式 Release、22,312-byte 扩展 ZIP、生产 Worker `06b96723-281c-4375-b816-32f21b8f2e40` 与线上 HTTP/安全头/正式 Turnstile/下载 smoke 均已闭合；系统 Chrome 本地视觉 QA 通过，线上 Chrome DOM 控制连续超时后按既定禁用内部浏览器规则停止重试。 |
 | M166 Windows one-click local installer | complete | 自包含运行时、API/生产 Board、Key-only 首次配置、per-user 安装/快捷方式/卸载、独立扩展包与 CI 构建合同均已完成；本地与三套 fresh Hosted CI、真实安装、精简 PATH、v2.1.4→v2.2.0 升级和数据保留全绿。PR #3 已合并，annotated `v2.2.0`、Windows 安装器与独立扩展 ZIP 正式 Release 已发布，生产 Worker 已切到存在的 v2.2.0 下载链接并通过 HTTP/安全头/附件 smoke。 |
 | M167 README installation simplification | complete | 不改变 Windows/Chrome/Key、扩展独立安装、私有 Web URL 禁止公开等既有原则；对照成熟桌面应用与浏览器扩展项目，已把普通用户下载/安装前置并压缩为三步，源码开发与扩展安装细节迁入独立文档，发布文案合同、Markdown 本地链接与差异检查均已通过。 |
+| M168 installed launcher port-conflict recovery | in_progress | 真实安装首次启动发现源码开发服务占用固定 `8000` 时，安装版只弹错并退出。先安全停止当前旧服务恢复用户使用，再以行为测试驱动启动器自动选择空闲回环端口，同时保留对已验证安装版健康进程的幂等复用。 |
+| M169 user-supplied Provider endpoint and key | in_progress | 本地首次配置改为同时填写 API 接口地址与 API Key；地址仅要求可解析为 HTTP(S) URL，不按梭子蟹、DeepSeek、Kimi 或公网域名白名单限制。提交前先用该地址和 Key 执行能力探测，成功后才保存端点配置与凭据；Web Edition 继续使用其独立的 Cloudflare Provider 配置。 |
 
 ### M164 验收合同
 
@@ -102,6 +104,23 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 2. 渐进披露 → 验证：小红书扩展只在“需要小红书时”出现；源码环境、更新脚本和排障细节离开普通用户主路径。
 3. 原则不变 → 验证：README 仍明确只支持 Google Chrome、首次只填 Key、扩展不进安装器且需 Chrome 手动授权、未签名 SmartScreen 边界；不公开私有 Web URL。
 4. 可验证 → 验证：发布合同守卫关键文案与链接，Markdown 链接有效，`scripts/tests/release.tests.ps1` 与 `git diff --check` 通过。
+
+### M168 验收合同
+
+1. 当前机器恢复 → 验证：只停止工作区记录的旧开发 API 进程，确认 `127.0.0.1:8000` 不再监听；重新打开已安装 ArchResearch 可进入页面。
+2. 冲突自动恢复 → 验证：默认端口被无关进程占用时，安装版启动器自动选择可用回环端口并把同一端口传给 API、健康检查与 Chrome，不再要求用户手动关闭程序。
+
+3. 幂等与安全 → 验证：已由安装版启动且健康的服务继续复用；不得连接身份不明的 `8000` 服务，不结束无关占用进程，不监听公网地址。
+4. 首次配置可读 → 验证：“验证并开始使用”和“取消”按钮在 Windows 默认主题与系统缩放下有明确可见文字、足够对比度、正常/禁用状态均可辨识；Key 仍只由用户本人输入。
+5. Windows 图标一致 → 验证：移除黄钥匙/白板占位图形，应用图标采用主界面的蓝图蓝、纸白和石墨制图语言；ICO 包含常用多尺寸，在桌面、开始菜单、任务栏和窗口标题栏的小尺寸下仍清晰可辨。
+6. 发布闭环 → 验证：先新增失败行为测试，再实现最小修复；相关 launcher/installer 测试、release contracts、完整门禁、真实冲突 smoke 与 GitHub CI 全部通过，更新安装器版本并发布后用户可重新下载安装。所有 UI 与图标实机确认完毕后才提交。
+
+### M169 验收合同
+
+1. 双项必填 → 验证：首次配置与 CLI 都要求 API 接口地址和 API Key，任一为空都不创建 Provider 客户端、不保存配置或凭据。
+2. 地址不按供应商限制 → 验证：自定义 HTTP/HTTPS、中转站、DeepSeek、Kimi 以及本机回环地址均可通过配置模型；只拒绝缺少协议/主机或把凭据嵌入 URL 的明显格式错误。
+3. 先测后存 → 验证：能力探测收到用户填写的 `base_url` 和 Key；探测失败保留原配置/凭据，探测成功才写入新端点与 Key。
+4. 首次界面诚实 → 验证：Windows 配置窗同时显示“API 接口地址”和“API Key”，状态文案说明会先测试连接，README/开发脚本同步两项配置和 OpenAI-compatible 能力边界。
 
 ## External acceptance gates
 

@@ -1,7 +1,7 @@
 # ArchResearch
 
 [![verify](https://github.com/jileyu2000/archresearch/actions/workflows/verify.yml/badge.svg)](https://github.com/jileyu2000/archresearch/actions/workflows/verify.yml)
-![version](https://img.shields.io/badge/version-2.2.0-2F5BFF)
+![version](https://img.shields.io/badge/version-2.2.1-2F5BFF)
 ![platform](https://img.shields.io/badge/platform-Windows%2011-171A18)
 
 > 把建筑设计问题变成有出处、能比较、可继续使用的案例答案与图纸灵感板。
@@ -14,15 +14,15 @@ ArchResearch 是为建筑学生和青年设计师制作的本地优先研究工�
 
 **需要 Windows 11 和 Google Chrome。**
 
-[下载 Windows 安装版 v2.2.0](https://github.com/jileyu2000/archresearch/releases/download/v2.2.0/ArchResearch-Windows-x64-Setup-v2.2.0.exe)
+[下载 Windows 安装版 v2.2.1](https://github.com/jileyu2000/archresearch/releases/download/v2.2.1/ArchResearch-Windows-x64-Setup-v2.2.1.exe)
 
 1. 下载并双击安装程序。
-2. 首次启动只输入自己的 Key。验证通过后，Key 会存入 Windows 凭据管理器。
+2. 首次启动填写自己的 API 接口地址和 API Key。程序会先测试连接成功，再保存配置；Key 会存入 Windows 凭据管理器。
 3. 以后从桌面或开始菜单打开 ArchResearch，它会自动在 Chrome 中显示本地页面。
 
 本地服务、完整界面、数据库和运行环境都会自动安装。不需要安装 Python、Node.js、pnpm 或 PowerShell。
 
-> 安装程序暂未签名，Windows 可能显示 SmartScreen 或“未知发布者”。可在 [v2.2.0 Release](https://github.com/jileyu2000/archresearch/releases/tag/v2.2.0) 核对文件与 SHA-256。
+> 安装程序暂未签名，Windows 可能显示 SmartScreen 或“未知发布者”。可在 [v2.2.1 Release](https://github.com/jileyu2000/archresearch/releases/tag/v2.2.1) 核对文件与 SHA-256。
 
 ### 需要小红书时
 
@@ -109,7 +109,7 @@ flowchart TB
 
 ## 模型与密钥
 
-Windows 安装版首次启动时只显示一个 Key 输入框。程序会隐藏输入并先执行一次小型、可能产生费用的 `gpt-5.6-sol + medium` 结构化输出测试；只有验证通过后，才把 Key 保存到 Windows 凭据管理器。失败时不会保存 Key，用户可直接修改并重试。
+Windows 安装版首次启动时需要填写 **API 接口地址和 API Key**。地址可以是中转站、DeepSeek、Kimi 或自建服务，不按厂商域名白名单限制。程序会先测试连接成功，再保存接口地址；Key 会隐藏输入并只保存到 Windows 凭据管理器。测试会确认当前服务能满足 ArchResearch 所需的 OpenAI-compatible Responses 结构化输出能力，失败时不会保存地址或 Key，用户可直接修改并重试。
 
 公开建筑网站由 Direct Playwright 使用系统 Google Chrome，在不落盘的隔离上下文中提取正文、项目链接、图片 URL 和图注；图片、媒体和字体请求默认拦截以降低流量。Windows 安装版的小红书研究由用户单独安装并连接的 ArchResearch 扩展读取登录态页面；源码开发环境还可选用 OpenCLI Browser Bridge。每个灵感方向按 rank 最多尝试四篇笔记，累计三篇产生可用图的帖子后停止；每篇等距选取最多四图并合并为一次视觉分类。图纸灵感共享 48 个逐图检查槽位 / 48 MiB 预览预算。可用的小红书读取路径全部失败时会诚实终止，不降级为通用网页素材。
 

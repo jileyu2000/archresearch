@@ -13,6 +13,7 @@ $workspace = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $apiRoot = Join-Path $workspace "apps\api"
 $boardRoot = Join-Path $workspace "apps\board"
 $launcherPath = Join-Path $workspace "packaging\windows\launcher.py"
+$iconBuilderPath = Join-Path $workspace "scripts\build-windows-icon.py"
 $pythonProject = Get-Content -Raw -LiteralPath (Join-Path $apiRoot "pyproject.toml")
 $versionMatch = [regex]::Match(
     $pythonProject,
@@ -51,6 +52,7 @@ $workRoot = Join-Path $buildRoot "work"
 $specRoot = Join-Path $buildRoot "spec"
 $bundleRoot = Join-Path $distRoot "ArchResearch"
 $executablePath = Join-Path $bundleRoot "ArchResearch.exe"
+$iconPath = Join-Path $buildRoot "ArchResearch.ico"
 
 if (Test-Path -LiteralPath $buildRoot) {
     Remove-Item -LiteralPath $buildRoot -Recurse -Force
@@ -68,6 +70,11 @@ if ($LASTEXITCODE -ne 0) {
     throw "PyInstaller installation failed."
 }
 
+& $runtime.Python $iconBuilderPath --output $iconPath
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $iconPath -PathType Leaf)) {
+    throw "The ArchResearch Windows icon build failed."
+}
+
 $addBoard = "$(Join-Path $boardRoot 'dist'):board"
 $addAlembicConfig = "$(Join-Path $apiRoot 'alembic.ini'):."
 $addAlembic = "$(Join-Path $apiRoot 'alembic'):alembic"
@@ -76,6 +83,7 @@ $addAlembic = "$(Join-Path $apiRoot 'alembic'):alembic"
     --clean `
     --onedir `
     --windowed `
+    --icon $iconPath `
     --name ArchResearch `
     --distpath $distRoot `
     --workpath $workRoot `
@@ -127,6 +135,7 @@ $installerScript = Join-Path $workspace "packaging\windows\ArchResearch.iss"
     "/DAppVersion=$Version" `
     "/DSourceDir=$bundleRoot" `
     "/DOutputDir=$outputRoot" `
+    "/DIconFile=$iconPath" `
     $installerScript
 if ($LASTEXITCODE -ne 0) {
     throw "The ArchResearch Windows installer compilation failed."

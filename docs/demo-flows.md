@@ -57,7 +57,7 @@ pwsh -NoProfile -File scripts/stop.ps1
 pwsh -NoProfile -File scripts/configure-provider.ps1
 ```
 
-2. 能力探测成功后重启服务。Key 位于 Windows 凭据管理器的 `ArchResearch/suoxie` / `api-key`，项目内配置只含 `https://suoxie.codes/v1` 与 `gpt-5.6-sol`；公开网页发现由本地 Playwright 完成。
+2. 能力探测成功后重启服务。Key 位于 Windows 凭据管理器的 `ArchResearch/suoxie` / `api-key`，项目内配置只含用户填写的接口地址与模型标识；公开网页发现由本地 Playwright 完成。
 3. 安装并配对扩展，在扩展界面通过直接用户手势授予 HTTP/HTTPS 网页读取权限；后续研究无需重复授权。
 4. 需要小红书视觉灵感时，从 Chrome Web Store 安装一次 OpenCLI Browser Bridge、在同一 Chrome 登录小红书，并用 `pnpm opencli -- doctor` 检查连接。它不使用 ArchResearch 一次性配对码，也不需要每轮重新授权。
 5. 点“新建项目”命名“中小型博物馆流线”，发起 `museum-backstage-04` 的“做跨案例论证”研究。也可先用“形成方案依据”控制成本。

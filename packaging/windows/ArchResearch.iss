@@ -7,6 +7,9 @@
 #ifndef OutputDir
   #error OutputDir must be provided by build-windows-installer.ps1
 #endif
+#ifndef IconFile
+  #error IconFile must be provided by build-windows-installer.ps1
+#endif
 
 [Setup]
 AppId={{5D74473F-201D-4AF0-95AE-B06F92866E2E}
@@ -30,6 +33,7 @@ WizardStyle=modern
 CloseApplications=yes
 RestartApplications=no
 UninstallDisplayIcon={app}\ArchResearch.exe
+SetupIconFile={#IconFile}
 VersionInfoVersion={#AppVersion}
 VersionInfoDescription=ArchResearch Windows Installer
 VersionInfoProductName=ArchResearch

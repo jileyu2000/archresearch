@@ -33,15 +33,15 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/stop.ps1
 
 ## Provider
 
-默认 `mock` 模式不需要 Key。需要运行真实研究时，使用安全配置脚本：
+默认 `mock` 模式不需要 Provider 配置。需要运行真实研究时，使用安全配置脚本：
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/configure-provider.ps1
 ```
 
-脚本先验证 Key，再将其写入 Windows 凭据管理器。Key 不写入 `.env`、日志或仓库。
+脚本会要求 API 接口地址和 API Key，先用两者测试连接，再保存接口地址并将 Key 写入 Windows 凭据管理器。地址可指向中转站、DeepSeek、Kimi 或自建服务，不按域名白名单限制；Key 不写入 `.env`、日志或仓库。当前研究链路需要 OpenAI-compatible Responses 结构化输出能力，测试失败时不会保存任一项。
 
-如需测试其他 OpenAI 兼容配置，可编辑本地 `.env`。不要提交含 Key 的文件。
+不要提交含 Key 的文件。
 
 ## 更新源码运行环境
 

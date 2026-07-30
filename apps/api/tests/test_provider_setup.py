@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from archresearch_api.provider_credentials import ACCOUNT, SERVICE, SuoxieProviderConfig
+from archresearch_api.provider_credentials import ACCOUNT, SERVICE, ProviderConfig
 from archresearch_api.provider_setup import (
     ProviderCapabilityError,
     configure_provider,
@@ -54,11 +54,15 @@ def test_probe_requires_medium_structured_responses_without_web_search() -> None
         factory_calls.append(kwargs)
         return client
 
-    result = probe_provider("sk-test", SuoxieProviderConfig(), factory)
+    result = probe_provider(
+        "sk-test",
+        ProviderConfig(base_url="https://api.deepseek.com/v1"),
+        factory,
+    )
 
     assert result.capability == "responses.structured_output"
     assert result.model == "gpt-5.6-sol"
-    assert factory_calls == [{"api_key": "sk-test", "base_url": "https://suoxie.codes/v1"}]
+    assert factory_calls == [{"api_key": "sk-test", "base_url": "https://api.deepseek.com/v1"}]
     request = client.responses.requests[0]
     assert request["model"] == "gpt-5.6-sol"
     assert request["reasoning"] == {"effort": "medium"}
@@ -70,7 +74,11 @@ def test_probe_rejects_a_response_without_a_message() -> None:
     client = FakeClient([SimpleNamespace(type="reasoning")])
 
     with pytest.raises(ProviderCapabilityError, match="structured output"):
-        probe_provider("sk-test", SuoxieProviderConfig(), lambda **_: client)
+        probe_provider(
+            "sk-test",
+            ProviderConfig(base_url="https://api.moonshot.cn/v1"),
+            lambda **_: client,
+        )
 
 
 def test_shared_provider_setup_validates_before_saving_for_the_desktop(
@@ -80,6 +88,7 @@ def test_shared_provider_setup_validates_before_saving_for_the_desktop(
     client = FakeClient([SimpleNamespace(type="message")])
 
     result = configure_provider(
+        "https://relay.example/v1",
         "  sk-private-value  ",
         data_dir=tmp_path,
         keyring_backend=keyring,
@@ -88,7 +97,9 @@ def test_shared_provider_setup_validates_before_saving_for_the_desktop(
 
     assert result.capability == "responses.structured_output"
     assert keyring.get_password(SERVICE, ACCOUNT) == "sk-private-value"
-    assert "sk-private-value" not in (tmp_path / "provider.json").read_text(encoding="utf-8")
+    stored = (tmp_path / "provider.json").read_text(encoding="utf-8")
+    assert "sk-private-value" not in stored
+    assert "https://relay.example/v1" in stored
 
 
 def test_cli_success_tests_before_storing_and_never_prints_the_key(tmp_path: Path) -> None:
@@ -98,7 +109,12 @@ def test_cli_success_tests_before_storing_and_never_prints_the_key(tmp_path: Pat
     stderr = io.StringIO()
 
     exit_code = main(
-        ["--data-dir", str(tmp_path)],
+        [
+            "--data-dir",
+            str(tmp_path),
+            "--base-url",
+            "https://api.deepseek.com/v1",
+        ],
         stdin=io.StringIO("sk-private-value\n"),
         stdout=stdout,
         stderr=stderr,
@@ -112,6 +128,7 @@ def test_cli_success_tests_before_storing_and_never_prints_the_key(tmp_path: Pat
     combined = stdout.getvalue() + stderr.getvalue()
     assert "sk-private-value" not in combined
     assert "responses.structured_output" in stdout.getvalue()
+    assert "https://api.deepseek.com/v1" not in stdout.getvalue()
 
 
 def test_cli_probe_failure_preserves_existing_credential_and_config(tmp_path: Path) -> None:
@@ -126,7 +143,12 @@ def test_cli_probe_failure_preserves_existing_credential_and_config(tmp_path: Pa
         raise RuntimeError("Authorization failed for sk-private-value")
 
     exit_code = main(
-        ["--data-dir", str(tmp_path)],
+        [
+            "--data-dir",
+            str(tmp_path),
+            "--base-url",
+            "https://api.moonshot.cn/v1",
+        ],
         stdin=io.StringIO("sk-private-value\n"),
         stdout=stdout,
         stderr=stderr,
@@ -143,7 +165,21 @@ def test_cli_probe_failure_preserves_existing_credential_and_config(tmp_path: Pa
     assert "连接测试失败" in stderr.getvalue()
 
 
-def test_cli_rejects_empty_stdin_before_creating_a_client(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("argv", "stdin_value"),
+    [
+        (["--data-dir", "{data_dir}"], "sk-private-value\n"),
+        (
+            ["--data-dir", "{data_dir}", "--base-url", "https://relay.example/v1"],
+            "\n",
+        ),
+    ],
+)
+def test_cli_requires_endpoint_and_key_before_creating_a_client(
+    tmp_path: Path,
+    argv: list[str],
+    stdin_value: str,
+) -> None:
     calls = 0
 
     def factory(**_: str) -> FakeClient:
@@ -152,8 +188,8 @@ def test_cli_rejects_empty_stdin_before_creating_a_client(tmp_path: Path) -> Non
         return FakeClient([])
 
     exit_code = main(
-        ["--data-dir", str(tmp_path)],
-        stdin=io.StringIO("\n"),
+        [value.format(data_dir=tmp_path) for value in argv],
+        stdin=io.StringIO(stdin_value),
         stdout=io.StringIO(),
         stderr=io.StringIO(),
         keyring_backend=FakeKeyring(),

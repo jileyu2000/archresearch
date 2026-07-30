@@ -1048,3 +1048,36 @@
 - GitHub 发布前检查确认 `gh` 已认证为 `jileyu2000`，远端为 `jileyu2000/archresearch`、默认分支 `main`。工作树中只有 M167 的 README、两份新说明、发布合同和规划记录需要提交；`.artifacts/build`、QA 与 Release 产物继续明确排除。
 - 独立 Markdown 链接检查确认 README 和两份新说明的全部本地链接存在；复跑 release contracts 与 `git diff --check` 继续通过。一次临时检查脚本因 README 位于仓库根目录、父路径为空而在 `Join-Path` 处停止，改用 `.` 作为根文件基准后通过，不是仓库代码或文档故障。
 - 提交 `193f397` 已推送到 `codex/simplify-readme-installation`。GitHub 连接器创建 PR 时因 integration 权限返回 403，按发布 skill 回退到已认证 `gh`，成功创建 draft PR #5；两套 Hosted `verify` 已启动。PR 临时正文文件已从 `.artifacts` 删除，既有本地构建、QA 与 Release 产物未提交。
+
+## 2026-07-30 M168 port-conflict recovery start
+
+- 用户真实安装 `v2.2.0` 后首次打开出现固定端口 `8000` 被占用错误。只读诊断确认占用者是当前工作区此前启动的 uvicorn 源码服务 PID `39860`，而正式程序文件已完整安装。
+- 用户授权先关闭旧开发服务并继续修复启动器。M168 计划采用“当前机器恢复 → 失败测试 → 动态回环端口实现 → 安装 smoke/发布”的顺序，绝不结束身份不明的外部占用程序。
+- planning-with-files catchup 首次调用系统 `python` 失败，因为本机 App Execution Alias 找不到 Python；下一次改用项目 `.venv` 或 Codex bundled runtime 的显式路径，不重复相同命令。
+- 使用 Codex bundled Python 显式路径后 catchup 成功，只提示当前新诊断的一条未同步工具记录，相关事实已写入规划文件。随后核对 `stop.ps1` 时读取 `.archresearch` 所有根文件的命令范围过宽，误将 SQLite 数据库作为文本输出；文件未被修改，后续只读取精确的 `dev-processes.json`，不再遍历数据文件内容。
+- 精确状态确认 API PID `39860`/端口 `8000` 与 Board PID `38180`/端口 `5173` 均属于工作区记录；`scripts/stop.ps1` 按工作区命令行边界安全停止二者并删除进程状态，复核 `8000` 已释放。随后尝试用 shell `Start-Process` 打开已安装 EXE 被执行环境 policy 拒绝，程序并未启动；下一次改用 Windows 界面控制，不重复该命令。
+- 完整读取 Computer Use guidance/confirmations 后，通过已登记的安装路径启动现有 ArchResearch；用户此前已明确授权该动作。唯一窗口为“ArchResearch · 首次配置”，端口冲突提示未复现，当前机器已恢复到正常的 Key-only 首次配置步骤。未读取、输入或传输用户 Key。
+- 已先修改测试而未动生产代码：API 测试要求占用首选端口时选择空闲端口、所选端口贯穿健康接口和 Chrome URL；浏览器测试约束动态 URL 只能是严格 127.0.0.1 页面；Board 测试要求从安装页 origin 派生 WebSocket；安装器合同要求保留 8000 首选但具备自动恢复。首次红灯命令假设仓库 `.venv` 存在而立即失败，实际没有该路径；下一次改用已验证可用的 Codex bundled Python。
+- Codex bundled Python 本身没有 pytest；检查 `dev-common.ps1` 后确认门禁实际优先使用 `apps/api/.venv/Scripts/python.exe`，该环境含 pytest 8.4.2。由此取得有效 Python 红灯：`select_desktop_port` 与 `is_allowed_chrome_board_url` 均不存在；Board 红灯得到固定 8000 而非 49152；安装器红灯缺少端口恢复合同。
+- 第一轮最小实现加入严格动态 loopback Chrome URL、端口可用性/选择、用户数据目录端口状态、健康实例复用、动态 create_app/uvicorn/Chrome 线程参数，以及 Board 从安装页 origin 派生 WebSocket。复跑 API/浏览器 34 项与 Board 7 项通过；安装器合同因期望 `desktop_board_url`、实现直接调用 `installed_chrome_board_url` 而失败，下一步在 desktop 层提供并统一使用该明确入口。
+- desktop 层统一入口补齐后，API/浏览器 34 项、Board 7 项与 Windows installer contracts 全绿。随后首轮静态检查被测试中已不再使用的 `DESKTOP_PORT` import 拦截；这是测试改动产生的孤立 import，已定点删除后复跑，不使用自动修复。
+- Python ruff、strict mypy、Board ESLint 与 TypeScript build 已全绿。新增端口状态幂等测试覆盖“记录的备用端口健康则直接复用”和“记录陈旧但旧版默认 8000 是已验证安装实例则回退复用”；API/浏览器聚焦集增至 36 项并继续全绿。
+- 扩展 manifest/本地桥审计确认 `127.0.0.1` 权限匹配任意端口，动态安装端口不需新增权限。第一次版本扫描误把不存在的仓库根 `pyproject.toml` 作为 rg 参数而返回 1；改为全树精确扫描后确认产品版本面仍统一在公开 `2.2.0`。M168 修复将发布不可变的新 patch `v2.2.1`，不移动或覆盖旧 Release。
+- `v2.2.1` 发布合同先行红灯已成立：release test 在 CI 安装器 artifact 仍为 v2.2.0 处停止，Board 107 项中只有默认扩展下载链接仍为 v2.2.0 的一项失败，其余 106 项通过。下一步同步生产版本面和下载地址后复跑。
+- API、Board、Web、Edge、Extension package/manifest、README、CI artifact 名和 Board extension-only URL 已统一升到 `2.2.1`；旧 tag/Release 未改。release contracts 与 Board `App` + browserBridge 共 114 项转绿，下一步执行权威完整门禁与真实安装冲突 smoke。
+- 权威门禁首轮在用户追加 UI 缺陷时停止继续使用；停止前 release/dev/installer/provider/process/autostart/evaluation 合同与 API 374 项均通过，随后 ruff format check 精确指出本轮改动涉及的 5 个 Python 文件需要格式化并 exit 1。尚未进入前端门禁；下一轮先修首次配置按钮文字并运行 ruff formatter，再从头执行。
+- 用户实机截图确认首次配置的两个按钮轮廓存在但文字为空白。M168 增加“首次配置可读”合同；不要求或代用户输入 Key，修复后通过 Windows UI 截图验证。
+- Impeccable setup 因缺少 `PRODUCT.md` 暂停 UI 改动；完整读取 init/product register、既有 DESIGN 与 README 后，所有战略字段均可从已批准文档直接恢复。已新增根级 `PRODUCT.md`，仅固化现有 product register、建筑学生/青年设计师用户、克制/可信/轻快性格、本地优先与 WCAG AA 核心流程原则，不引入新功能。
+- Impeccable live 首次配置规则已读取；仓库是多 workspace，但用户实际产品页面由 `apps/board/index.html` 与 `apps/web/index.html` 两个 Vite shell 承载，配置将只覆盖这两个入口，不注入扩展 popup/sidepanel 或生成产物。下一步先运行 CSP 只读检测，再决定是否只写无害 config。
+- 用户要求提交前再完成 Windows 应用图标：当前黄钥匙/白板图标与主界面不一致。M168 增加多尺寸蓝图制图语言图标验收，端口、按钮与图标全部实机确认前不得提交。
+- Impeccable CSP 检测返回 `shape: null`，无需修改任何生产安全头；已写入 `.impeccable/live/config.json`，只覆盖 Board/Web 两个 Vite HTML shell 并标记 CSP checked。Init blocker 至此闭合，恢复首次配置 UI 与 Windows 图标修复。
+- 按钮可读性合同先红在缺少显式白色前景；首次配置动作已从受系统主题影响的 `ttk.Button` 改为标准 `tk.Button`，主按钮固定蓝图蓝/纸白，次按钮固定纸白/石墨，并明确 active/disabled 色与焦点参与，installer contract 和 ruff 转绿。
+- 图标合同先红在缺少 `scripts/build-windows-icon.py`；现已增加确定性 Pillow 多尺寸 ICO 生成器，PyInstaller `--icon` 与 Inno `SetupIconFile` 都接入同一产物。生成的 `.artifacts/qa/m168/ArchResearch.ico` 和 256px PNG 预览通过脚本/contract/ruff，未提交 QA 产物。
+- 第二轮权威门禁通过 release/dev/installer/provider/process/autostart/evaluation、API 374 项、ruff check/format，随后 strict mypy 在 `tk.Button` 不存在 `disabledbackground` 构造参数处失败。修复改为禁用/恢复动作时显式切换 `background`，保留合法的 `disabledforeground`；下一轮从头复跑，不重复无效参数。
+- 禁用背景修正后的首次聚焦检查只红在 ruff 需要机械换行；运行 formatter 后 ruff、strict mypy 与 Windows installer contracts 全绿。下一步重新执行完整门禁。
+- 修正后的权威 `scripts/verify.ps1` 完整重跑 exit 0：API 374 / Board 191 / Extension 189 / Web 12 / Edge 28 / packaged Extension E2E 8，并通过 release/installer/Provider/process/autostart/evaluation 合同、Ruff、strict Mypy、全部 TypeScript lint/typecheck/test/build 与 Wrangler dry-run。下一步构建真实 `v2.2.1` 安装器与独立扩展包，再做安装升级、端口冲突和窗口/快捷方式图标实机验收；三项未全部确认前不提交。
+- v2.2.1 安装器与独立扩展包均已构建；Windows 安装器 smoke（静默安装、精简 PATH 自检、排除扩展、卸载）通过。用户追问 Key-only 的端点边界后复核确认：`SuoxieProviderConfig` 固定默认 `https://suoxie.codes/v1`，本地配置页不提供端点输入；这不是从 Key 自动发现的通用机制。提交前必须由用户确认继续保持该内置端点，还是改为允许用户输入任意 OpenAI 兼容端点。
+- 用户决定改为“API 接口地址 + API Key”双项配置。M169 先以 Provider/CLI/启动、Windows 首次界面与 README 合同获得红灯，再把本地 `ProviderConfig` 泛化为用户必填 HTTP(S) 地址（无供应商、域名或公网白名单），保存前用该地址与 Key 执行既有结构化输出能力探测。旧梭子蟹本地配置继续可读；新配置与 Key 只有探测成功后才写入。定向 Python 28 项、Windows installer contracts、release contracts、Ruff、format 与 strict Mypy 全绿；下一步完整门禁、重建安装器并做首次配置实机验收。
+- M169 权威 `scripts/verify.ps1` 完整重跑 exit 0：379 API / 191 Board / 189 Extension / 12 Web / 28 Edge / 8 packaged E2E，连同 release/installer/Provider/process/autostart/evaluation 合同、Ruff、strict Mypy、全部 TypeScript lint/typecheck/test/build 和 Wrangler dry-run 均通过。`HANDOFF.md` 已收敛为本地用户端点与 Key、Web 端独立 Cloudflare Provider 的真实架构；下一步重建 v2.2.1 安装器与扩展 ZIP，并做最终 Windows 实机配置和图标验收。
+- 最终 `v2.2.1` 安装器重建、独立扩展 ZIP 重建、真实静默安装/精简 PATH 自检/扩展排除/卸载 smoke 均通过。经用户当次 Windows UI 授权，实机安装后首次配置窗口显示“连接你的研究接口”、API 接口地址与 API Key 两个输入框、连接测试说明、可读的“验证并开始使用”/“取消”按钮及新的蓝图图标；空白提交显示“请输入 API 接口地址后再继续”，未输入用户地址或 Key。标题栏可见新图标，空白配置窗已关闭；测试安装暂保留在本机，未写入配置或用户数据，若需卸载必须另获用户确认。
+- M168/M169 已作为本地提交 `aa9920f`（`Fix local installer startup and provider setup`）收口：暂存范围不含 `.artifacts`、本地数据或凭据，`git diff --cached --check` 与新增行的密钥模式扫描均通过。当前下一步如需发布，是推送分支、创建 PR、等待 Hosted CI 后再合并/tag/Release；在用户明确授权前不改变远端状态。

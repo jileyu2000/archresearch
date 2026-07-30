@@ -716,3 +716,29 @@
 - 对 ArchResearch 的结论：README 顶部应只保留一个 Windows 安装器主入口和三步启动；“需要小红书时”再出现独立扩展，四步开发者模式流程可留作次级说明；源码启动、自动启动、update 脚本和底层端口说明迁入开发文档。SmartScreen 保留一行诚实提醒，不打断主步骤。
 - 当前 README 的下载入口位于第 90 行，用户在此之前需要经过产品定位、能力表、Agent 架构和人机协同；安装区本身又连续混入源码开发、更新、扩展配对、OpenCLI 与浏览器协议。`docs/architecture.md` 已覆盖权限和受管标签等技术边界，因此 README 可删重复说明而不丢项目原则。
 - M167 采用三个信息层：README 顶部的 Windows 三步安装；按需出现并链接的 `docs/chrome-extension.md`；维护者使用的 `docs/development.md`。这比折叠大量文本更清楚，也便于页面内安装提示和文档分别承担首用/排障。
+
+## 2026-07-30 M168 installed launcher port conflict
+
+- 用户从正式 `v2.2.0` Release 下载并安装后，启动器提示“本机端口 8000 已被其他程序占用”。正式安装目录 `C:\Users\76384\AppData\Local\Programs\ArchResearch` 完整存在。
+- `127.0.0.1:8000` 的实际监听者是 PID `39860`：Codex runtime `python.exe -m uvicorn archresearch_api.main:app --app-dir C:\Users\76384\Documents\灵感agent\apps\api\src --host 127.0.0.1 --port 8000`，创建于 2026-07-30 12:50:54。`/health` 返回当前源码开发服务的 provider/model，证明不是陌生程序，也不是刚安装的 self-contained launcher 子进程。
+- 根因不是安装文件损坏，而是安装版启动器把 `8000` 作为不可变端口；它正确拒绝复用身份不明的健康服务，却没有为普通端口冲突选择后备端口。这与“一键安装、无需用户处理环境”的目标不一致。
+- 安全停止工作区服务后，用 Computer Use 启动已安装 `ArchResearch.exe` 成功，出现唯一的“ArchResearch · 首次配置”窗口，内容为 Key 输入、显示 Key 选项和 Windows 凭据管理器说明；不再出现端口错误。源码开发配置不会被安装版误当成已配置凭据，符合首次安装只由用户本人输入 Key 的边界。
+- `desktop.py` 当前把 `DESKTOP_PORT=8000` 派生到 `/desktop-health`、健康实例判断、端口 bind、首次/重复启动 Chrome URL、API 内“一键连接浏览器”URL 与 `uvicorn.run`；不能只让 Uvicorn 换端口，否则页面、健康探测和扩展会继续指向错误的 `8000`。
+- `browser.py` 只允许打开两个精确常量 URL，其中安装版 URL也是固定 `http://127.0.0.1:8000/?connect=chrome`；Board 的浏览器桥 fallback 与扩展默认输入同样保留 `8000`。实现需区分“安装版页面由当前 loopback origin 推导 endpoint”和“开发/手动配对仍以 8000 为默认”，避免为修复启动器而破坏既有协议测试。
+- 现有 `test_desktop.py` 只验证默认端口的健康 payload 与静态/API 同源，没有端口占用或备用端口复用行为；`windows-installer.tests.ps1` 反而把 `DESKTOP_PORT=8000` 写成稳定端口合同，需要先改为“默认起点 + 动态选取合同”并以失败测试证明旧实现不合格。
+- Board 的本地配对在 `useBrowserReadiness` 中调用 `resolveBrowserEndpoint()`；当前 fallback 固定 `ws://127.0.0.1:8000/v1/browser`。最小正确修复是：显式构建配置继续优先；页面运行在 loopback 时从 `window.location.protocol/host` 派生 WebSocket endpoint；其他来源仍回退既有默认。这样安装版备用端口与扩展配对同源，开发构建和公共版行为不变。
+- API 的 `/v1/browser/open-chrome` 由 `create_desktop_app` 注入 launcher closure，因此可在创建应用时把所选端口生成的 `/?connect=chrome` URL固定到该实例；无需把动态端口放进全局环境。`browser.open_board_in_chrome` 需要把安全白名单从“固定安装 URL”扩为“严格的 `http://127.0.0.1:<valid-port>/?connect=chrome`”，仍拒绝主机名、凭据、片段、额外路径或查询参数。
+- 实例复用采用用户数据目录内的非敏感端口状态文件：先验证记录端口的 `/desktop-health` 身份，再兼容探测旧版默认 8000；默认端口被无关服务占用时只选择 OS 分配的空闲回环端口，不停止占用者。陈旧状态只作为候选且必须健康验证，退出时仅在仍属于当前端口时清理。
+- Chrome 扩展 manifest 的本地 content script 匹配为 `http://127.0.0.1/*` / `http://localhost/*`，不限定端口；pairing-store 与 board-bridge 也按 loopback 主机校验，因此动态端口不需要扩大扩展权限。弹窗/侧栏的 8000 只是手动配对默认值，页面自动配对会传入当前 origin 派生的实际端口。
+- `v2.2.0` 已经公开且真实暴露此问题，不能移动旧 tag 或覆盖附件；修复安装器应发布为 patch `v2.2.1`。现有 release contract 要求 API、Board、Web、Edge、Extension/manifest、README、CI artifact 名称和 Board 的 extension-only URL 统一版本，因此继续维持统一版本面并在新 Release 附带两个明确命名的产物。
+- 用户在真实“ArchResearch · 首次配置”窗口截图中确认两个底部按钮只有白色轮廓、完全没有文字。源码使用 Windows `vista` themed `ttk.Button`，自定义 style 只设 font/padding，没有可靠的显式前景色；该机器的主题组合把按钮文字渲染为不可见。修复应改用颜色状态可控的标准 Tk 按钮或完全显式的 style map，并在实机截图中验证主按钮、次按钮和 disabled 状态。
+- 用户追加的桌面截图显示当前 ArchResearch 图标是黄钥匙叠加白色板面，并带 Windows 快捷方式箭头；色彩、隐喻和细节密度都与主界面的蓝图任务面、石墨制图线和纸白工作面不一致，小尺寸也显得像系统凭据工具。新图标应避免钥匙/机器人/字母堆叠，使用一个可在 16–32px 保持轮廓的蓝图纸面或制图定位符号，并输出真正的多分辨率 ICO。
+- Impeccable context 检测到仓库已有完整 `DESIGN.md` 但缺少 `PRODUCT.md`，按其 init blocker 必须先建立产品上下文。README 与 DESIGN 已直接给出全部必需答案：register 是工具型 product；用户是建筑学生/青年设计师；性格为克制、可信、轻快；反例包括聊天优先、营销 Hero、SaaS 卡墙、非标准表单和不可读控件；无障碍合同已有 4.5:1 对比、明确焦点、44px 命中区、系统缩放和 reduced motion。无需新增用户访谈或改变现有设计方向。
+- 图标生成器首版使用 `#2f5bff` 圆角蓝图面、`#ffffff` 两组嵌套制图墙线、`#171a18` 外轮廓/落边和一个 `#ffd84d` 注册点；256px 预览无文字、无钥匙/机器人隐喻，轮廓与主界面 token 一致。ICO 声明 16/20/24/32/48/64/128/256 八个尺寸，最终仍需在真实 Explorer/标题栏确认小尺寸不糊成通用图标。
+
+## 2026-07-31 M169 user-supplied Provider configuration
+
+- 用户明确撤销“只填 Key / 固定梭子蟹端点”的产品假设：本地安装版首次配置必须同时填写 API 接口地址和 API Key，地址可以是中转站、DeepSeek、Kimi 或自建服务，不做供应商、域名、是否公网的白名单限制。
+- 地址仍必须是带协议和主机的 HTTP(S) URL，且不接受把用户名、密码嵌入 URL 的格式；这是 URL 格式与凭据泄露边界，不是供应商限制。用户可填本机回环地址。
+- ArchResearch 当前的研究执行客户端依赖 OpenAI-compatible Responses 的结构化输出与既定模型调用方式。配置页因此不能只做“URL 可访问”检查，而必须用用户填写的地址和 Key 进行真实能力探测；探测失败不保存新地址或 Key，并提示检查接口兼容性。这样不把 DeepSeek/Kimi/中转站的域名预先排除，也不把实际不可用的接口误标为已连接。
+- 旧 `provider.json` 中的 `provider: suoxie`、梭子蟹名称、端点和已存 Windows 凭据仍可读取，避免升级让现有用户失去既有本地配置；新配置写为 `openai-compatible` / `OpenAI 兼容 API`，端点只存本地 JSON，Key 仍只存 Windows Credential Manager。

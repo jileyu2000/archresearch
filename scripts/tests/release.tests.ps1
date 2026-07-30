@@ -28,8 +28,8 @@ $workflowContracts = @(
     @{ Pattern = '\./scripts/test-windows-installer-package\.ps1'; Message = "CI must install-smoke and uninstall the packaged Windows application." }
     @{ Pattern = '\./scripts/build-extension-package\.ps1'; Message = "CI must build the separately distributed Chrome extension package." }
     @{ Pattern = 'actions/upload-artifact@v4'; Message = "CI must upload the Windows installer artifact." }
-    @{ Pattern = 'ArchResearch-Windows-x64-Setup-v2\.2\.0\.exe'; Message = "CI must publish the clearly named v2.2.0 Windows installer artifact." }
-    @{ Pattern = 'archresearch-chrome-extension-only-v2\.2\.0\.zip'; Message = "CI must keep the clearly named v2.2.0 Chrome extension package separate." }
+    @{ Pattern = 'ArchResearch-Windows-x64-Setup-v2\.2\.1\.exe'; Message = "CI must publish the clearly named v2.2.1 Windows installer artifact." }
+    @{ Pattern = 'archresearch-chrome-extension-only-v2\.2\.1\.zip'; Message = "CI must keep the clearly named v2.2.1 Chrome extension package separate." }
 )
 foreach ($contract in $workflowContracts) {
     if ($workflow -notmatch $contract.Pattern) {
@@ -92,7 +92,7 @@ if ($edgeConfig.assets.run_worker_first -ne $true) {
     throw "Every Web Edition response must pass through the Worker security-header wrapper."
 }
 
-$expectedVersion = "2.2.0"
+$expectedVersion = "2.2.1"
 $boardPackage = Get-Content -Raw -LiteralPath (Join-Path $workspace "apps\board\package.json") |
     ConvertFrom-Json
 $webPackage = Get-Content -Raw -LiteralPath (Join-Path $workspace "apps\web\package.json") |
@@ -130,10 +130,12 @@ foreach ($versionSource in @($pythonProject, $pythonPackage, $pythonApp)) {
 $readme = Get-Content -Raw -LiteralPath (Join-Path $workspace "README.md")
 foreach ($readmeContract in @(
     'Windows 11 和 Google Chrome',
-    'ArchResearch-Windows-x64-Setup-v2\.2\.0\.exe',
+    'ArchResearch-Windows-x64-Setup-v2\.2\.1\.exe',
     '安装包不包含 Chrome 扩展',
     '不需要安装 Python、Node\.js、pnpm 或 PowerShell',
-    '\[下载 Windows 安装版 v2\.2\.0\]',
+    'API 接口地址和 API Key',
+    '先测试连接成功',
+    '\[下载 Windows 安装版 v2\.2\.1\]',
     '### 需要小红书时',
     '\[Chrome 扩展安装说明\]\(docs/chrome-extension\.md\)',
     '\[从源码运行\]\(docs/development\.md\)'

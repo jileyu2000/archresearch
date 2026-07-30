@@ -10,7 +10,7 @@ from archresearch_api.main import create_app
 from archresearch_api.provider_credentials import (
     ACCOUNT,
     SERVICE,
-    SuoxieProviderConfig,
+    ProviderConfig,
     write_provider_config,
 )
 
@@ -33,8 +33,11 @@ class FakeOpenAIClient:
     pass
 
 
-def test_startup_uses_stored_suoxie_config_for_both_model_clients(tmp_path: Path) -> None:
-    write_provider_config(tmp_path, SuoxieProviderConfig())
+def test_startup_uses_stored_user_endpoint_for_both_model_clients(tmp_path: Path) -> None:
+    write_provider_config(
+        tmp_path,
+        ProviderConfig(base_url="https://api.deepseek.com/v1"),
+    )
     keyring = FakeKeyring()
     keyring.set_password(SERVICE, ACCOUNT, "sk-stored")
     factory_calls: list[dict[str, object]] = []
@@ -62,7 +65,7 @@ def test_startup_uses_stored_suoxie_config_for_both_model_clients(tmp_path: Path
     assert factory_calls == [
         {
             "api_key": "sk-stored",
-            "base_url": "https://suoxie.codes/v1",
+            "base_url": "https://api.deepseek.com/v1",
             "timeout": 45.0,
             "max_retries": 0,
         }
@@ -72,14 +75,17 @@ def test_startup_uses_stored_suoxie_config_for_both_model_clients(tmp_path: Path
     assert health == {
         "status": "ok",
         "provider_mode": "openai",
-        "provider": "梭子蟹 API",
+        "provider": "OpenAI 兼容 API",
         "model": "gpt-5.6-sol",
     }
     assert "sk-stored" not in str(health)
 
 
 def test_missing_stored_credential_keeps_deterministic_mock_mode(tmp_path: Path) -> None:
-    write_provider_config(tmp_path, SuoxieProviderConfig())
+    write_provider_config(
+        tmp_path,
+        ProviderConfig(base_url="https://api.moonshot.cn/v1"),
+    )
     calls = 0
 
     def factory(**_: str) -> Any:
