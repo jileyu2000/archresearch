@@ -65,6 +65,7 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | M164 Web/local user-visible parity and extension-only release naming | complete | 用户可见功能、同源界面、多方向逐帖逐图、共享 48 图/48 MiB、R2 对象键事件、IndexedDB 本地预览、扩展专属命名、PR #1、两套 Hosted CI 与 `v2.1.3` 扩展专属 Release 均已闭合。私有 R2 桶与三日生命周期已启用，生产 Worker 已部署为 `c7144317-8daa-4e8f-ae57-5ccf79fc8a41`；HTTP、安全头、正式 Turnstile 配置和系统 Chrome 1440×1000 / 390×844 线上 smoke 全部通过。 |
 | M165 extension installation and connection onboarding | complete | 首动作已改为同弹窗“查看安装方法”，四步安装流程和 extension-only 下载边界完整；公共桥用严格 v2 ready 通知当前页，同 origin 重复连接不再注销重注册。PR #2 两套 fresh Windows CI、`v2.1.4` annotated tag/正式 Release、22,312-byte 扩展 ZIP、生产 Worker `06b96723-281c-4375-b816-32f21b8f2e40` 与线上 HTTP/安全头/正式 Turnstile/下载 smoke 均已闭合；系统 Chrome 本地视觉 QA 通过，线上 Chrome DOM 控制连续超时后按既定禁用内部浏览器规则停止重试。 |
 | M166 Windows one-click local installer | complete | 自包含运行时、API/生产 Board、Key-only 首次配置、per-user 安装/快捷方式/卸载、独立扩展包与 CI 构建合同均已完成；本地与三套 fresh Hosted CI、真实安装、精简 PATH、v2.1.4→v2.2.0 升级和数据保留全绿。PR #3 已合并，annotated `v2.2.0`、Windows 安装器与独立扩展 ZIP 正式 Release 已发布，生产 Worker 已切到存在的 v2.2.0 下载链接并通过 HTTP/安全头/附件 smoke。 |
+| M167 README installation simplification | complete | 不改变 Windows/Chrome/Key、扩展独立安装、私有 Web URL 禁止公开等既有原则；对照成熟桌面应用与浏览器扩展项目，已把普通用户下载/安装前置并压缩为三步，源码开发与扩展安装细节迁入独立文档，发布文案合同、Markdown 本地链接与差异检查均已通过。 |
 
 ### M164 验收合同
 
@@ -94,6 +95,13 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 5. 扩展独立安装 → 验证：Windows 安装包不包含扩展文件；本地页面检测不到扩展时与网页版一样展示安装提醒、完整安装方法和独立扩展下载入口，连接成功后不再弹出。不得静默安装、强制策略安装或把站外 ZIP 伪装成 Web Store 一键安装。
 6. 数据与更新 → 验证：研究数据、收藏、Key 与扩展权限不随应用更新被覆盖；卸载默认保留用户数据并提供明确的可选删除边界。
 7. 构建与发布 → 验证：安装器构建可复现，产物版本/哈希/内容合同有自动测试；现有 API/Board/Extension/Web/Edge 门禁、packaged E2E、fresh installer smoke、GitHub CI、PR、tag 与 Release 全部通过。
+
+### M167 验收合同
+
+1. 首屏可行动 → 验证：项目简介后立即出现唯一的 Windows 下载入口和三步安装，不要求普通用户先读架构、开发环境或安全实现。
+2. 渐进披露 → 验证：小红书扩展只在“需要小红书时”出现；源码环境、更新脚本和排障细节离开普通用户主路径。
+3. 原则不变 → 验证：README 仍明确只支持 Google Chrome、首次只填 Key、扩展不进安装器且需 Chrome 手动授权、未签名 SmartScreen 边界；不公开私有 Web URL。
+4. 可验证 → 验证：发布合同守卫关键文案与链接，Markdown 链接有效，`scripts/tests/release.tests.ps1` 与 `git diff --check` 通过。
 
 ## External acceptance gates
 

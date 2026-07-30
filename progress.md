@@ -1035,3 +1035,16 @@
 - annotated `v2.2.0` tag 精确指向 `bbc79ee`。正式 Release “ArchResearch Windows 一键安装版 v2.2.0”附 main CI 生成的两个明确附件：69,723,372-byte 安装器 SHA-256 `5E34FB6A3C7A7B63449AEF87639F14ECA8295E8E34D21AAC2FB531ACE3422782`，22,331-byte extension-only ZIP SHA-256 `58522E4076BC0AF8522E5C4DFAC74526110927248C784275B66B421FE331032B`；GitHub digest 一致，ZIP 根目录含 `manifest.json`，Release 无私有网页地址。
 - Release 生效后生产 Worker 部署为 `0d94ed1e-7807-49fd-b2fc-73c2f00bc1c9`。线上 HTTP smoke：主页 200，CSP/noindex/noarchive/frame deny 与正式 Turnstile 配置存在，bundle 精确包含 v2.2.0 extension-only 链接，附件 200/22,331 bytes。部署命令外层 PowerShell 的 `$LASTEXITCODE` 曾被提前展开产生一条非终止 `-ne` 诊断，但 Web build、Wrangler upload/deploy 均 exit 0 并返回新版本；随后独立线上检查闭合。
 - 第一次线上 smoke 变量名 `$home` 在 PowerShell 大小写不敏感规则下等同只读 `$HOME`，命令在请求前退出且未改状态；改为任务专用 `$homepageResponse` 后完整检查通过。M166 至此 complete。
+
+## 2026-07-30 M167 README simplification start
+
+- 用户确认 `v2.2.0` README 已更新，但认为普通用户说明仍然复杂；要求参考成熟项目，原有安装原则保持不变。
+- planning catchup 恢复 M166 发布闭环；`main` 与 `origin/main` 同步，仅保留有意未跟踪的 `.artifacts/build`、QA 与 Release 产物。humanizer-zh 的登记插件路径不存在，已从当前个人 skill 路径完整加载同名规范。
+- 当前计划：对照“桌面主程序 + 独立浏览器扩展”的官方安装说明，先提炼信息层级，再把下载入口前置、普通用户路径压缩，最后用发布合同守卫不可丢失的边界。
+- 已对照 Obsidian、Joplin、Zotero 和 LocalSend 官方下载/README/扩展说明。共同结构是：下载动作前置；主应用与扩展命名分开；配对与排障由产品内提示或独立文档承担；源码开发远离普通用户安装路径。下一步按此结构重排 README，并先提升发布文案合同获得预期红灯。
+- 现状审计确认下载入口被 89 行产品/架构内容压在后面，普通安装区还包含约 80 行开发和协议说明。已提升 release contract：下载必须出现在首张截图/项目定位前，README 不得再混入旧快速开始四节或 source setup/update 命令，并要求独立扩展/开发文档具备关键合同。下一步运行预期红灯。
+- release contract 已先以缺少新下载标题的预期失败证明能捕获旧结构，再完成 README 重排：项目简介后直接给 Windows 安装器、三步启动、运行环境自动安装和一行 SmartScreen 边界；小红书扩展缩成按需段落，源码命令与扩展手动加载分别移入 `docs/development.md` 和 `docs/chrome-extension.md`。
+- `scripts/tests/release.tests.ps1` 已通过，新增文档关键合同和 README 相对链接均存在，`git diff --check` 无错误。M167 的本地实现与相关验证已完成，下一步发布到 GitHub 并等待 Hosted CI。
+- GitHub 发布前检查确认 `gh` 已认证为 `jileyu2000`，远端为 `jileyu2000/archresearch`、默认分支 `main`。工作树中只有 M167 的 README、两份新说明、发布合同和规划记录需要提交；`.artifacts/build`、QA 与 Release 产物继续明确排除。
+- 独立 Markdown 链接检查确认 README 和两份新说明的全部本地链接存在；复跑 release contracts 与 `git diff --check` 继续通过。一次临时检查脚本因 README 位于仓库根目录、父路径为空而在 `Join-Path` 处停止，改用 `.` 作为根文件基准后通过，不是仓库代码或文档故障。
+- 提交 `193f397` 已推送到 `codex/simplify-readme-installation`。GitHub 连接器创建 PR 时因 integration 权限返回 403，按发布 skill 回退到已认证 `gh`，成功创建 draft PR #5；两套 Hosted `verify` 已启动。PR 临时正文文件已从 `.artifacts` 删除，既有本地构建、QA 与 Release 产物未提交。
