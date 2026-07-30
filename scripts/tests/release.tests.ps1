@@ -132,10 +132,67 @@ foreach ($readmeContract in @(
     'Windows 11 和 Google Chrome',
     'ArchResearch-Windows-x64-Setup-v2\.2\.0\.exe',
     '安装包不包含 Chrome 扩展',
-    '不需要安装 Python、Node\.js、pnpm 或 PowerShell'
+    '不需要安装 Python、Node\.js、pnpm 或 PowerShell',
+    '\[下载 Windows 安装版 v2\.2\.0\]',
+    '### 需要小红书时',
+    '\[Chrome 扩展安装说明\]\(docs/chrome-extension\.md\)',
+    '\[从源码运行\]\(docs/development\.md\)'
 )) {
     if ($readme -notmatch $readmeContract) {
         throw "README must document the one-click Windows install contract: $readmeContract"
+    }
+}
+$installHeadingIndex = $readme.IndexOf("## 下载与安装", [StringComparison]::Ordinal)
+$firstScreenshotIndex = $readme.IndexOf("![ArchResearch 首页]", [StringComparison]::Ordinal)
+$positioningHeadingIndex = $readme.IndexOf("## 项目定位", [StringComparison]::Ordinal)
+if (
+    $installHeadingIndex -lt 0 -or
+    $installHeadingIndex -ge $firstScreenshotIndex -or
+    $installHeadingIndex -ge $positioningHeadingIndex
+) {
+    throw "The Windows download path must appear before screenshots and product architecture."
+}
+foreach ($obsoleteInstallHeading in @(
+    "## 快速开始",
+    "### 从源码开发",
+    "### 更新已有安装",
+    "### 安装扩展与配对"
+)) {
+    if ($readme.Contains($obsoleteInstallHeading, [StringComparison]::Ordinal)) {
+        throw "README ordinary-user path must not mix in obsolete section: $obsoleteInstallHeading"
+    }
+}
+if ($readme -match 'scripts/setup\.ps1|scripts/configure-autostart\.ps1|scripts/update\.ps1') {
+    throw "Source setup and maintenance commands belong in the development document."
+}
+
+$chromeExtensionGuidePath = Join-Path $workspace "docs\chrome-extension.md"
+$developmentGuidePath = Join-Path $workspace "docs\development.md"
+foreach ($guidePath in @($chromeExtensionGuidePath, $developmentGuidePath)) {
+    if (-not (Test-Path -LiteralPath $guidePath -PathType Leaf)) {
+        throw "README linked guide is missing: $guidePath"
+    }
+}
+$chromeExtensionGuide = Get-Content -Raw -LiteralPath $chromeExtensionGuidePath
+foreach ($extensionGuideContract in @(
+    'chrome://extensions',
+    'manifest\.json',
+    '连接当前 ArchResearch 网页',
+    '连接成功后'
+)) {
+    if ($chromeExtensionGuide -notmatch $extensionGuideContract) {
+        throw "Chrome extension guide is missing contract: $extensionGuideContract"
+    }
+}
+$developmentGuide = Get-Content -Raw -LiteralPath $developmentGuidePath
+foreach ($developmentGuideContract in @(
+    'scripts/setup\.ps1',
+    'scripts/start\.ps1',
+    'scripts/update\.ps1',
+    'scripts/configure-provider\.ps1'
+)) {
+    if ($developmentGuide -notmatch $developmentGuideContract) {
+        throw "Development guide is missing contract: $developmentGuideContract"
     }
 }
 

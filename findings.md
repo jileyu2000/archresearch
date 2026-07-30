@@ -706,3 +706,13 @@
 - 最终升级验证证明同一个 Inno `AppId` 会把测试 `v2.1.4` 程序覆盖为 `v2.2.0`，安装后静态 Board 精确包含 `v2.2.0` 独立扩展下载链接；`%LOCALAPPDATA%\ArchResearch\data` 中由验收创建的 sentinel 在升级和卸载后均保留。验收结束只删除该 sentinel，程序目录和快捷方式由正式卸载器移除。
 - 正式 Release 使用 main CI `30517007300` 的产物而非先前本机构建，因此最终哈希与本地测试包不同；GitHub asset digest、下载大小和本地重算 SHA-256 三者一致。两个附件分别命名为 Windows 完整安装器与 `chrome-extension-only` ZIP，Release 说明同时区分 GitHub 自动 Source archives，未写入私有 Web URL。
 - Worker 只在 `v2.2.0` Release 附件确认 uploaded 后部署，避免网页 bundle 先指向 404。生产版本 `0d94ed1e-7807-49fd-b2fc-73c2f00bc1c9` 保留既有 R2/Workflow/CostGuard/限流/Secret；HTTP smoke 确认 v2.2.0 扩展附件 200 且 Content-Length 22,331。
+
+## 2026-07-30 M167 mature installation guidance
+
+- Obsidian 的官方下载页把 `App` 与 `Web Clipper` 并列成两个独立下载对象，只给平台入口；开发者资料另放 Developers。可借鉴的是“先让用户选对产品形态”，不在下载动作前解释内部架构。
+- Joplin 对 Web Clipper 的首段只有用途和一个上下文动作：打开桌面应用，在 Web Clipper 设置里按提示操作；端口、防火墙、代理和调试全部下沉到后续 Troubleshooting。可借鉴的是由产品内提醒承担配对细节，README 只解释何时需要扩展。
+- Zotero 将桌面应用和 Connector 明确称为两个组件，Connector 页面首屏直接给 Install；功能、偏好与无法连接的排障各自独立成文档。可借鉴的是主程序优先、扩展按能力补充，不能让用户把扩展 ZIP 当完整应用。
+- LocalSend README 在产品简介/截图后立即给 Download，具体运行机制、源码编译和 Troubleshooting 都排在后面；Windows 入口直接命名 `EXE Installer`。可借鉴的是普通用户路径以“下载什么”为中心，开发者命令不与安装步骤混排。
+- 对 ArchResearch 的结论：README 顶部应只保留一个 Windows 安装器主入口和三步启动；“需要小红书时”再出现独立扩展，四步开发者模式流程可留作次级说明；源码启动、自动启动、update 脚本和底层端口说明迁入开发文档。SmartScreen 保留一行诚实提醒，不打断主步骤。
+- 当前 README 的下载入口位于第 90 行，用户在此之前需要经过产品定位、能力表、Agent 架构和人机协同；安装区本身又连续混入源码开发、更新、扩展配对、OpenCLI 与浏览器协议。`docs/architecture.md` 已覆盖权限和受管标签等技术边界，因此 README 可删重复说明而不丢项目原则。
+- M167 采用三个信息层：README 顶部的 Windows 三步安装；按需出现并链接的 `docs/chrome-extension.md`；维护者使用的 `docs/development.md`。这比折叠大量文本更清楚，也便于页面内安装提示和文档分别承担首用/排障。
