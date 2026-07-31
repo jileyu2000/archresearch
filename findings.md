@@ -48,20 +48,20 @@
 - Ruff/64-file format、strict Mypy、Board/Extension lint/typecheck/build、进程生命周期、安全、评测、manifest/protocol 与 Windows 发布合同全部通过。
 - Windows 安装 smoke 验证真实 per-user 安装、桌面/开始菜单快捷方式、精简 `PATH` 下冻结程序 `--self-test`、安装包不含扩展，以及卸载后无程序残留。
 - `/desktop-health` 与 `/health` 由冻结入口使用的同一 FastAPI desktop app 行为测试覆盖。
-- `git diff --check` exit 0；`HEAD`、`main`、`origin/main` 均为 `87826af`。
+- `git diff --check` exit 0；远端 `main` 已为 `9196119`，本地 checkout 为 `agent/local-release-v2.2.2` / `HEAD=2429277`；本地 `origin/main` tracking ref 仍为 `87826af`，因为未 fetch/pull。
 
 ## Release candidate
 
 - 扩展 ZIP：18,260 bytes，SHA-256 `9D554576B6DDAAD705EC4E66B1D948EB2305A749CAEFAE40144EC04D8FAD0902`。
 - Windows 安装器：69,681,830 bytes，SHA-256 `F859C66720D0A493950653F2178E34C7955CBF7D838CD4569C36D994A30162A1`。
-- 两个文件都只存在 `.artifacts/releases/` 并已上传到 [v2.2.2 Release](https://github.com/jileyu2000/archresearch/releases/tag/v2.2.2)；tag 指向 `5637ee0`，PR #11 保持草稿状态。
+- 两个文件都只存在 `.artifacts/releases/` 并已上传到 [v2.2.2 Release](https://github.com/jileyu2000/archresearch/releases/tag/v2.2.2)；tag 指向 `5637ee0`，PR #11 已合并但没有重发 Release。
 
 ## Constraints
 
 - 不恢复 Firecrawl、Web/Edge、Cloudflare 或公共 HTTPS 扩展桥。
 - 不调用会导致桌面应用闪退的内部浏览器。
 - 默认验证不读取用户 Cookie、Chrome 会话或 Provider Key，不创建或重试真实研究。
-- 不 reset、checkout 或 clean；本轮用户已明确授权提交、推送、tag 和 Release。
+- 不 reset、checkout、clean、commit 或 push；不修改已发布的 `v2.2.2` Release，不调用内部浏览器，不恢复 Web/Edge 或 Firecrawl。
 - 本轮只读复核曾假设根级 `tests` 和 `provider_runtime.py` 存在；实际路径分别是 `apps/api/tests`，Provider runtime 定义位于现有 credential 模块。错误命令未写文件，也未重复。
 
 ## GitHub Hosted CI coverage correction
@@ -72,5 +72,35 @@
 
 ## GitHub PR ready state
 
-- 管理记录提交 `d52da0d` 已推送；PR #11 已从 Draft 标记为 Ready，仍未合并，GitHub 报告为 mergeable。
+- 管理记录提交 `d52da0d` 已推送；PR #11 曾从 Draft 标记为 Ready，随后完成 squash merge，详见下方合并记录。
 - 最新 Hosted CI run `30636022102` / job `91173717123` 于 `2026-07-31 14:09:09 UTC` 成功；文档状态同步没有引入代码或发布合同变化。
+
+## GitHub PR merge
+
+- PR #11 的最新 head `2429277` 通过 `verify` run `30637527995` 后，于 `2026-07-31 14:34:44 UTC` squash merge 到远端 `main`，merge commit 为 `9196119`。
+- `v2.2.2` tag 和 Release 附件保持不变；本地 checkout 未自动切换到 `main`。
+
+## Current user task: visual Run failure
+
+- 本地数据库中的图纸 Run `06843b31-d478-4b82-959f-49c1f15e65be` 在规划阶段记录了 `planner_error_type=AuthenticationError`，随后三轮 `opencli-xiaohongshu` 搜索各返回 4 个帖子。
+- 该 Run 的 12 次帖子图片处理全部失败：Trace 只记录了 `AuthenticationError` 或 `APIConnectionError`，并继续尝试 Chrome 读取；最终 `candidate_count=0`、`stop_reason=no_usable_assets`。因此“没有可用图纸”掩盖了 Provider 认证/视觉分析失败。
+- 旧成功图纸 Run 使用同样的 OpenCLI 搜索与 `/search_result/<id>` 来源格式并能完成下载、分类；当前故障更符合 Provider 运行时认证/连接失效，而不是 XHS 搜索结果为空。
+- 当前 `ResearchRun`、`QueryAttempt`、`TraceEvent` 只有 `cost_usd=0.0`，没有 input/output/total token 或请求计数；Trace 中 `openai` 被跳过只代表该阶段走了本地浏览搜索，不能代表整条 Run 没有 Provider 请求。
+- 为保证图纸研究能完成，视觉 Provider 出现认证、连接、超时、限流、服务端或请求格式错误时，已增加受限本地确定性分类；它只处理已下载图片的类型/可见特征，不把图片升级为正式建筑事实。正常远程分类仍优先使用。
+- 建筑 Run 的失败还包括网页正文分析与最后综合阶段的 Provider 认证/连接错误；已增加正文原句回退和综合确定性回退，二者都保留来源边界，不生成未出现在正文中的建筑事实。
+- 本任务不增加 token、费用或 Provider 用量字段；用量仍由用户自行查看梭子蟹后台。
+
+## Local development page and GitHub release
+
+- `scripts/start.ps1` 的源码开发模式已在 Chrome 中验证：Board 页面为 `http://127.0.0.1:5173/`，API 为 `http://127.0.0.1:8000/`，标题为 `ArchResearch Board`。
+- 当前 GitHub Release 是源码/安装包分发，不是在线 Web Edition：Windows 安装器运行生产 API + Board，独立 Chrome 扩展 ZIP 只提供浏览器能力。
+- 发布提交 `5637ee0` 与当前 HEAD `2429277` 的差异不包含 `apps/api`、`apps/board`、`apps/extension` 生产代码；只有扩展截图测试和 Windows 安装器元信息变化。
+- 当前工作树只有 `HANDOFF.md`、`task_plan.md`、`findings.md`、`progress.md` 修改，以及 `.artifacts/build/`、`.artifacts/qa/`、`.artifacts/releases/` 未跟踪产物。
+
+## 2026-08-01 Zero-coverage retry recovery
+
+- 修复前，图纸 Run `06843b31-d478-4b82-959f-49c1f15e65be` 的 attempt 1 仍为零覆盖，持久化预算为 46 次视觉调用、9,521,874 bytes 和 12 次浏览页；该 attempt 只有 planning/composing Trace，没有新 QueryAttempt。
+- 修复前，建筑 Run `4e304e27-68e2-4beb-8fb2-88a858c676c8` 的 attempt 1 有 19 个候选但正文覆盖为 0，持久化预算为 24 次视觉调用和 36 次浏览页；attempt 1 的 24 个 QueryAttempt 全部 completed。
+- 显式 retry 原先只递增 attempt，不刷新运行预算；因此零覆盖 Run 会在搜索前因旧上限退出。查询恢复还会在上一执行同时有 completed/started 状态时继承 completed 键，即使这些查询没有形成任何证据。
+- 最小修复只针对 `covered_subquestions == 0`：retry 事务刷新本次视觉/浏览预算；工作流 attempt 大于 0 且实时覆盖为 0 时不继承 completed 查询。已有覆盖的部分结果仍沿用原断点续跑语义。
+- 真实验证中，图纸 Run attempt 2 在 84.7 秒内从 0/3 推进至 34 个结果和 3/3 覆盖；建筑 Run attempt 2 在 160.8 秒内从 19 个候选、0/4 覆盖推进至 36 个结果、4/4 覆盖、6 个项目和 79 条 EvidenceClaim。两条都以 `completed/coverage_satisfied` 结束。

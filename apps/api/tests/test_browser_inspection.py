@@ -634,7 +634,7 @@ def test_visual_reference_search_completes_from_one_bounded_xiaohongshu_note_per
         traces = list(session.scalars(select(TraceEvent).where(TraceEvent.run_id == run_id)))
 
     assert run is not None
-    assert run.status == RunStatus.completed.value
+    assert run.status == RunStatus.completed.value, (run.stop_reason, run.coverage_report)
     assert run.stop_reason == "coverage_satisfied"
     assert run.coverage_report["covered_subquestions"] == branch_count
     assert run.coverage_report["gaps"] == []
@@ -649,6 +649,287 @@ def test_visual_reference_search_completes_from_one_bounded_xiaohongshu_note_per
     assert {asset.publication_tier for asset in assets} == {PublicationTier.aggregator.value}
     assert {asset.rights_status for asset in assets} == {RightsStatus.unknown.value}
     assert sum(trace.tool == "xiaohongshu_assets" for trace in traces) == branch_count * 2
+
+
+def test_visual_run_completes_with_local_visual_fallback_when_provider_auth_fails(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(
+        tmp_path,
+        max_pages=3,
+        budget_mode=BudgetMode.quick,
+    )
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assert run is not None
+        run.question = "帮我找一套清新竞赛风格图纸"
+        run.goal = ResearchGoal.visual_reference_search.value
+        run.research_sources = ["xiaohongshu"]
+        run.budget = {
+            "max_rounds": 1,
+            "max_queries": 3,
+            "max_pages": 3,
+            "max_seconds": 240,
+        }
+        session.commit()
+
+    class AuthenticationError(Exception):
+        pass
+
+    class AuthFailingPlanner(SingleBatchProvider):
+        name = "auth-failing-provider"
+
+        def __init__(self) -> None:
+            super().__init__(ProviderSearchResult(assets=[], sources=[]))
+            self.search_calls = 0
+
+        def plan(
+            self,
+            question: str,
+            goal: ResearchGoal,
+            budget_mode: BudgetMode,
+            workspace_context: str,
+        ) -> ResearchPlan:
+            del question, goal, budget_mode, workspace_context
+            raise AuthenticationError("invalid provider credential")
+
+        def search(
+            self,
+            query: str,
+            goal: ResearchGoal,
+            allowed_domains: list[str] | None = None,
+        ) -> ProviderSearchResult:
+            del query, goal, allowed_domains
+            self.search_calls += 1
+            raise AssertionError("XHS-only visual research must not use generic search")
+
+    class AuthFailingVisualClassifier:
+        name = "openai-vision"
+        worst_case_remote_batch_seconds = 60.0
+
+        def classify(
+            self,
+            image_data_url: str,
+            *,
+            question: str,
+            caption: str,
+            project_text: str,
+        ) -> VisualClassification:
+            del image_data_url, question, caption, project_text
+            raise AuthenticationError("invalid provider credential")
+
+        def classify_remote_batch(
+            self,
+            candidates: Sequence[RemoteVisualCandidate],
+            *,
+            question: str,
+            project_text: str,
+        ) -> RemoteVisualClassificationBatch:
+            del candidates, question, project_text
+            raise AuthenticationError("invalid provider credential")
+
+    class DownloadingXiaohongshu:
+        name = "opencli-xiaohongshu"
+
+        def __init__(self) -> None:
+            self.calls = 0
+            self.downloads = 0
+
+        def search(self, query: str, *, limit: int = 4) -> list[ProviderSource]:
+            del query, limit
+            self.calls += 1
+            return [
+                ProviderSource(
+                    url=f"https://www.xiaohongshu.com/explore/visual-note-{self.calls}",
+                    publisher="小红书",
+                    title=f"建筑图纸风格参考 {self.calls}",
+                    publication_tier=PublicationTier.aggregator,
+                )
+            ]
+
+        def download(self, note_url: str, output_dir: Path, *, limit: int = 4) -> list[Path]:
+            del note_url
+            self.downloads += 1
+            output_dir.mkdir(parents=True, exist_ok=True)
+            paths = []
+            for index in range(4):
+                path = output_dir / f"visual-{self.downloads}-{index}.png"
+                path.write_bytes(_distinct_crop_png(self.downloads * 4 + index))
+                paths.append(path)
+            return paths[:limit]
+
+    provider = AuthFailingPlanner()
+    xiaohongshu = DownloadingXiaohongshu()
+
+    execute_research_run(
+        database,
+        run_id,
+        provider,
+        visual_classifier=AuthFailingVisualClassifier(),
+        candidate_root=tmp_path / "visual-candidates",
+        xiaohongshu_search=xiaohongshu,
+    )
+
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assets = list(
+            session.scalars(select(AssetCandidate).where(AssetCandidate.run_id == run_id))
+        )
+        traces = list(
+            session.scalars(
+                select(TraceEvent).where(TraceEvent.run_id == run_id).order_by(TraceEvent.sequence)
+            )
+        )
+
+    assert run is not None
+    assert run.status == RunStatus.completed.value, (run.stop_reason, run.coverage_report)
+    assert run.stop_reason == "coverage_satisfied"
+    assert provider.search_calls == 0
+    assert xiaohongshu.calls == 3
+    assert xiaohongshu.downloads == 3
+    assert len(assets) == 12
+    assert run.visual_calls_used == 12
+    assert (
+        sum(
+            trace.tool == "openai" and trace.summary.get("mode") == "deterministic_local_visual"
+            for trace in traces
+        )
+        == 3
+    )
+    assert traces[1].summary["planner_error_type"] == "AuthenticationError"
+
+
+def test_precedent_run_completes_with_local_page_and_synthesis_fallbacks(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(
+        tmp_path,
+        max_pages=4,
+        budget_mode=BudgetMode.balanced,
+    )
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assert run is not None
+        run.budget = {
+            "max_rounds": 1,
+            "max_queries": 4,
+            "max_pages": 4,
+            "max_seconds": 240,
+        }
+        session.commit()
+
+    class AuthenticationError(Exception):
+        pass
+
+    class ProviderWithUnavailableAnalysis(SingleBatchProvider):
+        name = "auth-failing-provider"
+        worst_case_page_analysis_seconds = 0.0
+
+        def plan(
+            self,
+            question: str,
+            goal: ResearchGoal,
+            budget_mode: BudgetMode,
+            workspace_context: str,
+        ) -> ResearchPlan:
+            del question, goal, budget_mode, workspace_context
+            raise AuthenticationError("invalid provider credential")
+
+        def analyze_public_page(
+            self,
+            **kwargs: object,
+        ) -> PublicPageAnalysis:
+            del kwargs
+            raise AuthenticationError("invalid provider credential")
+
+        def synthesize_research(
+            self,
+            **kwargs: object,
+        ) -> ResearchSynthesis:
+            del kwargs
+            raise AuthenticationError("invalid provider credential")
+
+    class FourProjectParser:
+        name = "local_browser"
+        worst_case_call_seconds = 0.0
+
+        def __init__(self) -> None:
+            self.search_count = 0
+            self.urls: list[str] = []
+
+        def search(
+            self,
+            query: str,
+            *,
+            limit: int,
+            include_domains: list[str],
+        ) -> list[PublicSearchLead]:
+            del query, limit, include_domains
+            self.search_count += 1
+            project_id = self.search_count
+            return [
+                PublicSearchLead(
+                    url=f"https://www.archdaily.com/{100000 + project_id}/project-{project_id}",
+                    title=f"Project {project_id} / Studio Example",
+                )
+            ]
+
+        def parse(self, url: str) -> ParsedPublicPage:
+            self.urls.append(url)
+            project_id = url.rsplit("-", 1)[-1]
+            title = f"Project {project_id} / Studio Example"
+            return ParsedPublicPage(
+                source_url=url,
+                title=title,
+                markdown=(
+                    "The project retains an existing hall as the main public room. "
+                    "The inserted program organizes a clear route between the courtyard "
+                    "and the hall."
+                ),
+                images=[
+                    ParsedPageImage(
+                        url=f"https://cdn.example/project-{project_id}-plan.png",
+                        alt="Ground floor plan",
+                    ),
+                    ParsedPageImage(
+                        url=f"https://cdn.example/project-{project_id}-section.png",
+                        alt="Longitudinal section",
+                    ),
+                    ParsedPageImage(
+                        url=f"https://cdn.example/project-{project_id}-circulation.png",
+                        alt="Circulation diagram",
+                    ),
+                ],
+            )
+
+    parser = FourProjectParser()
+    execute_research_run(
+        database,
+        run_id,
+        ProviderWithUnavailableAnalysis(ProviderSearchResult(assets=[], sources=[])),
+        public_page_parser=parser,
+    )
+
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        events = list(session.scalars(select(TraceEvent).where(TraceEvent.run_id == run_id)))
+
+    assert run is not None
+    assert run.status == RunStatus.completed.value, (run.stop_reason, run.coverage_report)
+    assert run.stop_reason == "coverage_satisfied"
+    assert run.coverage_report["gaps"] == []
+    assert run.coverage_report["enrichment_gaps"] == []
+    assert run.coverage_report["synthesis"]["generation_mode"] == "deterministic_fallback"
+    fallback_events = [
+        event
+        for event in events
+        if event.tool == "public_page_analysis"
+        and event.summary.get("generation_mode") == "deterministic_fallback"
+    ]
+    assert len(fallback_events) >= 4
+    assert all(
+        event.summary["provider_error_type"] == "AuthenticationError" for event in fallback_events
+    )
 
 
 def test_visual_plan_fallback_keeps_the_explicitly_requested_drawing_type() -> None:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from enum import StrEnum
 from typing import Annotated, Any, Protocol, runtime_checkable
 
@@ -145,6 +145,105 @@ class MockVisualClassifier:
                 )
             )
         return RemoteVisualClassificationBatch(classifications=classifications)
+
+
+VISUAL_PROVIDER_FALLBACK_ERRORS = frozenset(
+    {
+        "APIConnectionError",
+        "APITimeoutError",
+        "AuthenticationError",
+        "BadRequestError",
+        "InternalServerError",
+        "PermissionDeniedError",
+        "RateLimitError",
+    }
+)
+
+
+class DeterministicFallbackVisualClassifier:
+    """Keep downloaded visual references usable when the remote classifier is unavailable."""
+
+    def __init__(
+        self,
+        primary: VisualClassifier,
+        *,
+        on_fallback: Callable[[str], None] | None = None,
+    ) -> None:
+        self._primary = primary
+        self._fallback = MockVisualClassifier()
+        self._on_fallback = on_fallback
+        self.name = getattr(primary, "name", "visual-classifier")
+        self.worst_case_remote_batch_seconds = float(
+            getattr(primary, "worst_case_remote_batch_seconds", 0.0)
+        )
+
+    def classify(
+        self,
+        image_data_url: str,
+        *,
+        question: str,
+        caption: str,
+        project_text: str,
+    ) -> VisualClassification:
+        try:
+            return self._primary.classify(
+                image_data_url,
+                question=question,
+                caption=caption,
+                project_text=project_text,
+            )
+        except Exception as exc:
+            if type(exc).__name__ not in VISUAL_PROVIDER_FALLBACK_ERRORS:
+                raise
+            self._report_fallback(exc)
+            return self._fallback.classify(
+                image_data_url,
+                question=question,
+                caption=caption,
+                project_text=project_text,
+            )
+
+    def classify_remote_batch(
+        self,
+        candidates: Sequence[RemoteVisualCandidate],
+        *,
+        question: str,
+        project_text: str,
+    ) -> RemoteVisualClassificationBatch:
+        try:
+            if isinstance(self._primary, RemoteVisualClassifier):
+                return self._primary.classify_remote_batch(
+                    candidates,
+                    question=question,
+                    project_text=project_text,
+                )
+            return RemoteVisualClassificationBatch(
+                classifications=[
+                    RemoteVisualClassification(
+                        candidate_id=candidate.candidate_id,
+                        **self.classify(
+                            candidate.image_url,
+                            question=question,
+                            caption=candidate.caption,
+                            project_text=project_text,
+                        ).model_dump(),
+                    )
+                    for candidate in candidates[:4]
+                ]
+            )
+        except Exception as exc:
+            if type(exc).__name__ not in VISUAL_PROVIDER_FALLBACK_ERRORS:
+                raise
+            self._report_fallback(exc)
+            return self._fallback.classify_remote_batch(
+                candidates,
+                question=question,
+                project_text=project_text,
+            )
+
+    def _report_fallback(self, error: Exception) -> None:
+        if self._on_fallback is not None:
+            self._on_fallback(type(error).__name__)
 
 
 class OpenAIVisualClassifier:

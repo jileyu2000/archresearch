@@ -20,6 +20,7 @@ from archresearch_api.providers import (
     ResearchSynthesisCase,
     ResearchSynthesisFinding,
     _focused_public_page_text,
+    deterministic_public_page_analysis,
 )
 from archresearch_api.schemas import (
     DEPTH_TARGETS,
@@ -377,6 +378,44 @@ def test_focused_page_analysis_keeps_a_late_section_mechanism() -> None:
 
     assert mechanism in focused
     assert len(focused) <= 6_000
+
+
+def test_deterministic_page_analysis_reuses_only_source_sentences() -> None:
+    page_text = (
+        "Courtyard Archive / Studio Example\n"
+        "The project retains an existing hall as the main public room. "
+        "The inserted program organizes a clear route between the courtyard and the hall."
+    )
+
+    analysis = deterministic_public_page_analysis(
+        question="旧建筑中如何植入新功能？",
+        title="Courtyard Archive / Studio Example",
+        page_text=page_text,
+        drawings=[
+            PublicPageDrawing(
+                drawing_id="drawing_1",
+                asset_type=ArchitectureAssetType.plan,
+                image_url="https://cdn.example/courtyard-plan.png",
+            )
+        ],
+    )
+
+    assert analysis is not None
+    assert analysis.relevance == 2
+    assert analysis.drawing_ids == ["drawing_1"]
+    assert analysis.project_context in page_text
+    assert analysis.design_mechanism in page_text
+    assert analysis.project_context != analysis.design_mechanism
+    assert all(fact.text_excerpt in page_text for fact in analysis.facts)
+    assert (
+        deterministic_public_page_analysis(
+            question="旧建筑中如何植入新功能？",
+            title="Only a title",
+            page_text="Only a title",
+            drawings=[],
+        )
+        is None
+    )
 
 
 def test_openai_page_analysis_does_not_fallback_after_a_non_transient_error() -> None:

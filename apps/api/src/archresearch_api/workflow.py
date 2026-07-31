@@ -71,6 +71,8 @@ from .providers import (
     ResearchProvider,
     ResearchSynthesisCase,
     ResearchSynthesisProvider,
+    deterministic_public_page_analysis,
+    is_recoverable_public_page_analysis_error,
     requested_visual_drawing_type,
 )
 from .public_pages import (
@@ -100,6 +102,7 @@ from .schemas import (
 )
 from .visual import (
     ArchitectureAssetType,
+    DeterministicFallbackVisualClassifier,
     RemoteVisualCandidate,
     RemoteVisualClassification,
     RemoteVisualClassifier,
@@ -229,6 +232,21 @@ def execute_research_run(
             planning_summary["planner_error_type"] = planning_error
         checkpoint(db, run_id, RunStatus.planning, planning_summary)
         subquestion_text = {item.id: item.question for item in plan.subquestions}
+        if goal is ResearchGoal.visual_reference_search and visual_classifier is not None:
+            visual_classifier = DeterministicFallbackVisualClassifier(
+                visual_classifier,
+                on_fallback=lambda error_type: checkpoint(
+                    db,
+                    run_id,
+                    RunStatus.inspecting,
+                    {
+                        "status": "fallback",
+                        "mode": "deterministic_local_visual",
+                        "provider_error_type": error_type,
+                    },
+                    tool="openai",
+                ),
+            )
         normal_rounds = int(budget["max_rounds"])
         recovery_rounds = (
             int(budget.get("completion_recovery_rounds", 1))
@@ -260,11 +278,16 @@ def execute_research_run(
             and public_page_parser is not None
             and isinstance(provider, ResearchSynthesisProvider)
         )
-        completed_query_keys = completed_query_keys_for_resume(db, run_id)
         initial_coverage = calculate_coverage(
             db,
             run_id,
             require_article_analysis=require_article_analysis,
+        )
+        retrying_without_coverage = (
+            run_attempt > 0 and initial_coverage["covered_subquestions"] == 0
+        )
+        completed_query_keys = (
+            set() if retrying_without_coverage else completed_query_keys_for_resume(db, run_id)
         )
         completion_continuation = (
             goal is ResearchGoal.precedent_research
@@ -2676,6 +2699,8 @@ def _try_public_page_analysis(
     analysis_requirements: Sequence[str],
     evidence_pages: Sequence[tuple[ProviderSource, ParsedPublicPage]] | None = None,
 ) -> int:
+    fallback_error_type: str | None = None
+    analysis: PublicPageAnalysis | None = None
     try:
         analysis = provider.analyze_public_page(
             question=_public_page_analysis_question(question),
@@ -2686,19 +2711,30 @@ def _try_public_page_analysis(
             analysis_requirements=analysis_requirements,
         )
     except Exception as exc:
-        checkpoint(
-            db,
-            run_id,
-            RunStatus.analyzing,
-            {
-                "source_url": _redacted_trace_url(source.url),
-                "subquestion_id": subquestion_id,
-                "status": "failed",
-                "error_type": type(exc).__name__,
-            },
-            tool="public_page_analysis",
-        )
-        return 0
+        if is_recoverable_public_page_analysis_error(exc):
+            analysis = deterministic_public_page_analysis(
+                question=question,
+                title=page.title,
+                page_text=_public_page_analysis_text(page),
+                drawings=drawings,
+            )
+            if analysis is not None:
+                fallback_error_type = type(exc).__name__
+        if analysis is None:
+            checkpoint(
+                db,
+                run_id,
+                RunStatus.analyzing,
+                {
+                    "source_url": _redacted_trace_url(source.url),
+                    "subquestion_id": subquestion_id,
+                    "status": "failed",
+                    "error_type": type(exc).__name__,
+                },
+                tool="public_page_analysis",
+            )
+            return 0
+    assert analysis is not None
     added = _persist_public_page_analysis(
         db,
         run_id,
@@ -2710,21 +2746,23 @@ def _try_public_page_analysis(
         subquestion_id=subquestion_id,
         evidence_pages=evidence_pages,
     )
-    checkpoint(
-        db,
-        run_id,
-        RunStatus.analyzing,
-        {
-            "source_url": _redacted_trace_url(source.url),
-            "subquestion_id": subquestion_id,
-            "status": "completed",
-            "relevance": analysis.relevance,
-            "drawing_count": len(analysis.drawing_ids),
-            "enriched": added,
-            "source_count": len(evidence_pages or [(source, page)]),
-        },
-        tool="public_page_analysis",
-    )
+    summary: dict[str, object] = {
+        "source_url": _redacted_trace_url(source.url),
+        "subquestion_id": subquestion_id,
+        "status": "completed",
+        "relevance": analysis.relevance,
+        "drawing_count": len(analysis.drawing_ids),
+        "enriched": added,
+        "source_count": len(evidence_pages or [(source, page)]),
+    }
+    if fallback_error_type is not None:
+        summary.update(
+            {
+                "generation_mode": "deterministic_fallback",
+                "provider_error_type": fallback_error_type,
+            }
+        )
+    checkpoint(db, run_id, RunStatus.analyzing, summary, tool="public_page_analysis")
     return added
 
 

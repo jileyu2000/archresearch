@@ -170,3 +170,43 @@ def test_windowed_desktop_server_does_not_load_console_logging(
     assert captured["host"] == "127.0.0.1"
     assert captured["port"] == 49152
     assert captured["log_config"] is None
+
+
+def test_provider_setup_keeps_model_fetch_action_visible(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import tkinter as tk
+
+    try:
+        probe_root = tk.Tk()
+    except tk.TclError:
+        pytest.skip("Tk is unavailable in this test environment")
+    probe_root.destroy()
+
+    real_tk = tk.Tk
+    captured: dict[str, bool] = {}
+
+    class InspectRoot(real_tk):
+        def mainloop(self, *args: object, **kwargs: object) -> None:
+            self.update()
+            surface = self.winfo_children()[0]
+            actions = next(
+                child for child in surface.winfo_children() if child.winfo_class() == "TFrame"
+            )
+            fetch_button = next(
+                child
+                for child in actions.winfo_children()
+                if child.winfo_class() == "Button" and child.cget("text") == "获取模型列表"
+            )
+            captured["fetch_is_mapped"] = bool(fetch_button.winfo_ismapped())
+            captured["fetch_is_in_action_row"] = fetch_button.winfo_parent() == str(actions)
+            self.destroy()
+
+    monkeypatch.setattr(tk, "Tk", InspectRoot)
+
+    assert desktop_module.prompt_for_provider_config(tmp_path, object()) is False
+    assert captured == {
+        "fetch_is_mapped": True,
+        "fetch_is_in_action_row": True,
+    }
