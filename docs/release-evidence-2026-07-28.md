@@ -55,6 +55,6 @@
 
 `.github/workflows/verify.yml` 使用 Windows latest、Python 3.12、Node 24、frozen setup、根 coverage 和权威 verify，并声明 `workflow_dispatch` 与 `contents: read`。默认 CI 不需要 live provider key。
 
-公开仓库 `jileyu2000/archresearch` 已建立。Hosted CI run `30332351557` 验证 Chromium 环境修复，run `30333320610` 验证发布记录落点；两轮都通过 setup、Playwright Chromium 安装、Board/Extension coverage 与完整 `scripts/verify.ps1`，最终日志明确为 348 API / 177 Board / 165 Extension / 8 packaged E2E 全绿。默认 CI 未使用 live provider key。
+公开仓库 `jileyu2000/archresearch-chrome-extension` 已建立。Hosted CI run `30332351557` 验证 Chromium 环境修复，run `30333320610` 验证发布记录落点；两轮都通过 setup、Playwright Chromium 安装、Board/Extension coverage 与完整 `scripts/verify.ps1`，最终日志明确为 348 API / 177 Board / 165 Extension / 8 packaged E2E 全绿。默认 CI 未使用 live provider key。
 
 这份记录保留的是 Web Edition 发布前的历史验证结果；旧的 `v2.1.0` Release 已随 Web-only 迁移退役。当前 GitHub Release 只保留明确命名的 ArchResearch Chrome 扩展 ZIP；GitHub 自动生成的 Source code 压缩包仅用于查看源码，不是安装包。

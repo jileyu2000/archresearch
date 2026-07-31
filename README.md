@@ -1,6 +1,6 @@
 # ArchResearch
 
-[![verify](https://github.com/jileyu2000/archresearch/actions/workflows/verify.yml/badge.svg)](https://github.com/jileyu2000/archresearch/actions/workflows/verify.yml)
+[![verify](https://github.com/jileyu2000/archresearch-chrome-extension/actions/workflows/verify.yml/badge.svg)](https://github.com/jileyu2000/archresearch-chrome-extension/actions/workflows/verify.yml)
 ![version](https://img.shields.io/badge/version-2.2.1-2F5BFF)
 ![platform](https://img.shields.io/badge/platform-Web%20%2B%20Chrome%20Extension-171A18)
 
@@ -18,7 +18,7 @@ Web Edition 访问地址由项目方私下提供，仓库不公开网页地址�
 
 只有“小红书图纸灵感”需要 Chrome 扩展。Chrome Web Store 尚未上架，当前需要手动加载一次：
 
-1. [下载 Chrome 扩展 v2.2.1](https://github.com/jileyu2000/archresearch/releases/download/v2.2.1/archresearch-chrome-extension-only-v2.2.1.zip)
+1. [下载 Chrome 扩展 v2.2.1](https://github.com/jileyu2000/archresearch-chrome-extension/releases/download/v2.2.1/archresearch-chrome-extension-only-v2.2.1.zip)
 2. 解压 ZIP，在 `chrome://extensions` 开启“开发者模式”，选择根目录直接包含 `manifest.json` 的文件夹。
 3. 回到 Web Edition，在扩展工具栏中点击“连接当前 ArchResearch 网页”。
 4. Chrome 首次询问网页读取权限时选择允许。
