@@ -149,3 +149,16 @@
 - 只对图纸 Run 发出一次 retry：attempt 2 经过 inspecting/searching，最终 `completed/coverage_satisfied`，34 个结果、3/3 覆盖、9 个来源项目。
 - 图纸终态后只对建筑 Run 发出一次 retry：attempt 2 从 19 个候选、0/4 覆盖推进至 36 个结果、4/4 覆盖、6 个项目、79 条 EvidenceClaim，最终 `completed/coverage_satisfied`。
 - 两条 Run 的 Trace 均保留 Provider 错误类型和确定性回退模式；未新增用量统计，未读取 Key，未调用 Codex 内置浏览器，未恢复 Web/Edge/Firecrawl，未 push。
+
+## 2026-08-01 Completed result visibility gap
+
+- 用户提供真实 Board 截图：建筑 Run 顶部已有研究结论，但四个子问题全部显示“这一问题暂时没有可用结果”；据此撤回“用户可见完成”的判断并继续修复。
+- 直接 API 核对显示同一 Run 当前有 36 条结果和完整子问题关联，根因范围收敛到 Board 结果查询缓存或前端归组。
+- 继续读取结果水合、轮询、归组和 `toWorkResult()` 后确认：终态打开和轮询完成都会重新 hydrate，真实问题不是旧缓存。
+- 真实 36 条结果中 22 条有逐题正文分析，四个子问题分别有 12/12/6/4 条；但顶层条件与机制为英文来源原句，Board 的中文 `analysisReady` 门槛把 36 条全部过滤。
+- 当前修复方向改为：只放行有逐题确定性回退标记和正文 EvidenceClaim 的结果，并保留现有“普通旧英文图片线索不能成为案例”保护。未调用 Codex 内置浏览器，未修改真实 Run。
+- 只读搜索曾把 Windows 不支持的 `**/*.test.tsx` glob 作为 `rg` 路径参数并失败；已改用 `-g` 过滤成功，没有写文件或重复失败命令。
+- 新增 Board 红测后先得到预期失败：完成页仍找不到 `Live Mill Conversion` 案例；最小修改 `toWorkResult()` 后，新回退测试与旧英文图片线索保护测试 2/2 通过。
+- 使用项目 Playwright 而非 Codex 内置浏览器打开真实 Run；首次因两条同名记录触发 strict locator 错误，随后按“36 张参考”精确选择成功。
+- 真实页面四章分别显示 3/3/2/1 个案例，空状态均为 0；完整页截图写入系统临时目录，没有修改真实 Run 或 Provider 配置。
+- 完整 Board 回归通过：15 个测试文件、179 项测试；ESLint、TypeScript typecheck、Vite production build 和 `git diff --check` 均通过。

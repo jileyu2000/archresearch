@@ -34,6 +34,38 @@ export type ResultAnalysis = {
   limitations: string[]
 }
 
+const deterministicPageFallbackBoundary = '远程页面分析不可用；本地回退只复用页面原句'
+
+function evidenceBindsStatement(candidate: ApiAssetCandidate, statement: string | undefined) {
+  const normalized = statement?.trim()
+  if (!normalized) return false
+  return candidate.evidence_claims.some((claim) => (
+    claim.statement.trim() === normalized && Boolean(claim.text_excerpt?.trim())
+  ))
+}
+
+function deterministicFallbackSubquestions(candidate: ApiAssetCandidate) {
+  const associatedIds = new Set(candidate.subquestion_ids ?? [])
+  return new Set(
+    Object.entries(candidate.subquestion_analysis ?? {})
+      .filter(([id, analysis]) => (
+        associatedIds.has(id)
+        && evidenceBindsStatement(candidate, analysis.project_context)
+        && evidenceBindsStatement(candidate, analysis.design_mechanism)
+        && chineseItems(analysis.transfer_strategy ?? []).length > 0
+        && (analysis.limitations ?? []).some((item) => (
+          item.startsWith(deterministicPageFallbackBoundary)
+        ))
+      ))
+      .map(([id]) => id),
+  )
+}
+
+function sourceOriginal(value: string | undefined, fallback: string) {
+  const normalized = value?.trim()
+  return normalized ? `来源原文：${normalized}` : fallback
+}
+
 function trustedProjectNameZh(translatedName: string, originalName: string, sourceUrl: string) {
   const translated = translatedName.trim()
   if (!translated) return ''
@@ -70,11 +102,15 @@ export function toWorkResult(candidate: ApiAssetCandidate): WorkResult {
   const inferences = chineseItems(candidate.inferences)
   const limitations = chineseItems(candidate.limitations)
   const transferStrategy = chineseItems(candidate.transfer_strategy)
+  const fallbackSubquestionIds = deterministicFallbackSubquestions(candidate)
   const analysisReady = Boolean(
-    chineseCharacterPattern.test(candidate.project_context ?? '')
-    && chineseCharacterPattern.test(candidate.design_mechanism ?? '')
-    && transferStrategy.length
-    && candidate.evidence_claims.some((claim) => Boolean(claim.text_excerpt?.trim())),
+    (
+      chineseCharacterPattern.test(candidate.project_context ?? '')
+      && chineseCharacterPattern.test(candidate.design_mechanism ?? '')
+      && transferStrategy.length
+      && candidate.evidence_claims.some((claim) => Boolean(claim.text_excerpt?.trim()))
+    )
+    || fallbackSubquestionIds.size > 0,
   )
   const legacyAnalysis = legacyChineseAnalysis(candidate, assetType)
   return {
@@ -106,11 +142,15 @@ export function toWorkResult(candidate: ApiAssetCandidate): WorkResult {
             candidate.source_url,
           ),
           projectContext: chineseText(
-            analysis.project_context,
+            fallbackSubquestionIds.has(id)
+              ? sourceOriginal(analysis.project_context, legacyAnalysis.projectContext)
+              : analysis.project_context,
             legacyAnalysis.projectContext,
           ),
           designMechanism: chineseText(
-            analysis.design_mechanism,
+            fallbackSubquestionIds.has(id)
+              ? sourceOriginal(analysis.design_mechanism, legacyAnalysis.designMechanism)
+              : analysis.design_mechanism,
             legacyAnalysis.designMechanism,
           ),
           transferStrategy: chineseItems(analysis.transfer_strategy).length

@@ -2286,6 +2286,58 @@ describe('research board', () => {
     expect(screen.queryByRole('region', { name: /问题小结/ })).not.toBeInTheDocument()
   })
 
+  it('shows evidence-bound deterministic page fallback as a usable project case', async () => {
+    const user = userEvent.setup()
+    const sourceContext = 'The project retains the existing hall as the main public room.'
+    const sourceMechanism = 'An inserted floor connects the courtyard to the upper gallery.'
+    vi.stubGlobal('fetch', createLiveFetch({
+      existingRunStatus: 'completed',
+      candidateOverrides: {
+        project_context: sourceContext,
+        design_mechanism: sourceMechanism,
+        transfer_strategy: [
+          '把来源机制作为待核验假设，先标出条件、介入动作和空间结果。',
+        ],
+        subquestion_analysis: {
+          program: {
+            project_context: sourceContext,
+            design_mechanism: sourceMechanism,
+            transfer_strategy: [
+              '把来源机制作为待核验假设，先标出条件、介入动作和空间结果。',
+            ],
+            observations: [],
+            limitations: [
+              '远程页面分析不可用；本地回退只复用页面原句，不补充页面未提供的结构、尺度或性能事实。',
+            ],
+          },
+        },
+        evidence_claims: [
+          {
+            ...candidate.evidence_claims[0],
+            id: 'claim-fallback-context',
+            statement: sourceContext,
+            text_excerpt: sourceContext,
+          },
+          {
+            ...candidate.evidence_claims[0],
+            id: 'claim-fallback-mechanism',
+            statement: sourceMechanism,
+            text_excerpt: sourceMechanism,
+          },
+        ],
+      },
+    }))
+    renderBoard()
+
+    await user.click(await screen.findByRole('button', { name: `打开研究：${liveQuestion}` }))
+
+    expect(await screen.findByRole('article', {
+      name: '代表案例 Live Mill Conversion',
+    })).toBeVisible()
+    expect(screen.getByText(`来源原文：${sourceMechanism}`)).toBeVisible()
+    expect(screen.queryByText('这一问题暂时没有可用结果')).not.toBeInTheDocument()
+  })
+
   it('keeps a text-grounded case usable when the browser extension was disconnected', async () => {
     const user = userEvent.setup()
     vi.stubGlobal('fetch', createLiveFetch({
