@@ -777,3 +777,18 @@
 - 隔离 console 调试包捕获到真实异常：`alembic.util.exc.CommandError: No 'script_location' key found in configuration.` PyInstaller 将 `archresearch_api.database` 放在 `base_library.zip`，`Path(__file__).parents[2] / "alembic.ini"` 因而指向不存在的压缩包路径；这与 Provider、Key 或 Uvicorn formatter 无关。
 - 新增冻结运行时红绿测试，`Database.migrate()` 在存在 `sys._MEIPASS` 时从资源根目录读取 `alembic.ini`，开发模式继续使用源码 `apps/api/alembic.ini`。迁移测试 6/6、桌面/Provider 启动定向测试 17/17 通过。
 - 重建安装器后覆盖现有安装：安装器 exit 0、`--self-test` exit 0；已保存配置启动后 `/desktop-health` 返回 `ArchResearch` / `2.2.1` / `8000`，`/health` 返回 `ok` 与已保存 Provider 模式，证明窗口化服务持续运行。新安装器 SHA-256 为 `FEC335DB8BE9F7E2943BE40F264EBDBD64AE673F1F37CA34051747EDC4661A68`；扩展 ZIP 未改变，仍为 `9327F89BD3B4CEB149F4FA28F2A986B39A88E18DB91FCDD833B8EF1CEA4D60AD`。
+
+## 2026-07-31 Web-only product decision
+
+- 用户决定停止本地部署与本地版公开发布。GitHub 只保留 Web Edition 源码和独立 Chrome 扩展 ZIP；私有 Web URL 继续不得进入仓库、Release 或 metadata。
+- 用户可见 parity 仍然要求共享 Board 的主页、研究模式、历史、结果、个人收藏、对照、导出、备份和小红书入口完整一致；Cloudflare Edge、IndexedDB 和动态 HTTPS origin 注册是有意的基础设施差异，不应机械回退为 Windows/SQLite 实现。
+- Windows installer/PyInstaller/Inno/桌面启动/autostart/provider setup 属于本地发行层，已从公开 CI、文档与发布合同移除。FastAPI/SQLite/loopback pairing 代码暂保留给维护者离线测试，未纳入 Web gate，不得重新出现在普通用户说明。
+- Extension popup/sidepanel 已移除本地服务、端点、一次性配对码、手动配对和断开控件；公共网页连接与权限动作保留。聚焦 UI/HTML 测试 24/24 通过；ChromeBrowserPort、BrowserCommandExecutor、content 协议和 publicBoardBridge 仍是 Web 小红书研究核心。
+- GitHub release cleanup completed with authenticated `gh`: `v2.2.0` and `v2.2.1` now each contain only their `archresearch-chrome-extension-only-*.zip`; Windows installer assets were deleted and Release titles/notes now describe the Chrome extension component only. Tags were not deleted and no Web URL was added.
+
+## 2026-07-31 Web-only verification and E2E migration
+
+- The first Web-only Extension E2E run was red only because the retired `FastAPI browser workflow` still clicked the removed manual-pairing UI. It timed out at 30 seconds; the other seven packaged bridge tests passed.
+- Removed that obsolete workflow and its dedicated `TestApi`, `requestJson`, pairing-token reader, Python child-process setup, and unused asynchronous wait helper. The remaining packaged suite now tests the browser protocol/managed tabs only; public Web status, dynamic HTTPS origin registration, and Xiaohongshu research coverage remain in the public controller/bridge tests.
+- Updated the extension product register and failure-recovery guide so ordinary users are told to reconnect the current Web Edition tab, not inspect a local service, API health endpoint, or pairing code. Maintainer-only FastAPI/SQLite compatibility remains explicitly outside the Web gate.
+- `scripts/tests/release.tests.ps1` passed. `scripts/verify-web.ps1` passed with 190 Board tests, 186 Extension tests, 7 packaged E2E, 12 Web tests, 29 Edge tests; coverage was Board 79.01/76.42/84.28/83.18 and Extension 83.40/78.55/85.29/85.74. No provider key, browser session, internal browser, or live Run was used.

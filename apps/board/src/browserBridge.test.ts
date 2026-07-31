@@ -16,17 +16,6 @@ describe('Board extension bridge client', () => {
     )
   })
 
-  it('derives the local browser endpoint from the installed page origin', () => {
-    expect(resolveBrowserEndpoint(
-      undefined,
-      'http://127.0.0.1:49152/projects',
-    )).toBe('ws://127.0.0.1:49152/v1/browser')
-    expect(resolveBrowserEndpoint(
-      undefined,
-      'https://public.example/projects',
-    )).toBe('ws://127.0.0.1:8000/v1/browser')
-  })
-
   it('sends one correlated pairing request and validates the extension status', async () => {
     const postMessage = vi.spyOn(window, 'postMessage').mockImplementation((message) => {
       const request = message as { id: string }

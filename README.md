@@ -2,33 +2,26 @@
 
 [![verify](https://github.com/jileyu2000/archresearch/actions/workflows/verify.yml/badge.svg)](https://github.com/jileyu2000/archresearch/actions/workflows/verify.yml)
 ![version](https://img.shields.io/badge/version-2.2.1-2F5BFF)
-![platform](https://img.shields.io/badge/platform-Windows%2011-171A18)
+![platform](https://img.shields.io/badge/platform-Web%20%2B%20Chrome-171A18)
 
 > 把建筑设计问题变成有出处、能比较、可继续使用的案例答案与图纸灵感板。
 
-ArchResearch 是为建筑学生和青年设计师制作的本地优先研究工作台。你可以输入一个具体设计问题，附上任务书 PDF 或案例网页；系统会拆解问题、研究公开网页、核对项目正文与图片关系，再把结果整理成可以直接阅读、收藏、对照和导出的研究材料。
+ArchResearch Web Edition 是为建筑学生和青年设计师制作的公开网页研究工作台。你可以输入一个具体设计问题，附上任务书 PDF 或案例网页；系统会拆解问题、研究公开网页、核对项目正文与图片关系，再把结果整理成可以直接阅读、收藏、对照和导出的研究材料。长期研究记录、收藏和备份保存在当前浏览器中，不需要本地运行时或命令行环境。
 
-它不是案例搜索结果墙，也不预先建设平台案例库。正式案例中的项目条件和空间机制必须绑定原文引文；小红书只用于寻找配色、线型、版式和分析图语言，不单独证明建筑事实。数据库、收藏和备份都保存在用户自己的电脑上。
+它不是案例搜索结果墙，也不预先建设平台案例库。正式案例中的项目条件和空间机制必须绑定原文引文；小红书只用于寻找配色、线型、版式和分析图语言，不单独证明建筑事实。
 
-## 下载与安装
+## 网页版与 Chrome 扩展
 
-**需要 Windows 11 和 Google Chrome。**
+Web Edition 访问地址由项目方私下提供，仓库不公开网页地址。拿到地址后直接用 Google Chrome 打开，不需要本地安装、Python、Node.js、pnpm、PowerShell 或 API Key。
 
-[下载 Windows 安装版 v2.2.1](https://github.com/jileyu2000/archresearch/releases/download/v2.2.1/ArchResearch-Windows-x64-Setup-v2.2.1.exe)
+只有“小红书图纸灵感”需要 Chrome 扩展。Chrome Web Store 尚未上架，当前需要手动加载一次：
 
-1. 下载并双击安装程序。
-2. 首次启动填写自己的 API 接口地址和 API Key。程序会从上游自动获取可用模型并测试连接，再保存配置；Key 会存入 Windows 凭据管理器。
-3. 以后从桌面或开始菜单打开 ArchResearch，它会自动在 Chrome 中显示本地页面。
+1. [下载 Chrome 扩展 v2.2.1](https://github.com/jileyu2000/archresearch/releases/download/v2.2.1/archresearch-chrome-extension-only-v2.2.1.zip)
+2. 解压 ZIP，在 `chrome://extensions` 开启“开发者模式”，选择根目录直接包含 `manifest.json` 的文件夹。
+3. 回到 Web Edition，在扩展工具栏中点击“连接当前 ArchResearch 网页”。
+4. Chrome 首次询问网页读取权限时选择允许。
 
-本地服务、完整界面、数据库和运行环境都会自动安装。不需要安装 Python、Node.js、pnpm 或 PowerShell。
-
-> 安装程序暂未签名，Windows 可能显示 SmartScreen 或“未知发布者”。可在 [v2.2.1 Release](https://github.com/jileyu2000/archresearch/releases/tag/v2.2.1) 核对文件与 SHA-256。
-
-### 需要小红书时
-
-打开“图纸灵感”后，页面会提示安装 **ArchResearch Chrome 扩展**。按页面里的“查看安装方法”完成下载和连接即可。安装包不包含 Chrome 扩展；连接成功后，提醒会自动消失。
-
-[Chrome 扩展安装说明](docs/chrome-extension.md) · [从源码运行](docs/development.md)
+连接成功后，网页会自动关闭扩展提醒；同一个 Chrome 通常只需完成一次安装和授权。完整步骤见[Chrome 扩展安装说明](docs/chrome-extension.md)。
 
 ![ArchResearch 首页](.artifacts/portfolio/current-2026-07-28/home-desktop.png)
 
@@ -109,11 +102,11 @@ flowchart TB
 
 ## 模型与密钥
 
-Windows 安装版首次启动时需要填写 **API 接口地址和 API Key**。地址可以是中转站、DeepSeek、Kimi 或自建服务，不按厂商域名白名单限制。程序会从上游模型列表自动获取可用模型，依次验证 OpenAI-compatible Responses 与 Chat Completions 结构化输出，成功后保存接口地址、选中模型和协议；Key 会隐藏输入并只保存到 Windows 凭据管理器。上游不提供模型列表或没有兼容模型时不会保存地址或 Key，用户可直接修改并重试。图片分析仍要求上游选中模型本身支持视觉输入。
+Web Edition 的 Provider 由项目方在 Cloudflare 部署中配置，用户不需要填写接口地址或 API Key。网页端只保留当前浏览器中的工作区、研究记录、收藏和备份；云端仅处理有界研究执行与短期检查点。
 
-公开建筑网站由 Direct Playwright 使用系统 Google Chrome，在不落盘的隔离上下文中提取正文、项目链接、图片 URL 和图注；图片、媒体和字体请求默认拦截以降低流量。Windows 安装版的小红书研究由用户单独安装并连接的 ArchResearch 扩展读取登录态页面；源码开发环境还可选用 OpenCLI Browser Bridge。每个灵感方向按 rank 最多尝试四篇笔记，累计三篇产生可用图的帖子后停止；每篇等距选取最多四图并合并为一次视觉分类。图纸灵感共享 48 个逐图检查槽位 / 48 MiB 预览预算。可用的小红书读取路径全部失败时会诚实终止，不降级为通用网页素材。
+公开建筑网站由 Web Edition 在有界执行中读取正文、项目链接、图片 URL 和图注；小红书视觉研究由用户单独安装并连接的 ArchResearch Chrome 扩展读取登录态页面。每个灵感方向按 rank 最多尝试四篇笔记，累计三篇产生可用图的帖子后停止；每篇等距选取最多四图并合并为一次视觉分类。图纸灵感共享 48 个逐图检查槽位 / 48 MiB 预览预算。可用的小红书读取路径全部失败时会诚实终止，不降级为通用网页素材。
 
-源码开发、mock 模式和其他 OpenAI 兼容配置见[开发文档](docs/development.md)。
+源码开发与 mock 模式见[开发文档](docs/development.md)。
 
 ## 研究行为
 
@@ -148,10 +141,10 @@ Windows 安装版首次启动时需要填写 **API 接口地址和 API Key**。�
 
 ```powershell
 pnpm test:coverage
-pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1
+pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/verify-web.ps1
 ```
 
-第一条命令执行 Board 与 Extension 覆盖率门槛；第二条运行发布、PowerShell 安全与进程生命周期测试、评测夹具验证、Python 单元/集成测试、Ruff、Mypy、两个 TypeScript 应用的 lint/类型检查/测试/生产构建，以及打包后 Chrome 扩展 E2E。所有默认测试均使用 Mock/本地 fixture，不调用真实模型或公开搜索网页。
+第一条命令执行 Board 与 Extension 覆盖率门槛；第二条运行 Chrome 扩展、Web Edition 和 Edge 的 lint、类型检查、测试、生产构建及打包扩展 E2E。所有默认测试均使用 Mock/本地 fixture，不调用真实模型或公开搜索网页。
 
 只验证版本化评测集：
 
@@ -161,19 +154,13 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/validate-evaluation-fixtur
 
 ## 完成度与已知边界
 
-当前版本是可安装、可持久化、可备份恢复的 V2.2 系统，不是界面原型。Windows 一键安装程序交付自包含本地服务与生产界面；Chrome 扩展保持独立下载。Agent 四模块边界、七阶段 checkpoint、任务书流程、个人收藏、跨案例对照、权利门禁导出和 Chrome 扩展均已有行为测试。发布门禁包含 Python 与 TypeScript 测试、Ruff、strict Mypy、lint/typecheck、production build、进程、安全、评测夹具、扩展 E2E 和 Windows 安装产物合同；默认测试不调用真实模型或公开网页。完整证据见[发布验证记录](docs/release-evidence-2026-07-28.md)。
+当前版本是可持久化、可备份恢复的 Web Edition，不是界面原型。Agent 四模块边界、七阶段 checkpoint、任务书流程、个人收藏、跨案例对照、权利门禁导出和 Chrome 扩展均已有行为测试。发布门禁覆盖 Board、Extension、Web 和 Edge 的测试、类型检查、构建、扩展 E2E、权限和安全合同；默认测试不调用真实模型或公开网页。完整证据见[发布验证记录](docs/release-evidence-2026-07-28.md)。
 
-产品刻意保持本地优先边界：当前支持 Windows 11 + Google Chrome，一次只运行一个研究任务；实时网页研究需要使用者主动配置自己的 OpenAI 兼容 Provider，并授予所需浏览器权限。小红书视觉研究还需要使用者自己的登录态和独立 ArchResearch Chrome 扩展。未知或受限权利图片只能作为来源卡与链接交付，不能由 Agent 自动升级权利状态。
+产品刻意保持浏览器本地数据边界：一次只运行一个研究任务；网页研究由项目方配置的 Provider 执行，并在需要时请求浏览器权限。小红书视觉研究还需要使用者自己的登录态和独立 ArchResearch Chrome 扩展。未知或受限权利图片只能作为来源卡与链接交付，不能由 Agent 自动升级权利状态。
 
 ## 访问与演示
 
-本仓库提供 Windows 安装程序、完整源码和本地演示入口。按[下载与安装](#下载与安装)完成安装后，参考板默认位于 `http://127.0.0.1:8000/`。安装版的三个纯本地回放入口是：
-
-- 快速找方向：`http://127.0.0.1:8000/?demo=quick`
-- 形成方案依据：`http://127.0.0.1:8000/?demo=balanced`
-- 做跨案例论证：`http://127.0.0.1:8000/?demo=deep`
-
-这些入口不需要 Key，不创建 Workspace 或 ResearchRun，也不请求外部供应商；它们只展示真实产品界面和固定示例数据，不冒充实时网页研究。需要验证持久化闭环时，打开不带 `?demo=` 的正常地址，在默认 `mock` 模式创建工作区和研究即可。
+Web Edition 地址只由项目方私下提供，不写入仓库、Release 或 README。打开网页后可以直接使用完整工作台；需要小红书视觉灵感时，再按上面的扩展步骤完成一次安装与连接。
 
 可直接复制的测试问题：
 

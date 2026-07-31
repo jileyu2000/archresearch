@@ -1118,3 +1118,14 @@
 - 用户授权后的安装器覆盖升级、`--self-test`、`/desktop-health`（2.2.1 / 8000）与 `/health` 均通过；未读取或输出用户 API 地址、Key，扩展未打入安装器。
 - `archresearch-web` 已部署 Worker 版本 `7784b800-0135-461f-a506-d2be1b34f2e0`。线上主页、bundle、`/api/config` 均 200；bundle 精确包含 v2.2.1 extension-only 链接；noindex、frame deny、CSP/Turnstile 安全头和配置不泄露 Provider Key 的检查通过。
 - 本轮未调用内部浏览器、未创建新的 Live Run；M161 正式 Turnstile Quick 仍保留为真人外部验收。
+
+## 2026-07-31 Web-only retirement and alignment
+
+- Updated root `PRODUCT.md`, `docs/architecture.md`, and `docs/demo-flows.md` so public guidance no longer asks ordinary users to install local runtimes or configure a Provider. The local FastAPI/SQLite compatibility layer is explicitly maintainer-only.
+- Migrated `ui-shells.test.ts` and `ui.test.ts` to public Web semantics, removed popup/sidepanel local pairing controls and related CSS, and changed guidance to current-page connection. Focused Extension tests pass 24/24; no Key, endpoint, browser or user data was read.
+- GitHub release cleanup completed: removed Windows installer assets from `v2.2.0` and `v2.2.1`, retained both extension ZIPs, and rewrote Release titles/notes as Chrome extension component instructions. No Web URL was published.
+- The first post-migration packaged E2E run was red only in the obsolete FastAPI workflow: it still opened the deleted manual-pairing UI and timed out. The seven protocol/managed-tab tests passed.
+- Removed the obsolete FastAPI E2E block and its `TestApi`, `requestJson`, pairing-token and unused wait helpers; renamed the retained bridge test so it no longer presents local pairing as the product path. Updated extension product and failure-recovery docs to Web-only terminology.
+- Release contracts passed, `git diff --check` passed, and `scripts/verify-web.ps1` passed: 190 Board / 186 Extension / 7 packaged E2E / 12 Web / 29 Edge; coverage Board 79.01/76.42/84.28/83.18 and Extension 83.40/78.55/85.29/85.74. `.artifacts/` remains untracked and no browser/provider/live Run was touched.
+- Recovery note: the planning catch-up script was attempted with the system `python` alias and failed because Windows only exposed the Microsoft Store placeholder; no project file or runtime state was changed by that failed attempt.
+- Remaining action: re-read `git status`, explicitly stage only intended source/docs/tests, then commit and push the Web-only migration. Do not add `.artifacts/`.

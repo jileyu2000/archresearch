@@ -1,7 +1,6 @@
-# M123 draft: reproduces the established local gate (scripts/verify.ps1) in CI.
-# Unvalidated until the repository is first pushed — treat the first CI run as
-# part of M123 acceptance, not as an already-proven gate. No provider keys are
-# required: every default test uses mock/local fixtures.
+# Web Edition verification gate. The public repository publishes only the
+# separately loaded Chrome extension; the retired Windows installer is not
+# built or uploaded by CI.
 name: verify
 
 on:
@@ -44,13 +43,11 @@ jobs:
           key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: pnpm-${{ runner.os }}-
 
-      - name: Prepare environment file
+      - name: Install Web Edition workspace
         shell: pwsh
-        run: Copy-Item .env.example .env
-
-      - name: Setup workspace (venv, api deps, pnpm install, extension build)
-        shell: pwsh
-        run: ./scripts/setup.ps1
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --dir apps/extension run build
 
       - name: Install Playwright Chromium for packaged Extension E2E
         shell: pwsh
@@ -60,41 +57,19 @@ jobs:
         shell: pwsh
         run: pnpm test:coverage
 
-      - name: Run the full repository gate
+      - name: Run the focused Web Edition gate
         shell: pwsh
-        run: ./scripts/verify.ps1
-
-      - name: Install Inno Setup
-        shell: pwsh
-        run: >
-          winget install --id JRSoftware.InnoSetup --exact --source winget
-          --silent --accept-package-agreements --accept-source-agreements
-          --disable-interactivity
+        run: ./scripts/verify-web.ps1
 
       - name: Build separate Chrome extension package
         shell: pwsh
         run: ./scripts/build-extension-package.ps1
-
-      - name: Build self-contained Windows installer
-        shell: pwsh
-        run: ./scripts/build-windows-installer.ps1
-
-      - name: Smoke installed Windows application
-        shell: pwsh
-        run: ./scripts/test-windows-installer-package.ps1
 
       - name: Upload separate Chrome extension package
         uses: actions/upload-artifact@v4
         with:
           name: archresearch-chrome-extension-only-v2.2.1
           path: .artifacts/releases/archresearch-chrome-extension-only-v2.2.1.zip
-          if-no-files-found: error
-
-      - name: Upload Windows installer
-        uses: actions/upload-artifact@v4
-        with:
-          name: ArchResearch-Windows-x64-Setup-v2.2.1
-          path: .artifacts/releases/ArchResearch-Windows-x64-Setup-v2.2.1.exe
           if-no-files-found: error
 
       - name: Upload test artifacts on failure

@@ -21,14 +21,11 @@ $workflowContracts = @(
     @{ Pattern = "python-version:\s+'3\.12'"; Message = "CI must use the supported Python version." }
     @{ Pattern = "node-version:\s+'24'"; Message = "CI must use the supported Node version." }
     @{ Pattern = 'pnpm test:coverage'; Message = "CI must enforce Board and Extension coverage thresholds." }
-    @{ Pattern = '\./scripts/setup\.ps1'; Message = "CI must prove setup.ps1 from a fresh checkout." }
+    @{ Pattern = 'pnpm install'; Message = "CI must install the Web Edition workspace from a fresh checkout." }
     @{ Pattern = 'pnpm --dir apps/extension exec playwright install chromium'; Message = "CI must install Playwright Chromium for packaged Extension E2E." }
-    @{ Pattern = '\./scripts/verify\.ps1'; Message = "CI must run the authoritative repository gate." }
-    @{ Pattern = '\./scripts/build-windows-installer\.ps1'; Message = "CI must build the self-contained Windows installer." }
-    @{ Pattern = '\./scripts/test-windows-installer-package\.ps1'; Message = "CI must install-smoke and uninstall the packaged Windows application." }
+    @{ Pattern = '\./scripts/verify-web\.ps1'; Message = "CI must run the focused Web Edition gate." }
     @{ Pattern = '\./scripts/build-extension-package\.ps1'; Message = "CI must build the separately distributed Chrome extension package." }
-    @{ Pattern = 'actions/upload-artifact@v4'; Message = "CI must upload the Windows installer artifact." }
-    @{ Pattern = 'ArchResearch-Windows-x64-Setup-v2\.2\.1\.exe'; Message = "CI must publish the clearly named v2.2.1 Windows installer artifact." }
+    @{ Pattern = 'actions/upload-artifact@v4'; Message = "CI must upload the Chrome extension artifact." }
     @{ Pattern = 'archresearch-chrome-extension-only-v2\.2\.1\.zip'; Message = "CI must keep the clearly named v2.2.1 Chrome extension package separate." }
 )
 foreach ($contract in $workflowContracts) {
@@ -38,6 +35,9 @@ foreach ($contract in $workflowContracts) {
 }
 if ($workflow -match 'OPENAI_API_KEY|ARCHRESEARCH_PROVIDER_MODE\s*:\s*live') {
     throw "Default CI must not require or enable live provider credentials."
+}
+if ($workflow -match 'build-windows-installer|test-windows-installer-package|ArchResearch-Windows-x64-Setup') {
+    throw "Public CI must not build or publish the retired Windows installer."
 }
 
 $extensionBuildPath = Join-Path $workspace "scripts\build-extension-package.ps1"
@@ -85,6 +85,31 @@ foreach ($webContract in @(
     }
 }
 
+$webVerifyPath = Join-Path $workspace "scripts\verify-web.ps1"
+if (-not (Test-Path -LiteralPath $webVerifyPath -PathType Leaf)) {
+    throw "Expected scripts/verify-web.ps1 to provide the focused Web Edition gate."
+}
+$webVerify = Get-Content -Raw -LiteralPath $webVerifyPath
+foreach ($webVerifyContract in @(
+    'test:coverage',
+    'apps/extension test:e2e',
+    '@archresearch/web lint',
+    '@archresearch/web typecheck',
+    '@archresearch/web test',
+    '@archresearch/web build',
+    '@archresearch/edge lint',
+    '@archresearch/edge typecheck',
+    '@archresearch/edge test',
+    '@archresearch/edge build'
+)) {
+    if ($webVerify -notmatch [regex]::Escape($webVerifyContract)) {
+        throw "Focused Web Edition gate is missing: $webVerifyContract."
+    }
+}
+if ($webVerify -match 'windows-installer|configure-provider|apps/api/tests') {
+    throw "Focused Web Edition gate must not depend on the retired local deployment."
+}
+
 $edgeConfig = Get-Content -Raw -LiteralPath (
     Join-Path $workspace "apps\edge\wrangler.jsonc"
 ) | ConvertFrom-Json
@@ -129,23 +154,18 @@ foreach ($versionSource in @($pythonProject, $pythonPackage, $pythonApp)) {
 
 $readme = Get-Content -Raw -LiteralPath (Join-Path $workspace "README.md")
 foreach ($readmeContract in @(
-    'Windows 11 和 Google Chrome',
-    'ArchResearch-Windows-x64-Setup-v2\.2\.1\.exe',
-    '安装包不包含 Chrome 扩展',
-    '不需要安装 Python、Node\.js、pnpm 或 PowerShell',
-    'API 接口地址和 API Key',
-    '自动获取可用模型',
-    '自动获取可用模型并测试连接',
-    '\[下载 Windows 安装版 v2\.2\.1\]',
-    '### 需要小红书时',
+    'Web Edition',
+    'Web Edition 访问地址由项目方私下提供',
+    '不需要本地安装',
+    '\[下载 Chrome 扩展 v2\.2\.1\]',
     '\[Chrome 扩展安装说明\]\(docs/chrome-extension\.md\)',
-    '\[从源码运行\]\(docs/development\.md\)'
+    'Chrome Web Store 尚未上架'
 )) {
     if ($readme -notmatch $readmeContract) {
-        throw "README must document the one-click Windows install contract: $readmeContract"
+        throw "README must document the Web Edition distribution contract: $readmeContract"
     }
 }
-$installHeadingIndex = $readme.IndexOf("## 下载与安装", [StringComparison]::Ordinal)
+$installHeadingIndex = $readme.IndexOf("## 网页版与 Chrome 扩展", [StringComparison]::Ordinal)
 $firstScreenshotIndex = $readme.IndexOf("![ArchResearch 首页]", [StringComparison]::Ordinal)
 $positioningHeadingIndex = $readme.IndexOf("## 项目定位", [StringComparison]::Ordinal)
 if (
@@ -153,7 +173,7 @@ if (
     $installHeadingIndex -ge $firstScreenshotIndex -or
     $installHeadingIndex -ge $positioningHeadingIndex
 ) {
-    throw "The Windows download path must appear before screenshots and product architecture."
+    throw "The Web Edition and extension path must appear before screenshots and product architecture."
 }
 foreach ($obsoleteInstallHeading in @(
     "## 快速开始",
@@ -165,8 +185,8 @@ foreach ($obsoleteInstallHeading in @(
         throw "README ordinary-user path must not mix in obsolete section: $obsoleteInstallHeading"
     }
 }
-if ($readme -match 'scripts/setup\.ps1|scripts/configure-autostart\.ps1|scripts/update\.ps1') {
-    throw "Source setup and maintenance commands belong in the development document."
+if ($readme -match 'ArchResearch-Windows-x64-Setup|下载 Windows 安装版|127\.0\.0\.1:8000|scripts/setup\.ps1|scripts/configure-autostart\.ps1|scripts/update\.ps1') {
+    throw "README must not publish the retired local deployment path."
 }
 
 $chromeExtensionGuidePath = Join-Path $workspace "docs\chrome-extension.md"

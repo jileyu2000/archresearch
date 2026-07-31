@@ -10,7 +10,6 @@ Set-Location -LiteralPath $workspace
 
 & $pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/tests/dev-common.tests.ps1
 & $pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/tests/release.tests.ps1
-& $pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/tests/windows-installer.tests.ps1
 & $pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/tests/configure-provider.tests.ps1
 & $pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/tests/process-lifecycle.tests.ps1
 & $pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/tests/autostart.tests.ps1

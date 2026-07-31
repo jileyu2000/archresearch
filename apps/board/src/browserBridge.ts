@@ -38,22 +38,8 @@ export class BrowserBridgeError extends Error {
 
 export function resolveBrowserEndpoint(
   configuredEndpoint = import.meta.env.VITE_ARCHRESEARCH_BROWSER_ENDPOINT,
-  pageUrl = window.location.href,
 ): string {
-  if (configuredEndpoint) return configuredEndpoint
-  try {
-    const currentPage = new URL(pageUrl)
-    if (
-      currentPage.protocol === 'http:'
-      && currentPage.hostname === '127.0.0.1'
-      && currentPage.port
-    ) {
-      return `ws://${currentPage.host}/v1/browser`
-    }
-  } catch {
-    // Fall back to the development default for malformed or non-local page URLs.
-  }
-  return 'ws://127.0.0.1:8000/v1/browser'
+  return configuredEndpoint || 'ws://127.0.0.1:8000/v1/browser'
 }
 
 export function requestBrowserBridge(

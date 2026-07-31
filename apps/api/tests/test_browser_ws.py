@@ -14,7 +14,6 @@ from archresearch_api.browser import (
     CHROME_BOARD_URL,
     BrowserBroker,
     BrowserNavigationError,
-    is_allowed_chrome_board_url,
     open_board_in_chrome,
 )
 from archresearch_api.config import Settings
@@ -199,24 +198,6 @@ def test_open_chrome_board_uses_only_the_fixed_local_connection_url(tmp_path: Pa
     assert response.status_code == 200
     assert response.json() == {"opened": True}
     assert opened_urls == ["http://127.0.0.1:5173/?connect=chrome"]
-
-
-@pytest.mark.parametrize(
-    ("url", "allowed"),
-    [
-        ("http://127.0.0.1:8000/?connect=chrome", True),
-        ("http://127.0.0.1:49152/?connect=chrome", True),
-        ("http://localhost:49152/?connect=chrome", False),
-        ("http://127.0.0.1:49152/private?connect=chrome", False),
-        ("http://127.0.0.1:49152/?connect=chrome&next=https://example.com", False),
-        ("https://127.0.0.1:49152/?connect=chrome", False),
-    ],
-)
-def test_chrome_launcher_accepts_only_the_bounded_installed_loopback_url(
-    url: str,
-    allowed: bool,
-) -> None:
-    assert is_allowed_chrome_board_url(url) is allowed
 
 
 def test_open_chrome_board_reports_when_chrome_is_unavailable(tmp_path: Path) -> None:
