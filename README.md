@@ -2,9 +2,11 @@
 
 [![verify](https://github.com/jileyu2000/archresearch/actions/workflows/verify.yml/badge.svg)](https://github.com/jileyu2000/archresearch/actions/workflows/verify.yml)
 ![version](https://img.shields.io/badge/version-2.2.1-2F5BFF)
-![platform](https://img.shields.io/badge/platform-Web%20%2B%20Chrome-171A18)
+![platform](https://img.shields.io/badge/platform-Web%20%2B%20Chrome%20Extension-171A18)
 
 > 把建筑设计问题变成有出处、能比较、可继续使用的案例答案与图纸灵感板。
+
+> **GitHub 发布内容：ArchResearch Chrome 扩展。** 这是连接 Web Edition 的独立浏览器组件，不是 Windows 本地部署程序；项目介绍、架构和源码说明仍保留在下文。
 
 ArchResearch Web Edition 是为建筑学生和青年设计师制作的公开网页研究工作台。你可以输入一个具体设计问题，附上任务书 PDF 或案例网页；系统会拆解问题、研究公开网页、核对项目正文与图片关系，再把结果整理成可以直接阅读、收藏、对照和导出的研究材料。长期研究记录、收藏和备份保存在当前浏览器中，不需要本地运行时或命令行环境。
 
