@@ -96,3 +96,10 @@
 - 根因是恢复本地扩展时删除了 Web Edition 对应测试，覆盖率阈值仍按旧公共扩展基线保留；本机已稳定复现同一失败。
 - 新增 `apps/extension/tests/screenshot.test.ts`，覆盖成功裁图、无效 viewport、越界区域和 Canvas 不可用；未下调 coverage 阈值，也未改生产代码。
 - 修复后扩展 coverage 为 statements 85.05%、functions 84.50%、lines 87.16%；根级 frontend coverage、lint、typecheck 和完整 `scripts/verify.ps1` 均通过，等待推送后的 PR 重跑。
+
+## 2026-07-31 PR CI recheck
+
+- 已确认本地工作树仍只保留 `.artifacts/build/`、`.artifacts/qa/`、`.artifacts/releases/` 未跟踪产物；没有 reset、checkout、clean 或新增代码修改。
+- GitHub Actions run `30633778406` / job `91166171854` 已于 `2026-07-31 13:31:45 UTC` 成功完成；coverage、完整本地门禁、扩展 ZIP、Windows 安装器和真实安装 smoke 全部通过。
+- PR #11 当前仍为 Draft；没有合并 PR、重发 `v2.2.2` 或调用浏览器。当前等待用户明确决定下一步发布/合并动作。
+- 规划 skill 的 `session-catchup.py` 尝试因本机 Python 别名和后续 Windows 路径解析问题失败；未改变仓库，改为直接读取并同步规划文件。

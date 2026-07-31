@@ -85,8 +85,13 @@ Status: **complete**
 
 - 30 条版本化任务的真实网页批量执行与人工标注需要用户主动启用，并可能产生 Provider 费用。
 - 100+ 独立来源、权利清晰的真实图纸样本仍是外部数据门槛；当前 108 张为确定性合成夹具。
-- GitHub Hosted CI 仍是外部门禁；用户已明确授权本轮 v2.2.2 的提交、推送、tag 与 Release。
+- GitHub Hosted CI run `30633778406` 已于 `2026-07-31 13:31:45 UTC` 成功；coverage、完整本地门禁、安装器构建和 smoke 均通过。
+- PR #11 仍为 Draft；不自动标记 Ready、不合并 PR、不重新发布已有 `v2.2.2` Release。
+
+## Session note
+
+- 规划 skill 的 `session-catchup.py` 在本机未能运行：系统 `python` 命令指向 Microsoft Store 别名，随后仓库虚拟环境调用又发生 Windows 路径解析错误；未写入仓库，已按恢复顺序直接读取规划文件并继续。
 
 ## Next action
 
-本阶段验证、管理记录同步和 `v2.2.2` GitHub Release 已完成；用户下一步从 Release 下载 Windows 安装器与独立 Chrome 扩展 ZIP。
+本阶段验证和管理记录同步已完成；PR #11 的 CI 已转绿，下一步等待用户明确决定是否将 Draft PR 标记 Ready 或合并。

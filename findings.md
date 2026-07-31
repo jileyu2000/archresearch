@@ -63,3 +63,9 @@
 - 默认验证不读取用户 Cookie、Chrome 会话或 Provider Key，不创建或重试真实研究。
 - 不 reset、checkout 或 clean；本轮用户已明确授权提交、推送、tag 和 Release。
 - 本轮只读复核曾假设根级 `tests` 和 `provider_runtime.py` 存在；实际路径分别是 `apps/api/tests`，Provider runtime 定义位于现有 credential 模块。错误命令未写文件，也未重复。
+
+## GitHub Hosted CI coverage correction
+
+- 推送 `367064b` 后，GitHub Actions run `30633778406` 的 coverage 步骤和完整 `verify` job 均成功；job `91166171854` 于 `2026-07-31 13:31:45 UTC` 完成。
+- Hosted runner 还成功完成独立 Chrome 扩展 ZIP、Windows 安装器构建、安装 smoke 和附件上传；没有发现新的代码或发布合同问题。
+- `v2.2.2` Release 仍使用 tag `5637ee0` 和原附件；coverage 测试只收口 PR 门禁，不需要重建或重发 Release。

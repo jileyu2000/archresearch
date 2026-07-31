@@ -100,11 +100,18 @@
 
 ## v2.2.2 GitHub 发布状态
 
-- 分支 `agent/local-release-v2.2.2` 已推送；提交 `5637ee0` 已创建 `v2.2.2` tag。
+- 分支 `agent/local-release-v2.2.2` 已推送；当前最新提交为 `367064b`，`v2.2.2` tag 仍指向发布提交 `5637ee0`。
 - 草稿 PR [#11](https://github.com/jileyu2000/archresearch/pull/11) 已打开，目标为 `main`。
 - 正式 Release [ArchResearch 本地版 v2.2.2](https://github.com/jileyu2000/archresearch/releases/tag/v2.2.2) 已发布，非草稿、非预发布。
 - Release 附件为 Windows 安装器和独立 Chrome 扩展 ZIP；GitHub 侧名称、大小和本地 SHA-256 记录一致，文案未包含生产 Web URL 或 Provider Key。
+- 为修复 PR coverage 门禁，新增 `apps/extension/tests/screenshot.test.ts` 的 9 个裁图行为测试；未修改生产代码，也未降低 coverage 阈值。
+
+## v2.2.2 PR CI 状态
+
+- GitHub Actions `verify` run `30633778406` / job `91166171854` 已于 `2026-07-31 13:31:45 UTC` 完成并成功。
+- Coverage、完整本地门禁、独立扩展 ZIP、Windows 安装器和真实安装 smoke 全部成功；PR #11 仍保持 Draft。
+- 本次 coverage 修复没有改变 `v2.2.2` Release tag 或附件，不重新发布 Release。
 
 ## 当前唯一下一步
 
-用户下一步从 `v2.2.2` Release 下载 Windows 安装器；需要图纸灵感时，再单独下载并加载 Chrome 扩展。当前不自动调用浏览器、不恢复 Web/Edge、不写入 Key 或生产 Web URL。
+PR #11 的 Hosted CI 已通过；保持 Draft，等待用户明确决定是否将 PR 标记为 Ready 或合并。当前不自动合并、不重新发布 `v2.2.2`、不调用浏览器、不恢复 Web/Edge、不写入 Key 或生产 Web URL。
