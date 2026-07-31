@@ -85,8 +85,8 @@ Status: **complete**
 
 - 30 条版本化任务的真实网页批量执行与人工标注需要用户主动启用，并可能产生 Provider 费用。
 - 100+ 独立来源、权利清晰的真实图纸样本仍是外部数据门槛；当前 108 张为确定性合成夹具。
-- GitHub Hosted CI run `30633778406` 已于 `2026-07-31 13:31:45 UTC` 成功；coverage、完整本地门禁、安装器构建和 smoke 均通过。
-- PR #11 仍为 Draft；不自动标记 Ready、不合并 PR、不重新发布已有 `v2.2.2` Release。
+- GitHub Hosted CI run `30636022102` 已于 `2026-07-31 14:09:09 UTC` 成功；coverage、完整本地门禁、安装器构建和 smoke 均通过。
+- PR #11 已标记 Ready 但尚未合并；不自动合并 PR、不重新发布已有 `v2.2.2` Release。
 
 ## Session note
 
@@ -94,4 +94,4 @@ Status: **complete**
 
 ## Next action
 
-本阶段验证和管理记录同步已完成；PR #11 的 CI 已转绿，下一步等待用户明确决定是否将 Draft PR 标记 Ready 或合并。
+本阶段验证和管理记录同步已完成；PR #11 的 CI 已转绿并标记 Ready，下一步等待用户审查后明确决定是否合并。

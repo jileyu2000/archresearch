@@ -69,3 +69,8 @@
 - 推送 `367064b` 后，GitHub Actions run `30633778406` 的 coverage 步骤和完整 `verify` job 均成功；job `91166171854` 于 `2026-07-31 13:31:45 UTC` 完成。
 - Hosted runner 还成功完成独立 Chrome 扩展 ZIP、Windows 安装器构建、安装 smoke 和附件上传；没有发现新的代码或发布合同问题。
 - `v2.2.2` Release 仍使用 tag `5637ee0` 和原附件；coverage 测试只收口 PR 门禁，不需要重建或重发 Release。
+
+## GitHub PR ready state
+
+- 管理记录提交 `d52da0d` 已推送；PR #11 已从 Draft 标记为 Ready，仍未合并，GitHub 报告为 mergeable。
+- 最新 Hosted CI run `30636022102` / job `91173717123` 于 `2026-07-31 14:09:09 UTC` 成功；文档状态同步没有引入代码或发布合同变化。

@@ -103,3 +103,10 @@
 - GitHub Actions run `30633778406` / job `91166171854` 已于 `2026-07-31 13:31:45 UTC` 成功完成；coverage、完整本地门禁、扩展 ZIP、Windows 安装器和真实安装 smoke 全部通过。
 - PR #11 当前仍为 Draft；没有合并 PR、重发 `v2.2.2` 或调用浏览器。当前等待用户明确决定下一步发布/合并动作。
 - 规划 skill 的 `session-catchup.py` 尝试因本机 Python 别名和后续 Windows 路径解析问题失败；未改变仓库，改为直接读取并同步规划文件。
+
+## 2026-07-31 PR ready and latest CI
+
+- 管理文档提交 `d52da0d` 已推送，PR #11 已成功标记为 Ready；GitHub 连接器权限不足时改用已认证 `gh` CLI 完成状态变更。
+- 最新 run `30636022102` / job `91173717123` 已于 `2026-07-31 14:09:09 UTC` 成功完成；coverage、完整门禁、扩展 ZIP、Windows 安装器和真实安装 smoke 全部通过。
+- 期间尝试读取运行中 job 日志时 GitHub 返回 404 `BlobNotFound`，因为日志尚未生成；未取消或重跑该 run，随后 run 正常完成。
+- 当前未合并 PR、未重发 `v2.2.2`、未调用浏览器；下一步等待用户审查并明确决定是否合并。
