@@ -7,9 +7,10 @@ from typing import Any
 
 import pytest
 
-from archresearch_api.provider_credentials import ACCOUNT, SERVICE, SuoxieProviderConfig
+from archresearch_api.provider_credentials import ACCOUNT, SERVICE, ProviderConfig
 from archresearch_api.provider_setup import (
     ProviderCapabilityError,
+    ProviderProbePayload,
     configure_provider,
     main,
     probe_provider,
@@ -42,8 +43,17 @@ class FakeResponses:
 
 
 class FakeClient:
-    def __init__(self, output: list[Any]) -> None:
+    def __init__(
+        self,
+        output: list[Any],
+        model_ids: list[str] | None = None,
+    ) -> None:
         self.responses = FakeResponses(output)
+        self.models = SimpleNamespace(
+            list=lambda: SimpleNamespace(
+                data=[SimpleNamespace(id=model_id) for model_id in (model_ids or ["gpt-5.6-sol"])]
+            )
+        )
 
 
 def test_probe_requires_medium_structured_responses_without_web_search() -> None:
@@ -54,11 +64,15 @@ def test_probe_requires_medium_structured_responses_without_web_search() -> None
         factory_calls.append(kwargs)
         return client
 
-    result = probe_provider("sk-test", SuoxieProviderConfig(), factory)
+    result = probe_provider(
+        "sk-test",
+        ProviderConfig(base_url="https://api.deepseek.com/v1"),
+        factory,
+    )
 
     assert result.capability == "responses.structured_output"
     assert result.model == "gpt-5.6-sol"
-    assert factory_calls == [{"api_key": "sk-test", "base_url": "https://suoxie.codes/v1"}]
+    assert factory_calls == [{"api_key": "sk-test", "base_url": "https://api.deepseek.com/v1"}]
     request = client.responses.requests[0]
     assert request["model"] == "gpt-5.6-sol"
     assert request["reasoning"] == {"effort": "medium"}
@@ -70,7 +84,11 @@ def test_probe_rejects_a_response_without_a_message() -> None:
     client = FakeClient([SimpleNamespace(type="reasoning")])
 
     with pytest.raises(ProviderCapabilityError, match="structured output"):
-        probe_provider("sk-test", SuoxieProviderConfig(), lambda **_: client)
+        probe_provider(
+            "sk-test",
+            ProviderConfig(base_url="https://api.moonshot.cn/v1"),
+            lambda **_: client,
+        )
 
 
 def test_shared_provider_setup_validates_before_saving_for_the_desktop(
@@ -80,6 +98,7 @@ def test_shared_provider_setup_validates_before_saving_for_the_desktop(
     client = FakeClient([SimpleNamespace(type="message")])
 
     result = configure_provider(
+        "https://relay.example/v1",
         "  sk-private-value  ",
         data_dir=tmp_path,
         keyring_backend=keyring,
@@ -88,7 +107,121 @@ def test_shared_provider_setup_validates_before_saving_for_the_desktop(
 
     assert result.capability == "responses.structured_output"
     assert keyring.get_password(SERVICE, ACCOUNT) == "sk-private-value"
-    assert "sk-private-value" not in (tmp_path / "provider.json").read_text(encoding="utf-8")
+    stored = (tmp_path / "provider.json").read_text(encoding="utf-8")
+    assert "sk-private-value" not in stored
+    assert "https://relay.example/v1" in stored
+    assert "gpt-5.6-sol" in stored
+
+
+def test_setup_gets_the_model_name_from_the_upstream_model_list(
+    tmp_path: Path,
+) -> None:
+    keyring = FakeKeyring()
+    client = FakeClient(
+        [SimpleNamespace(type="message")],
+        model_ids=["text-embedding-3-large", "deepseek-chat"],
+    )
+
+    result = configure_provider(
+        "https://api.deepseek.com/v1",
+        "sk-private-value",
+        data_dir=tmp_path,
+        keyring_backend=keyring,
+        client_factory=lambda **_: client,
+    )
+
+    assert result.model == "deepseek-chat"
+    stored = (tmp_path / "provider.json").read_text(encoding="utf-8")
+    assert "deepseek-chat" in stored
+    assert "text-embedding-3-large" not in stored
+
+
+def test_setup_skips_an_incompatible_listed_model_before_saving(
+    tmp_path: Path,
+) -> None:
+    response_models: list[str] = []
+
+    class ModelResponses:
+        def parse(self, **kwargs: Any) -> Any:
+            response_models.append(kwargs["model"])
+            if kwargs["model"] == "broken-model":
+                raise RuntimeError("unsupported")
+            return SimpleNamespace(output_parsed={"status": "ok"})
+
+    class FailingChatCompletions:
+        def parse(self, **_: Any) -> Any:
+            raise RuntimeError("unsupported")
+
+    client = SimpleNamespace(
+        models=SimpleNamespace(
+            list=lambda: SimpleNamespace(
+                data=[
+                    SimpleNamespace(id="broken-model"),
+                    SimpleNamespace(id="deepseek-chat"),
+                ]
+            )
+        ),
+        responses=ModelResponses(),
+        chat=SimpleNamespace(completions=FailingChatCompletions()),
+    )
+
+    result = configure_provider(
+        "https://api.deepseek.com/v1",
+        "sk-private-value",
+        data_dir=tmp_path,
+        keyring_backend=FakeKeyring(),
+        client_factory=lambda **_: client,
+    )
+
+    assert response_models == ["broken-model", "deepseek-chat"]
+    assert result.model == "deepseek-chat"
+    assert "deepseek-chat" in (tmp_path / "provider.json").read_text(encoding="utf-8")
+
+
+def test_probe_falls_back_to_chat_completions_structured_output() -> None:
+    responses_requests: list[dict[str, Any]] = []
+    chat_requests: list[dict[str, Any]] = []
+
+    class FailingResponses:
+        def parse(self, **kwargs: Any) -> Any:
+            responses_requests.append(kwargs)
+            raise RuntimeError("responses endpoint is not supported")
+
+    class ChatCompletions:
+        def parse(self, **kwargs: Any) -> Any:
+            chat_requests.append(kwargs)
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            parsed=ProviderProbePayload(status="ok"),
+                        )
+                    )
+                ]
+            )
+
+    client = SimpleNamespace(
+        responses=FailingResponses(),
+        chat=SimpleNamespace(completions=ChatCompletions()),
+    )
+
+    result = probe_provider(
+        "sk-test",
+        ProviderConfig(
+            base_url="https://api.deepseek.com/v1",
+            research_model="deepseek-chat",
+            vision_model="deepseek-chat",
+        ),
+        lambda **_: client,
+    )
+
+    assert result.model == "deepseek-chat"
+    assert result.api_protocol == "chat_completions"
+    assert result.capability == "chat_completions.structured_output"
+    assert len(responses_requests) == 1
+    assert chat_requests[0]["model"] == "deepseek-chat"
+    assert chat_requests[0]["response_format"] is ProviderProbePayload
+    assert "reasoning_effort" not in chat_requests[0]
 
 
 def test_cli_success_tests_before_storing_and_never_prints_the_key(tmp_path: Path) -> None:
@@ -98,7 +231,12 @@ def test_cli_success_tests_before_storing_and_never_prints_the_key(tmp_path: Pat
     stderr = io.StringIO()
 
     exit_code = main(
-        ["--data-dir", str(tmp_path)],
+        [
+            "--data-dir",
+            str(tmp_path),
+            "--base-url",
+            "https://api.deepseek.com/v1",
+        ],
         stdin=io.StringIO("sk-private-value\n"),
         stdout=stdout,
         stderr=stderr,
@@ -112,6 +250,7 @@ def test_cli_success_tests_before_storing_and_never_prints_the_key(tmp_path: Pat
     combined = stdout.getvalue() + stderr.getvalue()
     assert "sk-private-value" not in combined
     assert "responses.structured_output" in stdout.getvalue()
+    assert "https://api.deepseek.com/v1" not in stdout.getvalue()
 
 
 def test_cli_probe_failure_preserves_existing_credential_and_config(tmp_path: Path) -> None:
@@ -126,7 +265,12 @@ def test_cli_probe_failure_preserves_existing_credential_and_config(tmp_path: Pa
         raise RuntimeError("Authorization failed for sk-private-value")
 
     exit_code = main(
-        ["--data-dir", str(tmp_path)],
+        [
+            "--data-dir",
+            str(tmp_path),
+            "--base-url",
+            "https://api.moonshot.cn/v1",
+        ],
         stdin=io.StringIO("sk-private-value\n"),
         stdout=stdout,
         stderr=stderr,
@@ -143,7 +287,26 @@ def test_cli_probe_failure_preserves_existing_credential_and_config(tmp_path: Pa
     assert "连接测试失败" in stderr.getvalue()
 
 
-def test_cli_rejects_empty_stdin_before_creating_a_client(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("argv", "stdin_value"),
+    [
+        (["--data-dir", "{data_dir}"], "sk-private-value\n"),
+        (
+            [
+                "--data-dir",
+                "{data_dir}",
+                "--base-url",
+                "https://relay.example/v1",
+            ],
+            "\n",
+        ),
+    ],
+)
+def test_cli_requires_endpoint_and_key_before_creating_a_client(
+    tmp_path: Path,
+    argv: list[str],
+    stdin_value: str,
+) -> None:
     calls = 0
 
     def factory(**_: str) -> FakeClient:
@@ -152,8 +315,8 @@ def test_cli_rejects_empty_stdin_before_creating_a_client(tmp_path: Path) -> Non
         return FakeClient([])
 
     exit_code = main(
-        ["--data-dir", str(tmp_path)],
-        stdin=io.StringIO("\n"),
+        [value.format(data_dir=tmp_path) for value in argv],
+        stdin=io.StringIO(stdin_value),
         stdout=io.StringIO(),
         stderr=io.StringIO(),
         keyring_backend=FakeKeyring(),

@@ -1,19 +1,18 @@
 from __future__ import annotations
 
-import ipaddress
 import json
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, Protocol
-from urllib.parse import urlparse
 
 from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, field_validator
 
 SERVICE = "ArchResearch/suoxie"
 ACCOUNT = "api-key"
 CONFIG_FILENAME = "provider.json"
+DEFAULT_PROVIDER_MODEL = "gpt-5.6-sol"
 
 
 class ProviderConfigurationError(RuntimeError):
@@ -32,40 +31,34 @@ class KeyringBackend(Protocol):
     def delete_password(self, service: str, account: str) -> None: ...
 
 
-class SuoxieProviderConfig(BaseModel):
+class ProviderConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", validate_default=True)
 
-    provider: Literal["suoxie"] = "suoxie"
-    name: str = Field(default="梭子蟹 API", min_length=1, max_length=100)
-    base_url: AnyHttpUrl = AnyHttpUrl("https://suoxie.codes/v1")
-    research_model: str = Field(default="gpt-5.6-sol", min_length=1, max_length=100)
-    vision_model: str = Field(default="gpt-5.6-sol", min_length=1, max_length=100)
+    provider: str = Field(default="openai-compatible", min_length=1, max_length=100)
+    name: str = Field(default="OpenAI 兼容 API", min_length=1, max_length=100)
+    base_url: AnyHttpUrl
+    research_model: str = Field(default=DEFAULT_PROVIDER_MODEL, min_length=1, max_length=100)
+    vision_model: str = Field(default=DEFAULT_PROVIDER_MODEL, min_length=1, max_length=100)
+    api_protocol: Literal["responses", "chat_completions"] = "responses"
 
     @field_validator("base_url")
     @classmethod
-    def require_public_https(cls, value: AnyHttpUrl) -> AnyHttpUrl:
-        parsed = urlparse(str(value))
-        if parsed.scheme != "https" or parsed.username or parsed.password or not parsed.hostname:
-            raise ValueError("Provider base URL must be public HTTPS without credentials")
-        try:
-            address = ipaddress.ip_address(parsed.hostname)
-        except ValueError:
-            return value
-        if not address.is_global:
-            raise ValueError("Provider base URL must not target a private address")
+    def reject_embedded_credentials(cls, value: AnyHttpUrl) -> AnyHttpUrl:
+        if value.username or value.password:
+            raise ValueError("Provider base URL must not contain credentials")
         return value
 
 
 @dataclass(frozen=True)
 class ProviderRuntime:
-    config: SuoxieProviderConfig
+    config: ProviderConfig
     api_key: str
 
 
-ConfigWriter = Callable[[Path, SuoxieProviderConfig], None]
+ConfigWriter = Callable[[Path, ProviderConfig], None]
 
 
-def write_provider_config(data_dir: Path, config: SuoxieProviderConfig) -> None:
+def write_provider_config(data_dir: Path, config: ProviderConfig) -> None:
     data_dir.mkdir(parents=True, exist_ok=True)
     target = data_dir / CONFIG_FILENAME
     temporary = target.with_suffix(".tmp")
@@ -77,17 +70,17 @@ def write_provider_config(data_dir: Path, config: SuoxieProviderConfig) -> None:
     temporary.replace(target)
 
 
-def load_provider_config(data_dir: Path) -> SuoxieProviderConfig | None:
+def load_provider_config(data_dir: Path) -> ProviderConfig | None:
     try:
         payload: Any = json.loads((data_dir / CONFIG_FILENAME).read_text(encoding="utf-8"))
-        return SuoxieProviderConfig.model_validate(payload)
+        return ProviderConfig.model_validate(payload)
     except (FileNotFoundError, OSError, ValueError):
         return None
 
 
 def commit_provider_config(
     data_dir: Path,
-    config: SuoxieProviderConfig,
+    config: ProviderConfig,
     api_key: str,
     keyring_backend: KeyringBackend,
     *,

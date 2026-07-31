@@ -1048,3 +1048,84 @@
 - GitHub 发布前检查确认 `gh` 已认证为 `jileyu2000`，远端为 `jileyu2000/archresearch`、默认分支 `main`。工作树中只有 M167 的 README、两份新说明、发布合同和规划记录需要提交；`.artifacts/build`、QA 与 Release 产物继续明确排除。
 - 独立 Markdown 链接检查确认 README 和两份新说明的全部本地链接存在；复跑 release contracts 与 `git diff --check` 继续通过。一次临时检查脚本因 README 位于仓库根目录、父路径为空而在 `Join-Path` 处停止，改用 `.` 作为根文件基准后通过，不是仓库代码或文档故障。
 - 提交 `193f397` 已推送到 `codex/simplify-readme-installation`。GitHub 连接器创建 PR 时因 integration 权限返回 403，按发布 skill 回退到已认证 `gh`，成功创建 draft PR #5；两套 Hosted `verify` 已启动。PR 临时正文文件已从 `.artifacts` 删除，既有本地构建、QA 与 Release 产物未提交。
+
+## 2026-07-30 M168 port-conflict recovery start
+
+- 用户真实安装 `v2.2.0` 后首次打开出现固定端口 `8000` 被占用错误。只读诊断确认占用者是当前工作区此前启动的 uvicorn 源码服务 PID `39860`，而正式程序文件已完整安装。
+- 用户授权先关闭旧开发服务并继续修复启动器。M168 计划采用“当前机器恢复 → 失败测试 → 动态回环端口实现 → 安装 smoke/发布”的顺序，绝不结束身份不明的外部占用程序。
+- planning-with-files catchup 首次调用系统 `python` 失败，因为本机 App Execution Alias 找不到 Python；下一次改用项目 `.venv` 或 Codex bundled runtime 的显式路径，不重复相同命令。
+- 使用 Codex bundled Python 显式路径后 catchup 成功，只提示当前新诊断的一条未同步工具记录，相关事实已写入规划文件。随后核对 `stop.ps1` 时读取 `.archresearch` 所有根文件的命令范围过宽，误将 SQLite 数据库作为文本输出；文件未被修改，后续只读取精确的 `dev-processes.json`，不再遍历数据文件内容。
+- 精确状态确认 API PID `39860`/端口 `8000` 与 Board PID `38180`/端口 `5173` 均属于工作区记录；`scripts/stop.ps1` 按工作区命令行边界安全停止二者并删除进程状态，复核 `8000` 已释放。随后尝试用 shell `Start-Process` 打开已安装 EXE 被执行环境 policy 拒绝，程序并未启动；下一次改用 Windows 界面控制，不重复该命令。
+- 完整读取 Computer Use guidance/confirmations 后，通过已登记的安装路径启动现有 ArchResearch；用户此前已明确授权该动作。唯一窗口为“ArchResearch · 首次配置”，端口冲突提示未复现，当前机器已恢复到正常的 Key-only 首次配置步骤。未读取、输入或传输用户 Key。
+- 已先修改测试而未动生产代码：API 测试要求占用首选端口时选择空闲端口、所选端口贯穿健康接口和 Chrome URL；浏览器测试约束动态 URL 只能是严格 127.0.0.1 页面；Board 测试要求从安装页 origin 派生 WebSocket；安装器合同要求保留 8000 首选但具备自动恢复。首次红灯命令假设仓库 `.venv` 存在而立即失败，实际没有该路径；下一次改用已验证可用的 Codex bundled Python。
+- Codex bundled Python 本身没有 pytest；检查 `dev-common.ps1` 后确认门禁实际优先使用 `apps/api/.venv/Scripts/python.exe`，该环境含 pytest 8.4.2。由此取得有效 Python 红灯：`select_desktop_port` 与 `is_allowed_chrome_board_url` 均不存在；Board 红灯得到固定 8000 而非 49152；安装器红灯缺少端口恢复合同。
+- 第一轮最小实现加入严格动态 loopback Chrome URL、端口可用性/选择、用户数据目录端口状态、健康实例复用、动态 create_app/uvicorn/Chrome 线程参数，以及 Board 从安装页 origin 派生 WebSocket。复跑 API/浏览器 34 项与 Board 7 项通过；安装器合同因期望 `desktop_board_url`、实现直接调用 `installed_chrome_board_url` 而失败，下一步在 desktop 层提供并统一使用该明确入口。
+- desktop 层统一入口补齐后，API/浏览器 34 项、Board 7 项与 Windows installer contracts 全绿。随后首轮静态检查被测试中已不再使用的 `DESKTOP_PORT` import 拦截；这是测试改动产生的孤立 import，已定点删除后复跑，不使用自动修复。
+- Python ruff、strict mypy、Board ESLint 与 TypeScript build 已全绿。新增端口状态幂等测试覆盖“记录的备用端口健康则直接复用”和“记录陈旧但旧版默认 8000 是已验证安装实例则回退复用”；API/浏览器聚焦集增至 36 项并继续全绿。
+- 扩展 manifest/本地桥审计确认 `127.0.0.1` 权限匹配任意端口，动态安装端口不需新增权限。第一次版本扫描误把不存在的仓库根 `pyproject.toml` 作为 rg 参数而返回 1；改为全树精确扫描后确认产品版本面仍统一在公开 `2.2.0`。M168 修复将发布不可变的新 patch `v2.2.1`，不移动或覆盖旧 Release。
+- `v2.2.1` 发布合同先行红灯已成立：release test 在 CI 安装器 artifact 仍为 v2.2.0 处停止，Board 107 项中只有默认扩展下载链接仍为 v2.2.0 的一项失败，其余 106 项通过。下一步同步生产版本面和下载地址后复跑。
+- API、Board、Web、Edge、Extension package/manifest、README、CI artifact 名和 Board extension-only URL 已统一升到 `2.2.1`；旧 tag/Release 未改。release contracts 与 Board `App` + browserBridge 共 114 项转绿，下一步执行权威完整门禁与真实安装冲突 smoke。
+- 权威门禁首轮在用户追加 UI 缺陷时停止继续使用；停止前 release/dev/installer/provider/process/autostart/evaluation 合同与 API 374 项均通过，随后 ruff format check 精确指出本轮改动涉及的 5 个 Python 文件需要格式化并 exit 1。尚未进入前端门禁；下一轮先修首次配置按钮文字并运行 ruff formatter，再从头执行。
+- 用户实机截图确认首次配置的两个按钮轮廓存在但文字为空白。M168 增加“首次配置可读”合同；不要求或代用户输入 Key，修复后通过 Windows UI 截图验证。
+- Impeccable setup 因缺少 `PRODUCT.md` 暂停 UI 改动；完整读取 init/product register、既有 DESIGN 与 README 后，所有战略字段均可从已批准文档直接恢复。已新增根级 `PRODUCT.md`，仅固化现有 product register、建筑学生/青年设计师用户、克制/可信/轻快性格、本地优先与 WCAG AA 核心流程原则，不引入新功能。
+- Impeccable live 首次配置规则已读取；仓库是多 workspace，但用户实际产品页面由 `apps/board/index.html` 与 `apps/web/index.html` 两个 Vite shell 承载，配置将只覆盖这两个入口，不注入扩展 popup/sidepanel 或生成产物。下一步先运行 CSP 只读检测，再决定是否只写无害 config。
+- 用户要求提交前再完成 Windows 应用图标：当前黄钥匙/白板图标与主界面不一致。M168 增加多尺寸蓝图制图语言图标验收，端口、按钮与图标全部实机确认前不得提交。
+- Impeccable CSP 检测返回 `shape: null`，无需修改任何生产安全头；已写入 `.impeccable/live/config.json`，只覆盖 Board/Web 两个 Vite HTML shell 并标记 CSP checked。Init blocker 至此闭合，恢复首次配置 UI 与 Windows 图标修复。
+- 按钮可读性合同先红在缺少显式白色前景；首次配置动作已从受系统主题影响的 `ttk.Button` 改为标准 `tk.Button`，主按钮固定蓝图蓝/纸白，次按钮固定纸白/石墨，并明确 active/disabled 色与焦点参与，installer contract 和 ruff 转绿。
+- 图标合同先红在缺少 `scripts/build-windows-icon.py`；现已增加确定性 Pillow 多尺寸 ICO 生成器，PyInstaller `--icon` 与 Inno `SetupIconFile` 都接入同一产物。生成的 `.artifacts/qa/m168/ArchResearch.ico` 和 256px PNG 预览通过脚本/contract/ruff，未提交 QA 产物。
+- 第二轮权威门禁通过 release/dev/installer/provider/process/autostart/evaluation、API 374 项、ruff check/format，随后 strict mypy 在 `tk.Button` 不存在 `disabledbackground` 构造参数处失败。修复改为禁用/恢复动作时显式切换 `background`，保留合法的 `disabledforeground`；下一轮从头复跑，不重复无效参数。
+- 禁用背景修正后的首次聚焦检查只红在 ruff 需要机械换行；运行 formatter 后 ruff、strict mypy 与 Windows installer contracts 全绿。下一步重新执行完整门禁。
+- 修正后的权威 `scripts/verify.ps1` 完整重跑 exit 0：API 374 / Board 191 / Extension 189 / Web 12 / Edge 28 / packaged Extension E2E 8，并通过 release/installer/Provider/process/autostart/evaluation 合同、Ruff、strict Mypy、全部 TypeScript lint/typecheck/test/build 与 Wrangler dry-run。下一步构建真实 `v2.2.1` 安装器与独立扩展包，再做安装升级、端口冲突和窗口/快捷方式图标实机验收；三项未全部确认前不提交。
+- v2.2.1 安装器与独立扩展包均已构建；Windows 安装器 smoke（静默安装、精简 PATH 自检、排除扩展、卸载）通过。用户追问 Key-only 的端点边界后复核确认：`SuoxieProviderConfig` 固定默认 `https://suoxie.codes/v1`，本地配置页不提供端点输入；这不是从 Key 自动发现的通用机制。提交前必须由用户确认继续保持该内置端点，还是改为允许用户输入任意 OpenAI 兼容端点。
+- 用户决定改为“API 接口地址 + API Key”双项配置。M169 先以 Provider/CLI/启动、Windows 首次界面与 README 合同获得红灯，再把本地 `ProviderConfig` 泛化为用户必填 HTTP(S) 地址（无供应商、域名或公网白名单），保存前用该地址与 Key 执行既有结构化输出能力探测。旧梭子蟹本地配置继续可读；新配置与 Key 只有探测成功后才写入。定向 Python 28 项、Windows installer contracts、release contracts、Ruff、format 与 strict Mypy 全绿；下一步完整门禁、重建安装器并做首次配置实机验收。
+- M169 权威 `scripts/verify.ps1` 完整重跑 exit 0：379 API / 191 Board / 189 Extension / 12 Web / 28 Edge / 8 packaged E2E，连同 release/installer/Provider/process/autostart/evaluation 合同、Ruff、strict Mypy、全部 TypeScript lint/typecheck/test/build 和 Wrangler dry-run 均通过。`HANDOFF.md` 已收敛为本地用户端点与 Key、Web 端独立 Cloudflare Provider 的真实架构；下一步重建 v2.2.1 安装器与扩展 ZIP，并做最终 Windows 实机配置和图标验收。
+- 最终 `v2.2.1` 安装器重建、独立扩展 ZIP 重建、真实静默安装/精简 PATH 自检/扩展排除/卸载 smoke 均通过。经用户当次 Windows UI 授权，实机安装后首次配置窗口显示“连接你的研究接口”、API 接口地址与 API Key 两个输入框、连接测试说明、可读的“验证并开始使用”/“取消”按钮及新的蓝图图标；空白提交显示“请输入 API 接口地址后再继续”，未输入用户地址或 Key。标题栏可见新图标，空白配置窗已关闭；测试安装暂保留在本机，未写入配置或用户数据，若需卸载必须另获用户确认。
+- M168/M169 本地提交后来 amend 为当前真实提交 `7486c75`（`Fix local installer startup and provider setup`）：范围不含 `.artifacts`、本地数据或凭据，尚未推送、创建 PR、合并、tag、Release 或部署 Worker。
+
+## 2026-07-31 M170 windowed launcher logging recovery
+
+- 用户实机使用自己的第二家中转站通过连接测试后，安装版在启动本地 Uvicorn 时崩溃；截图错误为 `Unable to configure formatter 'default'` / `NoneType ... isatty`。第二家接口已经通过能力探测，崩溃不是新的连接失败。
+- 只读恢复完成：`HANDOFF.md`、`AGENTS.md`、活动计划和最近 findings/progress 已读取；分支为 `codex/fix-installer-port-conflict`，HEAD `7486c75`，tracked 工作树干净，仅有三个既有 `.artifacts` 未跟踪目录。
+- planning catchup 再次调用系统 `python` alias 失败（Microsoft Store alias，无 PATH Python）；未重复同一命令。一次 `rg` 读取命令因 Windows 不接受传入的 `*.py` 路径参数而 exit 1，已改用目录搜索。
+- 下一步：先在 `apps/api/tests/test_desktop.py` 写失败行为测试，要求安装版 Uvicorn 不加载默认控制台日志配置；红灯后最小加入 `log_config=None`，再执行定向与完整验证。
+- 用户追加要求提升第一家中转站一类接口的兼容性。审计确认固定模型名与 Responses-only 是现行主要限制，而公开建筑检索已有独立本地 Chrome 路径；M171 将先以模型配置、协议协商和统一 adapter 行为测试取得红灯，再实现最小兼容层。
+- 用户进一步明确模型名称必须从上游获取、不能自行填写。尚未写生产代码；已把测试与计划修正为 `/models` 自动发现和有界能力探测，首次配置继续只输入接口地址与 Key。
+- 红灯证据成立：windowed desktop 测试因缺少 `log_config` 失败；Provider 测试证明旧实现固定 `gpt-5.6-sol`、拒绝 `api_protocol` 且不回退 Chat；新 adapter 模块不存在；Windows/配置脚本/README 合同均因缺少自动模型发现说明失败。
+- 最小实现已加入 `log_config=None`、上游模型发现、最多 6 个候选的 Responses→Chat Completions 协商、持久化模型/协议和统一结构化 adapter。首轮 35 项 Python 定向测试及 Windows installer/configure-provider/release contracts 转绿；Ruff check 与 strict Mypy 通过，formatter 已机械整理 5 个文件。
+- 补强后的 37 项定向测试通过：首个模型不兼容时继续探测第二个、旧配置缺少协议字段时默认 Responses、Chat adapter 同时覆盖纯文本和图像输入。静态复核为 Ruff/format、strict Mypy、三组 PowerShell 合同与 `git diff --check` 全绿。
+- 权威 `scripts/verify.ps1` exit 0：388 API / 191 Board / 189 Extension / 12 Web / 28 Edge / 8 packaged E2E，并通过 release/installer/Provider/process/autostart/evaluation、Ruff、strict Mypy、全部 TypeScript lint/typecheck/test/build 与 Wrangler dry-run。默认测试未调用真实 Provider。
+- `v2.2.1` 安装器和独立扩展 ZIP 已重建。安装器 69,686,394 bytes，SHA-256 `3C55C55AF66052EA7A05F041BD9506392317836010785BDB78D234FC7E1385FB`，Authenticode `NotSigned`；扩展 ZIP 22,317 bytes，SHA-256 `9327F89BD3B4CEB149F4FA28F2A986B39A88E18DB91FCDD833B8EF1CEA4D60AD`。
+- 新 onedir 在精简 PATH 下 `--self-test` exit 0，递归扫描未发现扩展 `manifest.json`。本机已有 ArchResearch 安装，正式 package smoke 会按脚本合同拒绝覆盖；下一步需用户明确授权用新安装器升级现有程序，再验证已保存配置可直接启动且不再出现 Uvicorn formatter 崩溃。不得读取或打印用户端点与 Key。
+
+## 2026-07-31 M172 Web visual research failure recovery
+
+- 用户截图显示公共 Web 的“小红书图纸灵感” Run 已进入 `failed` 终态。未读取浏览器 IndexedDB、用户 Key 或端点，也未调用内部浏览器；Cloudflare 只读部署列表确认当前生产版本仍为 `0d94ed1e-7807-49fd-b2fc-73c2f00bc1c9`。
+- 代码审计发现视觉分析阶段统一使用 5 分钟 Workflow step 上限，但最多要串行处理 48 个图像槽位（每批 4 张）。该上限可在正常 Provider 延迟下把尚未完成的 Run 误判为失败。
+- 已先修改 Edge Workflow 行为测试并加入 `workflowStageTimeout()`，随后让 `ResearchWorkflow` 使用 `20 minutes` 的分析上限、其他阶段仍为 `5 minutes`。`pnpm exec vitest run src/workflow.test.ts` 4/4、Edge typecheck 与 lint 均通过。
+- 当前未部署、未创建新的真实 Run、未提交本轮改动。下一步先补 Provider 视觉请求的大小/失败边界测试与错误阶段可定位检查，再运行 Edge/Web 定向门禁；只有用户明确继续公开发布时才部署 Worker。
+
+## 2026-07-31 packaged startup recovery
+
+- 用户已明确授权覆盖现有安装。第一次实际启动暴露出此前静态 `--self-test` 未覆盖的迁移错误：PyInstaller `base_library.zip` 中的 `database.py` 找不到资源根目录的 `alembic.ini`，Uvicorn 在 lifespan 前以 exit 3 结束。
+- 已先加入冻结 `_MEIPASS` 资源路径失败测试，再让 `Database.migrate()` 从 `_MEIPASS/alembic.ini` 读取配置；源码模式路径保持不变。Ruff、迁移、桌面和 Provider 启动定向测试全绿。
+- v2.2.1 安装器已重建并覆盖现有安装；`--self-test`、`/desktop-health` 和 `/health` 实际启动 smoke 均通过，验证后已停止测试进程。未读取或打印用户端点与 Key。
+- 下一步：运行完整 `scripts/verify.ps1`，显式 stage 源码/测试/文档，提交并推送本地与 Edge 修改；发布 v2.2.1 资产后再部署 Worker，避免网页扩展下载链接指向不存在的 Release。
+
+## 2026-07-31 发布与网页部署完成
+
+- 用户已授权覆盖安装；提交 `1695973` 已推送到 `codex/fix-installer-port-conflict`，本地完整门禁 exit 0（388 API / 191 Board / 189 Extension / 12 Web / 28 Edge / 8 packaged E2E）。同 SHA Hosted Run `30572135856` success；重复 Run `30572207240` 卡在完整门禁且无进展，已取消。
+- annotated tag `v2.2.1` 已创建并推送，GitHub Release 已发布。Windows 安装器 SHA-256 为 `FEC335DB8BE9F7E2943BE40F264EBDBD64AE673F1F37CA34051747EDC4661A68`；独立 Chrome 扩展 ZIP SHA-256 为 `9327F89BD3B4CEB149F4FA28F2A986B39A88E18DB91FCDD833B8EF1CEA4D60AD`。
+- 用户授权后的安装器覆盖升级、`--self-test`、`/desktop-health`（2.2.1 / 8000）与 `/health` 均通过；未读取或输出用户 API 地址、Key，扩展未打入安装器。
+- `archresearch-web` 已部署 Worker 版本 `7784b800-0135-461f-a506-d2be1b34f2e0`。线上主页、bundle、`/api/config` 均 200；bundle 精确包含 v2.2.1 extension-only 链接；noindex、frame deny、CSP/Turnstile 安全头和配置不泄露 Provider Key 的检查通过。
+- 本轮未调用内部浏览器、未创建新的 Live Run；M161 正式 Turnstile Quick 仍保留为真人外部验收。
+
+## 2026-07-31 Web-only retirement and alignment
+
+- Updated root `PRODUCT.md`, `docs/architecture.md`, and `docs/demo-flows.md` so public guidance no longer asks ordinary users to install local runtimes or configure a Provider. The local FastAPI/SQLite compatibility layer is explicitly maintainer-only.
+- Migrated `ui-shells.test.ts` and `ui.test.ts` to public Web semantics, removed popup/sidepanel local pairing controls and related CSS, and changed guidance to current-page connection. Focused Extension tests pass 24/24; no Key, endpoint, browser or user data was read.
+- GitHub release cleanup completed: removed Windows installer assets from `v2.2.0` and `v2.2.1`, retained both extension ZIPs, and rewrote Release titles/notes as Chrome extension component instructions. No Web URL was published.
+- The first post-migration packaged E2E run was red only in the obsolete FastAPI workflow: it still opened the deleted manual-pairing UI and timed out. The seven protocol/managed-tab tests passed.
+- Removed the obsolete FastAPI E2E block and its `TestApi`, `requestJson`, pairing-token and unused wait helpers; renamed the retained bridge test so it no longer presents local pairing as the product path. Updated extension product and failure-recovery docs to Web-only terminology.
+- Release contracts passed, `git diff --check` passed, and `scripts/verify-web.ps1` passed: 190 Board / 186 Extension / 7 packaged E2E / 12 Web / 29 Edge; coverage Board 79.01/76.42/84.28/83.18 and Extension 83.40/78.55/85.29/85.74. `.artifacts/` remains untracked and no browser/provider/live Run was touched.
+- Recovery note: the planning catch-up script was attempted with the system `python` alias and failed because Windows only exposed the Microsoft Store placeholder; no project file or runtime state was changed by that failed attempt.
+- Remaining action: re-read `git status`, explicitly stage only intended source/docs/tests, then commit and push the Web-only migration. Do not add `.artifacts/`.

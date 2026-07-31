@@ -36,5 +36,11 @@ if ($script -match '\$env:[A-Za-z0-9_]*API[_A-Za-z0-9]*KEY') {
 if ($script -notmatch 'archresearch_api\.provider_setup') {
     throw "Provider setup helper is not invoked."
 }
+if ($script -match 'Read-Host\s+"Enter model name"|ArgumentList\.Add\("--model"\)') {
+    throw "The model name must come from the upstream model list, not user input."
+}
+if ($script -notmatch 'automatically discovers a compatible model') {
+    throw "The provider setup script must explain automatic upstream model discovery."
+}
 
 Write-Host "Provider configuration security contract passed."

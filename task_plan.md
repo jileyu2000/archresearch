@@ -56,16 +56,21 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 | M155 evidence-grounded agent boundaries | complete | `agent/planning.py`、`execution.py`、`verification.py` 与 `synthesis.py` 已按红绿合同形成明确边界；七阶段 orchestrator、API/schema、checkpoint、取消/恢复、查询预算、gap 补查、失败保留与 evidence-bound 双门槛不变。完整门禁 360 API / 177 Board / 165 Extension / 8 packaged E2E 全绿；durable 为 4/15/13 permanent/0 active/14 collections/2 inputs。 |
 | M156 competition GitHub presentation and publish | complete | GitHub 访客页覆盖场景价值、Agent 架构、工作流/工具、创新、完成度、访问方式、3 个测试问题和人机协同边界；architecture/demo 文档同步四模块、双门槛和现行三档。公开产品提交 `010eceb` 已推送 `main`；本地完整门禁与 Hosted CI `30362938145` 均通过 360/177/165/8，durable 仍为 4/15/13 permanent/0 active/14 collections/2 inputs。 |
 | M157 project-first GitHub presentation | complete | README 已恢复为 ArchResearch 的长期通用项目主页，竞赛要求仅作为信息组织参考；参赛、投稿和评审专属定位已删除，真实建筑竞赛使用场景与目标用户、痛点、场景价值、Agent 架构、人机协同、完成度、截图、安装、演示和验证入口均保留。完整本地门禁与 Hosted CI `30368067949` 通过 360/177/165/8，项目主页提交为 `cdb97f0`。 |
-| M158 Cloudflare Web Edition contract and foundation | in_progress | 双版本范围合同、`apps/web`/`apps/edge` 基础与首轮离线测试已完成：网页工作台不要求用户 Key，浏览器 IndexedDB 保存 Run/result/collection 并支持版本化 JSON 导入导出；Worker 路由、Turnstile、设备/IP 配额、CostGuard DO、七阶段 Workflow、Provider client 与 `fetch` + `HTMLRewriter` 公开页读取已就位。未部署、未创建 Secret/资源、未调用真实模型或真实研究流程。 |
+| M158 Cloudflare Web Edition contract and foundation | complete | 双版本范围合同、`apps/web`/`apps/edge` 基础、浏览器 IndexedDB 长期数据、Turnstile、设备/IP 配额、CostGuard DO、七阶段 Workflow、Provider client 与 `fetch` + `HTMLRewriter` 公开页读取均已完成；生产部署与版本化发布由 M161/M172 收口。 |
 | M159 browser-local history and public research UX | complete | 公开页第一屏、三档研究、开始/轮询/取消、结果与最近记录均完成；IndexedDB 记录、版本化备份、OPFS 附件 adapter 及其离线测试完成。桌面与 390px loaded QA 无横向溢出；清站点数据、无痕模式和换设备丢失边界已在界面明确。 |
 | M160 edge research orchestration and bounded execution | complete | typed 七阶段 plan/execute/verify/synthesize、短期 Workflow 状态、取消/恢复、逐字引文核验、coverage + enrichment 双门槛、Turnstile、入口配额、有界查询/页面/Token/时间与 kill switch 已完成。用户取消每日/单次美元金额拒绝后，CostGuard SQLite 只记录预留与实际用量；Edge 7 files / 16 tests 及根级完整门禁全绿。实际部署核验归 M161。 |
-| M161 public deployment and dual-edition release | in_progress | `archresearch-web` 已用当前非 mock 源码重新部署为版本 `c17dc24c-28ce-44c3-9c0f-b52a9f4fd95e`；主页/API/安全头、生产 Turnstile、缺 token 拒绝及桌面/390px loaded QA 已通过。Web Edition 源码、Chrome-only README 边界和 fresh build 顺序修复已推送 `main`，Hosted CI `30424872745` 全绿。剩余是由真人完成 Turnstile 后执行一次 Quick 真实研究验收，再决定新版本 tag/Release；URL 只私下交付，不进入 GitHub README、Release、About 或仓库文档。 |
+| M161 public deployment and dual-edition release | in_progress | Web Edition 已持续以非 mock 源码部署，当前 `v2.2.1` 发布对应 Worker 版本 `7784b800-0135-461f-a506-d2be1b34f2e0`；主页/API/安全头、生产 Turnstile、缺 token 拒绝与 bundle 下载链接 smoke 通过，GitHub 不包含私有 Web URL。剩余仅是由真人完成正式 Turnstile 后执行一次 Quick 真实研究验收，自动化不绕过该外部门槛。 |
 | M162 Web Edition full local-product transfer | complete | 公共入口直接复用本地 Board 的同一套 React 页面、样式、导航和结果工作台，只通过 `PublicApiClient` 替换持久化与云端执行；工作区、两类研究、PDF/URL、进度/诊断、完整结果、收藏、对照/导出/分享、表达规范、保留期和 JSON 备份矩阵全部闭合。提交 `896945a` 已推送 `main`，Hosted CI `30433096343` 全绿；生产 Worker 版本 `051c4e0c-4e9f-45c8-be0c-99194b16cf7b` 的桌面/390px smoke、完整结果对照与静态素材均通过，正式 `v2.1.1` Release 已发布。 |
 | M163 public Web Xiaohongshu bridge | complete | 严格协议、动态公共页连接、扩展内有界小红书搜索、Web/Edge 输入与主页面安装提醒均已发布；根级 coverage 与完整门禁通过 360 API / 183 Board / 186 Extension / 11 Web / 18 Edge / 8 packaged E2E。提交 `c74571f` 的 Hosted CI `30438474678` success；生产 Worker 版本 `dc0eb528-a8c3-4ca2-88fa-c6131f866d3c` 的主页/API/安全头/Turnstile/1440/390 smoke 全绿；annotated `v2.1.2` tag、正式 Release 与扩展 ZIP 已发布。 |
 | M164 Web/local user-visible parity and extension-only release naming | complete | 用户可见功能、同源界面、多方向逐帖逐图、共享 48 图/48 MiB、R2 对象键事件、IndexedDB 本地预览、扩展专属命名、PR #1、两套 Hosted CI 与 `v2.1.3` 扩展专属 Release 均已闭合。私有 R2 桶与三日生命周期已启用，生产 Worker 已部署为 `c7144317-8daa-4e8f-ae57-5ccf79fc8a41`；HTTP、安全头、正式 Turnstile 配置和系统 Chrome 1440×1000 / 390×844 线上 smoke 全部通过。 |
 | M165 extension installation and connection onboarding | complete | 首动作已改为同弹窗“查看安装方法”，四步安装流程和 extension-only 下载边界完整；公共桥用严格 v2 ready 通知当前页，同 origin 重复连接不再注销重注册。PR #2 两套 fresh Windows CI、`v2.1.4` annotated tag/正式 Release、22,312-byte 扩展 ZIP、生产 Worker `06b96723-281c-4375-b816-32f21b8f2e40` 与线上 HTTP/安全头/正式 Turnstile/下载 smoke 均已闭合；系统 Chrome 本地视觉 QA 通过，线上 Chrome DOM 控制连续超时后按既定禁用内部浏览器规则停止重试。 |
 | M166 Windows one-click local installer | complete | 自包含运行时、API/生产 Board、Key-only 首次配置、per-user 安装/快捷方式/卸载、独立扩展包与 CI 构建合同均已完成；本地与三套 fresh Hosted CI、真实安装、精简 PATH、v2.1.4→v2.2.0 升级和数据保留全绿。PR #3 已合并，annotated `v2.2.0`、Windows 安装器与独立扩展 ZIP 正式 Release 已发布，生产 Worker 已切到存在的 v2.2.0 下载链接并通过 HTTP/安全头/附件 smoke。 |
 | M167 README installation simplification | complete | 不改变 Windows/Chrome/Key、扩展独立安装、私有 Web URL 禁止公开等既有原则；对照成熟桌面应用与浏览器扩展项目，已把普通用户下载/安装前置并压缩为三步，源码开发与扩展安装细节迁入独立文档，发布文案合同、Markdown 本地链接与差异检查均已通过。 |
+| M168 installed launcher port-conflict recovery | complete | 真实安装首次启动发现源码开发服务占用固定 `8000` 时，安装版只弹错并退出；已改为安全验证旧实例、冲突时选择空闲回环端口并把同一端口传给 API、健康检查、Chrome 和扩展，完整门禁与真实安装启动 smoke 通过。 |
+| M169 user-supplied Provider endpoint and key | complete | 本地首次配置同时填写 API 接口地址与 API Key；地址仅要求可解析为 HTTP(S) URL，不按供应商或域名白名单限制。提交前用当前地址和 Key 执行能力探测，成功后才保存端点配置与凭据；Web Edition 继续使用独立的 Cloudflare Provider 配置，完整门禁通过。 |
+| M170 windowed launcher logging recovery | complete | PyInstaller 无控制台进程不再加载 Uvicorn 默认 formatter，避免 `stderr=None` 崩溃；另修复冻结运行时从 `_MEIPASS` 读取 Alembic 配置，重建安装器并用已保存配置验证 `/desktop-health` 与 `/health` 持续可用。 |
+| M171 OpenAI-compatible protocol negotiation | complete | 自定义接口不再被固定模型与 Responses-only 探测挡住：程序从上游 `/models` 自动取得候选模型，优先探测 Responses、失败再探测 Chat Completions，并持久化验证成功的模型与协议；Python/PowerShell 合同与完整门禁通过。 |
+| M172 Web visual research timeout recovery | complete | 线上图纸灵感 Run 的失败根因之一是视觉分析最多处理 48 个图像槽位，却与其他阶段共用 5 分钟 Workflow step 上限；已用回归测试固定 `analyzing` 为 20 分钟、其他阶段保持 5 分钟。Edge/Web 定向测试、完整门禁、`v2.2.1` Release 与 Worker 部署后的主页/API/安全头/bundle smoke 均通过；未创建新的 Live Run。 |
 
 ### M164 验收合同
 
@@ -102,6 +107,42 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 2. 渐进披露 → 验证：小红书扩展只在“需要小红书时”出现；源码环境、更新脚本和排障细节离开普通用户主路径。
 3. 原则不变 → 验证：README 仍明确只支持 Google Chrome、首次只填 Key、扩展不进安装器且需 Chrome 手动授权、未签名 SmartScreen 边界；不公开私有 Web URL。
 4. 可验证 → 验证：发布合同守卫关键文案与链接，Markdown 链接有效，`scripts/tests/release.tests.ps1` 与 `git diff --check` 通过。
+
+### M168 验收合同
+
+1. 当前机器恢复 → 验证：只停止工作区记录的旧开发 API 进程，确认 `127.0.0.1:8000` 不再监听；重新打开已安装 ArchResearch 可进入页面。
+2. 冲突自动恢复 → 验证：默认端口被无关进程占用时，安装版启动器自动选择可用回环端口并把同一端口传给 API、健康检查与 Chrome，不再要求用户手动关闭程序。
+
+3. 幂等与安全 → 验证：已由安装版启动且健康的服务继续复用；不得连接身份不明的 `8000` 服务，不结束无关占用进程，不监听公网地址。
+4. 首次配置可读 → 验证：“验证并开始使用”和“取消”按钮在 Windows 默认主题与系统缩放下有明确可见文字、足够对比度、正常/禁用状态均可辨识；Key 仍只由用户本人输入。
+5. Windows 图标一致 → 验证：移除黄钥匙/白板占位图形，应用图标采用主界面的蓝图蓝、纸白和石墨制图语言；ICO 包含常用多尺寸，在桌面、开始菜单、任务栏和窗口标题栏的小尺寸下仍清晰可辨。
+6. 发布闭环 → 验证：先新增失败行为测试，再实现最小修复；相关 launcher/installer 测试、release contracts、完整门禁、真实冲突 smoke 与 GitHub CI 全部通过，更新安装器版本并发布后用户可重新下载安装。所有 UI 与图标实机确认完毕后才提交。
+
+### M169 验收合同
+
+1. 双项必填 → 验证：首次配置与 CLI 都要求 API 接口地址和 API Key，任一为空都不创建 Provider 客户端、不保存配置或凭据。
+2. 地址不按供应商限制 → 验证：自定义 HTTP/HTTPS、中转站、DeepSeek、Kimi 以及本机回环地址均可通过配置模型；只拒绝缺少协议/主机或把凭据嵌入 URL 的明显格式错误。
+3. 先测后存 → 验证：能力探测收到用户填写的 `base_url` 和 Key；探测失败保留原配置/凭据，探测成功才写入新端点与 Key。
+4. 首次界面诚实 → 验证：Windows 配置窗同时显示“API 接口地址”和“API Key”，状态文案说明会先测试连接，README/开发脚本同步两项配置和 OpenAI-compatible 能力边界。
+
+### M170 验收合同
+
+1. 无控制台启动 → 验证：即使冻结版运行时 `sys.stdout` / `sys.stderr` 为 `None`，启动器也不初始化 Uvicorn 默认控制台 formatter，服务仍绑定选定的回环端口。
+2. Provider 结果不混淆 → 验证：能力探测成功与随后本地服务启动是两个独立阶段；启动器日志崩溃不得误报为接口连接失败。未通过探测的中转站继续显示真实兼容性错误，不按域名放行或拦截。
+3. 回归与安装包 → 验证：先取得 `test_desktop.py` 红灯，再做最小实现；通过 Python 定向测试、Ruff、strict Mypy、安装器合同、完整门禁、重建安装 smoke，并在用户授权后实机升级启动。不得读取、打印或改写用户现有端点和 Key。
+
+### M171 验收合同
+
+1. 上游模型发现 → 验证：Windows 首次配置仍只要求接口地址与 Key；程序从上游 `/models` 获取模型 ID，过滤明显非对话模型并在有界候选内自动选择通过能力探测的模型。用户不手填或猜测模型名；既有配置继续按已保存模型启动。
+2. 协议协商 → 验证：先尝试 Responses 结构化输出；仅在失败后尝试 Chat Completions 结构化输出，成功协议写入配置。两种协议均用 Pydantic schema 校验真实返回，不以普通 HTTP 200 冒充可用。
+3. 统一运行路径 → 验证：研究规划、网页分析、综合和图像分类继续调用同一结构化客户端接口；Chat Completions adapter 正确转换文本与图像输入、输出 token 参数并丢弃不通用的 reasoning 参数。公开建筑检索继续使用现有本地 Chrome，不要求模型端点提供 Web Search。
+4. 诚实边界 → 验证：上游不提供模型列表或候选的两种协议都失败时，不保存端点、模型或 Key；错误提示明确说明模型发现或结构化输出兼容性。视觉输入仍要求所选模型本身支持图片，程序不得伪称所有 DeepSeek/Kimi 模型都具备视觉能力。
+
+### M172 验收合同
+
+1. 视觉分析时间边界 → 验证：最多 48 个图像槽位按每批 4 张分析时，`analyzing` 使用独立的 20 分钟 Workflow step 上限；规划、搜索、读取、核验、缺口检查和综合继续使用 5 分钟上限。
+2. 失败阶段可定位 → 验证：定向 Edge/Workflow 测试覆盖视觉分析超时配置；不调用真实 Provider、不创建新的 Live Run 作为默认测试。
+3. 发布闭环 → 验证：Edge/Web 定向测试、类型检查、lint、构建与完整门禁通过后才部署 Worker；部署后完成主页/API/安全头/bundle smoke，真实研究仍由 M161 的真人 Turnstile Quick 外部验收承担，私有 URL 不写入仓库。
 
 ## External acceptance gates
 
@@ -200,10 +241,22 @@ Build the approved local-first architecture research agent: a Chrome MV3 extensi
 - React + Vite instead of Next.js: the board is a local SPA with no SSR requirement.
 - FastAPI + SQLAlchemy + SQLite; no PostgreSQL, Redis, S3, Celery, Docker, Qdrant, LangGraph, or multi-agent runtime.
 - Direct OpenAI Responses API with strict schemas; custom local trace to control sensitive data. Research and visual classification default to `gpt-5.6-sol` with `medium` reasoning; both remain environment-overridable.
-- The `suoxie` relay key is accepted only through hidden PowerShell input and stored in Windows Credential Manager; provider JSON contains no secret. Never print or migrate the key.
+- 本地版由用户提供 OpenAI-compatible API 接口地址与 Key；端点只存本地 `provider.json`，Key 只存 Windows Credential Manager，绝不打印或迁移。旧 `suoxie` 配置仅保留兼容读取。
 - Project automation defaults to PowerShell 7 (`pwsh`); Windows PowerShell 5.1 only for explicit compatibility checks. Process scripts must stay WMI/CIM-free (MSIX pwsh cannot load MMI): listener discovery via `netstat -ano`, command lines via PEB.
 - All browser commands are enumerated JSON messages; no arbitrary selectors, JavaScript, credentials, social actions, or general form submission.
 - Retention: new Runs default to one semester (180 days) from creation with a per-record permanent toggle; cancelling permanent restarts 180 days from that action, while existing rows keep their stored expiry. Assets/claims use 7 days and sources/query metadata/trace 30 days unless their Run is permanent. `keep_forever` protects the Run **and all its child evidence** from every expiry clock (M141). Personal collections are snapshots that survive Run expiry; saving is additive and never deletes an existing collection (M145).
 - Research depth is a semantic contract (decomposition, per-subquestion coverage, analysis obligations); query/page/time values are bounded execution ceilings. All depths owe a complete answer across planned subquestions; depth changes rigor, never permission to deliver a knowingly incomplete answer as complete.
 - Deterministic replay fixtures remain the zero-cost development and regression path. Firecrawl was fully removed in M41 and must not return; TinEye/source lookup was removed in M113; Pinterest was removed in M94 and unexpected Pinterest results are discarded before persistence. Current release evidence is frozen in `docs/release-evidence-2026-07-28.md`; older captures remain historical only.
 - Xiaohongshu support uses only the user's visible, signed-in Chrome pages after explicit one-time permission; read-only `search`/`download` commands, no password/cookie/DM access, revocable anytime. Authoritative architecture/project sources establish case facts; Xiaohongshu is the sole visual-inspiration source and cannot alone prove a project case.
+
+## M173 Web-only retirement and alignment (complete)
+
+1. **Separate user-facing parity from implementation parity** -> Web Edition and the shared Board/Extension must expose the same complete workflow (home, research modes, history, results, collections, compare, export, backups, and XHS bridge); Cloudflare Edge, IndexedDB and extension origin registration may differ internally from the retired local runtime.
+2. **Remove local distribution surface** -> Windows installer, PyInstaller/Inno, desktop launcher, autostart and local provider setup must not be built, documented as ordinary-user steps, or uploaded by CI; preserve only maintainer compatibility code until its tests are deliberately migrated.
+3. **Align extension onboarding** -> popup/sidepanel must describe current public Web page connection and permission only; no endpoint, one-time pairing code, local service, manual pairing or disconnect controls. Verify with focused UI/manifest/protocol tests.
+4. **Retire public release assets** -> complete: Windows installer assets were removed from `v2.2.0` and `v2.2.1`; each Release now keeps only the clearly named Chrome extension ZIP and Web-only installation notes.
+5. **Verification** -> complete: release contracts, Extension lint/typecheck and 7 packaged E2E, `git diff --check`, and `scripts/verify-web.ps1` all pass. The Web-only gate reports 190 Board / 186 Extension / 12 Web / 29 Edge tests, with coverage above thresholds; only intentional source/docs/tests remain stageable and `.artifacts/` stays untracked.
+
+### M173 current decision
+
+The Web Edition is the only public product. "一致" means user-visible workflow and terminology remain the same through the shared Board; it does not mean copying the local API, SQLite, port management or provider credential implementation into Cloudflare. The loopback API/extension compatibility layer is retained only for maintainer offline tests and is excluded from the public Web gate. The obsolete FastAPI browser workflow E2E and its `TestApi`/pairing-code helpers were removed from the packaged Extension suite; public bridge and Xiaohongshu protocol coverage remains.

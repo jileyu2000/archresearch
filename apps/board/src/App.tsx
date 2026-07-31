@@ -170,7 +170,7 @@ export default function App({
   edition = 'local',
   verificationControl,
   verificationReady = true,
-  extensionInstallUrl = 'https://github.com/jileyu2000/archresearch/releases/download/v2.2.0/archresearch-chrome-extension-only-v2.2.0.zip',
+  extensionInstallUrl = 'https://github.com/jileyu2000/archresearch/releases/download/v2.2.1/archresearch-chrome-extension-only-v2.2.1.zip',
 }: AppProps) {
   const publicEdition = edition === 'public'
   const demoDepth = useMemo(() => demoDepthFromSearch(window.location.search), [])

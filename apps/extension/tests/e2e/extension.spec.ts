@@ -1,6 +1,4 @@
 import { once } from "node:events";
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { existsSync } from "node:fs";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { type AddressInfo } from "node:net";
@@ -31,17 +29,6 @@ type BrowserResult = {
 };
 
 const EXTENSION_BUILD_PATH = resolve(import.meta.dirname, "../../dist");
-const REPOSITORY_ROOT = resolve(import.meta.dirname, "../../../..");
-const E2E_API_SCRIPT = resolve(
-  import.meta.dirname,
-  "support/full-stack-api.py",
-);
-const E2E_PYTHON = [
-  process.env.ARCHRESEARCH_E2E_PYTHON,
-  resolve(REPOSITORY_ROOT, ".venv/Scripts/python.exe"),
-  resolve(REPOSITORY_ROOT, "apps/api/.venv/Scripts/python.exe"),
-].find((candidate): candidate is string => Boolean(candidate && existsSync(candidate))) ??
-  "python";
 const FIXTURE_HOST = "archresearch.test";
 const HOST_ORIGINS = ["<all_urls>"];
 
@@ -77,11 +64,16 @@ test.describe.serial("packaged MV3 browser bridge", () => {
     await coordinator?.close();
     await fixtures?.close();
     if (testRoot) {
-      await rm(testRoot, { recursive: true, force: true });
+      await rm(testRoot, {
+        recursive: true,
+        force: true,
+        maxRetries: 12,
+        retryDelay: 250,
+      });
     }
   });
 
-  test("pairs from the local board and restores optional host access", async () => {
+  test("connects the packaged browser bridge and restores optional host access", async () => {
     const board = await context.newPage();
     await board.goto(fixtures.loopbackUrl("/board"));
     const paired = await requestBoardBridge(board, "pair", {
@@ -372,124 +364,6 @@ test.describe.serial("packaged MV3 browser bridge", () => {
 
 });
 
-test.describe.serial("FastAPI browser workflow", () => {
-  let context: BrowserContext;
-  let serviceWorker: Worker;
-  let popup: Page;
-  let testRoot: string;
-  let fixtures: FixtureServer;
-
-  test.beforeAll(async () => {
-    fixtures = await FixtureServer.start();
-    testRoot = await mkdtemp(join(tmpdir(), "archresearch-full-stack-"));
-    const userDataDir = join(testRoot, "profile");
-    const extensionPath = join(testRoot, "extension");
-    await mkdir(userDataDir);
-    await cp(EXTENSION_BUILD_PATH, extensionPath, { recursive: true });
-    await primeOptionalHostAccess(userDataDir, extensionPath);
-    context = await launchExtension(userDataDir, extensionPath);
-    serviceWorker = await waitForServiceWorker(context);
-    const extensionId = new URL(serviceWorker.url()).host;
-    popup = await context.newPage();
-    await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-  });
-
-  test.afterAll(async () => {
-    await context?.close();
-    await fixtures?.close();
-    if (testRoot) {
-      await rm(testRoot, { recursive: true, force: true });
-    }
-  });
-
-  test("persists a real browser crop through the FastAPI workflow", async () => {
-    const api = await TestApi.start(testRoot, fixtures.url("/static"));
-    try {
-      const pairing = await requestJson<{ code: string }>(
-        `${api.httpEndpoint}/v1/browser/pairing-code`,
-        { method: "POST" },
-      );
-      await popup.getByText("连接有问题？手动配对", { exact: true }).click();
-      await popup.locator('[data-role="endpoint"]').fill(api.websocketEndpoint);
-      await popup.locator('[data-role="token"]').fill(pairing.code);
-      await popup.getByRole("button", { name: "使用配对码连接" }).click();
-      await expect
-        .poll(() => storedPairingToken(serviceWorker))
-        .not.toBe(pairing.code);
-      await popup.reload();
-      await expect(popup.locator('[data-role="connection"]')).toHaveText(
-        "已连接",
-      );
-      await expect(popup.locator('[data-role="permission"]')).toHaveText(
-        "网页读取已授权",
-      );
-
-      const workspace = await requestJson<{ id: string }>(
-        `${api.httpEndpoint}/v1/workspaces`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ name: "Full stack browser E2E" }),
-        },
-      );
-      const createdRun = await requestJson<{ id: string; status: string }>(
-        `${api.httpEndpoint}/v1/workspaces/${workspace.id}/runs`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            question: "旧建筑中如何形成有层次的剖面？",
-            goal: "precedent_research",
-            budget_mode: "quick",
-          }),
-        },
-      );
-      const run = await waitUntilAsync(async () => {
-        const current = await requestJson<{ id: string; status: string }>(
-          `${api.httpEndpoint}/v1/runs/${createdRun.id}`,
-        );
-        return ["completed", "partial", "blocked", "failed"].includes(
-          current.status,
-        )
-          ? current
-          : null;
-      });
-      const trace = await (
-        await fetch(`${api.httpEndpoint}/v1/runs/${createdRun.id}/events`)
-      ).text();
-      expect(run.status, trace).toBe("blocked");
-
-      const results = await requestJson<
-        Array<{ id: string; asset_type: string; has_local_content: boolean }>
-      >(`${api.httpEndpoint}/v1/runs/${createdRun.id}/results`);
-      const captured = results.find((candidate) => candidate.has_local_content);
-      expect(captured).toMatchObject({
-        asset_type: "section",
-        has_local_content: true,
-      });
-
-      const content = await fetch(
-        `${api.httpEndpoint}/v1/assets/${captured!.id}/content`,
-      );
-      expect(content.status).toBe(200);
-      expect(content.headers.get("content-type")).toBe("image/png");
-      expect(
-        Array.from(new Uint8Array((await content.arrayBuffer()).slice(0, 8))),
-      ).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
-
-      await expect.poll(() => hasHostAccess(serviceWorker)).toBe(true);
-      await popup.reload();
-      await expect(popup.locator('[data-role="permission"]')).toHaveText(
-        "网页读取已授权",
-      );
-      await popup.getByRole("button", { name: "撤销网页读取权限" }).click();
-      await expect.poll(() => hasHostAccess(serviceWorker)).toBe(false);
-    } finally {
-      await api.close();
-    }
-  });
-});
-
 type MediaItem = {
   media_type: string;
   url: string | null;
@@ -523,16 +397,6 @@ function hasHostAccess(worker: Worker): Promise<boolean> {
     (origins) => chrome.permissions.contains({ origins }),
     HOST_ORIGINS,
   );
-}
-
-function storedPairingToken(worker: Worker): Promise<string | null> {
-  return worker.evaluate(async () => {
-    const stored = await chrome.storage.local.get("archresearch.pairing");
-    const pairing = stored["archresearch.pairing"];
-    return pairing && typeof pairing === "object" && "token" in pairing
-      ? String(pairing.token)
-      : null;
-  });
 }
 
 function managedTabIds(worker: Worker): Promise<number[]> {
@@ -832,84 +696,6 @@ class ResearchCoordinator {
   }
 }
 
-class TestApi {
-  private constructor(
-    readonly httpEndpoint: string,
-    private readonly child: ChildProcessWithoutNullStreams,
-    private readonly readOutput: () => string,
-  ) {}
-
-  get websocketEndpoint(): string {
-    return this.httpEndpoint.replace("http://", "ws://") + "/v1/browser";
-  }
-
-  static async start(testRoot: string, fixtureUrl: string): Promise<TestApi> {
-    const port = await unusedLoopbackPort();
-    const dataDirectory = join(testRoot, "full-stack-api");
-    await mkdir(dataDirectory, { recursive: true });
-    let output = "";
-    const child = spawn(
-      E2E_PYTHON,
-      [
-        E2E_API_SCRIPT,
-        "--port",
-        String(port),
-        "--data-dir",
-        dataDirectory,
-        "--source-url",
-        fixtureUrl,
-      ],
-      {
-        cwd: REPOSITORY_ROOT,
-        env: {
-          ...process.env,
-          PYTHONPATH: resolve(REPOSITORY_ROOT, "apps/api/src"),
-        },
-      },
-    );
-    child.stdout.on("data", (chunk) => {
-      output += chunk.toString();
-    });
-    child.stderr.on("data", (chunk) => {
-      output += chunk.toString();
-    });
-    const api = new TestApi(
-      `http://127.0.0.1:${port}`,
-      child,
-      () => output,
-    );
-    await waitUntilAsync(async () => {
-      if (child.exitCode !== null) {
-        throw new Error(`E2E API exited during startup:\n${output}`);
-      }
-      try {
-        const response = await fetch(`${api.httpEndpoint}/health`);
-        return response.ok ? true : null;
-      } catch {
-        return null;
-      }
-    }, 15_000);
-    return api;
-  }
-
-  async close(): Promise<void> {
-    if (this.child.exitCode !== null) {
-      return;
-    }
-    await fetch(`${this.httpEndpoint}/__e2e__/shutdown`, {
-      method: "POST",
-    }).catch(() => undefined);
-    await Promise.race([
-      once(this.child, "exit"),
-      new Promise((resolveWait) => setTimeout(resolveWait, 5_000)),
-    ]);
-    if (this.child.exitCode === null) {
-      this.child.kill();
-      throw new Error(`E2E API did not stop:\n${this.readOutput()}`);
-    }
-  }
-}
-
 function svg(label: string): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675"><rect width="1200" height="675" fill="#f4f4f0"/><path d="M80 530H1120M180 530V210H520V530M680 530V130H1020V530" fill="none" stroke="#171b19" stroke-width="12"/><text x="80" y="90" font-family="sans-serif" font-size="40">${label}</text></svg>`;
 }
@@ -919,28 +705,6 @@ function readPort(address: AddressInfo | string | null): number {
     throw new Error("Test server did not expose a TCP port");
   }
   return address.port;
-}
-
-async function unusedLoopbackPort(): Promise<number> {
-  const server = createServer();
-  server.listen(0, "127.0.0.1");
-  await once(server, "listening");
-  const port = readPort(server.address());
-  await new Promise<void>((resolveClose, rejectClose) => {
-    server.close((error) => (error ? rejectClose(error) : resolveClose()));
-  });
-  return port;
-}
-
-async function requestJson<T>(
-  url: string,
-  init?: RequestInit,
-): Promise<T> {
-  const response = await fetch(url, init);
-  if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}: ${await response.text()}`);
-  }
-  return (await response.json()) as T;
 }
 
 async function waitUntil<T>(
@@ -956,19 +720,4 @@ async function waitUntil<T>(
     await new Promise((resolveWait) => setTimeout(resolveWait, 25));
   }
   throw new Error("Timed out waiting for E2E condition");
-}
-
-async function waitUntilAsync<T>(
-  read: () => Promise<T | null>,
-  timeoutMilliseconds = 20_000,
-): Promise<T> {
-  const deadline = Date.now() + timeoutMilliseconds;
-  while (Date.now() < deadline) {
-    const value = await read();
-    if (value !== null) {
-      return value;
-    }
-    await new Promise((resolveWait) => setTimeout(resolveWait, 50));
-  }
-  throw new Error("Timed out waiting for asynchronous E2E condition");
 }

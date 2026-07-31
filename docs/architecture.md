@@ -1,8 +1,10 @@
-# ArchResearch V2.1 架构
+# ArchResearch Web Edition 架构
+
+> 当前对外产品只有 Cloudflare Web Edition。本文后半部分保留 FastAPI/SQLite 和本地浏览器适配器的源码边界，供维护者运行离线测试或迁移旧数据；这些组件不属于公开安装路径，也不代表普通用户需要安装或配置本地服务。
 
 ## 产品边界
 
-ArchResearch 是面向单个 Windows/Chrome 用户的本地优先建筑研究工具。它接收具体设计问题和可选的图片、PDF、URL，在限定轮数、查询数、页面数与时间内研究当前网页，识别建筑图纸并把来源证据编排成参考板。
+ArchResearch Web Edition 面向建筑学生与青年设计师。用户打开项目方提供的 HTTPS 地址，输入具体设计问题和可选的图片、PDF、URL，在限定轮数、查询数、页面数与时间内研究公开网页，识别建筑图纸并把来源证据编排成参考板。工作区、Run、结果、收藏与备份长期保存在当前浏览器，云端只保留有界执行所需的短期检查点。
 
 系统不建设平台案例库，不维护跨项目图片索引，不把收藏或拒绝记录变成公共语料，也不引入 PostgreSQL、Redis、S3、Qdrant、Celery、Docker、LangGraph 或多 Agent 运行时。
 
@@ -10,31 +12,27 @@ ArchResearch 是面向单个 Windows/Chrome 用户的本地优先建筑研究工
 
 ```mermaid
 flowchart LR
-    U["用户"] --> B["React 图纸参考板<br/>apps/board"]
-    B <-->|"回环 HTTP + SSE"| A["FastAPI 研究执行器<br/>apps/api"]
-    A --> D["SQLite + 本地工作区<br/>.archresearch"]
-    A <-->|"枚举 JSON 动作<br/>WebSocket /v1/browser"| E["Chrome MV3 扩展<br/>apps/extension"]
-    E -->|"用户授权的站点权限<br/>用户现有登录态"| W["实时项目网页"]
-    A -->|"Responses API<br/>问题拆解 / 页面分析 / 视觉分类"| O["OpenAI 兼容服务"]
-    A -->|"隔离系统 Chrome<br/>搜索 / 正文 / links / images"| P["Playwright 本地浏览器"]
-    A -->|"固定只读命令<br/>搜索 / 轮播多图"| X["OpenCLI 小红书适配器"]
-    X <-->|"Browser Bridge"| C["用户登录态 Chrome"]
+    U["用户"] --> B["React 完整工作台<br/>apps/board"]
+    B <-->|"PublicApiClient + IndexedDB"| W["Cloudflare Web Edition<br/>apps/web + apps/edge"]
+    W -->|"有界 HTTPS 读取 / Workflow"| O["项目方 Provider Secret"]
+    B <-->|"严格公共 bridge"| E["ArchResearch Chrome 扩展<br/>apps/extension"]
+    E -->|"用户授权的可见页与登录态"| X["小红书公开笔记"]
 ```
 
 | 组件 | 职责 | 不负责 |
 |---|---|---|
 | 参考板 | 工作区输入、后台运行状态、答案优先的案例阅读、个人收藏、2–6 项案例策略对照、表达规范与导出 | 自行抓网页、决定来源可信度 |
-| 本地 API | 状态机、预算、供应商调用、来源与资产持久化、排序、检查点、版权门禁、TTL 清理 | 使用浏览器 Cookie、运行远程脚本 |
+| Cloudflare Edge | Turnstile、配额、预算、七阶段 Workflow、公开页读取、Provider 调用和短期 checkpoint | 保存跨用户长期历史、接收浏览器 Cookie |
 | Chrome 扩展 | 在用户动作授权后打开页面、读取受限语义快照与元数据、枚举媒体、滚动、裁取候选区域 | 读取 Cookie/LocalStorage/密码/私信，发布、点赞、购买或提交普通表单 |
-| Playwright 本地浏览器 | 用子问题级查询实时发现公开来源，读取动态渲染后的正文、链接、图片 URL 与图注 | 用户 Chrome 登录态、任意交互、来源/版权升级、批量站点爬取 |
-| OpenCLI 小红书适配器 | 使用登录态 Chrome 搜索结构化笔记并下载被选笔记的轮播多图 | 方案事实核验、点赞/收藏/评论/发布、任意 OpenCLI 命令 |
-| SQLite/工作区 | 保存业务对象、检查点、临时裁图和导出 | 跨 Workspace 或跨用户召回 |
+| 公共网页读取 | 在 Edge 中按子问题读取受限 HTTPS 正文、链接、图片 URL 与图注 | 用户 Chrome 登录态、任意交互、来源/版权升级、批量站点爬取 |
+| Chrome 扩展 | 使用用户已登录的小红书页面完成有界只读搜索、逐帖逐图读取与预览 | 读取 Cookie/密码/私信，点赞、评论、发布或提交普通表单 |
+| IndexedDB / OPFS | 保存当前浏览器的 workspace、Run、收藏、结果、备份与较大附件 | 跨用户召回或平台级案例库 |
 
-API 只监听 `127.0.0.1`。扩展首次用一次性配对码连接，随后把轮换后的令牌放在 `chrome.storage.local`；API 落盘保存令牌摘要。
+公共页面只接受 HTTPS 同源、版本化且字段严格的扩展消息。扩展首次由用户在工具栏点击“连接当前 ArchResearch 网页”，动态注册当前页面 origin；不使用本地端点或一次性配对码，Cookie、账号和密码始终留在 Chrome。
 
 ## Evidence-Grounded Plan-and-Execute Agent
 
-FastAPI 进程内只有一个七阶段 orchestrator，不运行自主多 Agent 网络。Evidence-Grounded Plan-and-Execute 的四个职责边界是普通 Python 模块；模型负责适合语言推理的规划、页面分析、视觉分类与综合，确定性代码负责状态、预算、工具权限、证据准入和终态判断。
+Cloudflare Edge Workflow 内只有一个七阶段 orchestrator，不运行自主多 Agent 网络。Evidence-Grounded Plan-and-Execute 的四个职责边界由共享 Python 模块与 Edge adapter 对齐；模型负责适合语言推理的规划、页面分析、视觉分类与综合，确定性代码负责状态、预算、工具权限、证据准入和终态判断。
 
 ```mermaid
 flowchart TB
@@ -78,7 +76,7 @@ stateDiagram-v2
     inspecting --> failed: "失败且没有资产"
 ```
 
-每个阶段向 SQLite 提交检查点并写入脱敏 `TraceEvent`；进入 `gap_check` 时还把当前覆盖计数写回 Run，Board 轮询期间即可显示已取得的可用参考数。新建 Run 从创建日起默认保留一学期（180 天），可由用户单独改为永久保留；取消永久后从操作日起重新获得 180 天。既有记录沿用已存到期日，不做静默迁移。`keep_forever` 同时豁免该 Run 的资产、来源页与证据声明各自的独立过期时钟，永久 Run 的子数据不会被启动清扫删除。应用启动时删除到期 Run 及其候选文件、导出文件与关联用户状态，同时清理其他过期临时数据，并恢复未进入终态的运行。`partial`、`blocked`、`cancelled` 和 `failed` 可重试；重试增加 `attempt`，保留已有资产与证据。
+每个阶段向短期 Workflow checkpoint 提交最小状态并写入脱敏 `TraceEvent`；进入 `gap_check` 时还把当前覆盖计数写回 Run，Board 轮询期间即可显示已取得的可用参考数。新建 Run 从创建日起默认保留一学期（180 天），可由用户单独改为永久保留；长期 Run/result/collection/history 仍由当前浏览器 IndexedDB 保存。`partial`、`blocked`、`cancelled` 和 `failed` 可重试；重试增加 `attempt`，保留已有资产与证据。
 
 默认预算：
 
@@ -146,11 +144,11 @@ Chrome broker、终态消息和受管标签在 V2.1 中是单连接资源，因�
 
 `SavedReference` 是用户主动策展的个人收藏，不是记忆层。保存时把研究题目、研究目标和结果摘要写入 snapshot；建筑结果额外写入自包含的 `case_subquestions`，逐项保存子问题题目、项目条件、设计机制、转译步骤、适用边界及与条件/机制 statement 精确匹配的逐字原文，并写入最多三项 typed `case_images`。案例图片只从同一 Run、同一项目且已有 `image_url` 的正式 `AssetCandidate` 中选择：当前收藏资产优先，再优先补足不同资产类型，最后按既有顺序填满并按 URL 去重；它们是项目识别索引，不提升或替代逐题证据。Pydantic `SavedReferenceSnapshot` 是该响应结构的来源，Board TypeScript contract 与之对齐。既有 snapshot 在首次 workspace 收藏读取时，若原 AssetCandidate/Run 尚在，会分别只追加缺失的逐题包和案例图片并持久化兼容升级；没有精确 EvidenceClaim 时保持无原文，而不借用同项目其他分支。受控本地图仍复制到独立 `collections/` 目录，因此普通 Run 过期清理可以删除 checkpoint、候选和导出，同时保留可按收藏 ID 管理的收藏项、逐题研究内容和案例图片索引。一次前端提交完整保存新批次；保存是累加动作，不删除任何既有收藏（含同题旧批），删除只由用户对单项显式执行。Board 仍从同一个 workspace 聚合端点读取完整快照，并在内存中把建筑收藏展平为“原研究题目 + 案例子问题”目录项；选择状态只存在于当前 Board 页面，不写入 URL、数据库或新增 API。目录初始不渲染项目内容；点入后只把所选子问题映射为命名 region，项目保持独立 article，h2–h5 保留语义层级。界面只投影逐题设计机制和去重后的前三条转译步骤，并在其后显示紧凑案例图带。项目条件、完整边界和逐字证据仍在 snapshot 中，不因界面精简而删除。收藏类型切换、离开与重开会清除目录选择。收藏页可原位切换到只消费本地图或 image URL 的图纸视图。图纸灵感高清链接复用同一个安全 collection-content handler，本地副本缺失时才回退 snapshot image URL，原帖来源仍保持独立。该界面精简不新增表、列或 Alembic 迁移。
 
-所有路径都在当前本地工作区内，不建立全局索引。
+长期业务数据都在当前浏览器工作区内，不建立全局索引；云端只保存有 TTL 的执行 checkpoint 和临时素材。
 
-## 供应商与离线模式
+## 供应商、隐私与维护者 mock
 
-默认 `mock` 模式不需要 Key，也不会调用真实模型或公开网页。真实研究必须由用户主动运行 `scripts/configure-provider.ps1`，在隐藏输入中提供自己的模型 Key；脚本先执行一次小型结构化输出能力探测，成功后才把 Key 存入 Windows 凭据管理器。公开建筑网页由 Direct Playwright 的非持久化隔离上下文搜索和解析；登录态小红书由锁定版本的 OpenCLI Browser Bridge 读取。模型不再承担通用 `web_search`，系统也不依赖按量计费的网页抓取服务。
+Web Edition 的 Provider 地址与 Key 由项目方部署配置，Key 只存在 Cloudflare Secret，不进入浏览器 bundle、IndexedDB、响应或 Trace。默认测试使用确定性 mock，不调用真实模型或公开网页；维护者可按 `docs/development.md` 运行源码测试和本地兼容层，但这不是普通用户安装路径。公开建筑网页由 Edge 的有界 HTTPS 读取完成；登录态小红书由 ArchResearch Chrome 扩展读取。
 
 版本化评测夹具位于：
 

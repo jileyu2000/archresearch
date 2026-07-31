@@ -13,7 +13,7 @@
       </header>
       <section class="status-grid" aria-label="连接状态">
         <div class="status-item">
-          <span class="label">本地服务</span>
+          <span class="label">当前网页连接</span>
           <p class="value" data-role="connection">检查中</p>
         </div>
         <div class="status-item">
@@ -27,25 +27,8 @@
         <button class="primary-action" type="button" data-command="permissions.request">允许网页读取</button>
         <button type="button" data-command="permissions.revoke">撤销网页读取权限</button>
       </section>
-      <details class="manual-pairing" data-role="manual-pairing">
-        <summary>连接有问题？手动配对</summary>
-        <div class="manual-pairing-body">
-          <form data-role="pair-form">
-            <label>
-              本地服务地址
-              <input data-role="endpoint" type="url" value="ws://127.0.0.1:8000/v1/browser" required>
-            </label>
-            <label>
-              一次性配对码
-              <input data-role="token" inputmode="numeric" autocomplete="one-time-code" required>
-            </label>
-            <button type="submit">使用配对码连接</button>
-          </form>
-          <button class="disconnect" type="button" data-command="disconnect">断开当前连接</button>
-        </div>
-      </details>
       <p class="error" data-role="error" role="alert"></p>
-      <p class="boundary">不读取 Cookie、密码或私信，也不会点赞、评论或发布内容。授权会保留，直到你主动撤销或卸载扩展。</p>
+      <p class="boundary">只读取 ArchResearch 网页研究中需要的可见网页，不读取 Cookie、密码或私信，也不会点赞、评论或发布内容。授权会保留，直到你主动撤销或卸载扩展。</p>
     </main>
     <script type="module" src="/src/popup.ts"></script>
   </body>

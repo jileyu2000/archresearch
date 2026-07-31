@@ -1,3 +1,4 @@
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,13 @@ RESUME_SCHEMA_REVISION = "9b4c5d6e7f80"
 DURABLE_SCHEMA_REVISION = "a7c8d9e0f1a2"
 RESEARCH_SOURCES_SCHEMA_REVISION = "b8d9e0f1a2b3"
 RUN_RETENTION_SCHEMA_REVISION = "c9e0f1a2b3c4"
+
+
+def _resource_root() -> Path:
+    frozen_root = getattr(sys, "_MEIPASS", None)
+    if isinstance(frozen_root, str) and frozen_root:
+        return Path(frozen_root)
+    return Path(__file__).resolve().parents[2]
 
 
 class Base(DeclarativeBase):
@@ -42,7 +50,7 @@ class Database:
         Base.metadata.create_all(self.engine)
 
     def migrate(self) -> None:
-        config = Config(Path(__file__).resolve().parents[2] / "alembic.ini")
+        config = Config(_resource_root() / "alembic.ini")
         config.set_main_option("sqlalchemy.url", self.url.replace("%", "%%"))
 
         inspector = inspect(self.engine)

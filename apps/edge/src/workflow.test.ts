@@ -1,8 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { runResearchWorkflow } from './workflow'
+import { runResearchWorkflow, workflowStageTimeout } from './workflow'
 
 describe('mock Evidence-Grounded Plan-and-Execute workflow', () => {
+  it('keeps the bounded visual analysis stage from timing out before 48 image slots are processed', () => {
+    expect(workflowStageTimeout('analyzing')).toBe('20 minutes')
+    expect(workflowStageTimeout('planning')).toBe('5 minutes')
+  })
+
   it('checkpoints all seven stages and completes only with evidence-bound facts', async () => {
     const checkpoints: Array<{ stage: string; summary: Record<string, unknown> }> = []
     const services = {

@@ -149,7 +149,7 @@ describe('public ArchResearch product', () => {
     )
   })
 
-  it('shows the complete local result workbench on a public architecture result', async () => {
+  it('shows the complete shared result workbench on a public architecture result', async () => {
     const run: ResearchRun = {
       id: 'run-complete',
       workspaceId: workspace.id,

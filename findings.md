@@ -716,3 +716,79 @@
 - 对 ArchResearch 的结论：README 顶部应只保留一个 Windows 安装器主入口和三步启动；“需要小红书时”再出现独立扩展，四步开发者模式流程可留作次级说明；源码启动、自动启动、update 脚本和底层端口说明迁入开发文档。SmartScreen 保留一行诚实提醒，不打断主步骤。
 - 当前 README 的下载入口位于第 90 行，用户在此之前需要经过产品定位、能力表、Agent 架构和人机协同；安装区本身又连续混入源码开发、更新、扩展配对、OpenCLI 与浏览器协议。`docs/architecture.md` 已覆盖权限和受管标签等技术边界，因此 README 可删重复说明而不丢项目原则。
 - M167 采用三个信息层：README 顶部的 Windows 三步安装；按需出现并链接的 `docs/chrome-extension.md`；维护者使用的 `docs/development.md`。这比折叠大量文本更清楚，也便于页面内安装提示和文档分别承担首用/排障。
+
+## 2026-07-30 M168 installed launcher port conflict
+
+- 用户从正式 `v2.2.0` Release 下载并安装后，启动器提示“本机端口 8000 已被其他程序占用”。正式安装目录 `C:\Users\76384\AppData\Local\Programs\ArchResearch` 完整存在。
+- `127.0.0.1:8000` 的实际监听者是 PID `39860`：Codex runtime `python.exe -m uvicorn archresearch_api.main:app --app-dir C:\Users\76384\Documents\灵感agent\apps\api\src --host 127.0.0.1 --port 8000`，创建于 2026-07-30 12:50:54。`/health` 返回当前源码开发服务的 provider/model，证明不是陌生程序，也不是刚安装的 self-contained launcher 子进程。
+- 根因不是安装文件损坏，而是安装版启动器把 `8000` 作为不可变端口；它正确拒绝复用身份不明的健康服务，却没有为普通端口冲突选择后备端口。这与“一键安装、无需用户处理环境”的目标不一致。
+- 安全停止工作区服务后，用 Computer Use 启动已安装 `ArchResearch.exe` 成功，出现唯一的“ArchResearch · 首次配置”窗口，内容为 Key 输入、显示 Key 选项和 Windows 凭据管理器说明；不再出现端口错误。源码开发配置不会被安装版误当成已配置凭据，符合首次安装只由用户本人输入 Key 的边界。
+- `desktop.py` 当前把 `DESKTOP_PORT=8000` 派生到 `/desktop-health`、健康实例判断、端口 bind、首次/重复启动 Chrome URL、API 内“一键连接浏览器”URL 与 `uvicorn.run`；不能只让 Uvicorn 换端口，否则页面、健康探测和扩展会继续指向错误的 `8000`。
+- `browser.py` 只允许打开两个精确常量 URL，其中安装版 URL也是固定 `http://127.0.0.1:8000/?connect=chrome`；Board 的浏览器桥 fallback 与扩展默认输入同样保留 `8000`。实现需区分“安装版页面由当前 loopback origin 推导 endpoint”和“开发/手动配对仍以 8000 为默认”，避免为修复启动器而破坏既有协议测试。
+- 现有 `test_desktop.py` 只验证默认端口的健康 payload 与静态/API 同源，没有端口占用或备用端口复用行为；`windows-installer.tests.ps1` 反而把 `DESKTOP_PORT=8000` 写成稳定端口合同，需要先改为“默认起点 + 动态选取合同”并以失败测试证明旧实现不合格。
+- Board 的本地配对在 `useBrowserReadiness` 中调用 `resolveBrowserEndpoint()`；当前 fallback 固定 `ws://127.0.0.1:8000/v1/browser`。最小正确修复是：显式构建配置继续优先；页面运行在 loopback 时从 `window.location.protocol/host` 派生 WebSocket endpoint；其他来源仍回退既有默认。这样安装版备用端口与扩展配对同源，开发构建和公共版行为不变。
+- API 的 `/v1/browser/open-chrome` 由 `create_desktop_app` 注入 launcher closure，因此可在创建应用时把所选端口生成的 `/?connect=chrome` URL固定到该实例；无需把动态端口放进全局环境。`browser.open_board_in_chrome` 需要把安全白名单从“固定安装 URL”扩为“严格的 `http://127.0.0.1:<valid-port>/?connect=chrome`”，仍拒绝主机名、凭据、片段、额外路径或查询参数。
+- 实例复用采用用户数据目录内的非敏感端口状态文件：先验证记录端口的 `/desktop-health` 身份，再兼容探测旧版默认 8000；默认端口被无关服务占用时只选择 OS 分配的空闲回环端口，不停止占用者。陈旧状态只作为候选且必须健康验证，退出时仅在仍属于当前端口时清理。
+- Chrome 扩展 manifest 的本地 content script 匹配为 `http://127.0.0.1/*` / `http://localhost/*`，不限定端口；pairing-store 与 board-bridge 也按 loopback 主机校验，因此动态端口不需要扩大扩展权限。弹窗/侧栏的 8000 只是手动配对默认值，页面自动配对会传入当前 origin 派生的实际端口。
+- `v2.2.0` 已经公开且真实暴露此问题，不能移动旧 tag 或覆盖附件；修复安装器应发布为 patch `v2.2.1`。现有 release contract 要求 API、Board、Web、Edge、Extension/manifest、README、CI artifact 名称和 Board 的 extension-only URL 统一版本，因此继续维持统一版本面并在新 Release 附带两个明确命名的产物。
+- 用户在真实“ArchResearch · 首次配置”窗口截图中确认两个底部按钮只有白色轮廓、完全没有文字。源码使用 Windows `vista` themed `ttk.Button`，自定义 style 只设 font/padding，没有可靠的显式前景色；该机器的主题组合把按钮文字渲染为不可见。修复应改用颜色状态可控的标准 Tk 按钮或完全显式的 style map，并在实机截图中验证主按钮、次按钮和 disabled 状态。
+- 用户追加的桌面截图显示当前 ArchResearch 图标是黄钥匙叠加白色板面，并带 Windows 快捷方式箭头；色彩、隐喻和细节密度都与主界面的蓝图任务面、石墨制图线和纸白工作面不一致，小尺寸也显得像系统凭据工具。新图标应避免钥匙/机器人/字母堆叠，使用一个可在 16–32px 保持轮廓的蓝图纸面或制图定位符号，并输出真正的多分辨率 ICO。
+- Impeccable context 检测到仓库已有完整 `DESIGN.md` 但缺少 `PRODUCT.md`，按其 init blocker 必须先建立产品上下文。README 与 DESIGN 已直接给出全部必需答案：register 是工具型 product；用户是建筑学生/青年设计师；性格为克制、可信、轻快；反例包括聊天优先、营销 Hero、SaaS 卡墙、非标准表单和不可读控件；无障碍合同已有 4.5:1 对比、明确焦点、44px 命中区、系统缩放和 reduced motion。无需新增用户访谈或改变现有设计方向。
+- 图标生成器首版使用 `#2f5bff` 圆角蓝图面、`#ffffff` 两组嵌套制图墙线、`#171a18` 外轮廓/落边和一个 `#ffd84d` 注册点；256px 预览无文字、无钥匙/机器人隐喻，轮廓与主界面 token 一致。ICO 声明 16/20/24/32/48/64/128/256 八个尺寸，最终仍需在真实 Explorer/标题栏确认小尺寸不糊成通用图标。
+
+## 2026-07-31 M169 user-supplied Provider configuration
+
+- 用户明确撤销“只填 Key / 固定梭子蟹端点”的产品假设：本地安装版首次配置必须同时填写 API 接口地址和 API Key，地址可以是中转站、DeepSeek、Kimi 或自建服务，不做供应商、域名、是否公网的白名单限制。
+- 地址仍必须是带协议和主机的 HTTP(S) URL，且不接受把用户名、密码嵌入 URL 的格式；这是 URL 格式与凭据泄露边界，不是供应商限制。用户可填本机回环地址。
+- ArchResearch 当前的研究执行客户端依赖 OpenAI-compatible Responses 的结构化输出与既定模型调用方式。配置页因此不能只做“URL 可访问”检查，而必须用用户填写的地址和 Key 进行真实能力探测；探测失败不保存新地址或 Key，并提示检查接口兼容性。这样不把 DeepSeek/Kimi/中转站的域名预先排除，也不把实际不可用的接口误标为已连接。
+- 旧 `provider.json` 中的 `provider: suoxie`、梭子蟹名称、端点和已存 Windows 凭据仍可读取，避免升级让现有用户失去既有本地配置；新配置写为 `openai-compatible` / `OpenAI 兼容 API`，端点只存本地 JSON，Key 仍只存 Windows Credential Manager。
+
+## 2026-07-31 M170 windowed launcher logging crash
+
+- 用户使用第二家中转站通过首次配置连接测试后，冻结版立即弹出 `Unable to configure formatter 'default'`；堆栈落在 `uvicorn.logging.DefaultFormatter.__init__` 对 `stream.isatty()` 的调用，实际异常为 `AttributeError: 'NoneType' object has no attribute 'isatty'`。
+- PyInstaller 的 windowed/no-console 进程可令 `sys.stdout` 与 `sys.stderr` 为 `None`。`desktop.py` 当前调用 `uvicorn.run()` 时未覆盖 `log_config`，因此 Uvicorn 仍加载面向控制台的默认 `LOGGING_CONFIG`。这发生在 Provider 能力探测成功并保存配置之后，与第二家中转站是否可连接无关。
+- 第一家中转站失败不代表地址被白名单限制；现行探测要求服务兼容项目实际使用的 OpenAI Responses 结构化输出和当前模型。不同中转站可能只兼容 Chat Completions、缺少结构化输出或不提供当前模型，应显示探测返回的兼容性错误，不能把“HTTP 可访问”等同于 ArchResearch 可用。
+- 最小修复是在安装版 `uvicorn.run()` 中显式传入 `log_config=None`，继续保留 `log_level="warning"` 与 `access_log=False`。先用行为测试固定该调用合同，再重建并实机验证。
+
+## 2026-07-31 M171 compatibility scope
+
+- 仅允许任意接口地址并不等于能调用任意服务：当前配置把研究/视觉模型固定为 `gpt-5.6-sol`，探测和全部生产调用又只使用 `client.responses.parse`。直接 DeepSeek、Kimi 或只实现 `/chat/completions` 的中转站会因模型名或协议不匹配失败。
+- 本地正式案例检索已经由 `LocalBrowserPageParser` 通过系统 Chrome 和固定只读搜索路径承担；Workflow 检测到该 `PublicSearchProvider` 后不会调用模型的 `web_search` 工具。因此 Chat Completions 兼容层只需覆盖规划、页面分析、综合和视觉结构化输出，不需要虚构通用模型搜索能力。
+- 用户明确要求模型名从上游获取，不允许用户手填。最小可用的兼容提升因此是调用 `/models` 获取模型 ID，过滤 embedding、音频、图像生成等明显非对话模型后，对有界候选依次协商 Responses 与 Chat Completions。运行时必须复用已验证模型与协议，不能让探测走 Chat 而生产仍硬编码 Responses。
+- Chat Completions adapter 需要把 Responses 风格的 `input_text` / `input_image` 转为 chat 的 `text` / `image_url` content，并把 `text_format` 映射为 SDK 的 Pydantic `response_format`。`reasoning` 不是通用 OpenAI-compatible 参数，Chat 路径应忽略；图像是否可用仍由具体模型决定。
+
+## 2026-07-31 M172 Web visual research failure diagnosis
+
+- 用户提供的线上截图显示“小红书图纸灵感” Run 已进入 `failed` 终态，文案为“搜索失败，已找到的图纸已保留”；没有 Run ID 或 Cloudflare 历史日志，不能仅凭截图判断 Provider 具体错误。
+- 只读审计确认视觉路径不是普通 Web Search：Workflow 先等待 `xiaohongshu-visual-sources` 事件，扩展最多返回 48 个逐图槽位；Worker 将 R2 预览读回后，在 `createLiveResearchServices().analyze()` 中每 4 张图串行调用一次结构化视觉模型。
+- 根因候选中已确认一项代码缺口：Cloudflare `ResearchWorkflow` 给所有 `step.do` 阶段统一 `timeout: '5 minutes'`。视觉分析最多 12 批模型请求，正常慢接口会在仍有待处理图片时被 Workflow 判为 errored，入口随后只能把它压成 `status: failed`。现有测试只有单批视觉分析，未覆盖该上限。
+- 最小修复已加入 `workflowStageTimeout()`：`analyzing` 使用 20 分钟，其余阶段保持 5 分钟；Edge Workflow 回归测试锁定该映射，Edge lint/typecheck 与 workflow tests 已通过。尚未证明生产失败是否还包含 Provider 载荷/模型兼容性问题，下一步需补充生产级请求边界测试并做部署后验收。
+
+## 2026-07-31 M172/M170/M171 发布收口
+
+- 提交 `1695973` 同时包含本地安装器启动/迁移修复、Provider 模型与协议协商以及 Edge 视觉分析超时修复；Hosted `verify` Run `30572135856` 对该 SHA 成功。另一套同 SHA Run `30572207240` 在完整门禁阶段无进展，已取消，不作为失败代码证据。
+- annotated tag `v2.2.1` 已推送，正式 Release 已上传两个独立资产：`ArchResearch-Windows-x64-Setup-v2.2.1.exe`（69,689,547 bytes，SHA-256 `FEC335DB8BE9F7E2943BE40F264EBDBD64AE673F1F37CA34051747EDC4661A68`）与 `archresearch-chrome-extension-only-v2.2.1.zip`（22,317 bytes，SHA-256 `9327F89BD3B4CEB149F4FA28F2A986B39A88E18DB91FCDD833B8EF1CEA4D60AD`）。扩展仍不进入 Windows 安装包。
+- `archresearch-web` 已部署新 Worker 版本 `7784b800-0135-461f-a506-d2be1b34f2e0`。部署仅使用既有 Cloudflare 配置与 Secret 绑定，没有打印或迁移任何 Provider Key。线上主页、bundle、`/api/config` 均返回 200；bundle 包含 v2.2.1 扩展下载地址，`x-robots-tag`、`X-Frame-Options`、CSP frame deny/Turnstile 约束存在，配置响应不含 Provider Key。
+- 本轮未调用内部浏览器、未创建新的真实研究 Run；M161 的正式 Turnstile Quick 仍是需要真人资源的外部验收，不自动绕过。
+
+## 2026-07-31 M170 packaged startup recovery
+
+- 用户授权升级后，`v2.2.1` 安装器第一次真实启动仍以退出码 3 结束；`--self-test` 只能证明静态资源存在，不能覆盖 FastAPI lifespan。
+- 隔离 console 调试包捕获到真实异常：`alembic.util.exc.CommandError: No 'script_location' key found in configuration.` PyInstaller 将 `archresearch_api.database` 放在 `base_library.zip`，`Path(__file__).parents[2] / "alembic.ini"` 因而指向不存在的压缩包路径；这与 Provider、Key 或 Uvicorn formatter 无关。
+- 新增冻结运行时红绿测试，`Database.migrate()` 在存在 `sys._MEIPASS` 时从资源根目录读取 `alembic.ini`，开发模式继续使用源码 `apps/api/alembic.ini`。迁移测试 6/6、桌面/Provider 启动定向测试 17/17 通过。
+- 重建安装器后覆盖现有安装：安装器 exit 0、`--self-test` exit 0；已保存配置启动后 `/desktop-health` 返回 `ArchResearch` / `2.2.1` / `8000`，`/health` 返回 `ok` 与已保存 Provider 模式，证明窗口化服务持续运行。新安装器 SHA-256 为 `FEC335DB8BE9F7E2943BE40F264EBDBD64AE673F1F37CA34051747EDC4661A68`；扩展 ZIP 未改变，仍为 `9327F89BD3B4CEB149F4FA28F2A986B39A88E18DB91FCDD833B8EF1CEA4D60AD`。
+
+## 2026-07-31 Web-only product decision
+
+- 用户决定停止本地部署与本地版公开发布。GitHub 只保留 Web Edition 源码和独立 Chrome 扩展 ZIP；私有 Web URL 继续不得进入仓库、Release 或 metadata。
+- 用户可见 parity 仍然要求共享 Board 的主页、研究模式、历史、结果、个人收藏、对照、导出、备份和小红书入口完整一致；Cloudflare Edge、IndexedDB 和动态 HTTPS origin 注册是有意的基础设施差异，不应机械回退为 Windows/SQLite 实现。
+- Windows installer/PyInstaller/Inno/桌面启动/autostart/provider setup 属于本地发行层，已从公开 CI、文档与发布合同移除。FastAPI/SQLite/loopback pairing 代码暂保留给维护者离线测试，未纳入 Web gate，不得重新出现在普通用户说明。
+- Extension popup/sidepanel 已移除本地服务、端点、一次性配对码、手动配对和断开控件；公共网页连接与权限动作保留。聚焦 UI/HTML 测试 24/24 通过；ChromeBrowserPort、BrowserCommandExecutor、content 协议和 publicBoardBridge 仍是 Web 小红书研究核心。
+- GitHub release cleanup completed with authenticated `gh`: `v2.2.0` and `v2.2.1` now each contain only their `archresearch-chrome-extension-only-*.zip`; Windows installer assets were deleted and Release titles/notes now describe the Chrome extension component only. Tags were not deleted and no Web URL was added.
+
+## 2026-07-31 Web-only verification and E2E migration
+
+- The first Web-only Extension E2E run was red only because the retired `FastAPI browser workflow` still clicked the removed manual-pairing UI. It timed out at 30 seconds; the other seven packaged bridge tests passed.
+- Removed that obsolete workflow and its dedicated `TestApi`, `requestJson`, pairing-token reader, Python child-process setup, and unused asynchronous wait helper. The remaining packaged suite now tests the browser protocol/managed tabs only; public Web status, dynamic HTTPS origin registration, and Xiaohongshu research coverage remain in the public controller/bridge tests.
+- Updated the extension product register and failure-recovery guide so ordinary users are told to reconnect the current Web Edition tab, not inspect a local service, API health endpoint, or pairing code. Maintainer-only FastAPI/SQLite compatibility remains explicitly outside the Web gate.
+- `scripts/tests/release.tests.ps1` passed. `scripts/verify-web.ps1` passed with 190 Board tests, 186 Extension tests, 7 packaged E2E, 12 Web tests, 29 Edge tests; coverage was Board 79.01/76.42/84.28/83.18 and Extension 83.40/78.55/85.29/85.74. No provider key, browser session, internal browser, or live Run was used.

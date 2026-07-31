@@ -1084,7 +1084,7 @@ describe('research board', () => {
       name: '下载扩展安装包',
     })).toHaveAttribute(
       'href',
-      'https://github.com/jileyu2000/archresearch/releases/download/v2.2.0/archresearch-chrome-extension-only-v2.2.0.zip',
+      'https://github.com/jileyu2000/archresearch/releases/download/v2.2.1/archresearch-chrome-extension-only-v2.2.1.zip',
     )
   })
 

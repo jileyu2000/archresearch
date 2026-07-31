@@ -1,6 +1,6 @@
 # 从源码运行 ArchResearch
 
-本文只面向需要修改或调试源码的开发者。普通用户请直接使用 README 中的 Windows 安装版。
+本文只面向需要修改或调试源码的开发者。普通用户请使用项目方私下提供的 Web Edition 地址；仓库不公开网页地址。
 
 ## 环境
 
@@ -33,15 +33,15 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/stop.ps1
 
 ## Provider
 
-默认 `mock` 模式不需要 Key。需要运行真实研究时，使用安全配置脚本：
+默认 `mock` 模式不需要 Provider 配置。需要运行真实研究时，使用安全配置脚本：
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/configure-provider.ps1
 ```
 
-脚本先验证 Key，再将其写入 Windows 凭据管理器。Key 不写入 `.env`、日志或仓库。
+脚本会要求 API 接口地址和 API Key，先从上游模型列表自动获取候选模型，再依次测试 Responses 与 Chat Completions 结构化输出；成功后保存接口地址、选中模型和协议，并将 Key 写入 Windows 凭据管理器。地址可指向中转站、DeepSeek、Kimi 或自建服务，不按域名白名单限制；Key 不写入 `.env`、日志或仓库。上游不提供模型列表或没有兼容模型时不会保存任一项；图片分析仍要求选中模型支持视觉输入。
 
-如需测试其他 OpenAI 兼容配置，可编辑本地 `.env`。不要提交含 Key 的文件。
+不要提交含 Key 的文件。
 
 ## 更新源码运行环境
 

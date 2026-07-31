@@ -10,7 +10,7 @@ from archresearch_api.main import create_app
 from archresearch_api.provider_credentials import (
     ACCOUNT,
     SERVICE,
-    SuoxieProviderConfig,
+    ProviderConfig,
     write_provider_config,
 )
 
@@ -33,8 +33,11 @@ class FakeOpenAIClient:
     pass
 
 
-def test_startup_uses_stored_suoxie_config_for_both_model_clients(tmp_path: Path) -> None:
-    write_provider_config(tmp_path, SuoxieProviderConfig())
+def test_startup_uses_stored_user_endpoint_for_both_model_clients(tmp_path: Path) -> None:
+    write_provider_config(
+        tmp_path,
+        ProviderConfig(base_url="https://api.deepseek.com/v1"),
+    )
     keyring = FakeKeyring()
     keyring.set_password(SERVICE, ACCOUNT, "sk-stored")
     factory_calls: list[dict[str, object]] = []
@@ -62,7 +65,7 @@ def test_startup_uses_stored_suoxie_config_for_both_model_clients(tmp_path: Path
     assert factory_calls == [
         {
             "api_key": "sk-stored",
-            "base_url": "https://suoxie.codes/v1",
+            "base_url": "https://api.deepseek.com/v1",
             "timeout": 45.0,
             "max_retries": 0,
         }
@@ -72,14 +75,17 @@ def test_startup_uses_stored_suoxie_config_for_both_model_clients(tmp_path: Path
     assert health == {
         "status": "ok",
         "provider_mode": "openai",
-        "provider": "梭子蟹 API",
+        "provider": "OpenAI 兼容 API",
         "model": "gpt-5.6-sol",
     }
     assert "sk-stored" not in str(health)
 
 
 def test_missing_stored_credential_keeps_deterministic_mock_mode(tmp_path: Path) -> None:
-    write_provider_config(tmp_path, SuoxieProviderConfig())
+    write_provider_config(
+        tmp_path,
+        ProviderConfig(base_url="https://api.moonshot.cn/v1"),
+    )
     calls = 0
 
     def factory(**_: str) -> Any:
@@ -101,3 +107,35 @@ def test_missing_stored_credential_keeps_deterministic_mock_mode(tmp_path: Path)
     assert app.state.research_provider.name == "mock"
     assert app.state.visual_classifier.name == "mock-vision"
     assert calls == 0
+
+
+def test_startup_adapts_a_negotiated_chat_completions_client(tmp_path: Path) -> None:
+    write_provider_config(
+        tmp_path,
+        ProviderConfig(
+            base_url="https://api.deepseek.com/v1",
+            research_model="deepseek-chat",
+            vision_model="deepseek-chat",
+            api_protocol="chat_completions",
+        ),
+    )
+    keyring = FakeKeyring()
+    keyring.set_password(SERVICE, ACCOUNT, "sk-stored")
+    raw_client = FakeOpenAIClient()
+
+    app = create_app(
+        Settings(
+            _env_file=None,
+            database_url=f"sqlite:///{(tmp_path / 'chat.db').as_posix()}",
+            data_dir=tmp_path,
+            provider_mode="mock",
+        ),
+        keyring_backend=keyring,
+        openai_client_factory=lambda **_: raw_client,
+    )
+
+    assert app.state.research_provider.model == "deepseek-chat"
+    assert app.state.visual_classifier.model == "deepseek-chat"
+    assert app.state.research_provider.client is app.state.visual_classifier.client
+    assert app.state.research_provider.client is not raw_client
+    assert app.state.research_provider.client.raw_client is raw_client

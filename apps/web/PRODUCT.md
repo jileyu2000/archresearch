@@ -16,7 +16,7 @@ Users arrive through a public HTTPS page. Their long-term research history, save
 
 ## Product Purpose
 
-The Web Edition is the public deployment of the existing local ArchResearch product. Case research is install-free; Xiaohongshu visual research adds one Chrome extension. The local edition is the product and interaction source of truth; the Web Edition must not invent a separate information architecture or reduced feature set. It must preserve the complete research loop:
+The Web Edition is the only user-facing deployment of ArchResearch. Case research is install-free; Xiaohongshu visual research adds one Chrome extension. The shared Board remains the interaction source of truth; the Web Edition must not invent a separate information architecture or reduced feature set. It must preserve the complete research loop:
 
 1. Start an architectural research or visual-inspiration task.
 2. Follow bounded progress and inspect partial results.
@@ -44,7 +44,7 @@ The Web Edition must transfer the local edition's screens, navigation, terminolo
 
 Implementation differences must stay below the product surface wherever possible. Any unavoidable edition difference must be explicit and narrow:
 
-- Local-file integration remains a local-edition capability.
+- Local-file integration is intentionally outside the Web Edition scope.
 - Public case research reads bounded public HTTPS sources through the server protocol. Xiaohongshu visual research uses the ArchResearch Chrome extension to read bounded visible note cards from the user's signed-in Chrome; cookies, credentials, and browser storage never enter the Cloudflare request.
 - The main page checks for the extension and shows one install/connection notice while it is missing. Once the extension is detected, the notice stops appearing; source-specific readiness remains visible at the visual-research entry.
 - Capabilities that depend on unavailable source data may show an honest unavailable state; their surrounding workflow and navigation must remain present.
@@ -59,7 +59,7 @@ The product should feel clear-headed, lightweight, and dependable: closer to an 
 1. Feature parity before decoration. A polished surface cannot substitute for missing workflow steps.
 2. Evidence stays visible. Formal claims, provenance, and source access belong near the result they support.
 3. Local ownership is legible. History, collections, and backups clearly state that they live in the current browser.
-4. One architecture across editions. Shared concepts use the same names, hierarchy, and interaction patterns in local and Web editions.
+4. One architecture. Shared concepts use the same names, hierarchy, and interaction patterns throughout the Web Edition and its shared Board source.
 5. Honest degradation. Browser limitations are explained at the point of use, not hidden by removing the feature's place in the product.
 6. Calm density. Prefer strong typography, measured spacing, drawing-grid structure, and restrained color over decorative card stacks.
 
