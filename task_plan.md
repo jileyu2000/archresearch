@@ -85,8 +85,8 @@ Status: **complete**
 
 - 30 条版本化任务的真实网页批量执行与人工标注需要用户主动启用，并可能产生 Provider 费用。
 - 100+ 独立来源、权利清晰的真实图纸样本仍是外部数据门槛；当前 108 张为确定性合成夹具。
-- GitHub Hosted CI、提交、推送、tag 与 Release 不属于本轮已授权动作。
+- GitHub Hosted CI 仍是外部门禁；用户已明确授权本轮 v2.2.2 的提交、推送、tag 与 Release。
 
 ## Next action
 
-本阶段验证和 `v2.2.2` 本地发布候选已完成；下一步执行用户已授权的提交、推送和“ArchResearch 本地版 v2.2.2” Release，附件为 Windows 安装器与独立 Chrome 扩展 ZIP。
+本阶段验证和 `v2.2.2` 本地发布候选已完成；当前执行用户已授权的分支 PR、`v2.2.2` tag 和“ArchResearch 本地版 v2.2.2” Release，附件为 Windows 安装器与独立 Chrome 扩展 ZIP。

@@ -32,8 +32,8 @@
 - 最终 `scripts/verify.ps1` exit 0，stdout 为 `.artifacts/qa/m179-verify-final-e830bf9702004786822a01887eccc8d6.out.log`，stderr 为空。
 - API 389/389、Board 178/178、Extension 165/165、packaged E2E 8/8。
 - Ruff/64-file format、strict Mypy、lint/typecheck、Board/Extension production builds、进程、安全、评测、manifest/protocol 和 Windows 发布合同全部通过。
-- `scripts/build-extension-package.ps1` 成功生成 18,257-byte 扩展 ZIP，SHA-256 `129B6E398A92784905CB199C3C142119A2AEB091DC6FE061FDE8237A9F834B68`。
-- `scripts/build-windows-installer.ps1` 成功完成 Board build、PyInstaller 和 Inno Setup，生成 69,675,426-byte 安装器，SHA-256 `8B3824E8C7C39F9CF47ED97ECF46FAA1D290C9436DB7FC03526B9B167C5E897F`。
+- `scripts/build-extension-package.ps1` 成功生成 18,260-byte v2.2.2 扩展 ZIP，SHA-256 `9D554576B6DDAAD705EC4E66B1D948EB2305A749CAEFAE40144EC04D8FAD0902`。
+- `scripts/build-windows-installer.ps1` 成功完成 Board build、PyInstaller 和 Inno Setup，生成 69,681,830-byte v2.2.2 安装器，SHA-256 `F859C66720D0A493950653F2178E34C7955CBF7D838CD4569C36D994A30162A1`。
 - `scripts/test-windows-installer-package.ps1` 通过真实静默安装、快捷方式、精简 `PATH` 下 `--self-test`、扩展排除、静默卸载和残留检查。
 - `/desktop-health` 与 `/health` 行为在同轮 desktop app 测试中通过；packaged E2E 证明真实 FastAPI、扩展配对、浏览器裁图与本地资产读取。
 - `pnpm -r list --depth -1` 只列出 root、Board、Extension。
@@ -42,9 +42,9 @@
 ## Current working tree
 
 - 保留全部本地恢复修改、Web/Edge 删除项和 `.artifacts/build/`、`.artifacts/qa/`、`.artifacts/releases/`。
-- 未 reset、checkout、clean、stage、commit、push、tag 或修改 Release。
+- 未 reset、checkout 或 clean；本地恢复和 Provider 兼容性修改已提交为 `e9736c8` 并推送到 `agent/local-release-v2.2.2`，v2.2.2 tag/Release 尚未创建。
 - 未调用内部浏览器，未读取用户 Cookie、Chrome 会话或 Provider Key，未创建/取消/重试真实研究，未恢复 Firecrawl，未部署 Worker。
-- M179 已完成，当前无已授权自动下一步。
+- M179 已完成，当前正在执行用户已授权的 v2.2.2 发布流程。
 
 ## 2026-07-31 Provider configuration contract correction
 
@@ -76,4 +76,10 @@
 - 版本面已从 `2.2.1` 提升到 `2.2.2`。README 主标题改为本地优先研究工作台，GitHub Release 计划使用“ArchResearch 本地版 v2.2.2”，同时说明 Windows 安装器与独立 Chrome 扩展。
 - 权威 `scripts/verify.ps1` 通过：401 API / 178 Board / 165 Extension / 8 packaged E2E，Ruff/strict Mypy、前端 lint/typecheck/build 和 Windows 发布合同全绿。
 - `scripts/build-extension-package.ps1` 生成 18,260-byte 扩展 ZIP，SHA-256 `9D554576B6DDAAD705EC4E66B1D948EB2305A749CAEFAE40144EC04D8FAD0902`；Windows 安装器 69,681,830 bytes，SHA-256 `F859C66720D0A493950653F2178E34C7955CBF7D838CD4569C36D994A30162A1`。
-- `scripts/test-windows-installer-package.ps1` 真实安装、启动自检、扩展排除和卸载 smoke 通过；当前尚未提交、推送或创建新 Release。
+- `scripts/test-windows-installer-package.ps1` 真实安装、启动自检、扩展排除和卸载 smoke 通过；当前分支已提交并推送，尚未创建 v2.2.2 tag/Release。
+
+## 2026-07-31 Release verification
+
+- 权威门禁核心阶段通过：API 401/401、Board 178/178、Extension 165/165、packaged E2E 8/8，Ruff、strict Mypy、前端 lint/typecheck/build、Windows 安装器合同和真实安装 smoke 均通过。
+- 外层 `scripts/verify.ps1` 在最后的根级 `pnpm check` 收尾时超过工具 180 秒窗口；随后独立执行 `pnpm run check` 退出码 0，未发现代码或构建失败。
+- 用户已授权创建分支 PR、`v2.2.2` tag 和 GitHub Release；Release 标题固定为“ArchResearch 本地版 v2.2.2”，正文只描述 Windows/Chrome 本地产品，附件为 Windows 安装器与独立 Chrome 扩展 ZIP。

@@ -52,14 +52,14 @@
 
 ## Release candidate
 
-- 扩展 ZIP：18,257 bytes，SHA-256 `129B6E398A92784905CB199C3C142119A2AEB091DC6FE061FDE8237A9F834B68`。
-- Windows 安装器：69,675,426 bytes，SHA-256 `8B3824E8C7C39F9CF47ED97ECF46FAA1D290C9436DB7FC03526B9B167C5E897F`。
-- 两个文件都只存在 `.artifacts/releases/`；远端分支、tag 和 Release 未修改。
+- 扩展 ZIP：18,260 bytes，SHA-256 `9D554576B6DDAAD705EC4E66B1D948EB2305A749CAEFAE40144EC04D8FAD0902`。
+- Windows 安装器：69,681,830 bytes，SHA-256 `F859C66720D0A493950653F2178E34C7955CBF7D838CD4569C36D994A30162A1`。
+- 两个文件都只存在 `.artifacts/releases/`；`agent/local-release-v2.2.2` 已推送，v2.2.2 tag 和 Release 待本轮创建。
 
 ## Constraints
 
 - 不恢复 Firecrawl、Web/Edge、Cloudflare 或公共 HTTPS 扩展桥。
 - 不调用会导致桌面应用闪退的内部浏览器。
 - 默认验证不读取用户 Cookie、Chrome 会话或 Provider Key，不创建或重试真实研究。
-- 不 reset、checkout、clean、stage、commit、push、tag 或修改 Release，除非用户另行明确授权。
+- 不 reset、checkout 或 clean；本轮用户已明确授权提交、推送、tag 和 Release。
 - 本轮只读复核曾假设根级 `tests` 和 `provider_runtime.py` 存在；实际路径分别是 `apps/api/tests`，Provider runtime 定义位于现有 credential 模块。错误命令未写文件，也未重复。
