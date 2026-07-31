@@ -83,8 +83,32 @@ h1 {
   font-weight: 650;
 }
 
+form {
+  display: grid;
+  gap: 10px;
+}
+
+label {
+  color: var(--muted);
+  display: grid;
+  font-size: 11px;
+  gap: 5px;
+}
+
+input {
+  background: var(--paper);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  color: var(--graphite);
+  font: inherit;
+  min-height: 44px;
+  padding: 9px 11px;
+  width: 100%;
+}
+
+input:focus-visible,
 button:focus-visible,
-button:focus-visible {
+summary:focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
@@ -149,6 +173,36 @@ button:disabled {
 [data-permission="true"] [data-command="permissions.revoke"] {
   display: block;
   width: 100%;
+}
+
+[data-paired="true"][data-connection="connected"] .manual-pairing {
+  display: none;
+}
+
+.manual-pairing {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.manual-pairing summary {
+  align-items: center;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 16px;
+  min-height: 44px;
+}
+
+.manual-pairing-body {
+  display: grid;
+  gap: 10px;
+  padding-top: 10px;
+}
+
+.disconnect {
+  color: var(--restriction-ink);
 }
 
 .error {

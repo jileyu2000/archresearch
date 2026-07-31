@@ -1,6 +1,6 @@
 # 从源码运行 ArchResearch
 
-本文只面向需要修改或调试源码的开发者。普通用户请使用项目方私下提供的 Web Edition 地址；仓库不公开网页地址。
+本文只面向需要修改或调试源码的开发者。普通用户应使用 GitHub Release 中的 Windows 安装器；源码环境不会替代安装版的普通用户路径。
 
 ## 环境
 
@@ -39,7 +39,7 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/stop.ps1
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/configure-provider.ps1
 ```
 
-脚本会要求 API 接口地址和 API Key，先从上游模型列表自动获取候选模型，再依次测试 Responses 与 Chat Completions 结构化输出；成功后保存接口地址、选中模型和协议，并将 Key 写入 Windows 凭据管理器。地址可指向中转站、DeepSeek、Kimi 或自建服务，不按域名白名单限制；Key 不写入 `.env`、日志或仓库。上游不提供模型列表或没有兼容模型时不会保存任一项；图片分析仍要求选中模型支持视觉输入。
+脚本会要求 API 接口地址和 API Key，地址填写服务实际提供的 OpenAI-compatible base URL（常见形式以 `/v1` 结尾）；先从上游 `/models` 获取模型列表，再让用户输入模型序号。用户不需要也不能输入模型 ID。随后只测试选中的模型的 Responses 与 Chat Completions 结构化输出；成功后保存接口地址、选中模型和协议，并将 Key 写入 Windows 凭据管理器。地址可指向中转站、DeepSeek、Kimi 或自建服务，不按域名白名单限制；Key 不写入 `.env`、日志或仓库。上游不提供模型列表、用户未选择模型或选中模型不兼容时不会保存任一项；`gpt-5.6-sol` 只兼容读取缺少模型字段的旧配置；图片分析仍要求选中模型支持视觉输入。
 
 不要提交含 Key 的文件。
 

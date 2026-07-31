@@ -6,11 +6,11 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, TextIO
+from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict
 
 from .provider_credentials import (
-    DEFAULT_PROVIDER_MODEL,
     KeyringBackend,
     ProviderConfig,
     ProviderConfigurationError,
@@ -19,7 +19,6 @@ from .provider_credentials import (
 )
 
 ClientFactory = Callable[..., Any]
-MAX_PROVIDER_MODEL_PROBES = 6
 NON_CHAT_MODEL_MARKERS = (
     "embedding",
     "rerank",
@@ -123,16 +122,72 @@ def provider_model_ids(client: Any) -> list[str]:
             and model_id.strip() not in model_ids
         ):
             model_ids.append(model_id.strip())
-    if DEFAULT_PROVIDER_MODEL in model_ids:
-        model_ids.remove(DEFAULT_PROVIDER_MODEL)
-        model_ids.insert(0, DEFAULT_PROVIDER_MODEL)
     if not model_ids:
         raise ProviderCapabilityError("The upstream API did not list a usable text model")
     return model_ids
 
 
+def provider_base_url_candidates(base_url: str) -> list[str]:
+    validated_url = ProviderConfig.model_validate({"base_url": base_url.strip()}).base_url
+    normalized_url = str(validated_url).rstrip("/")
+    parsed = urlsplit(normalized_url)
+    path = parsed.path.rstrip("/")
+    candidates = [normalized_url]
+
+    def add_suffix(suffix: str) -> None:
+        candidate_path = f"{path}/{suffix}" if path else f"/{suffix}"
+        candidate = urlunsplit((parsed.scheme, parsed.netloc, candidate_path, parsed.query, ""))
+        if candidate not in candidates:
+            candidates.append(candidate)
+
+    if not path.casefold().endswith("/v1"):
+        add_suffix("v1")
+    if not path:
+        add_suffix("api/v1")
+    return candidates
+
+
+def _provider_model_catalog(
+    base_url: str,
+    api_key: str,
+    client_factory: ClientFactory | None = None,
+) -> list[tuple[str, Any, list[str]]]:
+    factory = client_factory or _create_openai_client
+    catalog: list[tuple[str, Any, list[str]]] = []
+    for candidate_url in provider_base_url_candidates(base_url):
+        try:
+            client = factory(api_key=api_key, base_url=candidate_url)
+            catalog.append((candidate_url, client, provider_model_ids(client)))
+        except Exception:
+            continue
+    if not catalog:
+        raise ProviderCapabilityError("The upstream API did not list a usable text model")
+    return catalog
+
+
+def list_provider_models(
+    base_url: str,
+    api_key: str,
+    client_factory: ClientFactory | None = None,
+) -> list[str]:
+    normalized_key = api_key.strip()
+    if not normalized_key:
+        raise ProviderConfigurationError("API key is required")
+    model_ids: list[str] = []
+    for _, _, candidate_models in _provider_model_catalog(
+        base_url,
+        normalized_key,
+        client_factory=client_factory,
+    ):
+        for model_id in candidate_models:
+            if model_id not in model_ids:
+                model_ids.append(model_id)
+    return model_ids
+
+
 def configure_provider(
     base_url: str,
+    model: str,
     api_key: str,
     *,
     data_dir: Path,
@@ -142,18 +197,29 @@ def configure_provider(
     normalized_key = api_key.strip()
     if not normalized_key:
         raise ProviderConfigurationError("API key is required")
-    validated_url = ProviderConfig.model_validate({"base_url": base_url.strip()}).base_url
-    factory = client_factory or _create_openai_client
-    client = factory(api_key=normalized_key, base_url=str(validated_url))
-    for model_id in provider_model_ids(client)[:MAX_PROVIDER_MODEL_PROBES]:
-        config = ProviderConfig(
-            base_url=validated_url,
-            research_model=model_id,
-            vision_model=model_id,
+    normalized_model = model.strip()
+    if not normalized_model:
+        raise ProviderConfigurationError("Model name is required")
+    catalog = _provider_model_catalog(
+        base_url,
+        normalized_key,
+        client_factory=client_factory,
+    )
+    last_probe_error: Exception | None = None
+    for candidate_url, client, candidate_models in catalog:
+        if normalized_model not in candidate_models:
+            continue
+        config = ProviderConfig.model_validate(
+            {
+                "base_url": candidate_url,
+                "research_model": normalized_model,
+                "vision_model": normalized_model,
+            }
         )
         try:
             probe = _probe_provider_client(client, config)
-        except ProviderCapabilityError:
+        except Exception as exc:
+            last_probe_error = exc
             continue
         negotiated_config = config.model_copy(update={"api_protocol": probe.api_protocol})
         commit_provider_config(
@@ -163,7 +229,13 @@ def configure_provider(
             keyring_backend,
         )
         return probe
-    raise ProviderCapabilityError("No listed model passed the structured output probe")
+    if last_probe_error is not None:
+        raise ProviderCapabilityError(
+            "No candidate Base URL supported structured output"
+        ) from last_probe_error
+    if not any(normalized_model in candidate_models for _, _, candidate_models in catalog):
+        raise ProviderCapabilityError("The selected model is not listed by the upstream API")
+    raise ProviderCapabilityError("No candidate Base URL supported structured output")
 
 
 def main(
@@ -178,6 +250,8 @@ def main(
     parser = argparse.ArgumentParser(description="Configure the ArchResearch relay provider")
     parser.add_argument("--data-dir", type=Path, default=Path(".archresearch"))
     parser.add_argument("--base-url", default="")
+    parser.add_argument("--list-models", action="store_true")
+    parser.add_argument("--model-index", type=int)
     arguments = parser.parse_args(argv)
     input_stream = stdin or sys.stdin
     output_stream = stdout or sys.stdout
@@ -188,15 +262,47 @@ def main(
         print("API 接口地址不能为空。", file=error_stream)
         return 2
 
+    if arguments.list_models and arguments.model_index is not None:
+        print("不能同时列出模型并指定模型序号。", file=error_stream)
+        return 2
+
     api_key = input_stream.readline().strip()
     if not api_key:
         print("API Key 不能为空。", file=error_stream)
         return 2
 
     try:
+        models = list_provider_models(
+            base_url,
+            api_key,
+            client_factory=client_factory,
+        )
+        if arguments.list_models:
+            for index, model in enumerate(models):
+                print(f"{index}\t{model}", file=output_stream)
+            return 0
+
+        model_index = arguments.model_index
+        if model_index is None:
+            print("请从上游模型列表中输入模型序号：", file=output_stream)
+            for index, model in enumerate(models):
+                print(f"{index}\t{model}", file=output_stream)
+            raw_index = input_stream.readline().strip()
+            if not raw_index:
+                print("模型序号不能为空。", file=error_stream)
+                return 2
+            try:
+                model_index = int(raw_index)
+            except ValueError:
+                print("模型序号必须是数字。", file=error_stream)
+                return 2
+        if model_index < 0 or model_index >= len(models):
+            print("模型序号无效。", file=error_stream)
+            return 2
         backend = keyring_backend or get_windows_keyring()
         probe = configure_provider(
             base_url,
+            models[model_index],
             api_key,
             data_dir=arguments.data_dir,
             keyring_backend=backend,

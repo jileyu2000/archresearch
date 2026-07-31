@@ -12,7 +12,8 @@ from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, field_validator
 SERVICE = "ArchResearch/suoxie"
 ACCOUNT = "api-key"
 CONFIG_FILENAME = "provider.json"
-DEFAULT_PROVIDER_MODEL = "gpt-5.6-sol"
+# Only applies when loading older provider.json files that omitted model fields.
+LEGACY_DEFAULT_PROVIDER_MODEL = "gpt-5.6-sol"
 
 
 class ProviderConfigurationError(RuntimeError):
@@ -37,8 +38,16 @@ class ProviderConfig(BaseModel):
     provider: str = Field(default="openai-compatible", min_length=1, max_length=100)
     name: str = Field(default="OpenAI 兼容 API", min_length=1, max_length=100)
     base_url: AnyHttpUrl
-    research_model: str = Field(default=DEFAULT_PROVIDER_MODEL, min_length=1, max_length=100)
-    vision_model: str = Field(default=DEFAULT_PROVIDER_MODEL, min_length=1, max_length=100)
+    research_model: str = Field(
+        default=LEGACY_DEFAULT_PROVIDER_MODEL,
+        min_length=1,
+        max_length=100,
+    )
+    vision_model: str = Field(
+        default=LEGACY_DEFAULT_PROVIDER_MODEL,
+        min_length=1,
+        max_length=100,
+    )
     api_protocol: Literal["responses", "chat_completions"] = "responses"
 
     @field_validator("base_url")

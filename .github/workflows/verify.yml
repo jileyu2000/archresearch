@@ -1,6 +1,4 @@
-# Web Edition verification gate. The public repository publishes only the
-# separately loaded Chrome extension; the retired Windows installer is not
-# built or uploaded by CI.
+# Reproduces the local Windows product gate without live provider credentials.
 name: verify
 
 on:
@@ -43,11 +41,13 @@ jobs:
           key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: pnpm-${{ runner.os }}-
 
-      - name: Install Web Edition workspace
+      - name: Prepare environment file
         shell: pwsh
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm --dir apps/extension run build
+        run: Copy-Item .env.example .env
+
+      - name: Setup workspace (venv, api deps, pnpm install, extension build)
+        shell: pwsh
+        run: ./scripts/setup.ps1
 
       - name: Install Playwright Chromium for packaged Extension E2E
         shell: pwsh
@@ -57,19 +57,41 @@ jobs:
         shell: pwsh
         run: pnpm test:coverage
 
-      - name: Run the focused Web Edition gate
+      - name: Run the full local repository gate
         shell: pwsh
-        run: ./scripts/verify-web.ps1
+        run: ./scripts/verify.ps1
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: >
+          winget install --id JRSoftware.InnoSetup --exact --source winget
+          --silent --accept-package-agreements --accept-source-agreements
+          --disable-interactivity
 
       - name: Build separate Chrome extension package
         shell: pwsh
         run: ./scripts/build-extension-package.ps1
 
+      - name: Build self-contained Windows installer
+        shell: pwsh
+        run: ./scripts/build-windows-installer.ps1
+
+      - name: Smoke installed Windows application
+        shell: pwsh
+        run: ./scripts/test-windows-installer-package.ps1
+
       - name: Upload separate Chrome extension package
         uses: actions/upload-artifact@v4
         with:
-          name: archresearch-chrome-extension-only-v2.2.1
-          path: .artifacts/releases/archresearch-chrome-extension-only-v2.2.1.zip
+          name: archresearch-chrome-extension-only-v2.2.2
+          path: .artifacts/releases/archresearch-chrome-extension-only-v2.2.2.zip
+          if-no-files-found: error
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ArchResearch-Windows-x64-Setup-v2.2.2
+          path: .artifacts/releases/ArchResearch-Windows-x64-Setup-v2.2.2.exe
           if-no-files-found: error
 
       - name: Upload test artifacts on failure

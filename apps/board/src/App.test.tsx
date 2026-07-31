@@ -7,13 +7,11 @@ import App from './App'
 import {
   BrowserBridgeError,
   requestBrowserBridge,
-  requestPublicBrowserBridgeStatus,
 } from './browserBridge'
 
 vi.mock('./browserBridge', async (importOriginal) => ({
   ...await importOriginal<typeof import('./browserBridge')>(),
   requestBrowserBridge: vi.fn(),
-  requestPublicBrowserBridgeStatus: vi.fn(),
 }))
 
 function jsonResponse(body: unknown, status = 200) {
@@ -639,14 +637,14 @@ function createTerminalSubmitHydrationRaceFetch() {
   return { fetchMock, releaseHydration, hydrationGate }
 }
 
-function renderBoard(search = '', edition: 'local' | 'public' = 'local') {
+function renderBoard(search = '') {
   window.history.replaceState({}, '', `/${search}`)
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
   return render(
     <QueryClientProvider client={queryClient}>
-      <App edition={edition} />
+      <App />
     </QueryClientProvider>,
   )
 }
@@ -696,12 +694,6 @@ describe('research board', () => {
       paired: true,
       connection: 'connected',
       researchPermission: true,
-    })
-    vi.mocked(requestPublicBrowserBridgeStatus).mockReset().mockResolvedValue({
-      paired: true,
-      connection: 'connected',
-      researchPermission: true,
-      visualProtocol: 2,
     })
   })
 
@@ -1003,89 +995,6 @@ describe('research board', () => {
     expect(screen.queryByText('这里只检查 Chrome 连接与网页读取权限，不会开始研究。')).not.toBeInTheDocument()
     expect(screen.queryByRole('group', { name: '研究目标' })).not.toBeInTheDocument()
     expect(screen.queryByText('Kamala Narayana Temple Survey')).not.toBeInTheDocument()
-  })
-
-  it('keeps the same product surface in public while using the connected extension for Xiaohongshu', async () => {
-    const user = userEvent.setup()
-    vi.stubGlobal('fetch', createLiveFetch({
-      browserConnected: false,
-      xiaohongshuSearchAvailable: false,
-    }))
-    renderBoard('', 'public')
-
-    expect(await screen.findByText('建筑研究工具')).toBeVisible()
-    await user.click(screen.getByRole('button', {
-      name: /图纸灵感.*配色、线型、版式与分析图/,
-    }))
-
-    expect(screen.getByRole('region', { name: '研究环境' })).toHaveTextContent(
-      '小红书图纸检索已就绪',
-    )
-    expect(screen.getByRole('region', { name: '研究环境' })).toHaveTextContent(
-      '使用你已登录的小红书查找公开笔记',
-    )
-    expect(screen.queryByRole('dialog', { name: '安装 Chrome 扩展' })).not.toBeInTheDocument()
-  })
-
-  it('uses the same visual-research stages and Xiaohongshu result wording in public', async () => {
-    const user = userEvent.setup()
-    vi.stubGlobal('fetch', createLiveFetch({
-      initialStatus: 'inspecting',
-      goal: 'visual_reference_search',
-      subquestions: visualDirectionSubquestions,
-      candidateOverrides: visualCandidateOverrides,
-    }))
-    renderBoard('', 'public')
-
-    await startVisualResearch(user)
-
-    expect(await screen.findByText('正在读取笔记图片并判断图纸类型与风格')).toBeVisible()
-    expect(screen.queryByText(/正在读取公开来源页面/)).not.toBeInTheDocument()
-  })
-
-  it('uses the same Xiaohongshu result organization in public', async () => {
-    const user = userEvent.setup()
-    vi.stubGlobal('fetch', createLiveFetch({
-      goal: 'visual_reference_search',
-      subquestions: visualDirectionSubquestions,
-      candidateOverrides: visualCandidateOverrides,
-    }))
-    renderBoard('', 'public')
-
-    await startVisualResearch(user)
-
-    expect(await screen.findByText(
-      '这次只比较图纸的画面表达，并保留每张图的原笔记来源。',
-    )).toBeVisible()
-    const inspirationBoard = screen.getByRole('region', { name: '视觉灵感板' })
-    expect(within(inspirationBoard).getByRole('heading', {
-      name: '小红书制图灵感',
-    })).toBeVisible()
-    expect(within(inspirationBoard).getByRole('link', { name: '打开原笔记' })).toBeVisible()
-    expect(within(inspirationBoard).queryByText(/公开来源|打开原来源/)).not.toBeInTheDocument()
-  })
-
-  it('links the default install action directly to the versioned Chrome extension component', async () => {
-    const user = userEvent.setup()
-    vi.mocked(requestBrowserBridge).mockRejectedValue(
-      new BrowserBridgeError('unavailable', 'bridge missing'),
-    )
-    vi.stubGlobal('fetch', createLiveFetch())
-    renderBoard()
-
-    const dialog = await screen.findByRole('dialog', { name: '安装 Chrome 扩展' })
-    expect(within(dialog).queryByRole('link', {
-      name: '下载扩展安装包',
-    })).not.toBeInTheDocument()
-
-    await user.click(within(dialog).getByRole('button', { name: '查看安装方法' }))
-
-    expect(within(dialog).getByRole('link', {
-      name: '下载扩展安装包',
-    })).toHaveAttribute(
-      'href',
-      'https://github.com/jileyu2000/archresearch-chrome-extension/releases/download/v2.2.1/archresearch-chrome-extension-only-v2.2.1.zip',
-    )
   })
 
   it('uses the idempotent default-workspace initializer on a fresh install', async () => {

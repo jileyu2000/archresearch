@@ -36,7 +36,6 @@ export type InspirationGroup = {
 }
 
 type VisualInspirationBoardProps = {
-  sourceName?: string
   isVisualResearch: boolean
   postCount: number
   inspirationResults: WorkResult[]
@@ -50,7 +49,6 @@ type VisualInspirationBoardProps = {
 }
 
 export function VisualInspirationBoard({
-  sourceName = '小红书',
   isVisualResearch,
   postCount,
   inspirationResults,
@@ -62,22 +60,19 @@ export function VisualInspirationBoard({
   onPreviewFailed,
   onToggleSelection,
 }: VisualInspirationBoardProps) {
-  const publicSource = sourceName !== '小红书'
   return (
     <section className="visual-inspiration-board" aria-label="视觉灵感板">
       <header className="visual-inspiration-heading section-heading">
         <div>
-          <h2>{sourceName}制图灵感</h2>
+          <h2>小红书制图灵感</h2>
           <p>{isVisualResearch
-            ? publicSource
-              ? '按灵感方向和来源页整理，每个页面集中展示相关图片；只比较画面表达，不用于确认项目事实或图纸权利。'
-              : '按灵感方向和帖子整理，每篇集中展示多张图；只比较画面表达，不用于确认项目事实或图纸权利。'
+            ? '按灵感方向和帖子整理，每篇集中展示多张图；只比较画面表达，不用于确认项目事实或图纸权利。'
             : '只作视觉参考：按问题和图纸类型整理可见表达，帮助判断“图怎么出”，不用于确认项目事实或图纸权利。'}</p>
           {isVisualResearch && (
             <p className="visual-count-note">总数按不重复图片计算；同一张图可能出现在多个方向。</p>
           )}
         </div>
-        <span>{postCount} {publicSource ? '个来源页' : '篇帖子'} · {inspirationResults.length} 张灵感图</span>
+        <span>{postCount} 篇帖子 · {inspirationResults.length} 张灵感图</span>
       </header>
 
       <div className="inspiration-question-groups">
@@ -92,7 +87,7 @@ export function VisualInspirationBoard({
                 <h3 id={`inspiration-question-${group.subquestion.id}`}>{group.subquestion.question}</h3>
                 <p>{group.subquestion.rationale}</p>
               </div>
-              <span>{group.noteGroups.length} {publicSource ? '个来源页' : '篇'} · {group.assets.length} 张</span>
+              <span>{group.noteGroups.length} 篇 · {group.assets.length} 张</span>
             </header>
 
             <div className="inspiration-type-index" aria-label="图纸类型">
@@ -107,7 +102,7 @@ export function VisualInspirationBoard({
                 <article
                   className="inspiration-note"
                   key={note.sourceUrl}
-                  aria-label={`${publicSource ? '灵感来源' : '灵感帖子'} ${note.primary.project}`}
+                  aria-label={`灵感帖子 ${note.primary.project}`}
                 >
                   <header className="inspiration-note-heading">
                     <div>
@@ -160,11 +155,7 @@ export function VisualInspirationBoard({
                                   <div className="preview-unavailable">
                                     <ImageOff aria-hidden="true" />
                                     <strong>{previewLoadFailed ? '灵感图加载失败' : '未提取到灵感图'}</strong>
-                                    <p>
-                                      {publicSource
-                                        ? '打开原来源查看图片，并核对图片与文字的对应关系。'
-                                        : '打开原笔记查看图片，并核对图片与文字的对应关系。'}
-                                    </p>
+                                    <p>打开原笔记查看图片，并核对图片与文字的对应关系。</p>
                                   </div>
                                 )}
                                 <div className="evidence-image-labels">
@@ -198,7 +189,7 @@ export function VisualInspirationBoard({
                     </p>
                     <a href={note.sourceUrl} target="_blank" rel="noreferrer">
                     <ExternalLink aria-hidden="true" />
-                      {sourceName === '小红书' ? '打开原笔记' : '打开原来源'}
+                      打开原笔记
                     </a>
                   </footer>
                 </article>

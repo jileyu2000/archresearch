@@ -23,7 +23,6 @@ export type WorkResult = EvidenceResult & {
   previewUrl: string | null
   previewSource: 'public' | 'chrome' | null
   subquestionAnalysis: Record<string, ResultAnalysis>
-  visualReference?: boolean
 }
 
 export type ResultAnalysis = {
@@ -96,7 +95,6 @@ export function toWorkResult(candidate: ApiAssetCandidate): WorkResult {
     sourceUrl: candidate.source_url,
     imageUrl: candidate.image_url,
     subquestionIds: candidate.subquestion_ids ?? [],
-    visualReference: candidate.visual_reference === true,
     analysisReady,
     subquestionAnalysis: Object.fromEntries(
       Object.entries(candidate.subquestion_analysis ?? {}).map(([id, analysis]) => [

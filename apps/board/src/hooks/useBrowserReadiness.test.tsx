@@ -2,20 +2,12 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { apiClient, type BrowserStatus } from '../api/client'
-import {
-  BrowserBridgeError,
-  requestBrowserBridge,
-  requestPublicBrowserBridgeStatus,
-  subscribePublicBrowserBridgeReady,
-  type BrowserBridgeStatus,
-} from '../browserBridge'
+import { requestBrowserBridge, type BrowserBridgeStatus } from '../browserBridge'
 import { useBrowserReadiness } from './useBrowserReadiness'
 
 vi.mock('../browserBridge', async (importOriginal) => ({
   ...await importOriginal<typeof import('../browserBridge')>(),
   requestBrowserBridge: vi.fn(),
-  requestPublicBrowserBridgeStatus: vi.fn(),
-  subscribePublicBrowserBridgeReady: vi.fn(() => vi.fn()),
 }))
 
 function deferred<T>() {
@@ -45,9 +37,6 @@ function renderReadiness() {
 describe('useBrowserReadiness', () => {
   beforeEach(() => {
     vi.mocked(requestBrowserBridge).mockReset()
-    vi.mocked(requestPublicBrowserBridgeStatus).mockReset()
-    vi.mocked(subscribePublicBrowserBridgeReady).mockReset()
-      .mockReturnValue(vi.fn())
   })
 
   afterEach(() => {
@@ -242,81 +231,5 @@ describe('useBrowserReadiness', () => {
     expect(result.current.browserReadinessLoading).toBe(false)
     expect(status).not.toHaveBeenCalled()
     expect(requestBrowserBridge).not.toHaveBeenCalled()
-    expect(requestPublicBrowserBridgeStatus).not.toHaveBeenCalled()
-  })
-
-  it('requires the connected extension and research permission in the public edition', async () => {
-    const onError = vi.fn()
-    const status = vi.spyOn(apiClient, 'getBrowserStatus')
-    vi.mocked(requestPublicBrowserBridgeStatus).mockResolvedValue({
-      paired: true,
-      connection: 'connected',
-      researchPermission: true,
-      visualProtocol: 2,
-    })
-    const { result } = renderHook(() => useBrowserReadiness({
-      demoMode: false,
-      publicEdition: true,
-      onAnnouncement: vi.fn(),
-      onError,
-    }))
-
-    await waitFor(() => expect(result.current.browserReadinessLoading).toBe(false))
-    expect(status).not.toHaveBeenCalled()
-    expect(result.current.extensionDetected).toBe(true)
-    expect(result.current.researchEnvironmentReady).toBe(true)
-    expect(result.current.researchEnvironmentTitle).toBe('小红书图纸检索已就绪')
-    await expect(result.current.ensureBrowserResearchAccess(true)).resolves.toBe(true)
-    expect(onError).not.toHaveBeenCalled()
-  })
-
-  it('keeps public Xiaohongshu research blocked while the extension is missing', async () => {
-    const onError = vi.fn()
-    vi.mocked(requestPublicBrowserBridgeStatus).mockRejectedValue(
-      new BrowserBridgeError('unavailable', 'ArchResearch extension bridge timed out'),
-    )
-    const { result } = renderHook(() => useBrowserReadiness({
-      demoMode: false,
-      publicEdition: true,
-      onAnnouncement: vi.fn(),
-      onError,
-    }))
-
-    await waitFor(() => expect(result.current.browserReadinessLoading).toBe(false))
-    expect(result.current.extensionDetected).toBe(false)
-    expect(result.current.researchEnvironmentReady).toBe(false)
-    expect(result.current.researchEnvironmentTitle).toBe('需要 Chrome 扩展')
-    await expect(result.current.ensureBrowserResearchAccess(true)).resolves.toBe(false)
-    expect(onError).toHaveBeenCalledWith(expect.stringContaining('安装'))
-  })
-
-  it('refreshes immediately when the public extension bridge becomes ready', async () => {
-    let announceReady: (() => void) | undefined
-    vi.mocked(subscribePublicBrowserBridgeReady).mockImplementation((listener) => {
-      announceReady = listener
-      return vi.fn()
-    })
-    vi.mocked(requestPublicBrowserBridgeStatus)
-      .mockRejectedValueOnce(
-        new BrowserBridgeError('unavailable', 'ArchResearch extension bridge timed out'),
-      )
-      .mockResolvedValueOnce({
-        paired: true,
-        connection: 'connected',
-        researchPermission: true,
-        visualProtocol: 2,
-      })
-    const { result } = renderHook(() => useBrowserReadiness({
-      demoMode: false,
-      publicEdition: true,
-      onAnnouncement: vi.fn(),
-      onError: vi.fn(),
-    }))
-    await waitFor(() => expect(result.current.extensionDetected).toBe(false))
-
-    act(() => announceReady?.())
-
-    await waitFor(() => expect(result.current.extensionDetected).toBe(true))
-    expect(result.current.researchEnvironmentReady).toBe(true)
   })
 })

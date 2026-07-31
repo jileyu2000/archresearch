@@ -1,6 +1,5 @@
 import {
   type FormEvent,
-  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -159,20 +158,7 @@ function browserWasUnavailableForSource(events: TraceEvent[], sourceUrl: string)
   })
 }
 
-type AppProps = {
-  edition?: 'local' | 'public'
-  verificationControl?: ReactNode
-  verificationReady?: boolean
-  extensionInstallUrl?: string
-}
-
-export default function App({
-  edition = 'local',
-  verificationControl,
-  verificationReady = true,
-  extensionInstallUrl = 'https://github.com/jileyu2000/archresearch-chrome-extension/releases/download/v2.2.1/archresearch-chrome-extension-only-v2.2.1.zip',
-}: AppProps) {
-  const publicEdition = edition === 'public'
+export default function App() {
   const demoDepth = useMemo(() => demoDepthFromSearch(window.location.search), [])
   const demoMode = demoDepth !== null
   const demoProfile = useMemo(() => (
@@ -218,7 +204,6 @@ export default function App({
     browserPairingStatus,
     browserReadinessError,
     browserReadinessLoading,
-    extensionDetected,
     ensureBrowserResearchAccess,
     handleConnectBrowser,
     loadBrowserReadiness,
@@ -230,7 +215,6 @@ export default function App({
     showBrowserConnectAction,
   } = useBrowserReadiness({
     demoMode,
-    publicEdition,
     onAnnouncement: setAnnouncement,
     onError: setActionError,
   })
@@ -248,7 +232,6 @@ export default function App({
   const [composerOpen, setComposerOpen] = useState(!demoMode)
   const [researchOptionsOpen, setResearchOptionsOpen] = useState(false)
   const [briefReviewLoading, setBriefReviewLoading] = useState(false)
-  const [extensionNoticeDismissed, setExtensionNoticeDismissed] = useState(false)
   const [workspaceCreateOpen, setWorkspaceCreateOpen] = useState(false)
   const [inspectorOpen, setInspectorOpen] = useState(false)
   const closeInspectorAfterHydration = useCallback(() => setInspectorOpen(false), [])
@@ -286,15 +269,7 @@ export default function App({
   const overlayTriggerRef = useRef<HTMLElement | null>(null)
   const questionInputRef = useRef<HTMLTextAreaElement | null>(null)
   const selectedResult = results.find((result) => result.id === selectedResultId)
-  const extensionInstallNoticeOpen = !demoMode
-    && !browserReadinessLoading
-    && !extensionDetected
-    && !extensionNoticeDismissed
-  const overlayOpen = inspectorOpen
-    || comparisonOpen
-    || shareSummaryOpen
-    || styleProfileOpen
-    || extensionInstallNoticeOpen
+  const overlayOpen = inspectorOpen || comparisonOpen || shareSummaryOpen || styleProfileOpen
 
   const closeOverlays = useCallback(() => {
     const trigger = overlayTriggerRef.current
@@ -302,7 +277,6 @@ export default function App({
     setComparisonOpen(false)
     setShareSummaryOpen(false)
     setStyleProfileOpen(false)
-    setExtensionNoticeDismissed(true)
     trigger?.focus()
   }, [])
 
@@ -1043,27 +1017,19 @@ export default function App({
         }
       })
     : researchSubquestions
-  const visualInspirationResults = visibleResults.filter((result) => (
-    result.visualReference || visualPlatformName(result.sourceUrl)
-  ))
+  const visualInspirationResults = visibleResults.filter((result) => visualPlatformName(result.sourceUrl))
   const visualInspirationNoteCount = new Set(
     visualInspirationResults.map((result) => result.sourceUrl),
   ).size
   const caseResults = visibleResults.filter(
-    (result) => !result.visualReference
-      && !visualPlatformName(result.sourceUrl)
-      && result.analysisReady,
+    (result) => !visualPlatformName(result.sourceUrl) && result.analysisReady,
   )
   const subquestionSummaries = displayResearchSubquestions.map((subquestion) => {
     const assets = results.filter(
       (result) => supportsSubquestion(result, subquestion.id, researchSubquestions),
     )
-    const caseAssets = assets.filter((result) => (
-      !result.visualReference && !visualPlatformName(result.sourceUrl)
-    ))
-    const inspirationAssets = assets.filter((result) => (
-      result.visualReference || visualPlatformName(result.sourceUrl)
-    ))
+    const caseAssets = assets.filter((result) => !visualPlatformName(result.sourceUrl))
+    const inspirationAssets = assets.filter((result) => visualPlatformName(result.sourceUrl))
     return {
       ...subquestion,
       caseAssetCount: caseAssets.length,
@@ -1223,9 +1189,7 @@ export default function App({
       <header className="app-header">
         <div className="app-brand">
           <span className="brand-mark" aria-hidden="true"><LayoutGrid /></span>
-          <div><strong>ArchResearch</strong><span>{demoMode
-            ? `演示数据 · ${modeLabels[mode]}`
-            : '建筑研究工具'}</span></div>
+          <div><strong>ArchResearch</strong><span>{demoMode ? `演示数据 · ${modeLabels[mode]}` : '本地研究工具'}</span></div>
         </div>
         <div className="header-actions">
           {homeViewOpen && !demoMode && (
@@ -1262,7 +1226,6 @@ export default function App({
       <section className="board-workspace" aria-label="研究工作区">
         <DataManagementPage
           open={dataManagementOpen}
-          publicEdition={publicEdition}
           workspaceCount={workspaces.length}
           runCount={recentRuns.length}
           isRunActive={isRunActive}
@@ -1281,11 +1244,6 @@ export default function App({
             files={files}
             referenceUrl={referenceUrl}
             demoMode={demoMode}
-            publicEdition={publicEdition}
-            verificationControl={verificationControl}
-            verificationReady={verificationReady}
-            extensionInstallNoticeOpen={extensionInstallNoticeOpen}
-            extensionInstallUrl={extensionInstallUrl}
             activeWorkspaceId={activeWorkspaceId}
             briefReviewLoading={briefReviewLoading}
             researchStarting={researchStarting}
@@ -1313,8 +1271,6 @@ export default function App({
             onRefreshBrowserReadiness={refreshBrowserReadiness}
             onCancel={handleCancel}
             onRetry={handleRetry}
-            onDismissExtensionInstallNotice={() => setExtensionNoticeDismissed(true)}
-            onCheckExtensionInstall={refreshBrowserReadiness}
           />
         )}
 
@@ -1348,14 +1304,7 @@ export default function App({
             <div className="run-status-actions">
               {isRunActive && <button className="research-cancel" type="button" onClick={() => void handleCancel()}>取消研究</button>}
               {activeRun && ['partial', 'blocked', 'failed', 'cancelled'].includes(activeRun.status) && (
-                <button
-                  className="research-retry"
-                  type="button"
-                  disabled={publicEdition && !verificationReady}
-                  onClick={() => void handleRetry()}
-                >
-                  {retryActionLabel(activeRun)}
-                </button>
+                <button className="research-retry" type="button" onClick={() => void handleRetry()}>{retryActionLabel(activeRun)}</button>
               )}
               {isRunActive && <details>
                 <summary>查看研究进度</summary>
@@ -1366,20 +1315,6 @@ export default function App({
                 </ol>
               </details>}
             </div>
-          </section>
-        )}
-
-        {publicEdition
-          && resultViewOpen
-          && !verificationReady
-          && activeRun
-          && ['partial', 'blocked', 'failed', 'cancelled'].includes(activeRun.status) && (
-          <section className="public-verification public-verification--result" aria-label="重试人机校验">
-            <div>
-              <CircleDashed aria-hidden="true" />
-              <span>继续研究前请重新完成人机校验</span>
-            </div>
-            {verificationControl}
           </section>
         )}
 
@@ -1418,21 +1353,19 @@ export default function App({
               {browserPairingStatus && <small className="browser-pairing-status" aria-live="polite">{browserPairingStatus}</small>}
             </div>
             <div className="drawing-recovery-actions">
-              {!publicEdition && browserConnected !== true && (
+              {browserConnected !== true && (
                 <button type="button" disabled={browserConnecting} onClick={() => void handleConnectBrowser()}>
                   <MonitorUp aria-hidden="true" />{browserConnecting ? '正在打开 Chrome…' : '在 Chrome 中连接图纸提取扩展'}
                 </button>
               )}
-              {!publicEdition && <button type="button" onClick={() => void refreshBrowserConnection()}>
+              <button type="button" onClick={() => void refreshBrowserConnection()}>
                 <RefreshCw aria-hidden="true" />检查连接
-              </button>}
+              </button>
               <button
                 className="button-primary"
                 type="button"
-                disabled={(publicEdition && !verificationReady)
-                  || (!publicEdition && browserConnected !== true)
-                  || rerunStarting}
-                onClick={() => void (publicEdition ? handleRetry() : handleRerunWithBrowser())}
+                disabled={browserConnected !== true || rerunStarting}
+                onClick={() => void handleRerunWithBrowser()}
               >
                 {rerunStarting ? '正在重新研究…' : '重新研究'}
               </button>

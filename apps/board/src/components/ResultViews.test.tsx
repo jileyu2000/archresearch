@@ -122,53 +122,6 @@ describe('result view components', () => {
     expect(onPreviewFailed).toHaveBeenCalledWith('visual-1', result.previewUrl)
   })
 
-  it('uses public-source wording when the same visual board runs on the public product', () => {
-    const result = workResult({
-      id: 'public-visual-1',
-      project: '公共空间剖面表达',
-      assetType: 'section',
-      visualReference: true,
-      sourceUrl: 'https://example.com/public-section',
-    })
-    render(
-      <VisualInspirationBoard
-        sourceName="公开来源"
-        isVisualResearch
-        postCount={1}
-        inspirationResults={[result]}
-        allResults={[result]}
-        groups={[{
-          subquestion: {
-            id: 'section-style',
-            question: '方向 1：剖面层次表达',
-            rationale: '比较线型与色块层级。',
-          },
-          assets: [result],
-          typeGroups: [{ assetType: 'section', assets: [result] }],
-          noteGroups: [{
-            sourceUrl: result.sourceUrl,
-            assets: [result],
-            primary: result,
-            observation: result.observation,
-            relevance: result.relevance,
-          }],
-        }]}
-        selectedIds={[]}
-        failedPreviewUrls={{}}
-        onOpenResult={vi.fn()}
-        onPreviewFailed={vi.fn()}
-        onToggleSelection={vi.fn()}
-      />,
-    )
-
-    const board = screen.getByRole('region', { name: '视觉灵感板' })
-    expect(within(board).getByRole('heading', { name: '公开来源制图灵感' })).toBeVisible()
-    expect(within(board).getByText('1 个来源页 · 1 张灵感图')).toBeVisible()
-    expect(within(board).getByRole('article', { name: '灵感来源 公共空间剖面表达' })).toBeVisible()
-    expect(within(board).getByRole('link', { name: '打开原来源' })).toBeVisible()
-    expect(within(board).queryByText(/小红书|帖子|原笔记/)).not.toBeInTheDocument()
-  })
-
   it('renders answer-first case chapters and delegates direct-save and selection actions', async () => {
     const user = userEvent.setup()
     const result = workResult()

@@ -21,12 +21,15 @@ $workflowContracts = @(
     @{ Pattern = "python-version:\s+'3\.12'"; Message = "CI must use the supported Python version." }
     @{ Pattern = "node-version:\s+'24'"; Message = "CI must use the supported Node version." }
     @{ Pattern = 'pnpm test:coverage'; Message = "CI must enforce Board and Extension coverage thresholds." }
-    @{ Pattern = 'pnpm install'; Message = "CI must install the Web Edition workspace from a fresh checkout." }
+    @{ Pattern = '\./scripts/setup\.ps1'; Message = "CI must prove setup.ps1 from a fresh checkout." }
     @{ Pattern = 'pnpm --dir apps/extension exec playwright install chromium'; Message = "CI must install Playwright Chromium for packaged Extension E2E." }
-    @{ Pattern = '\./scripts/verify-web\.ps1'; Message = "CI must run the focused Web Edition gate." }
+    @{ Pattern = '\./scripts/verify\.ps1'; Message = "CI must run the authoritative local repository gate." }
+    @{ Pattern = '\./scripts/build-windows-installer\.ps1'; Message = "CI must build the self-contained Windows installer." }
+    @{ Pattern = '\./scripts/test-windows-installer-package\.ps1'; Message = "CI must install-smoke and uninstall the packaged Windows application." }
     @{ Pattern = '\./scripts/build-extension-package\.ps1'; Message = "CI must build the separately distributed Chrome extension package." }
-    @{ Pattern = 'actions/upload-artifact@v4'; Message = "CI must upload the Chrome extension artifact." }
-    @{ Pattern = 'archresearch-chrome-extension-only-v2\.2\.1\.zip'; Message = "CI must keep the clearly named v2.2.1 Chrome extension package separate." }
+    @{ Pattern = 'actions/upload-artifact@v4'; Message = "CI must upload release artifacts." }
+    @{ Pattern = 'ArchResearch-Windows-x64-Setup-v2\.2\.2\.exe'; Message = "CI must publish the clearly named v2.2.2 Windows installer artifact." }
+    @{ Pattern = 'archresearch-chrome-extension-only-v2\.2\.2\.zip'; Message = "CI must keep the clearly named v2.2.2 Chrome extension package separate." }
 )
 foreach ($contract in $workflowContracts) {
     if ($workflow -notmatch $contract.Pattern) {
@@ -35,9 +38,6 @@ foreach ($contract in $workflowContracts) {
 }
 if ($workflow -match 'OPENAI_API_KEY|ARCHRESEARCH_PROVIDER_MODE\s*:\s*live') {
     throw "Default CI must not require or enable live provider credentials."
-}
-if ($workflow -match 'build-windows-installer|test-windows-installer-package|ArchResearch-Windows-x64-Setup') {
-    throw "Public CI must not build or publish the retired Windows installer."
 }
 
 $extensionBuildPath = Join-Path $workspace "scripts\build-extension-package.ps1"
@@ -61,68 +61,54 @@ if ($extensionBuild -match 'build-windows-installer|ArchResearch-Windows-x64-Set
 $rootPackage = Get-Content -Raw -LiteralPath (Join-Path $workspace "package.json") |
     ConvertFrom-Json
 $rootBuild = [string]$rootPackage.scripts.build
-$webBuild = "pnpm --filter @archresearch/web build"
-$edgeBuild = "pnpm --filter @archresearch/edge build"
-$webBuildIndex = $rootBuild.IndexOf($webBuild, [StringComparison]::Ordinal)
-$edgeBuildIndex = $rootBuild.IndexOf($edgeBuild, [StringComparison]::Ordinal)
-if ($webBuildIndex -lt 0 -or $edgeBuildIndex -lt 0 -or $webBuildIndex -ge $edgeBuildIndex) {
-    throw "The root build must create Web assets before the Edge Wrangler build consumes them."
+foreach ($localBuild in @(
+    'pnpm --filter @archresearch/board build',
+    'pnpm --filter @archresearch/extension build'
+)) {
+    if ($rootBuild -notmatch [regex]::Escape($localBuild)) {
+        throw "The root build must include the local product build: $localBuild."
+    }
+}
+if ($rootBuild -match '@archresearch/(web|edge)') {
+    throw "The root build must not include the retired Web or Edge workspaces."
+}
+
+$workspaceConfig = Get-Content -Raw -LiteralPath (Join-Path $workspace "pnpm-workspace.yaml")
+foreach ($localWorkspace in @('apps/board', 'apps/extension')) {
+    if ($workspaceConfig -notmatch [regex]::Escape($localWorkspace)) {
+        throw "The pnpm workspace is missing the local package: $localWorkspace."
+    }
+}
+if ($workspaceConfig -match 'apps/(web|edge)|workerd|cloudflare') {
+    throw "The pnpm workspace must not include retired Web/Edge or Cloudflare build configuration."
+}
+foreach ($retiredPath in @(
+    "apps\web",
+    "apps\edge",
+    "scripts\verify-web.ps1"
+)) {
+    if (Test-Path -LiteralPath (Join-Path $workspace $retiredPath)) {
+        throw "Retired Web Edition path still exists: $retiredPath"
+    }
 }
 
 $verifyScript = Get-Content -Raw -LiteralPath (Join-Path $workspace "scripts\verify.ps1")
-if ($verifyScript -notmatch 'release\.tests\.ps1') {
-    throw "The authoritative gate must include release workflow contracts."
-}
-foreach ($webContract in @(
-    '@archresearch/web test',
-    '@archresearch/web typecheck',
-    '@archresearch/edge test',
-    '@archresearch/edge typecheck',
-    '@archresearch/edge build'
+foreach ($localVerifyContract in @(
+    'release\.tests\.ps1',
+    'windows-installer\.tests\.ps1',
+    'apps/api/tests',
+    'apps/extension test:e2e'
 )) {
-    if ($verifyScript -notmatch [regex]::Escape($webContract)) {
-        throw "The authoritative gate must include Web/Edge contract: $webContract."
+    if ($verifyScript -notmatch $localVerifyContract) {
+        throw "The authoritative gate is missing local contract: $localVerifyContract."
     }
 }
-
-$webVerifyPath = Join-Path $workspace "scripts\verify-web.ps1"
-if (-not (Test-Path -LiteralPath $webVerifyPath -PathType Leaf)) {
-    throw "Expected scripts/verify-web.ps1 to provide the focused Web Edition gate."
-}
-$webVerify = Get-Content -Raw -LiteralPath $webVerifyPath
-foreach ($webVerifyContract in @(
-    'test:coverage',
-    'apps/extension test:e2e',
-    '@archresearch/web lint',
-    '@archresearch/web typecheck',
-    '@archresearch/web test',
-    '@archresearch/web build',
-    '@archresearch/edge lint',
-    '@archresearch/edge typecheck',
-    '@archresearch/edge test',
-    '@archresearch/edge build'
-)) {
-    if ($webVerify -notmatch [regex]::Escape($webVerifyContract)) {
-        throw "Focused Web Edition gate is missing: $webVerifyContract."
-    }
-}
-if ($webVerify -match 'windows-installer|configure-provider|apps/api/tests') {
-    throw "Focused Web Edition gate must not depend on the retired local deployment."
+if ($verifyScript -match '@archresearch/(web|edge)|verify-web|wrangler') {
+    throw "The authoritative local gate must not invoke the retired Web or Edge runtime."
 }
 
-$edgeConfig = Get-Content -Raw -LiteralPath (
-    Join-Path $workspace "apps\edge\wrangler.jsonc"
-) | ConvertFrom-Json
-if ($edgeConfig.assets.run_worker_first -ne $true) {
-    throw "Every Web Edition response must pass through the Worker security-header wrapper."
-}
-
-$expectedVersion = "2.2.1"
+$expectedVersion = "2.2.2"
 $boardPackage = Get-Content -Raw -LiteralPath (Join-Path $workspace "apps\board\package.json") |
-    ConvertFrom-Json
-$webPackage = Get-Content -Raw -LiteralPath (Join-Path $workspace "apps\web\package.json") |
-    ConvertFrom-Json
-$edgePackage = Get-Content -Raw -LiteralPath (Join-Path $workspace "apps\edge\package.json") |
     ConvertFrom-Json
 $extensionPackage = Get-Content -Raw -LiteralPath (Join-Path $workspace "apps\extension\package.json") |
     ConvertFrom-Json
@@ -130,8 +116,6 @@ $extensionManifest = Get-Content -Raw -LiteralPath (Join-Path $workspace "apps\e
     ConvertFrom-Json
 foreach ($version in @(
     $boardPackage.version,
-    $webPackage.version,
-    $edgePackage.version,
     $extensionPackage.version,
     $extensionManifest.version
 )) {
@@ -154,18 +138,23 @@ foreach ($versionSource in @($pythonProject, $pythonPackage, $pythonApp)) {
 
 $readme = Get-Content -Raw -LiteralPath (Join-Path $workspace "README.md")
 foreach ($readmeContract in @(
-    'Web Edition',
-    'Web Edition 访问地址由项目方私下提供',
-    '不需要本地安装',
-    '\[下载 Chrome 扩展 v2\.2\.1\]',
+    'Windows 11 和 Google Chrome',
+    'ArchResearch-Windows-x64-Setup-v2\.2\.2\.exe',
+    '安装包不包含 Chrome 扩展',
+    '不需要安装 Python、Node\.js、pnpm 或 PowerShell',
+    'API 接口地址和 API Key',
+    '从上游模型列表中选择模型',
+    '模型 ID 不可手输',
+    '\[下载 Windows 安装版 v2\.2\.2\]',
+    '### 需要小红书时',
     '\[Chrome 扩展安装说明\]\(docs/chrome-extension\.md\)',
-    'Chrome Web Store 尚未上架'
+    '\[从源码运行\]\(docs/development\.md\)'
 )) {
     if ($readme -notmatch $readmeContract) {
-        throw "README must document the Web Edition distribution contract: $readmeContract"
+        throw "README must document the one-click Windows install contract: $readmeContract"
     }
 }
-$installHeadingIndex = $readme.IndexOf("## 网页版与 Chrome 扩展", [StringComparison]::Ordinal)
+$installHeadingIndex = $readme.IndexOf("## 下载与安装", [StringComparison]::Ordinal)
 $firstScreenshotIndex = $readme.IndexOf("![ArchResearch 首页]", [StringComparison]::Ordinal)
 $positioningHeadingIndex = $readme.IndexOf("## 项目定位", [StringComparison]::Ordinal)
 if (
@@ -173,7 +162,7 @@ if (
     $installHeadingIndex -ge $firstScreenshotIndex -or
     $installHeadingIndex -ge $positioningHeadingIndex
 ) {
-    throw "The Web Edition and extension path must appear before screenshots and product architecture."
+    throw "The Windows download path must appear before screenshots and product architecture."
 }
 foreach ($obsoleteInstallHeading in @(
     "## 快速开始",
@@ -185,8 +174,8 @@ foreach ($obsoleteInstallHeading in @(
         throw "README ordinary-user path must not mix in obsolete section: $obsoleteInstallHeading"
     }
 }
-if ($readme -match 'ArchResearch-Windows-x64-Setup|下载 Windows 安装版|127\.0\.0\.1:8000|scripts/setup\.ps1|scripts/configure-autostart\.ps1|scripts/update\.ps1') {
-    throw "README must not publish the retired local deployment path."
+if ($readme -match 'scripts/setup\.ps1|scripts/configure-autostart\.ps1|scripts/update\.ps1') {
+    throw "Source setup and maintenance commands belong in the development document."
 }
 
 $chromeExtensionGuidePath = Join-Path $workspace "docs\chrome-extension.md"
@@ -200,7 +189,7 @@ $chromeExtensionGuide = Get-Content -Raw -LiteralPath $chromeExtensionGuidePath
 foreach ($extensionGuideContract in @(
     'chrome://extensions',
     'manifest\.json',
-    '连接当前 ArchResearch 网页',
+    'ArchResearch 本地页面',
     '连接成功后'
 )) {
     if ($chromeExtensionGuide -notmatch $extensionGuideContract) {

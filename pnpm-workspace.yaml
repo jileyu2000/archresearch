@@ -1,11 +1,6 @@
 packages:
   - "apps/board"
-  - "apps/edge"
   - "apps/extension"
-  - "apps/web"
 allowBuilds:
   '@jackwener/opencli': true
   esbuild: true
-  workerd: true
-minimumReleaseAgeExclude:
-  - '@cloudflare/workers-types@5.20260728.1'

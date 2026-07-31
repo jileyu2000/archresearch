@@ -61,6 +61,18 @@ export function runAnnouncement(run: ResearchRun) {
     return run.goal === 'visual_reference_search' ? '已完成 · 图纸较少' : '已完成 · 案例不足'
   }
   if (run.goal === 'visual_reference_search') {
+    const failureCode = run.stopReason?.replace(/^provider_error:/, '')
+    if (run.status === 'failed' && failureCode) {
+      const failureLabels: Record<string, string> = {
+        public_search_unavailable: '公开网页检索暂时不可用，已找到的图纸已保留，可重新发起研究',
+        public_page_read_unavailable: '公开项目页面暂时无法读取，已找到的图纸已保留，可重新发起研究',
+        visual_analysis_unavailable: '图纸分析暂时不可用，已找到的图纸已保留，可重新发起研究',
+        research_analysis_unavailable: '研究整理暂时不可用，已找到的图纸已保留，可重新发起研究',
+        provider_unavailable: '研究整理暂时不可用，已找到的图纸已保留，可重新发起研究',
+        workflow_failed: '研究流程暂时中断，已找到的图纸已保留，可重新发起研究',
+      }
+      if (failureLabels[failureCode]) return failureLabels[failureCode]
+    }
     const visualLabels: Record<RunStatus, string> = {
       created: '已创建',
       planning: '正在确定方向',
@@ -77,6 +89,18 @@ export function runAnnouncement(run: ResearchRun) {
       failed: '搜索失败，已找到的图纸已保留',
     }
     return visualLabels[run.status]
+  }
+  const failureCode = run.stopReason?.replace(/^provider_error:/, '')
+  if (run.status === 'failed' && failureCode) {
+    const failureLabels: Record<string, string> = {
+      public_search_unavailable: '公开网页检索暂时不可用，已有证据已保留，可重新发起研究',
+      public_page_read_unavailable: '公开项目页面暂时无法读取，已有证据已保留，可重新发起研究',
+      visual_analysis_unavailable: '图纸分析暂时不可用，已有证据已保留，可重新发起研究',
+      research_analysis_unavailable: '研究整理暂时不可用，已有证据已保留，可重新发起研究',
+      provider_unavailable: '研究整理暂时不可用，已有证据已保留，可重新发起研究',
+      workflow_failed: '研究流程暂时中断，已有证据已保留，可重新发起研究',
+    }
+    if (failureLabels[failureCode]) return failureLabels[failureCode]
   }
   const labels: Record<RunStatus, string> = {
     created: '已创建',

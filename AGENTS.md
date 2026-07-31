@@ -9,18 +9,15 @@
 
 ## Scope
 
-- Preserve the approved local-first ArchResearch V2.1 system and build the separately
-  deployed Cloudflare Web Edition only within its explicit product contract.
-- The local edition remains Windows/Chrome, BYOK, SQLite, and local filesystem based.
-  Web Edition code, storage, provider credentials, and deployment configuration must
-  not change those defaults.
-- The Web Edition may use Cloudflare Workers, Workflows, Durable Objects, R2, Browser
-  Rendering, Turnstile, and Rate Limiting for bounded execution, temporary checkpoints,
-  abuse protection, and exact cost gating. Long-term user history remains browser-local.
+- Preserve the approved local-first ArchResearch system as the only product runtime:
+  Windows/Chrome, BYOK, FastAPI, SQLite, and local filesystem storage.
+- Do not recreate `apps/web`, `apps/edge`, Cloudflare Workers/Workflows, Durable Objects,
+  R2, Turnstile, Wrangler configuration, or the public HTTPS extension bridge.
+- Keep the Windows installer and the Chrome extension as separate release artifacts.
+  The installer must remain self-contained but must not bundle the extension.
 - Do not add a platform case library, global vector index, Qdrant, PostgreSQL, Redis, S3, Celery, Docker, LangGraph, or multi-agent runtime.
 - Keep provider calls behind small concrete clients with deterministic mocks.
-- Never publish the Web Edition URL in GitHub repository content, releases, or repository
-  metadata. It is a private submission link even though anyone holding it may use it.
+- Never add the retired production Web URL to repository content, releases, or metadata.
 
 ## Engineering
 

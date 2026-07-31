@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "pnpm@11.7.0",
   "scripts": {
-    "build": "pnpm --filter @archresearch/web build && pnpm --filter @archresearch/board build && pnpm --filter @archresearch/extension build && pnpm --filter @archresearch/edge build",
+    "build": "pnpm --filter @archresearch/board build && pnpm --filter @archresearch/extension build",
     "test": "pnpm -r --if-present run test",
     "test:coverage": "pnpm -r --if-present run test:coverage",
     "typecheck": "pnpm -r --if-present run typecheck",
