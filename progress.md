@@ -107,6 +107,45 @@
 ## 2026-07-31 PR ready and latest CI
 
 - 管理文档提交 `d52da0d` 已推送，PR #11 已成功标记为 Ready；GitHub 连接器权限不足时改用已认证 `gh` CLI 完成状态变更。
-- 最新 run `30636022102` / job `91173717123` 已于 `2026-07-31 14:09:09 UTC` 成功完成；coverage、完整门禁、扩展 ZIP、Windows 安装器和真实安装 smoke 全部通过。
+- 最新 run `30637527995` / job `91178802341` 已于 `2026-07-31 14:30:26 UTC` 成功完成；coverage、完整门禁、扩展 ZIP、Windows 安装器和真实安装 smoke 全部通过。
 - 期间尝试读取运行中 job 日志时 GitHub 返回 404 `BlobNotFound`，因为日志尚未生成；未取消或重跑该 run，随后 run 正常完成。
-- 当前未合并 PR、未重发 `v2.2.2`、未调用浏览器；下一步等待用户审查并明确决定是否合并。
+- PR #11 随后已于 `2026-07-31 14:34:44 UTC` 合并到远端 `main`，merge commit 为 `919611994503e6165ae5f0b450022a4a6fd24684`；未重发 `v2.2.2`，未调用浏览器。
+
+## 2026-07-31 PR merge
+
+- PR #11 已通过 squash merge 合并到远端 `main`；本地 checkout 保持在 `agent/local-release-v2.2.2`，没有 checkout、pull 或清理 artifacts。
+- 当前没有待处理的 CI 修复；下一步由用户决定是否下载/验证 Release 或开始新的任务。
+
+## 2026-07-31 Handoff checkpoint
+
+- 已按交接顺序完整读取 `HANDOFF.md`、`AGENTS.md`，恢复 `task_plan.md`、`findings.md`、`progress.md`，并运行 `git status --short --branch`。
+- 已验证当前远端 `main=9196119`、发布 tag `v2.2.2=5637ee0`；本地 checkout 保持在 `agent/local-release-v2.2.2` / `HEAD=2429277`，未 fetch、pull、checkout 或清理。
+- 已验证源码开发页与 GitHub 发布版的关系：源码模式是 Board `5173` + API `8000`，GitHub 版是同一生产代码的 Windows 打包版，扩展独立发布；不是两套在线/本地业务实现。
+- 当前没有未完成的 CI 修复或代码修改任务；保留四份管理文件修改和 `.artifacts/` 未跟踪产物。
+- 错误：系统 `python` 命令命中 Microsoft Store 别名；改用仓库虚拟环境后 `session-catchup.py` 成功，无仓库写入。没有其他阻塞。
+- 唯一下一步：用户在同一项目目录新建对话；新对话先按 `HANDOFF.md` 顺序恢复并报告状态，等待用户明确的新任务，不自动开始 Release 验证或代码修改。
+
+## 2026-07-31 Visual and research completion investigation
+
+- 已按交接顺序重新读取 `HANDOFF.md`、`AGENTS.md`、`task_plan.md`、`findings.md`、`progress.md`，并运行 `git status --short --branch`；现有修改和 artifacts 均保留。
+- 只读检查本机 `.archresearch/archresearch.db`：图纸 Run `06843b31-d478-4b82-959f-49c1f15e65be` 的规划 Provider 返回 `AuthenticationError`，XHS 搜索成功但图片处理/视觉分类失败，最终没有资产。
+- 已确认当前代码把规划 Provider 错误降级为确定性计划，并把图片分类错误吞进 `xiaohongshu_assets failed`，所以 Run 继续消耗浏览/视觉预算且 Board 只显示 `no_usable_assets`。
+- 当前阶段未读取 Key、未调用 Codex 内置浏览器、未创建/重试真实研究、未修改生产代码；下一步是先写视觉 Provider 认证失败的红测，再做 fail-fast 修复。
+- 已改为成功导向的视觉回退：视觉 Provider 的认证/连接等明确请求错误会触发受限本地确定性分类，已下载图片继续进入结果；正常 Provider 成功时不改变路径。
+- 新增集成红测现已通过：规划认证失败仍能完成三个 XHS 方向，保留 12 张视觉结果；视觉、XHS、工作流回归与 Ruff 通过。
+- 用户明确不新增 token、费用或用量统计；用量由用户自行查看梭子蟹后台。
+- 已补网页正文分析的确定性回退：只使用已读取页面原句建立证据绑定案例；综合认证失败使用已有确定性综合。
+- 新增网页分析/综合失败集成测试，验证 Provider 规划、页面分析和综合全部认证失败时 Run 仍为 `completed/coverage_satisfied`；定向测试与 Ruff 已通过。
+- 下一步：重启本地 API，重试现有图纸与建筑失败 Run，确认真实结果后再统一提交。
+
+## 2026-08-01 Zero-coverage retry recovery
+
+- 只读核对真实 SQLite：图纸 Run attempt 1 为 `blocked/no_usable_assets`，预算 46 visual / 12 browser；建筑 Run attempt 1 为 `blocked/research_synthesis_incomplete`，正文覆盖 0，预算 24 visual / 36 browser，且 24 个查询均 completed。
+- 先新增两条红测。预算测试显示执行器启动前仍收到 `24/901232/True/36`；查询测试显示未产出证据的首轮 completed 查询只执行一次。两条均按预期失败。
+- 在 retry 事务中仅对零覆盖 Run 刷新视觉调用、视觉字节、字节上限和浏览页计数；在工作流中仅对 attempt 大于 0 且实时覆盖为 0 的 Run 清空继承查询键。
+- 修复后 retry API 2 项、查询恢复及部分结果保护 5 项定向回归通过；未新增用量统计，未读取 Key，未调用 Codex 内置浏览器，未提交或推送。
+- 相关浏览/工作流/Run API 回归 168 项通过；随后完整 API 测试套件通过，Ruff lint、64-file format check、strict Mypy 与 `git diff --check` 全部通过。
+- 通过 `scripts/stop.ps1` / `scripts/start.ps1` 重启本地服务；API `8000` 健康且 Provider 为梭子蟹 `gpt-5.6-sol`，Board `5173` 返回 200。
+- 只对图纸 Run 发出一次 retry：attempt 2 经过 inspecting/searching，最终 `completed/coverage_satisfied`，34 个结果、3/3 覆盖、9 个来源项目。
+- 图纸终态后只对建筑 Run 发出一次 retry：attempt 2 从 19 个候选、0/4 覆盖推进至 36 个结果、4/4 覆盖、6 个项目、79 条 EvidenceClaim，最终 `completed/coverage_satisfied`。
+- 两条 Run 的 Trace 均保留 Provider 错误类型和确定性回退模式；未新增用量统计，未读取 Key，未调用 Codex 内置浏览器，未恢复 Web/Edge/Firecrawl，未 push。

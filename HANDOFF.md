@@ -28,7 +28,8 @@
 ## 仓库与保护规则
 
 - 仓库：`https://github.com/jileyu2000/archresearch`
-- 当前分支与远端基线：`main` / `origin/main` = `87826af`
+- 远端 `main` 当前为 `9196119`（已用 `git ls-remote` 核实）；本地 checkout 保持在 `agent/local-release-v2.2.2`，HEAD 为 `2429277`。
+- 本地 `origin/main` tracking ref 仍是 `87826af`，因为本轮没有 fetch、pull 或 checkout；不要把它当作远端当前值。
 - 本轮恢复基线：`1695973`，它是最后一个经过 Hosted CI、完整本地门禁、真实安装升级、`--self-test`、`/desktop-health` 和 `/health` 验证的本地发行提交。
 - 恢复通过 `git show 1695973:<path>` 和定点补丁完成，不得使用 reset、checkout 或 clean。
 - 当前工作树包含有意的本地恢复、Web/Edge 删除、文档和计划修改；`.artifacts/build/`、`.artifacts/qa/`、`.artifacts/releases/` 保留。
@@ -100,8 +101,8 @@
 
 ## v2.2.2 GitHub 发布状态
 
-- 分支 `agent/local-release-v2.2.2` 已推送；当前最新提交为 `d52da0d`，`v2.2.2` tag 仍指向发布提交 `5637ee0`。
-- PR [#11](https://github.com/jileyu2000/archresearch/pull/11) 已标记为 Ready，目标为 `main`，尚未合并。
+- 分支 `agent/local-release-v2.2.2` 已推送；当前最新提交为 `2429277`，`v2.2.2` tag 仍指向发布提交 `5637ee0`。
+- PR [#11](https://github.com/jileyu2000/archresearch/pull/11) 已合并到 `main`，远端 squash merge commit 为 `9196119`。
 - 正式 Release [ArchResearch 本地版 v2.2.2](https://github.com/jileyu2000/archresearch/releases/tag/v2.2.2) 已发布，非草稿、非预发布。
 - Release 附件为 Windows 安装器和独立 Chrome 扩展 ZIP；GitHub 侧名称、大小和本地 SHA-256 记录一致，文案未包含生产 Web URL 或 Provider Key。
 - 为修复 PR coverage 门禁，新增 `apps/extension/tests/screenshot.test.ts` 的 9 个裁图行为测试；未修改生产代码，也未降低 coverage 阈值。
@@ -110,9 +111,31 @@
 
 - GitHub Actions `verify` run `30633778406` / job `91166171854` 已于 `2026-07-31 13:31:45 UTC` 完成并成功。
 - 管理文档提交 `d52da0d` 触发的最新 `verify` run `30636022102` 已于 `2026-07-31 14:09:09 UTC` 完成并成功；coverage、完整本地门禁、独立扩展 ZIP、Windows 安装器和真实安装 smoke 全部成功。
-- PR #11 已从 Draft 转为 Ready，当前可供审查；本轮没有修改生产代码。
+- PR #11 随后已从 Ready 合并到 `main`；本轮没有修改生产代码。
 - 本次 coverage 修复没有改变 `v2.2.2` Release tag 或附件，不重新发布 Release。
+
+## PR merge 状态
+
+- 最新 head `2429277` 已通过 `verify` run `30637527995`，并于 `2026-07-31 14:34:44 UTC` squash merge 到远端 `main`。
+- 远端 `main` 当前为 `9196119`；本地 checkout 仍停留在 `agent/local-release-v2.2.2`，未自动 checkout 或 pull。
+
+## 源码开发页与 GitHub 发布版
+
+- 已验证源码开发模式由 `scripts/start.ps1` 启动 Vite Board 与 FastAPI API：当前页面为 `http://127.0.0.1:5173/`，API 为 `http://127.0.0.1:8000/`，页面标题为 `ArchResearch Board`。
+- GitHub Release 不是在线网页部署；Windows 安装器包含同一套 API 与生产 Board，优先使用单一回环端口 8000，冲突时选择空闲端口；Chrome 扩展作为独立 ZIP 发布。
+- 对比发布提交 `5637ee0` 与当前 HEAD `2429277`，`apps/api`、`apps/board`、`apps/extension` 的生产代码没有差异；后续差异仅为扩展截图测试和 Windows 安装器元信息。
+- 当前工作树包含本阶段的 Provider 失败回退代码、定向测试、管理文件修改，以及 `.artifacts/build/`、`.artifacts/qa/`、`.artifacts/releases/` 未跟踪产物。
+
+## 当前研究失败修复
+
+- 图纸 Run `06843b31-d478-4b82-959f-49c1f15e65be` 失败根因是远程视觉分类认证/连接错误；已下载图片现在走受限本地确定性分类，仍保留小红书来源和视觉线索边界。
+- 建筑 Run `4e304e27-68e2-4beb-8fb2-88a858c676c8` 失败根因还包括网页正文分析和最终综合的 Provider 错误；正文回退只复用已读取页面原句并建立 EvidenceClaim，综合回退使用已有确定性综合。
+- 零覆盖 retry 现在刷新本次有界视觉/浏览预算，并重新执行没有形成证据的旧查询；已有覆盖的部分结果仍按原逻辑只补缺口。
+- 图纸 Run 已在 attempt 2 真实完成：`completed / coverage_satisfied`，34 个结果、3/3 方向覆盖、9 个来源项目。
+- 建筑 Run 已在 attempt 2 真实完成：`completed / coverage_satisfied`，36 个结果、4/4 正文覆盖、6 个项目、79 条 EvidenceClaim；正文分析和最终综合均记录确定性回退。
+- 完整 API 测试套件、Ruff lint/format、strict Mypy 和 `git diff --check` 已通过；本地 API `http://127.0.0.1:8000` 与 Board `http://127.0.0.1:5173` 正常运行。
+- 本任务不增加 token、费用或 Provider 用量统计；用户自行查看梭子蟹后台。不得读取 Key，不调用 Codex 内置浏览器。
 
 ## 当前唯一下一步
 
-PR #11 的 Hosted CI 已通过且已标记 Ready；下一步等待用户审查并明确决定是否合并。当前不自动合并、不重新发布 `v2.2.2`、不调用浏览器、不恢复 Web/Edge、不写入 Key 或生产 Web URL。
+唯一下一步：用户在当前 Board 查看两条已完成研究；本阶段没有剩余代码阻塞，不推送、不恢复 Web/Edge/Firecrawl、不读取 Key、不调用 Codex 内置浏览器。

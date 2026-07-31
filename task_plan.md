@@ -44,7 +44,7 @@ Status: **complete**
 
 ## Verified baseline
 
-- `HEAD` / `main` / `origin/main`: `87826af`
+- 远端 `main`：`9196119`（已用 `git ls-remote` 核实）；本地 checkout：`agent/local-release-v2.2.2` / `HEAD=2429277`；本地 `origin/main` tracking ref 仍为 `87826af`，因为未 fetch/pull。
 - 恢复基线：`1695973`
 - API：389 tests passed
 - Board：178 tests passed
@@ -81,17 +81,56 @@ Status: **complete**
 2. **最小实现**：已在 Provider 首配层生成同主机候选地址；模型列表按候选合并去重；配置时只探测已选模型并保存成功候选的地址。
 3. **验证收口**：已通过 Provider/凭据/启动定向测试、完整 API 门禁、Ruff/strict Mypy、Board/Extension 构建和 packaged E2E；未使用默认真实 Key，未创建研究，未改扩展协议。
 
+## Current user task: research completion after provider failure
+
+Status: **complete**
+
+目标：修复图纸灵感和建筑设计 Run 在 Provider 认证/连接失败时无法完成的问题；不新增 token、费用或用量统计。
+
+1. **图纸失败诊断与红测**：用现有确定性夹具覆盖视觉 Run 的 Provider 认证失败；验证已下载 XHS 图片仍可完成研究，不会被错误丢弃。
+2. **图纸失败最小实现**：视觉 Provider 不可用时使用受限的本地确定性分类，保留 XHS 来源与视觉线索边界，并写入 fallback Trace；不调用真实 Provider 或浏览器。
+3. **建筑研究失败最小实现**：网页正文分析 Provider 失败时，只复用已读取正文原句生成有证据绑定的案例；远程综合失败时复用已有确定性综合。
+4. **真实失败路径验证**：重启本地 API，重试已有失败 Run，确认图纸和建筑研究最终完成，不覆盖用户已有数据。
+5. **回归验证与交接**：通过 API 定向测试、Ruff、严格 Mypy 和 `git diff --check`；完成全部修改后再统一提交，不 push。
+
+### Completed in this phase
+
+- 新增视觉 Provider 失败红测：规划认证失败、三方向 XHS 搜索、12 张图的 Run 最终 `completed/coverage_satisfied`。
+- `DeterministicFallbackVisualClassifier` 只捕获认证、连接、超时、限流、服务端和请求格式类 Provider 错误；正常远程视觉分类路径不变。
+- fallback 只做图片类型/可见特征整理，不提升 XHS 为事实证据；Trace 记录 `deterministic_local_visual` 与错误类型。
+- 网页正文分析回退只复用页面原句，并保留逐字 `EvidenceClaim`；远程综合认证/连接失败进入已有确定性综合。
+- 视觉/XHS/网页分析/综合回归与 Ruff 已通过。
+- 新增零覆盖 retry 红测：重试执行前刷新视觉调用、视觉字节、字节上限和浏览页计数；已有覆盖的部分结果不刷新。
+- 新增零覆盖查询恢复红测：不继承上次失败执行中未产出证据的 completed 查询；已有证据的断点续跑仍跳过 completed 查询。
+- 图纸真实 Run attempt 2 已完成：34 个结果、3/3 方向覆盖、9 个来源项目，最终 `completed/coverage_satisfied`。
+- 建筑真实 Run attempt 2 已完成：36 个结果、4/4 正文覆盖、6 个项目、79 条 EvidenceClaim，最终 `completed/coverage_satisfied`。
+- 完整 API 测试套件、Ruff lint/format、strict Mypy 与 `git diff --check` 全部通过；API/Board 已重启并保持健康。
+
+### Current evidence
+
+- 图纸 Run `06843b31-d478-4b82-959f-49c1f15e65be` 的失败 Trace 为 `planner_error_type=AuthenticationError`；修复后 attempt 2 的 XHS 下载和本地分类均完成。
+- 当前 Provider 配置是本地 `梭子蟹 API` / `https://suoxie.codes/v1` / `gpt-5.6-sol`；Key 只在 Windows Credential Manager，不读取、不写入计划或日志。
+- 建筑 Run 的公开搜索由 `local_browser` 完成，正文回退建立 79 条 EvidenceClaim；本次修复不改变 Provider 用量记录，用户继续以梭子蟹后台为准。
+
+### Errors encountered
+
+| Error | Attempt | Resolution |
+|---|---:|---|
+| 图纸 Run 将 Provider `AuthenticationError` 吞成 `no_usable_assets` | 1 | 已下载图片改走受限本地分类并完成 Run |
+| 建筑 Run 的正文分析 Provider 失败后没有案例可供综合 | 1 | 复用页面正文原句建立证据绑定案例，并让综合认证失败进入确定性综合 |
+| retry 原样继承耗尽的视觉/浏览预算并跳过零覆盖查询 | 1 | 零覆盖 retry 刷新本次有界预算，并重新执行未产出证据的旧查询 |
+
 ## External gates
 
 - 30 条版本化任务的真实网页批量执行与人工标注需要用户主动启用，并可能产生 Provider 费用。
 - 100+ 独立来源、权利清晰的真实图纸样本仍是外部数据门槛；当前 108 张为确定性合成夹具。
 - GitHub Hosted CI run `30636022102` 已于 `2026-07-31 14:09:09 UTC` 成功；coverage、完整本地门禁、安装器构建和 smoke 均通过。
-- PR #11 已标记 Ready 但尚未合并；不自动合并 PR、不重新发布已有 `v2.2.2` Release。
+- PR #11 已于 `2026-07-31 14:34:44 UTC` 合并到远端 `main`，merge commit 为 `9196119`；不重新发布已有 `v2.2.2` Release。
 
 ## Session note
 
-- 规划 skill 的 `session-catchup.py` 在本机未能运行：系统 `python` 命令指向 Microsoft Store 别名，随后仓库虚拟环境调用又发生 Windows 路径解析错误；未写入仓库，已按恢复顺序直接读取规划文件并继续。
+- 规划 skill 的 `session-catchup.py` 首次调用系统 `python` 时命中 Microsoft Store 别名并失败；随后改用 `apps/api/.venv/Scripts/python.exe` 成功，报告 75 条未同步上下文。过程未写入仓库。
 
 ## Next action
 
-本阶段验证和管理记录同步已完成；PR #11 的 CI 已转绿并标记 Ready，下一步等待用户审查后明确决定是否合并。
+本阶段已完成；下一步由用户在 Board 查看两条完成结果。没有批准的自动产品改动，不新增用量统计，不调用 Codex 内置浏览器，不 push。

@@ -33,6 +33,19 @@ OPENAI_SYNTHESIS_TIMEOUT_SECONDS = {
 }
 PUBLIC_PAGE_ANALYSIS_TEXT_LIMIT = 12_000
 PUBLIC_PAGE_FALLBACK_TEXT_LIMIT = 6_000
+PUBLIC_PAGE_ANALYSIS_FALLBACK_ERRORS = frozenset(
+    {
+        "APIConnectionError",
+        "APIResponseValidationError",
+        "APIStatusError",
+        "APITimeoutError",
+        "AuthenticationError",
+        "BadRequestError",
+        "InternalServerError",
+        "PermissionDeniedError",
+        "RateLimitError",
+    }
+)
 
 
 def _focused_public_page_text(question: str, page_text: str) -> str:
@@ -331,6 +344,139 @@ class PublicPageAnalysis(BaseModel):
     transfer_strategy: list[str] = Field(default_factory=list, max_length=6)
     facts: list[PublicPageSupportedFact] = Field(default_factory=list, max_length=6)
     limitations: list[str] = Field(default_factory=list, max_length=6)
+
+
+def is_recoverable_public_page_analysis_error(error: Exception) -> bool:
+    if type(error).__name__ in PUBLIC_PAGE_ANALYSIS_FALLBACK_ERRORS:
+        return True
+    return isinstance(error, ValueError) and str(error).startswith(
+        "OpenAI response did not contain a structured page analysis"
+    )
+
+
+def deterministic_public_page_analysis(
+    *,
+    question: str,
+    title: str,
+    page_text: str,
+    drawings: Sequence[PublicPageDrawing],
+) -> PublicPageAnalysis | None:
+    """Build a bounded page analysis from source sentences when the provider is unavailable."""
+
+    normalized_source = " ".join(page_text.split())
+    normalized_title = " ".join(title.split())
+    if not normalized_source:
+        return None
+    focused_text = _focused_public_page_text(question, page_text)
+    chunks: list[str] = []
+    for chunk in re.split(r"(?<=[.!?。！？])\s+|\n+", focused_text):
+        normalized_chunk = " ".join(chunk.split())
+        if (
+            len(normalized_chunk) < 25
+            or normalized_chunk.startswith(("#", "!["))
+            or normalized_chunk not in normalized_source
+            or normalized_chunk in chunks
+        ):
+            continue
+        chunks.append(normalized_chunk[:500])
+
+    body_chunks = [chunk for chunk in chunks if chunk != normalized_title]
+    if len(body_chunks) >= 2:
+        context = body_chunks[0]
+        intent = _public_page_analysis_intent(question)
+        mechanism = max(
+            body_chunks[1:],
+            key=lambda chunk: (
+                sum(term in chunk.casefold() for term in intent),
+                len(chunk),
+            ),
+        )
+    elif normalized_title and body_chunks:
+        context = normalized_title[:500]
+        mechanism = body_chunks[0]
+    else:
+        return None
+
+    facts = [
+        PublicPageSupportedFact(statement=context, text_excerpt=context),
+        PublicPageSupportedFact(statement=mechanism, text_excerpt=mechanism),
+    ]
+    return PublicPageAnalysis(
+        relevance=2,
+        drawing_ids=[drawing.drawing_id for drawing in drawings[:4]],
+        project_context=context,
+        design_mechanism=mechanism,
+        transfer_strategy=[
+            "把来源机制作为待核验假设，先在当前方案中标出条件、介入动作和空间结果，"
+            "再核对尺度、结构与消防边界。"
+        ],
+        facts=facts,
+        limitations=[
+            "远程页面分析不可用；本地回退只复用页面原句，不补充页面未提供的结构、尺度或性能事实。",
+            "图片仅作同源项目预览，不能替代正文证据。",
+        ],
+    )
+
+
+def _public_page_analysis_intent(question: str) -> tuple[str, ...]:
+    from .public_pages import infer_research_issue_intent
+
+    return {
+        "interface": (
+            "retained",
+            "existing",
+            "structure",
+            "frame",
+            "column",
+            "truss",
+            "connection",
+            "separate",
+            "脱开",
+            "结构",
+            "保留",
+        ),
+        "program": (
+            "program",
+            "insert",
+            "volume",
+            "function",
+            "space",
+            "功能",
+            "植入",
+            "插入",
+        ),
+        "flow": (
+            "circulation",
+            "route",
+            "entrance",
+            "service",
+            "visitor",
+            "流线",
+            "入口",
+            "后勤",
+        ),
+        "daylight": (
+            "daylight",
+            "skylight",
+            "courtyard",
+            "light",
+            "采光",
+            "天窗",
+            "庭院",
+        ),
+        "section": (
+            "section",
+            "floor",
+            "height",
+            "mezzanine",
+            "vertical",
+            "roof",
+            "剖面",
+            "层高",
+            "夹层",
+            "屋顶",
+        ),
+    }.get(infer_research_issue_intent(question), ())
 
 
 class ResearchSynthesisFinding(BaseModel):

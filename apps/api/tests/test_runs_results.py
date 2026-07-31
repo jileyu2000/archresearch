@@ -1,10 +1,13 @@
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import fitz  # type: ignore[import-untyped]
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+import archresearch_api.api as api_module
 from archresearch_api.agent.execution import checkpoint
 from archresearch_api.models import AssetCandidate, InputArtifact, ResearchRun, SavedReference
 from archresearch_api.schemas import RunStatus
@@ -333,6 +336,78 @@ def test_cancel_and_idempotent_retry_preserve_existing_results(
     assert second_retry.status_code == 200
     assert second_retry.json()["attempt"] == first_retry.json()["attempt"]
     assert len(client.get(f"/v1/runs/{run['id']}/results").json()) == 12
+
+
+def test_zero_coverage_retry_refreshes_run_budgets_before_execution(
+    client: TestClient,
+    workspace_id: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with client.app.state.database.session_factory() as session:
+        run = ResearchRun(
+            workspace_id=workspace_id,
+            question="公共建筑如何形成开放、共享和亲切的空间？",
+            goal="precedent_research",
+            budget_mode="balanced",
+            budget={
+                "max_rounds": 3,
+                "max_queries": 12,
+                "max_pages": 30,
+                "max_seconds": 1_800,
+            },
+            research_sources=[],
+            subquestions=[],
+            status=RunStatus.blocked.value,
+            coverage_report={
+                "usable_assets": 19,
+                "covered_subquestions": 0,
+                "covered_subquestion_ids": [],
+            },
+            stop_reason="research_synthesis_incomplete",
+            attempt=1,
+            visual_calls_used=24,
+            visual_bytes_used=901_232,
+            visual_byte_limit_reached=True,
+            browser_pages_attempted=36,
+        )
+        session.add(run)
+        session.commit()
+        run_id = run.id
+
+    observed: dict[str, Any] = {}
+
+    def record_retry_state(
+        run_gate: Any,
+        database: Any,
+        reserved_run_id: str,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        del args, kwargs
+        with database.session_factory() as session:
+            retried = session.get(ResearchRun, reserved_run_id)
+            assert retried is not None
+            observed.update(
+                attempt=retried.attempt,
+                visual_calls_used=retried.visual_calls_used,
+                visual_bytes_used=retried.visual_bytes_used,
+                visual_byte_limit_reached=retried.visual_byte_limit_reached,
+                browser_pages_attempted=retried.browser_pages_attempted,
+            )
+        run_gate.release(reserved_run_id)
+
+    monkeypatch.setattr(api_module, "execute_reserved_research_run", record_retry_state)
+
+    response = client.post(f"/v1/runs/{run_id}/retry")
+
+    assert response.status_code == 200
+    assert observed == {
+        "attempt": 2,
+        "visual_calls_used": 0,
+        "visual_bytes_used": 0,
+        "visual_byte_limit_reached": False,
+        "browser_pages_attempted": 0,
+    }
 
 
 def test_save_and_reject_are_workspace_scoped(client: TestClient, workspace_id: str) -> None:

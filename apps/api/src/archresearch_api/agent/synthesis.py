@@ -30,9 +30,12 @@ def is_recoverable_research_synthesis_error(error: Exception) -> bool:
     return isinstance(error, (TimeoutError, ConnectionError)) or error_type in {
         "APIConnectionError",
         "APITimeoutError",
+        "AuthenticationError",
+        "BadRequestError",
         "ConnectError",
         "ConnectTimeout",
         "InternalServerError",
+        "PermissionDeniedError",
         "RateLimitError",
         "ReadError",
         "ReadTimeout",
