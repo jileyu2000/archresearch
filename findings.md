@@ -104,3 +104,13 @@
 - 显式 retry 原先只递增 attempt，不刷新运行预算；因此零覆盖 Run 会在搜索前因旧上限退出。查询恢复还会在上一执行同时有 completed/started 状态时继承 completed 键，即使这些查询没有形成任何证据。
 - 最小修复只针对 `covered_subquestions == 0`：retry 事务刷新本次视觉/浏览预算；工作流 attempt 大于 0 且实时覆盖为 0 时不继承 completed 查询。已有覆盖的部分结果仍沿用原断点续跑语义。
 - 真实验证中，图纸 Run attempt 2 在 84.7 秒内从 0/3 推进至 34 个结果和 3/3 覆盖；建筑 Run attempt 2 在 160.8 秒内从 19 个候选、0/4 覆盖推进至 36 个结果、4/4 覆盖、6 个项目和 79 条 EvidenceClaim。两条都以 `completed/coverage_satisfied` 结束。
+
+## 2026-08-01 Completed result visibility gap
+
+- 用户截图证明建筑 Run 的现有结果页仍把四个子问题全部显示为空，尽管页面顶部已显示研究结论。
+- 直接读取同一 Run 的 `/v1/runs/{id}/results` 返回 36 条结果；program、circulation、section、structure 均有可归组 `subquestion_ids`，多条结果还有逐题 `subquestion_analysis`。
+- 量化结果：36 条中 22 条有逐题正文分析，program/circulation/section/structure 分别有 12/12/6/4 条；但按 Board 当前 `analysisReady` 判定，36 条全部为 false。
+- 根因是 Board 只接受顶层 `project_context`、`design_mechanism` 均含中文的案例。确定性正文回退刻意保留英文来源原句，把中文动作和边界写入逐题分析，因此被前端全部过滤。
+- 这不是单纯的外部 retry 缓存问题。修复必须只识别有逐题分析、中文回退边界且原句已绑定 EvidenceClaim 的确定性回退，不能把一般旧英文图片线索升级为正式案例。
+- 最小修复后用项目 Playwright 打开真实 36 条结果 Run：program/circulation/section/structure 分别显示 3/3/2/1 个项目案例，四章空状态均为 0。
+- 视觉检查确认来源句以“来源原文：”明确标注，中文转译动作和出处保持可见；没有把英文原句伪装为中文模型分析，也没有恢复来源检视器或改变现有结果布局。

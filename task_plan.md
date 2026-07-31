@@ -133,4 +133,36 @@ Status: **complete**
 
 ## Next action
 
-本阶段已完成；下一步由用户在 Board 查看两条完成结果。没有批准的自动产品改动，不新增用量统计，不调用 Codex 内置浏览器，不 push。
+Provider 失败与结果可见性修复均已完成；下一步由用户在当前 Board 查看两条完成结果。不新增用量统计，不调用 Codex 内置浏览器，不 push。
+
+## Result visibility after externally completed retry
+
+Status: **complete**
+
+目标：确保 Provider 失败后的确定性正文回退结果能按子问题展示案例，不能让后端已完成且有逐题证据的 Run 被 Board 的中文分析门槛全部过滤为空。
+
+1. **复现与红测**：覆盖确定性回退保留英文来源原句、中文转译动作、逐题分析和逐字证据时，完成页仍应显示案例；普通旧英文图片线索继续不得升级为案例。
+2. **最小修复**：只放行有逐题分析、中文回退边界且正文原句已绑定 EvidenceClaim 的确定性回退，并以明确的中文“来源原文”标签展示原句；不放宽一般图片线索门槛。
+3. **用户可见验证**：重新打开真实 Board 数据并确认四个子问题都显示案例，不再显示四个空状态。
+4. **回归与提交**：通过 Board 定向测试、lint、typecheck、build 和 `git diff --check`；单独提交本次可见性修复，不 push。
+
+### Current evidence
+
+- 用户截图中的建筑 Run 已显示研究结论，但四个子问题都显示“这一问题暂时没有可用结果”。
+- 同一 Run 的 `/results` 当前返回 36 条结果，其中 22 条有逐题正文分析；program/circulation/section/structure 分别有 12/12/6/4 条逐题分析。
+- `toWorkResult()` 当前只在顶层 `project_context` 和 `design_mechanism` 含中文时设置 `analysisReady=true`；这 36 条均不满足，导致 `caseResults` 为 0。
+- 确定性正文回退有英文来源原句、中文转译动作、中文回退边界和逐字 EvidenceClaim；根因不是 API 空结果或页面旧缓存，而是 Board 没有识别这种受限但已绑定证据的回退合同。
+
+### Completed in this phase
+
+- 新增 Board 行为测试，覆盖有逐题正文证据的确定性回退必须显示为案例；保留一般旧英文图片线索不得升级为案例的既有保护。
+- `toWorkResult()` 只识别逐题关联一致、中文回退动作与边界存在、条件和机制均精确绑定 EvidenceClaim 的确定性回退；来源句以“来源原文：”明确展示。
+- 真实 36 条结果 Run 在四个章节分别显示 3/3/2/1 个案例，四章空状态均为 0。
+- Board 179 tests、lint、typecheck、production build 与 `git diff --check` 全部通过。
+
+### Errors encountered
+
+| Error | Attempt | Resolution |
+|---|---:|---|
+| Windows 下把 `**/*.test.tsx` glob 直接作为 `rg` 路径参数，返回路径语法错误 | 1 | 改用 `rg ... apps/board/src -g '*.test.ts' -g '*.test.tsx'`，只读搜索成功 |
+| Playwright 按问题前缀定位到两条同名历史 Run，strict mode 拒绝点击 | 1 | 使用当前 Run 可见的“36 张参考”信息精确定位，真实页面验证成功 |

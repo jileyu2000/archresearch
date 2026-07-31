@@ -136,6 +136,14 @@
 - 完整 API 测试套件、Ruff lint/format、strict Mypy 和 `git diff --check` 已通过；本地 API `http://127.0.0.1:8000` 与 Board `http://127.0.0.1:5173` 正常运行。
 - 本任务不增加 token、费用或 Provider 用量统计；用户自行查看梭子蟹后台。不得读取 Key，不调用 Codex 内置浏览器。
 
+## 完成结果可见性修复
+
+- 建筑 Run `4e304e27-68e2-4beb-8fb2-88a858c676c8` 的 36 条结果中，22 条有逐题正文分析，但确定性回退保留英文来源原句，旧 Board 中文门槛把它们全部过滤为空。
+- Board 现在只放行逐题关联一致、中文回退动作与边界存在、条件和机制均精确绑定 EvidenceClaim 的确定性回退；一般旧英文图片线索仍不能升级为正式案例。
+- 来源句以“来源原文：”明确显示，不伪装为中文模型分析。真实页面四个章节分别显示 3/3/2/1 个案例，空状态均为 0。
+- Board 15 个测试文件、179 项测试、lint、typecheck、production build 和 `git diff --check` 全部通过。
+- 本阶段只修改 Board 转换逻辑、行为测试与管理记录；`.artifacts/build/`、`.artifacts/qa/`、`.artifacts/releases/` 继续保留为未跟踪，不 push。
+
 ## 当前唯一下一步
 
-唯一下一步：用户在当前 Board 查看两条已完成研究；本阶段没有剩余代码阻塞，不推送、不恢复 Web/Edge/Firecrawl、不读取 Key、不调用 Codex 内置浏览器。
+唯一下一步：用户刷新或从“最近研究”重新打开两条已完成研究并查看结果；本阶段没有剩余代码阻塞，不推送、不恢复 Web/Edge/Firecrawl、不读取 Key、不调用 Codex 内置浏览器。
