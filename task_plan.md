@@ -89,4 +89,4 @@ Status: **complete**
 
 ## Next action
 
-本阶段验证和 `v2.2.2` 本地发布候选已完成；当前执行用户已授权的分支 PR、`v2.2.2` tag 和“ArchResearch 本地版 v2.2.2” Release，附件为 Windows 安装器与独立 Chrome 扩展 ZIP。
+本阶段验证、管理记录同步和 `v2.2.2` GitHub Release 已完成；用户下一步从 Release 下载 Windows 安装器与独立 Chrome 扩展 ZIP。

@@ -1,6 +1,6 @@
 # ArchResearch 本地优先研究工作台
 
-[![verify](https://github.com/jileyu2000/archresearch-chrome-extension/actions/workflows/verify.yml/badge.svg)](https://github.com/jileyu2000/archresearch-chrome-extension/actions/workflows/verify.yml)
+[![verify](https://github.com/jileyu2000/archresearch/actions/workflows/verify.yml/badge.svg)](https://github.com/jileyu2000/archresearch/actions/workflows/verify.yml)
 ![version](https://img.shields.io/badge/version-2.2.2-2F5BFF)
 ![platform](https://img.shields.io/badge/platform-Windows%2011-171A18)
 
@@ -14,7 +14,7 @@ ArchResearch 是面向建筑学生和青年设计师的本地优先研究工作�
 
 **需要 Windows 11 和 Google Chrome。**
 
-[下载 Windows 安装版 v2.2.2](https://github.com/jileyu2000/archresearch-chrome-extension/releases/download/v2.2.2/ArchResearch-Windows-x64-Setup-v2.2.2.exe)
+[下载 Windows 安装版 v2.2.2](https://github.com/jileyu2000/archresearch/releases/download/v2.2.2/ArchResearch-Windows-x64-Setup-v2.2.2.exe)
 
 1. 下载并双击 `ArchResearch-Windows-x64-Setup-v2.2.2.exe`。
 2. 首次启动填写 API 接口地址和 API Key。地址可以是服务根地址或完整 API 路径；程序会在同一服务地址上自动尝试常见路径，从上游模型列表中选择模型。模型 ID 不可手输；选定模型通过连接测试后才保存，Key 只写入 Windows 凭据管理器。
@@ -22,7 +22,7 @@ ArchResearch 是面向建筑学生和青年设计师的本地优先研究工作�
 
 本地服务、生产界面、SQLite 数据库和运行环境都会自动安装。不需要安装 Python、Node.js、pnpm 或 PowerShell。
 
-> 安装程序暂未签名，Windows 可能显示 SmartScreen 或“未知发布者”。可以在 [v2.2.2 Release](https://github.com/jileyu2000/archresearch-chrome-extension/releases/tag/v2.2.2) 核对附件与 SHA-256。
+> 安装程序暂未签名，Windows 可能显示 SmartScreen 或“未知发布者”。可以在 [v2.2.2 Release](https://github.com/jileyu2000/archresearch/releases/tag/v2.2.2) 核对附件与 SHA-256。
 
 ### 需要小红书时
 

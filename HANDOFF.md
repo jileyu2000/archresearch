@@ -27,7 +27,7 @@
 
 ## 仓库与保护规则
 
-- 仓库：`https://github.com/jileyu2000/archresearch-chrome-extension`
+- 仓库：`https://github.com/jileyu2000/archresearch`
 - 当前分支与远端基线：`main` / `origin/main` = `87826af`
 - 本轮恢复基线：`1695973`，它是最后一个经过 Hosted CI、完整本地门禁、真实安装升级、`--self-test`、`/desktop-health` 和 `/health` 验证的本地发行提交。
 - 恢复通过 `git show 1695973:<path>` 和定点补丁完成，不得使用 reset、checkout 或 clean。
@@ -98,6 +98,13 @@
 - 完整 `scripts/verify.ps1`：401 API / 178 Board / 165 Extension / 8 packaged E2E，Ruff/strict Mypy、前端 lint/typecheck/build、Windows 安装器合同和真实安装 smoke 全部通过。
 - 当前版本面统一为 `2.2.2`；GitHub Release 标题和 README 主标题应使用本地 Windows/Chrome 产品文案，不得退回“仅 Chrome 扩展”。
 
+## v2.2.2 GitHub 发布状态
+
+- 分支 `agent/local-release-v2.2.2` 已推送；提交 `5637ee0` 已创建 `v2.2.2` tag。
+- 草稿 PR [#11](https://github.com/jileyu2000/archresearch/pull/11) 已打开，目标为 `main`。
+- 正式 Release [ArchResearch 本地版 v2.2.2](https://github.com/jileyu2000/archresearch/releases/tag/v2.2.2) 已发布，非草稿、非预发布。
+- Release 附件为 Windows 安装器和独立 Chrome 扩展 ZIP；GitHub 侧名称、大小和本地 SHA-256 记录一致，文案未包含生产 Web URL 或 Provider Key。
+
 ## 当前唯一下一步
 
-用户已授权发布 `v2.2.2`：下一步只提交当前本地恢复、Provider 兼容性、文案和发布合同修改，推送后创建“ArchResearch 本地版 v2.2.2” Release，附件为 Windows 安装器和独立 Chrome 扩展 ZIP；不恢复 Web/Edge，不写入 Key 或生产 Web URL。
+用户下一步从 `v2.2.2` Release 下载 Windows 安装器；需要图纸灵感时，再单独下载并加载 Chrome 扩展。当前不自动调用浏览器、不恢复 Web/Edge、不写入 Key 或生产 Web URL。

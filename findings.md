@@ -54,7 +54,7 @@
 
 - 扩展 ZIP：18,260 bytes，SHA-256 `9D554576B6DDAAD705EC4E66B1D948EB2305A749CAEFAE40144EC04D8FAD0902`。
 - Windows 安装器：69,681,830 bytes，SHA-256 `F859C66720D0A493950653F2178E34C7955CBF7D838CD4569C36D994A30162A1`。
-- 两个文件都只存在 `.artifacts/releases/`；`agent/local-release-v2.2.2` 已推送，v2.2.2 tag 和 Release 待本轮创建。
+- 两个文件都只存在 `.artifacts/releases/` 并已上传到 [v2.2.2 Release](https://github.com/jileyu2000/archresearch/releases/tag/v2.2.2)；tag 指向 `5637ee0`，PR #11 保持草稿状态。
 
 ## Constraints
 
