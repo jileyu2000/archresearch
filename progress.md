@@ -89,3 +89,10 @@
 - 草稿 PR：[#11](https://github.com/jileyu2000/archresearch/pull/11)，标题为“ArchResearch 本地版 v2.2.2”，目标 `main`。
 - 正式 Release：[v2.2.2](https://github.com/jileyu2000/archresearch/releases/tag/v2.2.2)，非草稿、非预发布；tag 指向 `5637ee0`。
 - GitHub 侧附件核验通过：Windows 安装器 69,681,830 bytes，独立 Chrome 扩展 ZIP 18,260 bytes；Release 文案没有生产 Web URL 或 Provider Key。
+
+## 2026-07-31 PR coverage correction
+
+- PR #11 的 GitHub Actions `verify` 只在 `pnpm test:coverage` 阶段失败：扩展 165 个测试全部通过，但 statements 82.61%、functions 83.56%、lines 84.65% 分别略低于旧阈值。
+- 根因是恢复本地扩展时删除了 Web Edition 对应测试，覆盖率阈值仍按旧公共扩展基线保留；本机已稳定复现同一失败。
+- 新增 `apps/extension/tests/screenshot.test.ts`，覆盖成功裁图、无效 viewport、越界区域和 Canvas 不可用；未下调 coverage 阈值，也未改生产代码。
+- 修复后扩展 coverage 为 statements 85.05%、functions 84.50%、lines 87.16%；根级 frontend coverage、lint、typecheck 和完整 `scripts/verify.ps1` 均通过，等待推送后的 PR 重跑。
