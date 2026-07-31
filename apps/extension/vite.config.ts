@@ -7,7 +7,6 @@ export default defineConfig({
       input: {
         background: resolve(import.meta.dirname, "src/background.ts"),
         boardBridge: resolve(import.meta.dirname, "src/board-bridge.ts"),
-        publicBoardBridge: resolve(import.meta.dirname, "src/public-board-bridge.ts"),
         content: resolve(import.meta.dirname, "src/content/index.ts"),
         popup: resolve(import.meta.dirname, "popup.html"),
         sidepanel: resolve(import.meta.dirname, "sidepanel.html"),

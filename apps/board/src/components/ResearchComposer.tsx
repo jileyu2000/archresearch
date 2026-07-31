@@ -1,14 +1,8 @@
-import {
-  useState,
-  type FormEvent,
-  type ReactNode,
-  type RefObject,
-} from 'react'
+import type { FormEvent, RefObject } from 'react'
 import {
   ArrowUp,
   Check,
   CircleDashed,
-  ExternalLink,
   Eye,
   LayoutGrid,
   MonitorUp,
@@ -38,11 +32,6 @@ type ResearchComposerProps = {
   files: File[]
   referenceUrl: string
   demoMode: boolean
-  publicEdition?: boolean
-  verificationControl?: ReactNode
-  verificationReady?: boolean
-  extensionInstallNoticeOpen?: boolean
-  extensionInstallUrl?: string
   activeWorkspaceId: string
   briefReviewLoading: boolean
   researchStarting: boolean
@@ -70,8 +59,6 @@ type ResearchComposerProps = {
   onRefreshBrowserReadiness: () => void | Promise<void>
   onCancel: () => void | Promise<void>
   onRetry: () => void | Promise<void>
-  onDismissExtensionInstallNotice?: () => void
-  onCheckExtensionInstall?: () => void | Promise<void>
 }
 
 export function ResearchComposer({
@@ -82,11 +69,6 @@ export function ResearchComposer({
   files,
   referenceUrl,
   demoMode,
-  publicEdition = false,
-  verificationControl,
-  verificationReady = true,
-  extensionInstallNoticeOpen = false,
-  extensionInstallUrl = '',
   activeWorkspaceId,
   briefReviewLoading,
   researchStarting,
@@ -114,83 +96,9 @@ export function ResearchComposer({
   onRefreshBrowserReadiness,
   onCancel,
   onRetry,
-  onDismissExtensionInstallNotice = () => undefined,
-  onCheckExtensionInstall = () => undefined,
 }: ResearchComposerProps) {
-  const [extensionInstallGuideOpen, setExtensionInstallGuideOpen] = useState(false)
-  const dismissExtensionInstallNotice = () => {
-    setExtensionInstallGuideOpen(false)
-    onDismissExtensionInstallNotice()
-  }
-
   return (
     <section className="research-composer" aria-label="新建研究">
-      {extensionInstallNoticeOpen && (
-        <div className="extension-install-backdrop">
-          <section
-            className="extension-install-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-label="安装 Chrome 扩展"
-          >
-            <p className="extension-install-eyebrow">使用前注意</p>
-            {extensionInstallGuideOpen ? (
-              <>
-                <h2>安装 ArchResearch Chrome 扩展</h2>
-                <p className="extension-install-intro">
-                  Chrome 暂不支持直接安装这个下载包。按下面四步操作一次，以后打开网页版即可使用。
-                </p>
-                <ol className="extension-install-steps">
-                  <li><span>01</span><div><strong>下载并解压安装包</strong><p>点击下方下载 ZIP，完成后右键选择“全部提取”。不要直接打开或选择 ZIP 文件。</p></div></li>
-                  <li><span>02</span><div><strong>打开扩展管理页</strong><p>在地址栏输入 chrome://extensions 并回车。</p></div></li>
-                  <li><span>03</span><div><strong>加载解压后的扩展</strong><p>打开右上角“开发者模式”，点击“加载已解压的扩展程序”，选择直接包含 manifest.json 的文件夹。</p></div></li>
-                  <li><span>04</span><div><strong>连接当前网页</strong><p>回到本页，打开工具栏中的“ArchResearch Chrome 扩展”，点击“连接当前 ArchResearch 网页”。</p></div></li>
-                </ol>
-              </>
-            ) : (
-              <>
-                <h2>读取小红书图纸灵感需要 Chrome 扩展</h2>
-                <p className="extension-install-intro">
-                  扩展使用你已登录的小红书查找公开笔记；建筑案例研究仍可直接使用。
-                </p>
-                <ol className="extension-install-steps">
-                  <li><span>01</span><div><strong>安装 Chrome 扩展</strong><p>只需安装一次，不需要 Python、Node 或其他环境。</p></div></li>
-                  <li><span>02</span><div><strong>连接当前网页</strong><p>安装后打开浏览器工具栏中的 ArchResearch，选择“连接当前 ArchResearch 网页”。</p></div></li>
-                </ol>
-              </>
-            )}
-            <p className="extension-install-boundary">
-              Cookie、账号和密码不会上传到 ArchResearch。
-            </p>
-            <div className="extension-install-actions">
-              {extensionInstallGuideOpen && extensionInstallUrl ? (
-                <a
-                  className="extension-install-primary"
-                  href={extensionInstallUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  下载扩展安装包<ExternalLink aria-hidden="true" />
-                </a>
-              ) : (
-                <button
-                  className="extension-install-primary"
-                  type="button"
-                  onClick={() => setExtensionInstallGuideOpen(true)}
-                >
-                  查看安装方法
-                </button>
-              )}
-              <button type="button" onClick={() => void onCheckExtensionInstall()}>
-                我已安装，检查连接
-              </button>
-              <button type="button" onClick={dismissExtensionInstallNotice}>
-                暂不安装
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
       <header>
         <div>
           <h1>从一个卡住你的地方开始</h1>
@@ -273,12 +181,7 @@ export function ResearchComposer({
               <button
                 className="research-submit"
                 type="submit"
-                disabled={briefReviewLoading
-                  || researchStarting
-                  || isRunActive
-                  || loading
-                  || (!demoMode && !activeWorkspaceId)
-                  || (publicEdition && !verificationReady)}
+                disabled={briefReviewLoading || researchStarting || isRunActive || loading || (!demoMode && !activeWorkspaceId)}
               >
                 {isRunActive
                   ? '研究进行中…'
@@ -294,15 +197,6 @@ export function ResearchComposer({
           </div>
           {composerError && <p className="research-submit-error" role="alert">{composerError}</p>}
         </div>
-        {publicEdition && (
-          <section className="public-verification" aria-label="人机校验">
-            <div>
-              {verificationReady ? <Check aria-hidden="true" /> : <CircleDashed aria-hidden="true" />}
-              <span>{verificationReady ? '已完成人机校验' : '开始研究前请完成人机校验'}</span>
-            </div>
-            {verificationControl}
-          </section>
-        )}
         {goal === 'precedent_research' && researchOptionsOpen && (
           <section className="research-options" aria-label="可选项目资料">
             <p className="research-options-intro">
@@ -350,11 +244,7 @@ export function ResearchComposer({
               <div className="research-preflight-actions">
                 {showBrowserConnectAction && (
                   <button type="button" disabled={browserConnecting} onClick={() => void onConnectBrowser()}>
-                    <MonitorUp aria-hidden="true" />{browserConnecting
-                      ? '正在检查 Chrome…'
-                      : publicEdition
-                        ? '检查扩展连接'
-                        : '连接 Chrome 读取高清图纸'}
+                    <MonitorUp aria-hidden="true" />{browserConnecting ? '正在连接 Chrome…' : '连接 Chrome 读取高清图纸'}
                   </button>
                 )}
                 <button
@@ -378,14 +268,7 @@ export function ResearchComposer({
         <div className="research-run-actions">
           {isRunActive && <button className="research-cancel" type="button" onClick={() => void onCancel()}>取消研究</button>}
           {activeRun && ['partial', 'blocked', 'failed', 'cancelled'].includes(activeRun.status) && (
-            <button
-              className="research-retry"
-              type="button"
-              disabled={publicEdition && !verificationReady}
-              onClick={() => void onRetry()}
-            >
-              {retryActionLabel(activeRun)}
-            </button>
+            <button className="research-retry" type="button" onClick={() => void onRetry()}>{retryActionLabel(activeRun)}</button>
           )}
         </div>
       </form>

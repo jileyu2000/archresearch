@@ -84,6 +84,15 @@ describe('App pure module contracts', () => {
     expect(runAnnouncement(completedRun)).toBe('研究已完成')
     expect(needsCompletionContinuation(incompleteRun)).toBe(true)
     expect(partialReasonTitle('no_new_assets')).toBe('这轮没有找到更多可用案例')
+
+    expect(runAnnouncement({
+      ...completedRun,
+      goal: 'visual_reference_search',
+      status: 'failed',
+      stopReason: 'provider_error:visual_analysis_unavailable',
+    } as unknown as ResearchRun)).toBe(
+      '图纸分析暂时不可用，已找到的图纸已保留，可重新发起研究',
+    )
   })
 
   it('keeps demo selection behavior stable', () => {

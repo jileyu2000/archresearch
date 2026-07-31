@@ -10,11 +10,18 @@ type BridgeStatus = {
 };
 
 export function mountBridgeUi(root: Document, runtime: UiRuntime): void {
+  const form = requireElement<HTMLFormElement>(root, '[data-role="pair-form"]');
+  const endpoint = requireElement<HTMLInputElement>(root, '[data-role="endpoint"]');
+  const token = requireElement<HTMLInputElement>(root, '[data-role="token"]');
   const connection = requireElement<HTMLElement>(root, '[data-role="connection"]');
   const permission = requireElement<HTMLElement>(root, '[data-role="permission"]');
   const permissionGuidance = requireElement<HTMLElement>(
     root,
     '[data-role="permission-guidance"]',
+  );
+  const manualPairing = requireElement<HTMLDetailsElement>(
+    root,
+    '[data-role="manual-pairing"]',
   );
   const error = requireElement<HTMLElement>(root, '[data-role="error"]');
 
@@ -27,6 +34,9 @@ export function mountBridgeUi(root: Document, runtime: UiRuntime): void {
     root.documentElement.dataset.paired = String(status.paired);
     root.documentElement.dataset.connection = status.connection;
     root.documentElement.dataset.permission = String(status.research_permission);
+    if (status.paired && status.connection === "connected") {
+      manualPairing.open = false;
+    }
   };
 
   const run = async (
@@ -43,6 +53,30 @@ export function mountBridgeUi(root: Document, runtime: UiRuntime): void {
       return null;
     }
   };
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const code = token.value.trim();
+    if (code === "") {
+      error.textContent = "请输入一次性配对码。";
+      return;
+    }
+    void run(
+      {
+        type: "ui.pair",
+        endpoint: endpoint.value.trim(),
+        token: code,
+      },
+      "配对码无效或已过期。请回到 ArchResearch 重新一键连接。",
+    ).then((status) => {
+      if (status?.paired) {
+        token.value = "";
+        manualPairing.open = false;
+      } else {
+        manualPairing.open = true;
+      }
+    });
+  });
 
   root.querySelectorAll<HTMLButtonElement>("[data-command]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -76,26 +110,15 @@ export function mountBridgeUi(root: Document, runtime: UiRuntime): void {
             error.textContent = failureMessage;
           },
         );
-      } else if (command === "public.connect") {
-        const failureMessage =
-          "连接没有完成。请保持 ArchResearch 网页为当前标签后重试；若网页提醒已关闭，则连接已经生效。";
-        error.textContent = "";
-        void runtime.requestResearchPermission().then(
-          (granted) => {
-            if (!granted) {
-              error.textContent = failureMessage;
-              return;
-            }
-            void run({ type: "ui.public.connect" }, failureMessage);
-          },
-          () => {
-            error.textContent = failureMessage;
-          },
-        );
       } else if (command === "permissions.revoke") {
         void run(
           { type: "ui.permissions.revoke" },
           "未能撤销网页读取权限。请稍后重试。",
+        );
+      } else if (command === "disconnect") {
+        void run(
+          { type: "ui.disconnect" },
+          "未能断开本地连接。请关闭扩展后重试。",
         );
       }
     });
@@ -117,7 +140,7 @@ function readStatus(response: unknown): BridgeStatus {
     response.result === null ||
     typeof response.result !== "object"
   ) {
-    throw new Error("Invalid public extension response");
+    throw new Error("Invalid local bridge response");
   }
   const status = response.result as Record<string, unknown>;
   if (
@@ -125,7 +148,7 @@ function readStatus(response: unknown): BridgeStatus {
     !isConnectionStatus(status.connection) ||
     typeof status.research_permission !== "boolean"
   ) {
-    throw new Error("Invalid public extension status");
+    throw new Error("Invalid local bridge status");
   }
   return {
     paired: status.paired,
@@ -159,8 +182,8 @@ function connectionLabel(status: BridgeStatus["connection"]): string {
 }
 
 function guidanceLabel(status: BridgeStatus): string {
-  if (!status.paired || status.connection === "disconnected") {
-    return "当前 ArchResearch 网页尚未连接。请回到网页所在标签，点击网页中的连接提示。";
+  if (!status.paired) {
+    return "尚未连接。请回到 ArchResearch 一键连接；配对码只用于故障恢复。";
   }
   switch (status.connection) {
     case "connected":
@@ -168,9 +191,11 @@ function guidanceLabel(status: BridgeStatus): string {
         ? "已获得网页研究权限，后续研究无需再次确认。"
         : "只差这一步：允许 ArchResearch 在研究时读取可见网页。授权会保留，直到你主动撤销。";
     case "connecting":
-      return "正在连接当前 ArchResearch 网页，连接完成后即可允许网页读取。";
+      return "正在连接本地服务，连接完成后即可允许网页读取。";
     case "error":
-      return "当前网页连接已失效。请回到 ArchResearch 网页重新连接。";
+      return "连接信息已失效。请回到 ArchResearch 重新一键连接。";
+    case "disconnected":
+      return "本地服务未连接。请先打开 ArchResearch；已保存的配对无需重新填写。";
   }
 }
 

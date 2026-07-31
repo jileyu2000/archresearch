@@ -37,10 +37,16 @@ if ($script -notmatch 'archresearch_api\.provider_setup') {
     throw "Provider setup helper is not invoked."
 }
 if ($script -match 'Read-Host\s+"Enter model name"|ArgumentList\.Add\("--model"\)') {
-    throw "The model name must come from the upstream model list, not user input."
+    throw "The model ID must not be entered or passed directly."
 }
-if ($script -notmatch 'automatically discovers a compatible model') {
-    throw "The provider setup script must explain automatic upstream model discovery."
+if ($script -notmatch 'ArgumentList\.Add\("--list-models"\)') {
+    throw "The provider setup script must fetch the upstream model list."
+}
+if ($script -notmatch 'ArgumentList\.Add\("--model-index"\)') {
+    throw "The provider setup script must pass only the selected model index."
+}
+if ($script -notmatch 'Read-Host\s+"Enter model number"') {
+    throw "The provider setup script must ask for a model number, not a model ID."
 }
 
 Write-Host "Provider configuration security contract passed."

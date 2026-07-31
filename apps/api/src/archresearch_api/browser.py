@@ -21,6 +21,15 @@ PROTOCOL_VERSION: Literal[1] = 1
 PAIRING_CODE_TTL_SECONDS = 300
 CHROME_BOARD_URL = "http://127.0.0.1:5173/?connect=chrome"
 
+
+def installed_chrome_board_url(port: int) -> str:
+    if isinstance(port, bool) or not 1 <= port <= 65535:
+        raise ValueError("Installed Chrome Board port must be between 1 and 65535")
+    return f"http://127.0.0.1:{port}/?connect=chrome"
+
+
+INSTALLED_CHROME_BOARD_URL = installed_chrome_board_url(8000)
+
 BrowserAction = Literal[
     "open_url",
     "wait",
@@ -428,8 +437,29 @@ class BrowserBroker:
                 )
 
 
+def is_allowed_chrome_board_url(url: str) -> bool:
+    if url == CHROME_BOARD_URL:
+        return True
+    try:
+        parsed = urlparse(url)
+        port = parsed.port
+    except ValueError:
+        return False
+    return (
+        parsed.scheme == "http"
+        and parsed.hostname == "127.0.0.1"
+        and parsed.username is None
+        and parsed.password is None
+        and port is not None
+        and 1 <= port <= 65535
+        and parsed.path == "/"
+        and parsed.query == "connect=chrome"
+        and not parsed.fragment
+    )
+
+
 def open_board_in_chrome(url: str) -> bool:
-    if os.name != "nt" or url != CHROME_BOARD_URL:
+    if os.name != "nt" or not is_allowed_chrome_board_url(url):
         return False
     local_app_data = os.environ.get("LOCALAPPDATA")
     candidates = [

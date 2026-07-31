@@ -57,4 +57,4 @@
 
 公开仓库 `jileyu2000/archresearch-chrome-extension` 已建立。Hosted CI run `30332351557` 验证 Chromium 环境修复，run `30333320610` 验证发布记录落点；两轮都通过 setup、Playwright Chromium 安装、Board/Extension coverage 与完整 `scripts/verify.ps1`，最终日志明确为 348 API / 177 Board / 165 Extension / 8 packaged E2E 全绿。默认 CI 未使用 live provider key。
 
-这份记录保留的是 Web Edition 发布前的历史验证结果；旧的 `v2.1.0` Release 已随 Web-only 迁移退役。当前 GitHub Release 只保留明确命名的 ArchResearch Chrome 扩展 ZIP；GitHub 自动生成的 Source code 压缩包仅用于查看源码，不是安装包。
+这份记录保留 V2.1 本地发行的历史验证结果。M179 已恢复 Windows 安装器、动态回环端口、Provider 配置、独立扩展和完整本地 CI 合同；新的 V2.2 本地构建、安装 smoke 与健康检查结果以 `progress.md` 的 M179 记录为准，正式发布后再生成新的版本化证据清单。GitHub 自动生成的 Source code ZIP/TAR 仍只是源码快照，不是安装包。

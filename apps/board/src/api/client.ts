@@ -1,6 +1,6 @@
 export type ResearchGoal = 'precedent_research' | 'visual_reference_search'
 export type ResearchMode = 'quick' | 'balanced' | 'deep'
-export type ResearchSource = 'xiaohongshu' | 'public_web'
+export type ResearchSource = 'xiaohongshu'
 export type RunStatus =
   | 'created'
   | 'planning'
@@ -173,7 +173,6 @@ export interface ApiAssetCandidate {
   asset_type: ArchitectureAssetType
   source_url: string
   image_url: string | null
-  visual_reference?: boolean
   has_local_content?: boolean
   publication_tier: 'primary' | 'trusted_secondary' | 'aggregator' | 'unknown'
   project_identity: 'confirmed' | 'probable' | 'unknown' | 'conflict'
@@ -651,10 +650,4 @@ export function createApiClient(baseUrl = '/v1') {
   }
 }
 
-export type ApiClient = ReturnType<typeof createApiClient>
-
-export let apiClient: ApiClient = createApiClient()
-
-export function configureApiClient(client: ApiClient) {
-  apiClient = client
-}
+export const apiClient = createApiClient()

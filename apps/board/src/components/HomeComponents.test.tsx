@@ -114,41 +114,6 @@ describe('home view components', () => {
     expect(props.onRefreshBrowserReadiness).toHaveBeenCalledOnce()
   })
 
-  it('prompts on the main page until the Chrome extension is detected', async () => {
-    const user = userEvent.setup()
-    const props = composerProps({
-      extensionInstallUrl: 'https://chromewebstore.google.com/detail/archresearch/example',
-      extensionInstallNoticeOpen: true,
-      onDismissExtensionInstallNotice: vi.fn(),
-    })
-    render(<ResearchComposer {...props} />)
-
-    const dialog = screen.getByRole('dialog', { name: '安装 Chrome 扩展' })
-    expect(within(dialog).getByRole('heading', {
-      name: '读取小红书图纸灵感需要 Chrome 扩展',
-    })).toBeVisible()
-    expect(within(dialog).getByText('Cookie、账号和密码不会上传到 ArchResearch。')).toBeVisible()
-    expect(within(dialog).queryByRole('link', {
-      name: '下载扩展安装包',
-    })).not.toBeInTheDocument()
-
-    await user.click(within(dialog).getByRole('button', { name: '查看安装方法' }))
-
-    expect(within(dialog).getByRole('heading', {
-      name: '安装 ArchResearch Chrome 扩展',
-    })).toBeVisible()
-    expect(within(dialog).getByText('在地址栏输入 chrome://extensions 并回车。')).toBeVisible()
-    expect(within(dialog).getByText(/直接包含 manifest\.json 的文件夹/)).toBeVisible()
-    expect(within(dialog).getByRole('link', {
-      name: '下载扩展安装包',
-    })).toHaveAttribute(
-      'href',
-      'https://chromewebstore.google.com/detail/archresearch/example',
-    )
-    await user.click(within(dialog).getByRole('button', { name: '暂不安装' }))
-    expect(props.onDismissExtensionInstallNotice).toHaveBeenCalledOnce()
-  })
-
   it('renders starters, controlled workspace creation, and recent-run actions', async () => {
     const user = userEvent.setup()
     const run: ResearchRun = {
