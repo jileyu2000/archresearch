@@ -28,7 +28,7 @@
 
 ## 当前已验证基线
 
-- 公开仓库为 `https://github.com/jileyu2000/archresearch`。`v2.1.0`–`v2.1.4` 的历史扩展/本地版本记录保留为历史；`v2.2.0`/`v2.2.1` 的 Windows 安装器属于已退休资产，必须从公开 Release 删除，仅保留明确命名的 Chrome 扩展 ZIP。当前 Web-only 修改尚未提交，后续仍按显式路径 stage，备份 ZIP 与构建产物不得入库。
+- 公开仓库为 `https://github.com/jileyu2000/archresearch-chrome-extension`。旧的 `v2.1.0`/`v2.1.1` 本地版 Release 已退役删除；`v2.1.2`–`v2.2.1` 仅保留明确命名的 Chrome 扩展 ZIP。Web-only 迁移已合并到 `main`，备份 ZIP 与构建产物仍不得入库。
 - Web-only 权威门禁 `scripts/verify-web.ps1` 最近通过：**190 Board / 186 Extension / 7 packaged E2E / 12 Web / 29 Edge**；coverage 为 Board `79.01/76.42/84.28/83.18`、Extension `83.40/78.55/85.29/85.74`，并通过 release contracts、lint、typecheck、生产构建和 Wrangler dry-run。旧的 `scripts/verify.ps1` 与 FastAPI/SQLite 测试只作为维护者兼容层，不属于 Web 发布门禁；PowerShell 脚本末行成功文案不能单独作为证明。
 - 进程脚本必须保持无 WMI/CIM（MSIX pwsh 加载 MMI 失败会杀掉自己拉起的服务）：监听发现用 `netstat -ano`，命令行读 PEB。
 - 持久数据基线：**4 workspaces / 15 Runs（13 条 permanent + 2 条仍沿用既有到期日的模拟试点 Run）/ active 0 / 14 条收藏 / 2 条 input artifacts**。2026-07-27 12:04 新增的 3 条收藏属于既有“城市社区共享中心”Run，与 M152 的隔离图纸/《耕织图》问题不同，是并发外部变化，已按工作区保护规则保留。新建 Run 默认 180 天；M152 未创建或改写 durable Run。《城市社区共享中心》8 问全部 completed 零缺口（M137）；`76f52c79`（三档验收 Deep）与 `ff16988d`（任务书 Standard）是现行验收声明的底层证据，不是失败记录。模拟产物去留待用户决定。
