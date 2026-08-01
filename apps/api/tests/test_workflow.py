@@ -528,8 +528,8 @@ def test_public_search_query_routes_overlapping_words_by_primary_design_intent()
     cases = [
         (
             "新功能通过插入盒体植入旧结构，剖面图如何表达新旧关系？",
-            ("program insertion", "box-in-box"),
-            ("sectional hierarchy", "skylight clerestory"),
+            ("program insertion", "inserted volume"),
+            ("box-in-box", "sectional hierarchy", "skylight clerestory"),
         ),
         (
             "原有大跨空间如何通过挑空、夹层、下沉和屋顶加建形成剖面层次？",
@@ -543,8 +543,8 @@ def test_public_search_query_routes_overlapping_words_by_primary_design_intent()
         ),
         (
             "加建区域如何通过独立入口、服务廊道和核心筒分离访客与后勤流线？",
-            ("visitor circulation", "back-of-house", "loading dock"),
-            ("program insertion", "sectional hierarchy"),
+            ("visitor circulation", "back-of-house", "service entrance"),
+            ("loading dock", "program insertion", "sectional hierarchy"),
         ),
         (
             "How can a roof extension, mezzanine and sunken floor create a sectional hierarchy?",
@@ -1421,6 +1421,56 @@ def test_retry_skips_completed_queries_and_resumes_the_failed_subquestion(tmp_pa
         "started",
         "completed",
     ]
+
+
+def test_zero_coverage_retry_repeats_completed_queries_from_the_failed_attempt(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
+
+    class EmptyThenRecoveringProvider:
+        name = "empty-then-recovering"
+
+        def __init__(self) -> None:
+            self.generation = 0
+            self.queries: list[str] = []
+
+        def plan(
+            self,
+            question: str,
+            goal: ResearchGoal,
+            budget_mode: BudgetMode,
+            research_context: str,
+        ) -> ResearchPlan:
+            del question, goal, budget_mode, research_context
+            return _quick_research_plan()
+
+        def search(
+            self,
+            query: str,
+            goal: ResearchGoal,
+            allowed_domains: list[str] | None = None,
+        ) -> ProviderSearchResult:
+            del goal, allowed_domains
+            self.queries.append(query)
+            if self.generation == 0:
+                if "剖面怎样形成层次" in query:
+                    raise RuntimeError("temporary provider failure")
+                return _batch()
+            index = len(self.queries)
+            return _batch(_asset(f"recovered-{index}", index))
+
+    provider = EmptyThenRecoveringProvider()
+    execute_research_run(database, run_id, provider)
+    first_program_query = provider.queries[0]
+    first_circulation_query = provider.queries[1]
+
+    provider.generation = 1
+    _advance_retry_attempt(database, run_id)
+    execute_research_run(database, run_id, provider)
+
+    assert provider.queries.count(first_program_query) == 2
+    assert provider.queries.count(first_circulation_query) == 2
 
 
 def test_retry_continues_only_uncovered_queries_after_a_resumed_run_stays_partial(

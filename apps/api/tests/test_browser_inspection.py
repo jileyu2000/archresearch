@@ -37,6 +37,9 @@ from archresearch_api.models import (
     Workspace,
 )
 from archresearch_api.providers import (
+    CandidateAssessment,
+    CandidateReranking,
+    LocalSearchCandidate,
     ProviderAsset,
     ProviderSearchResult,
     ProviderSource,
@@ -47,6 +50,8 @@ from archresearch_api.providers import (
     ResearchSynthesisBranchAnalysis,
     ResearchSynthesisCase,
     ResearchSynthesisFinding,
+    SearchQuery,
+    SearchQueryPlan,
 )
 from archresearch_api.public_pages import ParsedPageImage, ParsedPublicPage, PublicSearchLead
 from archresearch_api.schemas import (
@@ -518,7 +523,7 @@ def test_workflow_uses_opencli_xiaohongshu_multi_image_path_without_extension(
     )
 
 
-def test_visual_reference_search_completes_from_one_bounded_xiaohongshu_note_per_branch(
+def test_visual_reference_search_does_not_complete_from_one_usable_note_per_branch(
     tmp_path: Path,
 ) -> None:
     branch_count = 3
@@ -615,6 +620,14 @@ def test_visual_reference_search_completes_from_one_bounded_xiaohongshu_note_per
             self.searches.append(query)
             return super().search(query, goal, allowed_domains)
 
+        def plan_search_queries(self, **kwargs: object) -> SearchQueryPlan:
+            del kwargs
+            raise AssertionError("XHS-only visual research must not plan public web queries")
+
+        def rerank_search_candidates(self, **kwargs: object) -> CandidateReranking:
+            del kwargs
+            raise AssertionError("XHS-only visual research must not rerank public web candidates")
+
     provider = RecordingSearchProvider()
 
     execute_research_run(
@@ -634,8 +647,8 @@ def test_visual_reference_search_completes_from_one_bounded_xiaohongshu_note_per
         traces = list(session.scalars(select(TraceEvent).where(TraceEvent.run_id == run_id)))
 
     assert run is not None
-    assert run.status == RunStatus.completed.value
-    assert run.stop_reason == "coverage_satisfied"
+    assert run.status == RunStatus.partial.value, (run.stop_reason, run.coverage_report)
+    assert run.stop_reason == "visual_budget_exhausted"
     assert run.coverage_report["covered_subquestions"] == branch_count
     assert run.coverage_report["gaps"] == []
     assert run.coverage_report["enrichment_gaps"] == []
@@ -649,6 +662,288 @@ def test_visual_reference_search_completes_from_one_bounded_xiaohongshu_note_per
     assert {asset.publication_tier for asset in assets} == {PublicationTier.aggregator.value}
     assert {asset.rights_status for asset in assets} == {RightsStatus.unknown.value}
     assert sum(trace.tool == "xiaohongshu_assets" for trace in traces) == branch_count * 2
+
+
+def test_visual_run_completes_with_local_visual_fallback_when_provider_auth_fails(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(
+        tmp_path,
+        max_pages=3,
+        budget_mode=BudgetMode.quick,
+    )
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assert run is not None
+        run.question = "帮我找一套清新竞赛风格图纸"
+        run.goal = ResearchGoal.visual_reference_search.value
+        run.research_sources = ["xiaohongshu"]
+        run.budget = {
+            "max_rounds": 1,
+            "max_queries": 3,
+            "max_pages": 3,
+            "max_seconds": 240,
+        }
+        session.commit()
+
+    class AuthenticationError(Exception):
+        pass
+
+    class AuthFailingPlanner(SingleBatchProvider):
+        name = "auth-failing-provider"
+
+        def __init__(self) -> None:
+            super().__init__(ProviderSearchResult(assets=[], sources=[]))
+            self.search_calls = 0
+
+        def plan(
+            self,
+            question: str,
+            goal: ResearchGoal,
+            budget_mode: BudgetMode,
+            workspace_context: str,
+        ) -> ResearchPlan:
+            del question, goal, budget_mode, workspace_context
+            raise AuthenticationError("invalid provider credential")
+
+        def search(
+            self,
+            query: str,
+            goal: ResearchGoal,
+            allowed_domains: list[str] | None = None,
+        ) -> ProviderSearchResult:
+            del query, goal, allowed_domains
+            self.search_calls += 1
+            raise AssertionError("XHS-only visual research must not use generic search")
+
+    class AuthFailingVisualClassifier:
+        name = "openai-vision"
+        worst_case_remote_batch_seconds = 60.0
+
+        def classify(
+            self,
+            image_data_url: str,
+            *,
+            question: str,
+            caption: str,
+            project_text: str,
+        ) -> VisualClassification:
+            del image_data_url, question, caption, project_text
+            raise AuthenticationError("invalid provider credential")
+
+        def classify_remote_batch(
+            self,
+            candidates: Sequence[RemoteVisualCandidate],
+            *,
+            question: str,
+            project_text: str,
+        ) -> RemoteVisualClassificationBatch:
+            del candidates, question, project_text
+            raise AuthenticationError("invalid provider credential")
+
+    class DownloadingXiaohongshu:
+        name = "opencli-xiaohongshu"
+
+        def __init__(self) -> None:
+            self.calls = 0
+            self.downloads = 0
+
+        def search(self, query: str, *, limit: int = 4) -> list[ProviderSource]:
+            del query, limit
+            self.calls += 1
+            return [
+                ProviderSource(
+                    url=(f"https://www.xiaohongshu.com/explore/visual-note-{self.calls}-{rank}"),
+                    publisher="小红书",
+                    title=f"建筑图纸风格参考 {self.calls}-{rank}",
+                    publication_tier=PublicationTier.aggregator,
+                )
+                for rank in range(1, 4)
+            ]
+
+        def download(self, note_url: str, output_dir: Path, *, limit: int = 4) -> list[Path]:
+            del note_url
+            self.downloads += 1
+            output_dir.mkdir(parents=True, exist_ok=True)
+            paths = []
+            for index in range(4):
+                path = output_dir / f"visual-{self.downloads}-{index}.png"
+                path.write_bytes(_distinct_crop_png(self.downloads * 4 + index))
+                paths.append(path)
+            return paths[:limit]
+
+    provider = AuthFailingPlanner()
+    xiaohongshu = DownloadingXiaohongshu()
+
+    execute_research_run(
+        database,
+        run_id,
+        provider,
+        visual_classifier=AuthFailingVisualClassifier(),
+        candidate_root=tmp_path / "visual-candidates",
+        xiaohongshu_search=xiaohongshu,
+    )
+
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assets = list(
+            session.scalars(select(AssetCandidate).where(AssetCandidate.run_id == run_id))
+        )
+        traces = list(
+            session.scalars(
+                select(TraceEvent).where(TraceEvent.run_id == run_id).order_by(TraceEvent.sequence)
+            )
+        )
+
+    assert run is not None
+    assert run.status == RunStatus.completed.value, (run.stop_reason, run.coverage_report)
+    assert run.stop_reason == "coverage_satisfied"
+    assert provider.search_calls == 0
+    assert xiaohongshu.calls == 3
+    assert xiaohongshu.downloads == 9
+    assert len(assets) == 36
+    assert run.visual_calls_used == 36
+    assert (
+        sum(
+            trace.tool == "openai" and trace.summary.get("mode") == "deterministic_local_visual"
+            for trace in traces
+        )
+        == 9
+    )
+    assert traces[1].summary["planner_error_type"] == "AuthenticationError"
+
+
+def test_precedent_run_completes_with_local_page_and_synthesis_fallbacks(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(
+        tmp_path,
+        max_pages=4,
+        budget_mode=BudgetMode.balanced,
+    )
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assert run is not None
+        run.budget = {
+            "max_rounds": 1,
+            "max_queries": 4,
+            "max_pages": 4,
+            "max_seconds": 240,
+        }
+        session.commit()
+
+    class AuthenticationError(Exception):
+        pass
+
+    class ProviderWithUnavailableAnalysis(SingleBatchProvider):
+        name = "auth-failing-provider"
+        worst_case_page_analysis_seconds = 0.0
+
+        def plan(
+            self,
+            question: str,
+            goal: ResearchGoal,
+            budget_mode: BudgetMode,
+            workspace_context: str,
+        ) -> ResearchPlan:
+            del question, goal, budget_mode, workspace_context
+            raise AuthenticationError("invalid provider credential")
+
+        def analyze_public_page(
+            self,
+            **kwargs: object,
+        ) -> PublicPageAnalysis:
+            del kwargs
+            raise AuthenticationError("invalid provider credential")
+
+        def synthesize_research(
+            self,
+            **kwargs: object,
+        ) -> ResearchSynthesis:
+            del kwargs
+            raise AuthenticationError("invalid provider credential")
+
+    class FourProjectParser:
+        name = "local_browser"
+        worst_case_call_seconds = 0.0
+
+        def __init__(self) -> None:
+            self.search_count = 0
+            self.urls: list[str] = []
+
+        def search(
+            self,
+            query: str,
+            *,
+            limit: int,
+            include_domains: list[str],
+        ) -> list[PublicSearchLead]:
+            del query, limit, include_domains
+            self.search_count += 1
+            project_id = self.search_count
+            return [
+                PublicSearchLead(
+                    url=f"https://www.archdaily.com/{100000 + project_id}/project-{project_id}",
+                    title=f"Project {project_id} / Studio Example",
+                )
+            ]
+
+        def parse(self, url: str) -> ParsedPublicPage:
+            self.urls.append(url)
+            project_id = url.rsplit("-", 1)[-1]
+            title = f"Project {project_id} / Studio Example"
+            return ParsedPublicPage(
+                source_url=url,
+                title=title,
+                markdown=(
+                    "The project retains an existing hall as the main public room. "
+                    "The inserted program organizes a clear route between the courtyard "
+                    "and the hall."
+                ),
+                images=[
+                    ParsedPageImage(
+                        url=f"https://cdn.example/project-{project_id}-plan.png",
+                        alt="Ground floor plan",
+                    ),
+                    ParsedPageImage(
+                        url=f"https://cdn.example/project-{project_id}-section.png",
+                        alt="Longitudinal section",
+                    ),
+                    ParsedPageImage(
+                        url=f"https://cdn.example/project-{project_id}-circulation.png",
+                        alt="Circulation diagram",
+                    ),
+                ],
+            )
+
+    parser = FourProjectParser()
+    execute_research_run(
+        database,
+        run_id,
+        ProviderWithUnavailableAnalysis(ProviderSearchResult(assets=[], sources=[])),
+        public_page_parser=parser,
+    )
+
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        events = list(session.scalars(select(TraceEvent).where(TraceEvent.run_id == run_id)))
+
+    assert run is not None
+    assert run.status == RunStatus.completed.value, (run.stop_reason, run.coverage_report)
+    assert run.stop_reason == "coverage_satisfied"
+    assert run.coverage_report["gaps"] == []
+    assert run.coverage_report["enrichment_gaps"] == []
+    assert run.coverage_report["synthesis"]["generation_mode"] == "deterministic_fallback"
+    fallback_events = [
+        event
+        for event in events
+        if event.tool == "public_page_analysis"
+        and event.summary.get("generation_mode") == "deterministic_fallback"
+    ]
+    assert len(fallback_events) >= 4
+    assert all(
+        event.summary["provider_error_type"] == "AuthenticationError" for event in fallback_events
+    )
 
 
 def test_visual_plan_fallback_keeps_the_explicitly_requested_drawing_type() -> None:
@@ -747,11 +1042,12 @@ def test_visual_reference_search_only_persists_the_requested_drawing_type(
             index = len(self.searches)
             return [
                 ProviderSource(
-                    url=f"https://www.xiaohongshu.com/search_result/axis-note-{index}",
-                    publisher=f"小红书 · 轴测风格 {index}",
-                    title=f"轴测风格参考 {index}",
+                    url=(f"https://www.xiaohongshu.com/search_result/axis-note-{index}-{rank}"),
+                    publisher=f"小红书 · 轴测风格 {index}-{rank}",
+                    title=f"轴测风格参考 {index}-{rank}",
                     publication_tier=PublicationTier.aggregator,
                 )
+                for rank in range(1, 4)
             ]
 
         def download(self, note_url: str, output_dir: Path, *, limit: int = 4) -> list[Path]:
@@ -814,8 +1110,8 @@ def test_visual_reference_search_only_persists_the_requested_drawing_type(
     assert run is not None
     assert run.status == RunStatus.completed.value
     assert run.coverage_report["covered_subquestions"] == 3
-    assert len(xiaohongshu.downloads) == 3
-    assert len(assets) == 6
+    assert len(xiaohongshu.downloads) == 9
+    assert len(assets) == 18
     assert {asset.asset_type for asset in assets} == {ArchitectureAssetType.axonometric.value}
     assert {asset_id for asset in assets for asset_id in asset.subquestion_ids} == {
         "linework",
@@ -823,7 +1119,7 @@ def test_visual_reference_search_only_persists_the_requested_drawing_type(
         "rendered",
     }
     asset_traces = [trace for trace in traces if trace.tool == "xiaohongshu_assets"]
-    assert [trace.summary["type_mismatch_count"] for trace in asset_traces] == [2, 2, 2]
+    assert [trace.summary["type_mismatch_count"] for trace in asset_traces] == [2] * 9
 
 
 def test_xiaohongshu_accumulates_three_usable_ranked_notes_before_extension_fallback(
@@ -1035,6 +1331,133 @@ def test_visual_reference_budget_reaches_third_direction_after_four_notes_each(
         "collage",
         "rendered",
     }
+
+
+def test_xiaohongshu_only_requires_three_usable_notes_per_direction(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, max_pages=12)
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assert run is not None
+        run.question = "我想出一张轴测图，帮我找风格"
+        run.goal = ResearchGoal.visual_reference_search.value
+        run.research_sources = ["xiaohongshu"]
+        run.budget = {
+            "max_rounds": 1,
+            "max_queries": 3,
+            "max_pages": 12,
+            "max_seconds": 240,
+        }
+        session.commit()
+
+    plan = ResearchPlan(
+        subquestions=[
+            ResearchSubquestion(
+                id="linework",
+                question="精细线稿轴测图",
+                rationale="比较线宽与留白。",
+            ),
+            ResearchSubquestion(
+                id="collage",
+                question="拼贴叙事轴测图",
+                rationale="比较色块与材质。",
+            ),
+            ResearchSubquestion(
+                id="rendered",
+                question="材质渲染轴测图",
+                rationale="比较光影与纹理。",
+            ),
+        ]
+    )
+
+    class ThreeDirectionProvider(SingleBatchProvider):
+        def plan(
+            self,
+            question: str,
+            goal: ResearchGoal,
+            budget_mode: BudgetMode,
+            workspace_context: str,
+        ) -> ResearchPlan:
+            del question, goal, budget_mode, workspace_context
+            return plan
+
+    class LimitedUsableNotes:
+        name = "limited-usable-opencli-xiaohongshu"
+
+        def __init__(self) -> None:
+            self.searches = 0
+
+        def search(self, query: str, *, limit: int = 4) -> list[ProviderSource]:
+            del query
+            assert limit == 4
+            self.searches += 1
+            return [
+                ProviderSource(
+                    url=(f"https://www.xiaohongshu.com/explore/branch-{self.searches}-note-{rank}"),
+                    publisher="小红书",
+                    title=f"轴测图参考 {self.searches}-{rank}",
+                    publication_tier=PublicationTier.aggregator,
+                )
+                for rank in range(1, 5)
+            ]
+
+        def download(self, note_url: str, output_dir: Path, *, limit: int = 4) -> list[Path]:
+            slug = note_url.rsplit("/", 1)[-1].split("-")
+            branch, rank = int(slug[1]), int(slug[3])
+            output_dir.mkdir(parents=True, exist_ok=True)
+            paths = []
+            for index in range(2):
+                path = output_dir / f"axis-{index + 1}.png"
+                seed = ((branch - 1) * 4 + rank - 1) * 2 + index + 1
+                path.write_bytes(_distinct_crop_png(seed))
+                paths.append(path)
+            return paths[:limit]
+
+    class TwoUsableFinalDirectionClassifier(RecordingRemoteClassifier):
+        def classify_remote_batch(
+            self,
+            candidates: list[RemoteVisualCandidate],
+            *,
+            question: str,
+            project_text: str,
+        ) -> RemoteVisualClassificationBatch:
+            del question, project_text
+            self.remote_calls.append(candidates)
+            usable = len(self.remote_calls) not in {7, 9}
+            return RemoteVisualClassificationBatch(
+                classifications=[
+                    RemoteVisualClassification(
+                        candidate_id=candidate.candidate_id,
+                        asset_type=(ArchitectureAssetType.axonometric if usable else None),
+                        relevance=4 if usable else 0,
+                        observations=(["可见明确的轴测图表达。"] if usable else []),
+                    )
+                    for candidate in candidates
+                ]
+            )
+
+    xiaohongshu = LimitedUsableNotes()
+    classifier = TwoUsableFinalDirectionClassifier()
+    execute_research_run(
+        database,
+        run_id,
+        ThreeDirectionProvider(ProviderSearchResult(assets=[], sources=[])),
+        visual_classifier=classifier,
+        candidate_root=tmp_path / "visual-candidates",
+        xiaohongshu_search=xiaohongshu,
+    )
+
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+
+    assert run is not None
+    assert run.coverage_report["covered_subquestions"] == 3
+    assert run.visual_calls_used == 20
+    assert xiaohongshu.searches == 3
+    assert len(classifier.remote_calls) == 10
+    assert run.status == RunStatus.partial.value
+    assert run.stop_reason == "visual_budget_exhausted"
 
 
 def test_visual_reference_exhausted_slots_use_visual_budget_stop_reason(tmp_path: Path) -> None:
@@ -1706,6 +2129,462 @@ class UniquePublicSearchParser(RecordingPublicSearchParser):
         ]
 
 
+class ModelAssistedSearchProvider(AnalyzingPageProvider):
+    name = "model-assisted"
+    worst_case_call_seconds = 0.0
+
+    def __init__(self, *, fail_planning: bool = False, fail_reranking: bool = False) -> None:
+        super().__init__(ProviderSearchResult(sources=[], assets=[]))
+        self.fail_planning = fail_planning
+        self.fail_reranking = fail_reranking
+        self.query_plan_calls: list[dict[str, object]] = []
+        self.reranking_calls: list[list[LocalSearchCandidate]] = []
+        self.native_search_calls = 0
+
+    def search(
+        self,
+        query: str,
+        goal: ResearchGoal,
+        allowed_domains: list[str] | None = None,
+    ) -> ProviderSearchResult:
+        del query, goal, allowed_domains
+        self.native_search_calls += 1
+        raise AssertionError("default local research must not call native web_search")
+
+    def plan_search_queries(
+        self,
+        *,
+        question: str,
+        subquestion: ResearchSubquestion,
+        round_number: int,
+        preferred_language: str,
+        research_context: str,
+        previous_queries: Sequence[str],
+        excluded_sources: Sequence[str],
+        failure_reasons: Sequence[str],
+        query_limit: int,
+    ) -> SearchQueryPlan:
+        del question, research_context
+        self.query_plan_calls.append(
+            {
+                "subquestion_id": subquestion.id,
+                "round_number": round_number,
+                "previous_queries": list(previous_queries),
+                "excluded_sources": list(excluded_sources),
+                "failure_reasons": list(failure_reasons),
+                "query_limit": query_limit,
+            }
+        )
+        if self.fail_planning:
+            raise RuntimeError("query planner unavailable")
+        return SearchQueryPlan(
+            queries=[
+                SearchQuery(
+                    query=(
+                        f"community library {subquestion.id} round {round_number} "
+                        "atrium floor plan section project description"
+                    ),
+                    language=preferred_language,
+                )
+            ]
+        )
+
+    def rerank_search_candidates(
+        self,
+        *,
+        question: str,
+        subquestion: ResearchSubquestion,
+        search_queries: Sequence[str],
+        candidates: Sequence[LocalSearchCandidate],
+    ) -> CandidateReranking:
+        del question, subquestion, search_queries
+        self.reranking_calls.append(list(candidates))
+        if self.fail_reranking:
+            raise RuntimeError("candidate reranker unavailable")
+        return CandidateReranking(
+            assessments=[
+                CandidateAssessment(
+                    candidate_id=item.candidate_id,
+                    relevance=4 if "Library" in item.title else 0,
+                    typology_match=4 if "Library" in item.title else 0,
+                    drawing_availability=4 if "drawings" in item.description else 1,
+                    source_trust=4 if "archdaily.com" in item.url else 1,
+                    retain="Library" in item.title,
+                )
+                for item in candidates
+            ]
+        )
+
+
+class DuplicateCandidateSearchParser(RecordingPublicPageParser):
+    worst_case_call_seconds = 0.0
+
+    def __init__(self) -> None:
+        super().__init__([])
+        self.queries: list[str] = []
+
+    def search(
+        self,
+        query: str,
+        *,
+        limit: int,
+        include_domains: list[str],
+    ) -> list[PublicSearchLead]:
+        del limit, include_domains
+        self.queries.append(query)
+        return [
+            PublicSearchLead(
+                url="https://www.archdaily.com/100/community-library",
+                title="Central Community Library / Studio One",
+                description="Atrium and stepped reading with floor plan and section drawings.",
+            ),
+            PublicSearchLead(
+                url="https://www.archdaily.com/100/community-library",
+                title="Central Community Library / Studio One",
+                description="Duplicate URL.",
+            ),
+            PublicSearchLead(
+                url="https://studio.example/central-community-library",
+                title="Central Community Library / Studio One",
+                description="Duplicate project page.",
+            ),
+            PublicSearchLead(
+                url="https://www.archdaily.com/200/unrelated-hospital",
+                title="Regional Hospital / Studio Two",
+                description="Hospital patient rooms without library drawings.",
+            ),
+        ]
+
+    def parse(self, url: str) -> ParsedPublicPage:
+        self.urls.append(url)
+        return ParsedPublicPage(
+            source_url=url,
+            title="Central Community Library / Studio One",
+            markdown=(
+                "The community library places stepped reading around a central atrium. "
+                "The continuous circulation route connects every reading level."
+            ),
+            images=[],
+        )
+
+
+def test_model_assisted_local_search_filters_candidates_and_never_calls_native_web_search(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, max_pages=1)
+    provider = ModelAssistedSearchProvider()
+    parser = DuplicateCandidateSearchParser()
+
+    execute_research_run(
+        database,
+        run_id,
+        provider,
+        public_page_parser=parser,
+    )
+
+    with database.session_factory() as session:
+        events = list(session.scalars(select(TraceEvent).where(TraceEvent.run_id == run_id)))
+    assert provider.native_search_calls == 0
+    assert parser.urls == ["https://www.archdaily.com/100/community-library"]
+    assert provider.reranking_calls
+    assert len(provider.reranking_calls[0]) == 2
+    assert {item.title for item in provider.reranking_calls[0]} == {
+        "Central Community Library / Studio One",
+        "Regional Hospital / Studio Two",
+    }
+    assert any(
+        event.tool == "search_query_planning" and event.summary.get("status") == "completed"
+        for event in events
+    )
+    assert any(
+        event.tool == "candidate_reranking"
+        and event.summary.get("status") == "completed"
+        and event.summary.get("candidate_count") == 2
+        and event.summary.get("retained_count") == 1
+        for event in events
+    )
+
+
+def test_named_project_query_filters_cross_project_candidates_before_reranking(
+    tmp_path: Path,
+) -> None:
+    class DaeguQueryProvider(ModelAssistedSearchProvider):
+        def plan_search_queries(
+            self,
+            **kwargs: object,
+        ) -> SearchQueryPlan:
+            del kwargs
+            return SearchQueryPlan(
+                queries=[
+                    SearchQuery(
+                        query=(
+                            "Daegu Gosan Park Library new-build public library "
+                            "circulation project description"
+                        ),
+                        language="en",
+                    )
+                ]
+            )
+
+    class NamedProjectSearchParser(DuplicateCandidateSearchParser):
+        def search(
+            self,
+            query: str,
+            *,
+            limit: int,
+            include_domains: list[str],
+        ) -> list[PublicSearchLead]:
+            del limit, include_domains
+            self.queries.append(query)
+            return [
+                PublicSearchLead(
+                    url=(
+                        "https://www.designboom.com/architecture/"
+                        "dellekamp-arquitectos-daegu-gosan-park-library-01-01-2024/"
+                    ),
+                    title="Dellekamp Arquitectos: Daegu Gosan Park Library",
+                    description=("A four-level promenade wraps an atrium with natural daylight."),
+                ),
+                PublicSearchLead(
+                    url=(
+                        "https://www.designboom.com/architecture/"
+                        "snohetta-calgary-new-central-library-11-01-2018/"
+                    ),
+                    title="Snohetta: Calgary New Central Library",
+                    description="A public library with drawings and an atrium.",
+                ),
+                PublicSearchLead(
+                    url="https://www.designboom.com/architecture/podcast-city-design-01-01-2024/",
+                    title="Designboom architecture podcast",
+                    description="A discussion about public buildings and libraries.",
+                ),
+                PublicSearchLead(
+                    url="https://www.designboom.com/architecture/courtyard-house-01-01-2024/",
+                    title="Courtyard House / Example Studio",
+                    description="A private residence organized around a courtyard.",
+                ),
+            ]
+
+        def parse(self, url: str) -> ParsedPublicPage:
+            self.urls.append(url)
+            return ParsedPublicPage(
+                source_url=url,
+                title="Dellekamp Arquitectos: Daegu Gosan Park Library",
+                markdown=(
+                    "The public promenade rises through four levels around the atrium. "
+                    "The service entrance is located on the east side. "
+                    "Visitors enter from the public courtyard."
+                ),
+                links=[
+                    ("https://www.designboom.com/architecture/podcast-city-design-01-01-2024/"),
+                    ("https://www.designboom.com/architecture/courtyard-house-01-01-2024/"),
+                ],
+                images=[],
+            )
+
+    database, run_id = _database_with_run(tmp_path, max_pages=2)
+    provider = DaeguQueryProvider()
+    parser = NamedProjectSearchParser()
+
+    execute_research_run(
+        database,
+        run_id,
+        provider,
+        public_page_parser=parser,
+    )
+
+    assert provider.reranking_calls
+    assert [item.title for item in provider.reranking_calls[0]] == [
+        "Dellekamp Arquitectos: Daegu Gosan Park Library"
+    ]
+    assert parser.urls == [
+        (
+            "https://www.designboom.com/architecture/"
+            "dellekamp-arquitectos-daegu-gosan-park-library-01-01-2024/"
+        )
+    ]
+
+
+def test_unnamed_query_analyzes_concrete_project_parent_without_sidebar_expansion(
+    tmp_path: Path,
+) -> None:
+    parent_url = (
+        "https://www.designboom.com/architecture/dellekamp-arquitectos-daegu-gosan-park-library"
+    )
+    podcast_url = "https://www.designboom.com/architecture/library-design-podcast/"
+    house_url = "https://www.designboom.com/architecture/courtyard-house/"
+
+    class UnnamedProjectParser(DuplicateCandidateSearchParser):
+        def search(
+            self,
+            query: str,
+            *,
+            limit: int,
+            include_domains: list[str],
+        ) -> list[PublicSearchLead]:
+            del limit, include_domains
+            self.queries.append(query)
+            return [
+                PublicSearchLead(
+                    url=parent_url,
+                    title="Daegu Gosan Park Library / Dellekamp Arquitectos",
+                    description=(
+                        "A community library with an atrium promenade, floor plans, "
+                        "sections, and a project description."
+                    ),
+                )
+            ]
+
+        def parse(self, url: str) -> ParsedPublicPage:
+            self.urls.append(url)
+            if url != parent_url:
+                return ParsedPublicPage(
+                    source_url=url,
+                    title="Unrelated sidebar story",
+                    markdown="This page does not describe the library project.",
+                )
+            return ParsedPublicPage(
+                source_url=url,
+                title="Daegu Gosan Park Library / Dellekamp Arquitectos",
+                markdown=(
+                    "The public promenade rises through four levels around the atrium. "
+                    "The library reading rooms remain visible from the central space."
+                ),
+                links=[podcast_url, house_url],
+            )
+
+    database, run_id = _database_with_run(tmp_path, max_pages=2)
+    parser = UnnamedProjectParser()
+
+    execute_research_run(
+        database,
+        run_id,
+        ModelAssistedSearchProvider(),
+        public_page_parser=parser,
+    )
+
+    assert parser.urls == [parent_url]
+
+
+def test_named_project_source_filter_handles_two_independent_anchors_and_unnamed_queries() -> None:
+    sources = [
+        ProviderSource(
+            url="https://example.com/daegu-gosan-park-library",
+            title="Daegu Gosan Park Library",
+        ),
+        ProviderSource(
+            url="https://example.com/calgary-new-central-library",
+            title="Calgary New Central Library",
+        ),
+        ProviderSource(
+            url="https://example.com/courtyard-house",
+            title="Courtyard House",
+        ),
+    ]
+
+    named_titles = {
+        source.title
+        for query in (
+            "Daegu Gosan Park Library new public library circulation floor plan",
+            "Calgary New Central Library new public library atrium section",
+        )
+        for source in workflow_module._filter_named_project_query_sources(sources, query)
+    }
+    unnamed_sources = workflow_module._filter_named_project_query_sources(
+        sources,
+        "new public library atrium circulation floor plan",
+    )
+
+    assert named_titles == {
+        "Daegu Gosan Park Library",
+        "Calgary New Central Library",
+    }
+    assert unnamed_sources == sources
+
+
+def test_query_attempt_records_model_planned_query_language(tmp_path: Path) -> None:
+    database, run_id = _database_with_run(tmp_path)
+    with database.session_factory() as session:
+        attempt = QueryAttempt(
+            run_id=run_id,
+            round_number=1,
+            subquestion_id="branch-a",
+            query="old deterministic query",
+            language="en",
+            purpose=ResearchGoal.precedent_research.value,
+            provider="local_browser",
+        )
+        session.add(attempt)
+        session.commit()
+        attempt_id = attempt.id
+
+    workflow_module._update_query_attempt_text(
+        database,
+        attempt_id,
+        [SearchQuery(query="新建社区图书馆 中庭 平面图", language="zh")],
+    )
+
+    with database.session_factory() as session:
+        attempt = session.get(QueryAttempt, attempt_id)
+    assert attempt is not None
+    assert attempt.query == "新建社区图书馆 中庭 平面图"
+    assert attempt.language == "zh"
+
+
+def test_model_assisted_search_falls_back_and_recovery_queries_stay_bounded_and_distinct(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, max_pages=2)
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assert run is not None
+        run.question = "社区图书馆中庭如何组织采光、结构和安静阅览？"
+        run.budget = {
+            **run.budget,
+            "max_rounds": 1,
+            "max_queries": 3,
+            "completion_recovery_rounds": 1,
+            "completion_recovery_pages_per_subquestion": 1,
+        }
+        session.commit()
+    provider = ModelAssistedSearchProvider(fail_planning=True, fail_reranking=True)
+    parser = DuplicateCandidateSearchParser()
+
+    execute_research_run(
+        database,
+        run_id,
+        provider,
+        public_page_parser=parser,
+    )
+
+    with database.session_factory() as session:
+        events = list(session.scalars(select(TraceEvent).where(TraceEvent.run_id == run_id)))
+        run = session.get(ResearchRun, run_id)
+    assert run is not None
+    total_query_budget = run.budget["max_queries"] + 3
+    assert 1 < len(parser.queries) <= total_query_budget
+    assert len(parser.queries) == len(set(parser.queries))
+    assert all(call["query_limit"] == 1 for call in provider.query_plan_calls)
+    assert len(provider.query_plan_calls) <= total_query_budget
+    assert any(call["previous_queries"] for call in provider.query_plan_calls[1:])
+    assert any(call["failure_reasons"] for call in provider.query_plan_calls[1:])
+    assert parser.urls
+    assert all("unrelated-hospital" not in url for url in parser.urls)
+    assert any(
+        event.tool == "search_query_planning"
+        and event.summary.get("status") == "fallback"
+        and event.summary.get("mode") == "deterministic_template"
+        and event.summary.get("error_type") == "RuntimeError"
+        for event in events
+    )
+    assert any(
+        event.tool == "candidate_reranking"
+        and event.summary.get("status") == "fallback"
+        and event.summary.get("mode") == "deterministic_candidate_ranking"
+        for event in events
+    )
+
+
 def test_completion_recovery_keeps_page_capacity_for_each_uncovered_subquestion(
     tmp_path: Path,
 ) -> None:
@@ -1735,6 +2614,77 @@ def test_completion_recovery_keeps_page_capacity_for_each_uncovered_subquestion(
         "https://studio.example/project-7",
         "https://studio.example/project-8",
         "https://studio.example/project-9",
+    ]
+
+
+def test_uncovered_subquestion_keeps_its_domain_slot_when_earlier_branches_are_covered(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database, run_id = _database_with_run(tmp_path)
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assert run is not None
+        run.budget = {
+            **run.budget,
+            "max_rounds": 2,
+            "max_queries": 6,
+            "completion_recovery_rounds": 3,
+            "completion_recovery_pages_per_subquestion": 1,
+        }
+        session.commit()
+
+    class DomainRecordingParser:
+        name = "local_browser"
+        worst_case_call_seconds = 0.0
+
+        def __init__(self) -> None:
+            self.domains: list[list[str]] = []
+
+        def search(
+            self,
+            query: str,
+            *,
+            limit: int,
+            include_domains: list[str],
+        ) -> list[PublicSearchLead]:
+            del query, limit
+            self.domains.append(include_domains)
+            return []
+
+        def parse(self, url: str) -> ParsedPublicPage:
+            raise AssertionError(f"empty search must not parse {url}")
+
+    def two_branches_covered(*args: object, **kwargs: object) -> dict[str, object]:
+        del args, kwargs
+        return {
+            "usable_assets": 0,
+            "project_count": 0,
+            "verified_or_partial": 0,
+            "subquestion_count": 3,
+            "covered_subquestions": 2,
+            "covered_subquestion_ids": ["program", "circulation"],
+            "multi_asset_projects": 0,
+            "subquestion_passes": {},
+            "gaps": ["uncovered_subquestions", "article_analysis_incomplete"],
+            "enrichment_gaps": ["insufficient_usable_assets"],
+        }
+
+    monkeypatch.setattr(workflow_module, "calculate_coverage", two_branches_covered)
+    parser = DomainRecordingParser()
+
+    execute_research_run(
+        database,
+        run_id,
+        SingleBatchProvider(ProviderSearchResult(sources=[], assets=[])),
+        public_page_parser=parser,
+    )
+
+    assert parser.domains[:2] == [["archdaily.com"], ["designboom.com"]]
+    assert parser.domains[2:] == [
+        ["designboom.com"],
+        ["archdaily.cn"],
+        ["dezeen.com"],
     ]
 
 
@@ -1868,7 +2818,7 @@ def test_local_browser_search_keeps_progressing_without_model_web_search(
     assert parser.domain_batches[:3] == [
         ["archdaily.com"],
         ["designboom.com"],
-        ["dezeen.com"],
+        ["archdaily.com"],
     ]
     assert any(
         event.tool == provider.name
@@ -1920,24 +2870,24 @@ def test_public_recovery_changes_search_strategy_for_the_same_uncovered_branch(
     assert len(set(first_branch_queries)) == 4
     assert parser.domain_batches[0] == ["archdaily.com"]
     assert parser.domain_batches[3] == ["designboom.com"]
-    assert parser.domain_batches[6] == ["dezeen.com"]
-    assert parser.domain_batches[9] == ["divisare.com"]
+    assert parser.domain_batches[6] == ["designboom.com"]
+    assert parser.domain_batches[9] == ["dezeen.com"]
     assert first_branch_queries[0].endswith("site:archdaily.com")
     assert first_branch_queries[1].endswith("site:designboom.com")
-    assert first_branch_queries[2].endswith("site:dezeen.com")
-    assert first_branch_queries[3].endswith("site:divisare.com")
+    assert first_branch_queries[2].endswith("site:designboom.com")
+    assert first_branch_queries[3].endswith("site:dezeen.com")
     assert "adaptive reuse industrial building" in first_branch_queries[0]
     assert "community cultural center" in first_branch_queries[0]
     assert "visitor circulation" in first_branch_queries[0]
     assert "staff circulation" in first_branch_queries[0]
     assert "back-of-house" in first_branch_queries[0]
-    assert "loading dock" in first_branch_queries[0]
+    assert "loading dock" not in first_branch_queries[0]
     assert "旧工业厂房改造成社区文化中心" not in first_branch_queries[0]
     daylight_branch_queries = [parser.queries[index] for index in (2, 5, 8, 11)]
     for query in (
         daylight_branch_queries[0],
         daylight_branch_queries[1],
-        daylight_branch_queries[3],
+        daylight_branch_queries[2],
     ):
         assert query.isascii()
         assert "skylight" in query
@@ -1945,7 +2895,7 @@ def test_public_recovery_changes_search_strategy_for_the_same_uncovered_branch(
         assert "courtyard" in query
         assert "section" in query
         assert len(query) <= 300
-    assert "天窗 高侧窗 庭院 采光 剖面图" in daylight_branch_queries[2]
+    assert "天窗 高侧窗 庭院 采光 剖面图" in daylight_branch_queries[3]
 
 
 class RankedPublicSearchParser(RecordingPublicPageParser):
@@ -4986,6 +5936,521 @@ def test_article_ready_page_without_images_is_reanalyzed_when_later_searches_do_
     assert set(candidate.subquestion_analysis) == {"program", "circulation", "section"}
 
 
+def test_late_article_page_covers_earlier_branch_without_blocking_new_followup_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, max_pages=2)
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assert run is not None
+        run.question = "新建社区图书馆如何组织中庭、跨层流线和屋顶采光？"
+        run.budget = {
+            **run.budget,
+            "max_rounds": 1,
+            "max_queries": 3,
+            "completion_recovery_rounds": 1,
+            "completion_recovery_pages_per_subquestion": 1,
+        }
+        session.commit()
+
+    subquestions = [
+        ResearchSubquestion(
+            id="atrium", question="中庭如何组织公共活动？", rationale="核对中庭正文。"
+        ),
+        ResearchSubquestion(
+            id="circulation",
+            question="跨层流线如何围绕中庭组织？",
+            rationale="核对楼梯和步道正文。",
+        ),
+        ResearchSubquestion(
+            id="daylight",
+            question="屋顶采光如何进入中庭？",
+            rationale="核对天窗和采光正文。",
+        ),
+    ]
+    monkeypatch.setattr(
+        workflow_module,
+        "build_research_plan",
+        lambda *args, **kwargs: (
+            ResearchPlan(project_summary="新建社区图书馆", subquestions=subquestions),
+            "deterministic",
+            None,
+        ),
+    )
+
+    circulation_url = "https://www.archdaily.com/100001/central-library"
+    daylight_url = "https://www.archdaily.com/100002/skylit-library"
+    page_text = {
+        circulation_url: (
+            "Atrium condition. Atrium mechanism. Circulation condition. Circulation mechanism."
+        ),
+        daylight_url: "Daylight condition. Daylight mechanism.",
+    }
+
+    class LateSourceParser:
+        name = "local_browser"
+        worst_case_call_seconds = 0.0
+
+        def __init__(self) -> None:
+            self.search_count = 0
+            self.urls: list[str] = []
+
+        def search(
+            self,
+            query: str,
+            *,
+            limit: int,
+            include_domains: list[str],
+        ) -> list[PublicSearchLead]:
+            del query, limit, include_domains
+            self.search_count += 1
+            if self.search_count == 5:
+                return [
+                    PublicSearchLead(
+                        url=circulation_url,
+                        title="Central Library / Studio Example",
+                        description="Library atrium circulation project description.",
+                    )
+                ]
+            if self.search_count == 6:
+                return [
+                    PublicSearchLead(
+                        url=daylight_url,
+                        title="Skylit Library / Studio Example",
+                        description="Library atrium roof daylight project description.",
+                    )
+                ]
+            return []
+
+        def parse(self, url: str) -> ParsedPublicPage:
+            self.urls.append(url)
+            return ParsedPublicPage(
+                source_url=url,
+                title=(
+                    "Central Library / Studio Example"
+                    if url == circulation_url
+                    else "Skylit Library / Studio Example"
+                ),
+                markdown=page_text[url],
+            )
+
+    class BranchEvidenceProvider(SingleBatchProvider):
+        worst_case_page_analysis_seconds = 0.0
+
+        def __init__(self) -> None:
+            super().__init__(ProviderSearchResult(sources=[], assets=[]))
+            self.analysis_calls: list[tuple[str, str]] = []
+
+        def analyze_public_page(
+            self,
+            *,
+            question: str,
+            source_url: str,
+            title: str,
+            page_text: str,
+            drawings: list[PublicPageDrawing],
+            analysis_requirements: Sequence[str],
+        ) -> PublicPageAnalysis:
+            del title, page_text, drawings, analysis_requirements
+            branch = (
+                "circulation"
+                if "跨层流线" in question
+                else "daylight"
+                if "屋顶采光" in question
+                else "atrium"
+            )
+            self.analysis_calls.append((source_url, branch))
+            if source_url == circulation_url and branch in {"atrium", "circulation"}:
+                label = "Atrium" if branch == "atrium" else "Circulation"
+            elif source_url == daylight_url and branch == "daylight":
+                label = "Daylight"
+            else:
+                return PublicPageAnalysis(
+                    relevance=2,
+                    limitations=["正文不支持当前子问题。"],
+                )
+            return PublicPageAnalysis(
+                relevance=4,
+                project_context=f"{branch} 项目条件。",
+                design_mechanism=f"{branch} 设计机制。",
+                transfer_strategy=[f"转译 {branch} 机制。"],
+                facts=[
+                    PublicPageSupportedFact(
+                        statement=f"{branch} 项目条件。",
+                        text_excerpt=f"{label} condition.",
+                    ),
+                    PublicPageSupportedFact(
+                        statement=f"{branch} 设计机制。",
+                        text_excerpt=f"{label} mechanism.",
+                    ),
+                ],
+            )
+
+    provider = BranchEvidenceProvider()
+    parser = LateSourceParser()
+
+    execute_research_run(database, run_id, provider, public_page_parser=parser)
+
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+    assert run is not None
+    assert parser.urls == [circulation_url, daylight_url]
+    assert (circulation_url, "daylight") not in provider.analysis_calls
+    assert (daylight_url, "daylight") in provider.analysis_calls
+    assert (circulation_url, "atrium") in provider.analysis_calls
+    assert set(run.coverage_report["covered_subquestion_ids"]) == {
+        "atrium",
+        "circulation",
+        "daylight",
+    }
+
+
+def test_completion_recovery_caches_second_new_candidate_after_first_has_no_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, max_pages=1)
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assert run is not None
+        run.question = "新建社区图书馆如何组织中庭、跨层流线和屋顶采光？"
+        run.budget = {
+            **run.budget,
+            "max_rounds": 1,
+            "max_queries": 6,
+            "completion_recovery_rounds": 1,
+            "completion_recovery_pages_per_subquestion": 2,
+        }
+        session.commit()
+
+    subquestions = [
+        ResearchSubquestion(id="atrium", question="中庭如何组织公共活动？", rationale="核对正文。"),
+        ResearchSubquestion(
+            id="circulation",
+            question="跨层流线如何围绕中庭组织？",
+            rationale="核对正文。",
+        ),
+        ResearchSubquestion(
+            id="daylight",
+            question="屋顶采光如何进入中庭？",
+            rationale="核对正文。",
+        ),
+    ]
+    monkeypatch.setattr(
+        workflow_module,
+        "build_research_plan",
+        lambda *args, **kwargs: (
+            ResearchPlan(project_summary="新建社区图书馆", subquestions=subquestions),
+            "deterministic",
+            None,
+        ),
+    )
+
+    weak_url = "https://www.archdaily.com/100001/weak-library"
+    strong_url = "https://www.archdaily.com/100002/atrium-library"
+    page_text = {
+        weak_url: "The article only identifies the project year.",
+        strong_url: "Atrium condition. Atrium mechanism.",
+    }
+
+    class TwoCandidateRecoveryParser:
+        name = "local_browser"
+        worst_case_call_seconds = 0.0
+
+        def __init__(self) -> None:
+            self.search_count = 0
+            self.urls: list[str] = []
+
+        def search(
+            self,
+            query: str,
+            *,
+            limit: int,
+            include_domains: list[str],
+        ) -> list[PublicSearchLead]:
+            del query, limit, include_domains
+            self.search_count += 1
+            if self.search_count != 4:
+                return []
+            return [
+                PublicSearchLead(
+                    url=weak_url,
+                    title="Central Atrium Community Library / Studio Example",
+                    description="Atrium circulation project with public stairs and landings.",
+                ),
+                PublicSearchLead(
+                    url=strong_url,
+                    title="Community Library / Studio Example",
+                    description="Library project description.",
+                ),
+            ]
+
+        def parse(self, url: str) -> ParsedPublicPage:
+            self.urls.append(url)
+            image_name = "weak" if url == weak_url else "atrium"
+            return ParsedPublicPage(
+                source_url=url,
+                title=(
+                    "Central Atrium Community Library / Studio Example"
+                    if url == weak_url
+                    else "Community Library / Studio Example"
+                ),
+                markdown=page_text[url],
+                images=[
+                    ParsedPageImage(
+                        url=f"https://cdn.example/{image_name}-plan.jpg",
+                        alt="Floor plan",
+                    )
+                ],
+            )
+
+    class RecoveryEvidenceProvider(SingleBatchProvider):
+        worst_case_page_analysis_seconds = 0.0
+
+        def __init__(self) -> None:
+            super().__init__(ProviderSearchResult(sources=[], assets=[]))
+            self.analysis_sources: list[str] = []
+
+        def analyze_public_page(
+            self,
+            *,
+            question: str,
+            source_url: str,
+            title: str,
+            page_text: str,
+            drawings: list[PublicPageDrawing],
+            analysis_requirements: Sequence[str],
+        ) -> PublicPageAnalysis:
+            del question, title, page_text, drawings, analysis_requirements
+            self.analysis_sources.append(source_url)
+            if source_url == weak_url:
+                return PublicPageAnalysis(
+                    relevance=2,
+                    limitations=["正文不支持当前子问题。"],
+                )
+            return PublicPageAnalysis(
+                relevance=4,
+                project_context="中庭项目条件。",
+                design_mechanism="中庭设计机制。",
+                transfer_strategy=["转译中庭机制。"],
+                facts=[
+                    PublicPageSupportedFact(
+                        statement="中庭项目条件。",
+                        text_excerpt="Atrium condition.",
+                    ),
+                    PublicPageSupportedFact(
+                        statement="中庭设计机制。",
+                        text_excerpt="Atrium mechanism.",
+                    ),
+                ],
+            )
+
+    provider = RecoveryEvidenceProvider()
+    parser = TwoCandidateRecoveryParser()
+
+    execute_research_run(database, run_id, provider, public_page_parser=parser)
+
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+    assert run is not None
+    assert parser.search_count == 6
+    assert parser.urls == [weak_url, strong_url]
+    assert provider.analysis_sources[:2] == [weak_url, strong_url]
+    assert "atrium" in run.coverage_report["covered_subquestion_ids"]
+
+
+def test_completed_branches_use_cached_multi_drawing_page_for_enrichment_recovery(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, max_pages=3)
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assert run is not None
+        run.question = "新建社区图书馆如何组织中庭、跨层流线和屋顶采光？"
+        run.budget = {
+            **run.budget,
+            "max_rounds": 1,
+            "max_queries": 3,
+            "completion_recovery_rounds": 1,
+            "completion_recovery_pages_per_subquestion": 1,
+        }
+        session.commit()
+
+    subquestions = [
+        ResearchSubquestion(id="atrium", question="中庭如何组织公共活动？", rationale="核对正文。"),
+        ResearchSubquestion(
+            id="circulation",
+            question="跨层流线如何围绕中庭组织？",
+            rationale="核对正文。",
+        ),
+        ResearchSubquestion(
+            id="daylight",
+            question="屋顶采光如何进入中庭？",
+            rationale="核对正文。",
+        ),
+    ]
+    monkeypatch.setattr(
+        workflow_module,
+        "build_research_plan",
+        lambda *args, **kwargs: (
+            ResearchPlan(project_summary="新建社区图书馆", subquestions=subquestions),
+            "deterministic",
+            None,
+        ),
+    )
+
+    branch_urls = [
+        "https://www.archdaily.com/100001/atrium-library",
+        "https://www.archdaily.com/100002/circulation-library",
+        "https://www.archdaily.com/100003/daylight-library",
+    ]
+    multi_drawing_url = "https://www.archdaily.com/100004/deichman-library"
+
+    class EnrichmentRecoveryParser:
+        name = "local_browser"
+        worst_case_call_seconds = 0.0
+
+        def __init__(self) -> None:
+            self.search_count = 0
+            self.urls: list[str] = []
+
+        def search(
+            self,
+            query: str,
+            *,
+            limit: int,
+            include_domains: list[str],
+        ) -> list[PublicSearchLead]:
+            del query, limit, include_domains
+            self.search_count += 1
+            if self.search_count <= len(branch_urls):
+                url = branch_urls[self.search_count - 1]
+            elif self.search_count == len(branch_urls) + 1:
+                url = multi_drawing_url
+            else:
+                return []
+            return [
+                PublicSearchLead(
+                    url=url,
+                    title=f"Community Library {self.search_count} / Studio Example",
+                    description="Community library project description.",
+                )
+            ]
+
+        def parse(self, url: str) -> ParsedPublicPage:
+            self.urls.append(url)
+            if url == multi_drawing_url:
+                return ParsedPublicPage(
+                    source_url=url,
+                    title="Deichman Library / Studio Example",
+                    markdown=(
+                        "Deichman condition. Deichman mechanism. A public stair and "
+                        "continuous circulation promenade connect the main floors with "
+                        "widened landings."
+                    ),
+                    images=[
+                        ParsedPageImage(
+                            url="https://cdn.example/deichman-axonometric.jpg",
+                            alt="Axonometric diagram",
+                        ),
+                        ParsedPageImage(
+                            url="https://cdn.example/deichman-section.jpg",
+                            alt="Building section",
+                        ),
+                    ],
+                )
+            branch_index = branch_urls.index(url)
+            label = ("Atrium", "Circulation", "Daylight")[branch_index]
+            return ParsedPublicPage(
+                source_url=url,
+                title=f"{label} Library / Studio Example",
+                markdown=f"{label} condition. {label} mechanism.",
+                images=[
+                    ParsedPageImage(
+                        url=f"https://cdn.example/{label.casefold()}-plan-a.jpg",
+                        alt="Floor plan",
+                    ),
+                    ParsedPageImage(
+                        url=f"https://cdn.example/{label.casefold()}-plan-b.jpg",
+                        alt="Floor plan",
+                    ),
+                ],
+            )
+
+    class EnrichmentRecoveryProvider(SingleBatchProvider):
+        worst_case_page_analysis_seconds = 0.0
+
+        def __init__(self) -> None:
+            super().__init__(ProviderSearchResult(sources=[], assets=[]))
+            self.analysis_sources: list[str] = []
+            self.analysis_questions: list[str] = []
+
+        def analyze_public_page(
+            self,
+            *,
+            question: str,
+            source_url: str,
+            title: str,
+            page_text: str,
+            drawings: list[PublicPageDrawing],
+            analysis_requirements: Sequence[str],
+        ) -> PublicPageAnalysis:
+            del title, page_text, analysis_requirements
+            self.analysis_sources.append(source_url)
+            self.analysis_questions.append(question)
+            if source_url == multi_drawing_url and self.analysis_sources.count(source_url) == 1:
+                return PublicPageAnalysis(
+                    relevance=1,
+                    limitations=["第一次子问题与正文不匹配。"],
+                )
+            if source_url == multi_drawing_url and "跨层流线" not in question:
+                return PublicPageAnalysis(
+                    relevance=1,
+                    limitations=["缓存页正文不支持这个补充子问题。"],
+                )
+            label = (
+                "Deichman"
+                if source_url == multi_drawing_url
+                else ("Atrium", "Circulation", "Daylight")[branch_urls.index(source_url)]
+            )
+            return PublicPageAnalysis(
+                relevance=4,
+                drawing_ids=[drawing.drawing_id for drawing in drawings],
+                project_context=f"{label} 项目条件。",
+                design_mechanism=f"{label} 设计机制。",
+                transfer_strategy=[f"转译 {label} 机制。"],
+                facts=[
+                    PublicPageSupportedFact(
+                        statement=f"{label} 项目条件。",
+                        text_excerpt=f"{label} condition.",
+                    ),
+                    PublicPageSupportedFact(
+                        statement=f"{label} 设计机制。",
+                        text_excerpt=f"{label} mechanism.",
+                    ),
+                ],
+            )
+
+    provider = EnrichmentRecoveryProvider()
+    parser = EnrichmentRecoveryParser()
+
+    execute_research_run(database, run_id, provider, public_page_parser=parser)
+
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+    assert run is not None
+    assert parser.search_count == 6
+    assert parser.urls.count(multi_drawing_url) == 1
+    assert provider.analysis_sources.count(multi_drawing_url) == 2
+    assert provider.analysis_questions[-1].startswith(subquestions[1].question)
+    assert run.status == RunStatus.completed.value
+    assert run.stop_reason == "coverage_satisfied"
+    assert run.coverage_report["multi_asset_projects"] == 1
+    assert run.coverage_report["enrichment_gaps"] == []
+
+
 def test_article_ready_page_reuse_prefers_more_issue_matching_drawings(
     tmp_path: Path,
 ) -> None:
@@ -5085,8 +6550,12 @@ def test_article_ready_page_reuse_prefers_more_issue_matching_drawings(
 
     execute_research_run(database, run_id, provider, public_page_parser=parser)
 
-    assert provider.analysis_sources[-2] == section_url
-    assert len(provider.analysis_calls[-2]) == 2
+    reused_index = max(
+        index
+        for index, source_url in enumerate(provider.analysis_sources)
+        if source_url == section_url
+    )
+    assert len(provider.analysis_calls[reused_index]) == 2
 
 
 def test_cached_direct_project_page_analysis_is_not_repeated_for_the_same_subquestion(
@@ -5327,6 +6796,71 @@ def test_local_browser_expands_one_project_page_and_promotes_exact_image_evidenc
         and event.summary.get("promoted") == 1
         for event in events
     )
+
+
+@pytest.mark.parametrize(
+    ("project_name", "image_name", "expected_type"),
+    [
+        ("Community Library", "community-library-section.jpg", "section"),
+        ("Industrial Mill Conversion", "retained-structure-floor-plan.jpg", "plan"),
+        ("Cultural Centre Extension", "new-wing-axonometric.png", "axonometric"),
+    ],
+)
+def test_expanded_project_image_without_verbatim_alt_uses_visual_observation_evidence(
+    tmp_path: Path,
+    project_name: str,
+    image_name: str,
+    expected_type: str,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, max_pages=3)
+    project_url = f"https://magazine.example/projects/{project_name.lower().replace(' ', '-')}"
+    image_url = f"https://cdn.example/{image_name}"
+    with database.session_factory() as session:
+        session.add(SourcePage(run_id=run_id, url=project_url))
+        session.commit()
+
+    promoted = _persist_expanded_project_page(
+        database,
+        run_id,
+        ProviderSource(
+            url=project_url,
+            publication_tier=PublicationTier.trusted_secondary,
+        ),
+        ParsedPublicPage(
+            source_url=project_url,
+            title=project_name,
+            images=[ParsedPageImage(url=image_url, alt="")],
+        ),
+        subquestion_id="drawing-evidence",
+    )
+
+    with database.session_factory() as session:
+        candidate = session.scalar(
+            select(AssetCandidate).where(
+                AssetCandidate.run_id == run_id,
+                AssetCandidate.image_url == image_url,
+            )
+        )
+        claims = list(
+            session.scalars(
+                select(EvidenceClaim).where(EvidenceClaim.asset_candidate_id == candidate.id)
+            )
+        )
+
+    assert promoted == 1
+    assert candidate.asset_type == expected_type
+    assert candidate.facts == []
+    assert len(candidate.observations) == 1
+    assert len(claims) == 1
+    assert claims[0].claim_type == "observation"
+    assert claims[0].source_url == image_url
+    assert claims[0].text_excerpt is None
+    assert claims[0].image_region == {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 1.0,
+        "height": 1.0,
+    }
 
 
 def test_expanded_project_prefers_the_same_source_candidate_for_a_shared_image(

@@ -366,7 +366,7 @@ def prompt_for_provider_config(
         endpoint_entry.focus_set()
 
     fetch_models_button = tk.Button(
-        surface,
+        actions,
         text="获取模型列表",
         command=fetch_models,
         font=("Microsoft YaHei UI", 10),
@@ -382,7 +382,7 @@ def prompt_for_provider_config(
         cursor="hand2",
         takefocus=True,
     )
-    fetch_models_button.pack(anchor="w", pady=(2, 0))
+    fetch_models_button.pack(side="left")
 
     cancel_button = tk.Button(
         actions,

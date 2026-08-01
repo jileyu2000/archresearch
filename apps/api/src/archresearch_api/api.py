@@ -893,6 +893,11 @@ def retry_run(
         run.stop_reason = None
         run.finished_at = None
         run.attempt += 1
+        if not run.coverage_report.get("covered_subquestions", 0):
+            run.visual_calls_used = 0
+            run.visual_bytes_used = 0
+            run.visual_byte_limit_reached = False
+            run.browser_pages_attempted = 0
         session.commit()
     except Exception:
         run_gate.release(run.id)
