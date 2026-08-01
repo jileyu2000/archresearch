@@ -513,3 +513,12 @@
 - 24 个跟踪文件逐个显式暂存，staged diff check 通过，未暂存跟踪文件为 0；只保留 `.artifacts/` 为未跟踪。
 - 已创建统一提交 `Release ArchResearch v2.2.3`；在首次 push 前只更新规划文件为当前发布阶段，并 amend 同一提交。
 - 当前唯一下一步：推送当前分支并创建 `main` PR，等待 Windows Hosted CI。
+
+## 2026-08-02 v2.2.3 GitHub release
+
+- 旧分支推送后创建的 PR #12 被 GitHub 标记 `DIRTY`；只读 `merge-tree` 证明是 PR #11 squash 历史造成的伪冲突，没有修改当前工作区或 `.artifacts/`。
+- 从最新 `origin/main` 创建 `agent/v2.2.3-model-assisted-local-search`，按顺序移植 `fb727c8`、`a3f95cb` 和统一发布提交；新分支树 SHA 与本地完整验证树完全一致，Release 合同和 diff check 通过。
+- Ready PR #13 通过 Hosted CI run `30718825811` / job `91419013109`；完整仓库门禁、独立扩展、Windows 安装器、真实安装 smoke 和 artifact 上传全部成功。PR 随后 squash merge 为 `fc4e7a72dd7c86b61ffb3ad91c76d3c690e9fe47`。
+- 正式 Release `ArchResearch 本地版 v2.2.3` 已发布，非草稿、非预发布；tag 与远端 `main` 均指向 merge commit。
+- GitHub 附件核验通过：扩展 ZIP 18,260 bytes / SHA-256 `DF1EFDC5381F559BCBE6ADC65D0AE5E79E19B6722237FB229E9FEF761D74E346`；Windows 安装器 69,715,457 bytes / SHA-256 `A1F2658D9540966B5D1F24B90012F5CA1654FE90E863789B58F7B72A8E660D65`。
+- 当前目标全部完成，无剩余发布动作；等待用户提出新任务。
