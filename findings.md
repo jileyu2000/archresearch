@@ -310,3 +310,6 @@
 - Board QA：XHS 24/24 与 23/23 图片加载，均 9 篇帖子；工业改造建筑 6 个案例/6 张图，新建图书馆 8 个案例/8 张图，均无空子问题。
 - `v2.2.3` 升版需同步 11 个发布面：API 三处、Board package、Extension package/manifest、CI 两个 artifact、Release 合同测试、README 和两份部署文档；`pnpm-lock.yaml` 不保存 workspace package version，无需修改。
 - Release 合同测试先按 `2.2.3` 失败于旧 CI artifact，再失败于旧 README 正则，全部发布面同步后转绿；这避免构建出版本名不一致的安装器或扩展 ZIP。
+- PR #12 因复用 PR #11 squash 前分支历史而出现 GitHub 合并冲突；从 `origin/main` 新建分支并按原顺序移植 3 个未发布提交后，最终文件树与本地已验证树 SHA 完全一致，PR #13 可正常合并。
+- Hosted CI run `30718825811` / job `91419013109` 用时 17 分 10 秒并成功完成完整门禁、独立扩展、Windows 安装器、真实安装 smoke 和 artifact 上传。
+- `v2.2.3` tag 与远端 `main` 均为 `fc4e7a72dd7c86b61ffb3ad91c76d3c690e9fe47`；Release 非草稿、非预发布。扩展为 18,260 bytes / `DF1EFDC5381F559BCBE6ADC65D0AE5E79E19B6722237FB229E9FEF761D74E346`，安装器为 69,715,457 bytes / `A1F2658D9540966B5D1F24B90012F5CA1654FE90E863789B58F7B72A8E660D65`，GitHub digest 全部匹配。

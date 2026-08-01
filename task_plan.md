@@ -169,7 +169,7 @@ Status: **complete**
 
 ## v2.2.3 real-provider release qualification
 
-Status: **in_progress**
+Status: **complete**
 
 目标：用当前 Windows Credential Manager 中的 Provider 凭据执行多条全新真实研究，确认建筑与图纸两条产品路径都完成且确实成功调用 Provider；随后整理两个未发布修复，构建、实装验证并正式发布最新本地部署包。
 
@@ -188,7 +188,7 @@ Status: **in_progress**
 
 ### Model-assisted local search correction
 
-Status: **in_progress**
+Status: **complete**
 
 默认建筑研究链路固定为：模型拆题与生成独立搜索词 -> 本地 Playwright 搜索候选 -> 模型只从候选集中结构化筛选 -> 本地浏览器读取正文与图纸 -> 模型分析 -> 程序绑定 URL 和逐字 EvidenceClaim。
 
@@ -318,4 +318,7 @@ Status: **in_progress**
 - Windows 安装器已构建：69,715,457 bytes，文件/产品版本 `2.2.3`，SHA-256 `A1F2658D9540966B5D1F24B90012F5CA1654FE90E863789B58F7B72A8E660D65`。
 - `v2.2.3` 安装器真实 smoke 已通过：静默安装、冻结程序自检、健康检查、快捷方式、扩展排除、静默卸载与残留检查均成功。
 - 24 个跟踪文件已显式暂存并创建统一 `v2.2.3` 发布提交；`.artifacts/` 与 `.archresearch/` 未提交。
-- 当前唯一下一步：推送当前分支并创建面向 `main` 的 PR，随后等待 Windows Hosted CI。
+- 发布分支已推送并通过面向 `main` 的 Windows Hosted CI。
+- 发布已完成：PR #13 通过 Windows Hosted CI run `30718825811` 后 squash merge，远端 `main` 与 `v2.2.3` tag 均指向 `fc4e7a72dd7c86b61ffb3ad91c76d3c690e9fe47`。
+- 正式 Release 为 `ArchResearch 本地版 v2.2.3`，非草稿、非预发布；Windows 安装器与独立扩展 ZIP 的 GitHub 大小和 SHA-256 均与本地 smoke 产物一致。
+- 当前计划无未完成阶段；等待用户提出下一项工作。
