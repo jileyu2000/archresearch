@@ -7,6 +7,9 @@ import pytest
 from pydantic import ValidationError
 
 from archresearch_api.providers import (
+    CandidateAssessment,
+    CandidateReranking,
+    LocalSearchCandidate,
     MockResearchProvider,
     OpenAIResearchProvider,
     ProviderAsset,
@@ -19,12 +22,15 @@ from archresearch_api.providers import (
     ResearchSynthesisBranchAnalysis,
     ResearchSynthesisCase,
     ResearchSynthesisFinding,
+    SearchQuery,
+    SearchQueryPlan,
     _focused_public_page_text,
     deterministic_public_page_analysis,
 )
 from archresearch_api.schemas import (
     DEPTH_TARGETS,
     BudgetMode,
+    PublicationTier,
     ResearchGoal,
     ResearchPlan,
     ResearchSubquestion,
@@ -176,11 +182,11 @@ def test_openai_provider_constructs_a_bounded_retry_client(
         }
     ]
     assert provider.worst_case_call_seconds == 45.0
-    assert provider.worst_case_page_analysis_seconds == 45.0
+    assert provider.worst_case_page_analysis_seconds == 90.0
     assert [provider.synthesis_worst_case_seconds(mode) for mode in BudgetMode] == [
-        45.0,
-        60.0,
         90.0,
+        120.0,
+        180.0,
     ]
 
 
@@ -221,6 +227,442 @@ def test_openai_provider_uses_relay_compatible_web_search_and_domain_fields() ->
     ]
     assert "at most 4" in request["input"]
     assert request["text_format"] is ProviderSearchResult
+
+
+def test_openai_provider_plans_local_browser_queries_without_web_search_tools() -> None:
+    calls: list[dict[str, Any]] = []
+    expected = SearchQueryPlan(
+        queries=[
+            SearchQuery(
+                query=("community library atrium stepped reading circulation floor plan section"),
+                language="en",
+            ),
+            SearchQuery(
+                query="社区图书馆 中庭 阶梯阅读 环形流线 平面图 剖面图 项目说明",
+                language="zh",
+            ),
+        ]
+    )
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=expected)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+    result = provider.plan_search_queries(
+        question="社区图书馆如何组织中庭和阶梯阅读空间？",
+        subquestion=ResearchSubquestion(
+            id="atrium",
+            question="中庭如何串联阶梯阅读与环形流线？",
+            rationale="需要平剖面证据。",
+        ),
+        round_number=1,
+        preferred_language="en",
+        research_context="new-build community library",
+        previous_queries=[],
+        excluded_sources=[],
+        failure_reasons=[],
+        query_limit=2,
+    )
+
+    assert result == expected
+    request = calls[0]
+    assert "tools" not in request
+    assert "tool_choice" not in request
+    assert "include" not in request
+    assert request["text_format"] is SearchQueryPlan
+    assert request["max_output_tokens"] == 800
+    assert "building type" in request["input"]
+    assert "project condition" in request["input"]
+    assert "evidence type" in request["input"]
+    assert "at most 2" in request["input"]
+    assert "at most one explicitly named project" in request["input"]
+
+
+def test_openai_recovery_query_planning_rotates_equivalent_extension_terms() -> None:
+    calls: list[dict[str, Any]] = []
+    expected = SearchQueryPlan(
+        queries=[
+            SearchQuery(
+                query=(
+                    "community cultural center new wing public stair bridge circulation axonometric"
+                ),
+                language="en",
+            )
+        ]
+    )
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=expected)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+
+    result = provider.plan_search_queries(
+        question="社区文化中心扩建如何通过公共楼梯与连桥连接原有建筑？",
+        subquestion=ResearchSubquestion(
+            id="circulation",
+            question="公共楼梯与连桥如何形成连续公共流线？",
+            rationale="需要轴测图证据。",
+        ),
+        round_number=3,
+        preferred_language="en",
+        research_context="community cultural center extension",
+        previous_queries=[
+            "community cultural center extension public stair bridge circulation floor plan"
+        ],
+        excluded_sources=["https://www.designboom.com/architecture/unrelated-center"],
+        failure_reasons=["uncovered_subquestions", "article_analysis_incomplete"],
+        query_limit=1,
+    )
+
+    assert result == expected
+    prompt = calls[0]["input"]
+    assert "extension, expansion, addition to an existing building, or new wing" in prompt
+    assert "same project condition" in prompt
+    assert "adaptive reuse" in prompt
+    assert "does not appear" in prompt
+
+
+def test_openai_public_query_planning_removes_xhs_source_terms_from_context() -> None:
+    planned = SearchQueryPlan(
+        queries=[
+            SearchQuery(
+                query=(
+                    "社区文化中心扩建 新旧结构界面 公共楼梯 连桥 平面图 剖面图 "
+                    "轴测图 项目说明 登录态小红书图纸来源"
+                ),
+                language="zh",
+            )
+        ]
+    )
+    calls: list[dict[str, Any]] = []
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=planned)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+
+    result = provider.plan_search_queries(
+        question="社区文化中心扩建如何连接原有建筑？",
+        subquestion=ResearchSubquestion(
+            id="interface",
+            question="新旧结构界面如何连接公共楼梯与连桥？",
+            rationale="需要平面、剖面和轴测证据。",
+        ),
+        round_number=5,
+        preferred_language="zh",
+        research_context="图纸研究保持登录态小红书来源",
+        previous_queries=[],
+        excluded_sources=[],
+        failure_reasons=["uncovered_subquestions"],
+        query_limit=1,
+    )
+
+    query = result.queries[0].query
+    assert "小红书" not in query
+    assert "登录态" not in query
+    assert "xhs" not in query.casefold()
+    for required in ("社区文化中心", "扩建", "新旧结构界面", "平面图", "剖面图", "轴测图"):
+        assert required in query
+    assert "Xiaohongshu" in calls[0]["input"]
+    assert "public web query" in calls[0]["input"]
+
+
+def test_openai_local_search_assistance_retries_transient_errors_within_one_call_budget() -> None:
+    calls: list[dict[str, Any]] = []
+    attempts: dict[type[object], int] = {}
+    query_plan = SearchQueryPlan(
+        queries=[
+            SearchQuery(
+                query="Daegu Gosan Park Library public library circulation section",
+                language="en",
+            )
+        ]
+    )
+    reranking = CandidateReranking(
+        assessments=[
+            CandidateAssessment(
+                candidate_id="candidate-daegu",
+                relevance=4,
+                typology_match=4,
+                drawing_availability=3,
+                source_trust=4,
+                retain=True,
+            )
+        ]
+    )
+
+    class APIConnectionError(Exception):
+        pass
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            text_format = kwargs["text_format"]
+            attempts[text_format] = attempts.get(text_format, 0) + 1
+            if attempts[text_format] == 1:
+                raise APIConnectionError("relay connection reset")
+            output = query_plan if text_format is SearchQueryPlan else reranking
+            return SimpleNamespace(output_parsed=output)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+    subquestion = ResearchSubquestion(
+        id="circulation",
+        question="公共楼梯如何连接主要阅览层？",
+        rationale="需要剖面证据。",
+    )
+
+    planned = provider.plan_search_queries(
+        question="比较 Daegu Gosan Park Library 的公共流线。",
+        subquestion=subquestion,
+        round_number=1,
+        preferred_language="en",
+        research_context="new public library",
+        previous_queries=[],
+        excluded_sources=[],
+        failure_reasons=[],
+        query_limit=1,
+    )
+    ranked = provider.rerank_search_candidates(
+        question="比较 Daegu Gosan Park Library 的公共流线。",
+        subquestion=subquestion,
+        search_queries=[query_plan.queries[0].query],
+        candidates=[
+            LocalSearchCandidate(
+                candidate_id="candidate-daegu",
+                url="https://www.designboom.com/architecture/daegu-gosan-park-library",
+                title="Daegu Gosan Park Library",
+            )
+        ],
+    )
+
+    assert planned == query_plan
+    assert ranked == reranking
+    assert len(calls) == 4
+    assert all(0 < call["timeout"] <= 45.0 for call in calls)
+    assert provider.worst_case_call_seconds == 45.0
+
+
+@pytest.mark.parametrize(
+    ("error_type_name", "expected_calls"),
+    [("APIConnectionError", 2), ("ValueError", 1)],
+)
+def test_openai_local_search_assistance_retry_count_stays_bounded(
+    error_type_name: str,
+    expected_calls: int,
+) -> None:
+    calls: list[dict[str, Any]] = []
+    error_type = type(error_type_name, (Exception,), {})
+
+    class FailingResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            raise error_type("provider call failed")
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FailingResponses()),
+    )
+
+    with pytest.raises(error_type):
+        provider.plan_search_queries(
+            question="社区图书馆如何组织公共楼梯？",
+            subquestion=ResearchSubquestion(
+                id="circulation",
+                question="公共楼梯如何连接主要阅览层？",
+                rationale="需要剖面证据。",
+            ),
+            round_number=1,
+            preferred_language="en",
+            research_context="new public library",
+            previous_queries=[],
+            excluded_sources=[],
+            failure_reasons=[],
+            query_limit=1,
+        )
+
+    assert len(calls) == expected_calls
+    assert all(0 < call["timeout"] <= 45.0 for call in calls)
+
+
+def test_openai_query_planning_splits_multiple_named_projects_into_one_project_anchor() -> None:
+    planned = SearchQueryPlan(
+        queries=[
+            SearchQuery(
+                query=(
+                    "Calgary New Central Library Daegu Gosan Park Library Hunters Point "
+                    "Community Library new-build public library atrium circulation floor plan"
+                ),
+                language="en",
+            )
+        ]
+    )
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            del kwargs
+            return SimpleNamespace(output_parsed=planned)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+
+    result = provider.plan_search_queries(
+        question=(
+            "比较 Calgary New Central Library、Daegu Gosan Park Library 和 Hunters Point "
+            "Community Library 的中庭与流线。"
+        ),
+        subquestion=ResearchSubquestion(
+            id="visible_circulation",
+            question="三个案例如何组织可见的跨层流线？",
+            rationale="核对平面和剖面。",
+        ),
+        round_number=1,
+        preferred_language="en",
+        research_context="new-build public library",
+        previous_queries=[],
+        excluded_sources=[],
+        failure_reasons=[],
+        query_limit=1,
+    )
+
+    query = result.queries[0].query
+    named_projects = (
+        "Calgary New Central Library",
+        "Daegu Gosan Park Library",
+        "Hunters Point Community Library",
+    )
+    assert sum(project in query for project in named_projects) == 1
+    assert "new-build public library" in query
+    assert "atrium circulation floor plan" in query
+
+
+def test_openai_candidate_reranking_rejects_ids_outside_local_search_candidates() -> None:
+    calls: list[dict[str, Any]] = []
+    invalid = CandidateReranking(
+        assessments=[
+            CandidateAssessment(
+                candidate_id="candidate-invented",
+                relevance=4,
+                typology_match=4,
+                drawing_availability=4,
+                source_trust=4,
+                retain=True,
+            )
+        ]
+    )
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=invalid)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+    candidates = [
+        LocalSearchCandidate(
+            candidate_id="candidate-local",
+            url="https://www.archdaily.com/123/community-library",
+            title="Community Library / Studio",
+            description="Atrium, stepped reading and section drawings.",
+            publication_tier=PublicationTier.trusted_secondary,
+        )
+    ]
+
+    with pytest.raises(ValueError, match="outside local search candidates"):
+        provider.rerank_search_candidates(
+            question="社区图书馆如何组织中庭？",
+            subquestion=ResearchSubquestion(
+                id="atrium",
+                question="中庭如何串联阶梯阅读？",
+                rationale="需要项目证据。",
+            ),
+            search_queries=["community library atrium floor plan section"],
+            candidates=candidates,
+        )
+
+    assert "tools" not in calls[0]
+    assert calls[0]["text_format"] is CandidateReranking
+
+
+def test_openai_candidate_reranking_keeps_exact_typology_pages_readable_without_a_summary() -> None:
+    calls: list[dict[str, Any]] = []
+    expected = CandidateReranking(
+        assessments=[
+            CandidateAssessment(
+                candidate_id="candidate-library",
+                relevance=2,
+                typology_match=4,
+                drawing_availability=1,
+                source_trust=4,
+                retain=True,
+            )
+        ]
+    )
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=expected)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+
+    result = provider.rerank_search_candidates(
+        question="新建社区图书馆如何组织中庭？",
+        subquestion=ResearchSubquestion(
+            id="atrium",
+            question="中庭如何串联阶梯阅读？",
+            rationale="需要项目证据。",
+        ),
+        search_queries=["new community library atrium floor plan"],
+        candidates=[
+            LocalSearchCandidate(
+                candidate_id="candidate-library",
+                url="https://www.archdaily.com/123/community-library",
+                title="LIBRARY Community Library / Studio",
+                description="",
+                publication_tier=PublicationTier.trusted_secondary,
+            )
+        ],
+    )
+
+    assert result == expected
+    assert (
+        "Do not reject an exact building-type project page only because its search summary "
+        "is empty" in calls[0]["input"]
+    )
+    assert "The full local page read is the evidence check" in calls[0]["input"]
 
 
 def test_openai_provider_analyzes_a_collected_project_page_without_another_web_search() -> None:
@@ -307,7 +749,135 @@ def test_openai_provider_analyzes_a_collected_project_page_without_another_web_s
     assert "不能把未读取的图像像素写成事实" in request["input"]
     assert "证据冲突与缺口" in request["input"]
     assert "后续跨案例比较" in request["input"]
-    assert provider.worst_case_page_analysis_seconds == 45.0
+    assert provider.worst_case_page_analysis_seconds == 90.0
+
+
+def test_openai_page_analysis_retries_once_when_relevant_result_lacks_evidence() -> None:
+    calls: list[dict[str, Any]] = []
+    invalid = PublicPageAnalysis(
+        relevance=2,
+        drawing_ids=["drawing_1"],
+    )
+    context = "该图书馆围绕中央中庭组织主要公共空间。"
+    mechanism = "连续楼梯与阅读平台沿中庭串联各层。"
+    expected = PublicPageAnalysis(
+        relevance=3,
+        drawing_ids=["drawing_1"],
+        project_context=context,
+        design_mechanism=mechanism,
+        transfer_strategy=["用连续阅读平台连接中庭周边楼层。"],
+        facts=[
+            PublicPageSupportedFact(
+                statement=context,
+                text_excerpt="The library organizes its public spaces around a central atrium.",
+            ),
+            PublicPageSupportedFact(
+                statement=mechanism,
+                text_excerpt="Continuous stairs and reading terraces connect the floors around it.",
+            ),
+        ],
+    )
+    responses = [invalid, expected]
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=responses.pop(0))
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+
+    result = provider.analyze_public_page(
+        question="中庭和阶梯阅读如何组织连续流线？",
+        source_url="https://studio.example/library",
+        title="Community Library",
+        page_text=(
+            "The library organizes its public spaces around a central atrium. "
+            "Continuous stairs and reading terraces connect the floors around it."
+        ),
+        drawings=[
+            PublicPageDrawing(
+                drawing_id="drawing_1",
+                asset_type=ArchitectureAssetType.plan,
+                image_url="https://cdn.example/library-plan.png",
+                caption="Library floor plan",
+            )
+        ],
+    )
+
+    assert result == expected
+    assert len(calls) == 2
+    assert "上一次结构化结果把 relevance 设为 2 或更高" in calls[1]["input"]
+    assert provider.worst_case_page_analysis_seconds == 90.0
+
+
+def test_openai_page_analysis_retries_when_core_excerpts_are_not_verbatim() -> None:
+    calls: list[dict[str, Any]] = []
+    context = "该图书馆围绕中央中庭组织主要公共空间。"
+    mechanism = "连续楼梯与阅读平台沿中庭串联各层。"
+    invalid = PublicPageAnalysis(
+        relevance=3,
+        project_context=context,
+        design_mechanism=mechanism,
+        transfer_strategy=["用连续阅读平台连接中庭周边楼层。"],
+        facts=[
+            PublicPageSupportedFact(
+                statement=context,
+                text_excerpt="A fabricated context sentence that is absent from the page.",
+            ),
+            PublicPageSupportedFact(
+                statement=mechanism,
+                text_excerpt="A fabricated mechanism sentence that is absent from the page.",
+            ),
+        ],
+    )
+    expected = invalid.model_copy(
+        update={
+            "facts": [
+                PublicPageSupportedFact(
+                    statement=context,
+                    text_excerpt=(
+                        "The library organizes its public spaces around a central atrium."
+                    ),
+                ),
+                PublicPageSupportedFact(
+                    statement=mechanism,
+                    text_excerpt=(
+                        "Continuous stairs and reading terraces connect the floors around it."
+                    ),
+                ),
+            ]
+        }
+    )
+    responses = [invalid, expected]
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=responses.pop(0))
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+    result = provider.analyze_public_page(
+        question="中庭和阶梯阅读如何组织连续流线？",
+        source_url="https://studio.example/library",
+        title="Community Library",
+        page_text=(
+            "The library organizes its public spaces around a central atrium. "
+            "Continuous stairs and reading terraces connect the floors around it."
+        ),
+        drawings=[],
+    )
+
+    assert result == expected
+    assert len(calls) == 2
+    assert "text_excerpt 必须是 page_text 中连续、逐字存在的原文" in calls[1]["input"]
 
 
 def test_openai_page_analysis_keeps_a_mechanism_after_six_thousand_characters() -> None:
@@ -364,7 +934,56 @@ def test_openai_page_analysis_does_not_retry_the_same_page_after_a_timeout() -> 
         )
 
     assert len(calls) == 1
-    assert provider.worst_case_page_analysis_seconds == 45.0
+    assert provider.worst_case_page_analysis_seconds == 90.0
+
+
+@pytest.mark.parametrize("error_type_name", ["APITimeoutError", "APIConnectionError"])
+def test_openai_page_analysis_retries_one_transient_error_within_existing_budget(
+    error_type_name: str,
+) -> None:
+    calls: list[dict[str, Any]] = []
+    context = "The project reuses a former textile warehouse as a headquarters."
+    mechanism = (
+        "The new all-steel hanging system supports the rooftop gallery and remains "
+        "completely separate from the old structure."
+    )
+    expected = PublicPageAnalysis(
+        relevance=3,
+        project_context=context,
+        design_mechanism=mechanism,
+        transfer_strategy=["Keep the new support system structurally independent."],
+        facts=[
+            PublicPageSupportedFact(statement=context, text_excerpt=context),
+            PublicPageSupportedFact(statement=mechanism, text_excerpt=mechanism),
+        ],
+    )
+
+    error_type = type(error_type_name, (Exception,), {})
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            if len(calls) == 1:
+                raise error_type("page analysis request failed")
+            return SimpleNamespace(output_parsed=expected)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+
+    result = provider.analyze_public_page(
+        question="新介入如何与原有结构形成连接或脱开关系？",
+        source_url="https://studio.example/foundry",
+        title="Foundry reuse",
+        page_text=f"{context}\n{'Background. ' * 700}{mechanism}",
+        drawings=[],
+    )
+
+    assert result == expected
+    assert len(calls) == 2
+    assert provider.worst_case_page_analysis_seconds == 90.0
 
 
 def test_focused_page_analysis_keeps_a_late_section_mechanism() -> None:
@@ -528,7 +1147,7 @@ def test_openai_provider_changes_synthesis_work_by_research_depth() -> None:
     assert "跨案例比较机制的共性与分歧" in deep_prompt
     assert "证据冲突和不确定性" in deep_prompt
     assert all(call["text_format"] is ResearchSynthesis for call in calls)
-    assert [call["timeout"] for call in calls] == [45.0, 60.0, 90.0]
+    assert [call["timeout"] for call in calls] == [90.0, 60.0, 90.0]
     assert [call["max_output_tokens"] for call in calls] == [1_200, 1_600, 3_200]
     assert all("tools" not in call for call in calls)
     for index, call in enumerate(calls):
@@ -696,6 +1315,124 @@ def test_synthesis_depth_rejects_outputs_below_the_selected_research_strength() 
             subquestions=subquestions,
             cases=[case],
         )
+
+
+def test_synthesis_retries_one_invalid_structured_output_within_its_time_budget() -> None:
+    finding = ResearchSynthesisFinding(
+        statement="阶梯阅读区沿中庭形成连续公共界面。",
+        evidence_asset_ids=["asset-1"],
+    )
+    invalid = ResearchSynthesis(answer=finding)
+    valid = invalid.model_copy(update={"causal_chains": [finding], "recommendations": [finding]})
+    calls: list[dict[str, Any]] = []
+
+    class SequencedResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=invalid if len(calls) == 1 else valid)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=SequencedResponses()),
+    )
+    case = ResearchSynthesisCase(
+        asset_id="asset-1",
+        project_name="社区图书馆",
+        asset_type=ArchitectureAssetType.section,
+        source_url="https://studio.example/library",
+        subquestion_ids=["section"],
+        project_context="中庭连接各层阅读空间。",
+        design_mechanism="阶梯阅读区沿中庭连续布置。",
+        transfer_strategy=["先校核中庭宽高比和疏散距离。"],
+        evidence=["原文证据"],
+    )
+    subquestions = [
+        ResearchSubquestion(
+            id="section",
+            question="中庭和阶梯阅读空间如何形成剖面联系？",
+            rationale="需要核对建成案例的剖面证据。",
+        )
+    ]
+
+    result = provider.synthesize_research(
+        question="社区图书馆如何组织中庭和阶梯阅读空间？",
+        budget_mode=BudgetMode.quick,
+        subquestions=subquestions,
+        cases=[case],
+    )
+
+    assert result == valid
+    assert len(calls) == 2
+    assert [call["reasoning"] for call in calls] == [
+        {"effort": "medium"},
+        {"effort": "medium"},
+    ]
+    assert provider.synthesis_worst_case_seconds(BudgetMode.quick) == 90.0
+
+
+def test_synthesis_retries_one_api_timeout_within_its_existing_call_budget() -> None:
+    finding = ResearchSynthesisFinding(
+        statement="中庭把各层阅览空间连接为可见的公共核心。",
+        evidence_asset_ids=["asset-1"],
+    )
+    valid = ResearchSynthesis(
+        answer=finding,
+        causal_chains=[finding],
+        recommendations=[finding],
+    )
+    calls: list[dict[str, Any]] = []
+
+    class APITimeoutError(Exception):
+        pass
+
+    class SequencedResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            if len(calls) == 1:
+                raise APITimeoutError("relay timed out")
+            return SimpleNamespace(output_parsed=valid)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=SequencedResponses()),
+    )
+    case = ResearchSynthesisCase(
+        asset_id="asset-1",
+        project_name="社区图书馆",
+        asset_type=ArchitectureAssetType.section,
+        source_url="https://studio.example/library",
+        subquestion_ids=["section"],
+        project_context="中庭连接各层阅览空间。",
+        design_mechanism="中庭把各层阅览空间连接为可见的公共核心。",
+        transfer_strategy=["先校核中庭宽高比和疏散距离。"],
+        evidence=["原文证据"],
+    )
+    subquestions = [
+        ResearchSubquestion(
+            id="section",
+            question="中庭如何连接各层阅览空间？",
+            rationale="需要核对建成案例的剖面证据。",
+        )
+    ]
+
+    result = provider.synthesize_research(
+        question="社区图书馆如何组织中庭？",
+        budget_mode=BudgetMode.quick,
+        subquestions=subquestions,
+        cases=[case],
+    )
+
+    assert result == valid
+    assert len(calls) == 2
+    assert [call["reasoning"] for call in calls] == [
+        {"effort": "medium"},
+        {"effort": "low"},
+    ]
+    assert 89.0 <= calls[0]["timeout"] <= 90.0
+    assert 0.0 < calls[1]["timeout"] <= calls[0]["timeout"]
+    assert provider.synthesis_worst_case_seconds(BudgetMode.quick) == 90.0
 
 
 @pytest.mark.parametrize("query", ["adaptive reuse section", "旧建筑剖面更新"])

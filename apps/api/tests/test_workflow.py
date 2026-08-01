@@ -528,8 +528,8 @@ def test_public_search_query_routes_overlapping_words_by_primary_design_intent()
     cases = [
         (
             "新功能通过插入盒体植入旧结构，剖面图如何表达新旧关系？",
-            ("program insertion", "box-in-box"),
-            ("sectional hierarchy", "skylight clerestory"),
+            ("program insertion", "inserted volume"),
+            ("box-in-box", "sectional hierarchy", "skylight clerestory"),
         ),
         (
             "原有大跨空间如何通过挑空、夹层、下沉和屋顶加建形成剖面层次？",
@@ -543,8 +543,8 @@ def test_public_search_query_routes_overlapping_words_by_primary_design_intent()
         ),
         (
             "加建区域如何通过独立入口、服务廊道和核心筒分离访客与后勤流线？",
-            ("visitor circulation", "back-of-house", "loading dock"),
-            ("program insertion", "sectional hierarchy"),
+            ("visitor circulation", "back-of-house", "service entrance"),
+            ("loading dock", "program insertion", "sectional hierarchy"),
         ),
         (
             "How can a roof extension, mezzanine and sunken floor create a sectional hierarchy?",

@@ -8,6 +8,7 @@ from typing import Any, Protocol, TypeVar, runtime_checkable
 from urllib.parse import quote_plus, unquote, urlparse
 
 from playwright.sync_api import Page, Route, sync_playwright
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .visual import ArchitectureAssetType
@@ -48,6 +49,23 @@ NON_PROJECT_PATH_MARKERS = {
     "tags",
 }
 ARCHDAILY_DOMAINS = {"archdaily.com", "archdaily.cn"}
+EXPLICIT_PROJECT_NAME_PATTERN = re.compile(
+    r"\b(?:[A-Z][A-Za-z0-9'’+-]*\s+){1,6}?"
+    r"(?:Library|Museum|Centre|Center|Hall|Factory|Mill|Warehouse|Plant)\b"
+)
+PROJECT_EXTENSION_PATTERN = re.compile(
+    r"\b(?:"
+    r"(?:building|library|museum|factory|warehouse|industrial building|"
+    r"cultural (?:center|centre)|community (?:center|centre))\s+"
+    r"(?:addition|extension|expansion)|"
+    r"(?:addition|extension|expansion)\s+(?:project|building|library|museum|factory|warehouse|"
+    r"industrial building|cultural (?:center|centre)|community (?:center|centre))|"
+    r"(?:addition|extension|expansion)\s+to\s+(?:(?:an?|the)\s+)?"
+    r"(?:existing|original)\s+(?:building|library|museum|factory|warehouse|"
+    r"industrial building|cultural (?:center|centre)|community (?:center|centre))|"
+    r"new wing|expanded (?:building|library|museum|factory|warehouse)"
+    r")\b"
+)
 
 
 class StrictModel(BaseModel):
@@ -261,7 +279,20 @@ class PlaywrightBrowserBackend:
             if isinstance(item, dict) and isinstance(item.get("text"), str)
         ]
         body_text = page.locator("body").inner_text(timeout=3_000)
-        text = max([*content_texts, body_text], key=len)
+        semantic_text = max(content_texts, key=len, default="")
+        text = (
+            semantic_text
+            if len(semantic_text) >= 1_000
+            else max((semantic_text, body_text), key=len)
+        )
+        if _url_matches_any_domain(page.url, ["designboom.com"]):
+            recommendation_match = re.search(
+                r"architecture\s+connections\s*[:：]",
+                text[1_000:],
+                flags=re.IGNORECASE,
+            )
+            if recommendation_match is not None:
+                text = text[: 1_000 + recommendation_match.start()].rstrip()
         raw_links: Any = page.locator("a[href]").evaluate_all(
             "elements => elements.map(element => ({"
             "url: element.href || '', text: (element.innerText || '').trim()}))"
@@ -330,6 +361,7 @@ class PlaywrightBrowserBackend:
 class LocalBrowserPageParser:
     name = "local_browser"
     worst_case_call_seconds = LOCAL_BROWSER_TIMEOUT_SECONDS
+    worst_case_search_seconds = LOCAL_BROWSER_TIMEOUT_SECONDS * 2
 
     def __init__(self, backend: LocalBrowserBackend | None = None) -> None:
         self.backend = backend or PlaywrightBrowserBackend()
@@ -348,33 +380,81 @@ class LocalBrowserPageParser:
             raise ValueError("Public search limit must be between 1 and 10")
         domains = _bounded_domains(include_domains or [])
         search_url = _browser_search_url(bounded_query, domains, limit)
-        results = self.backend.search(search_url)
-
+        fallback_domain = (
+            domains[0] if len(domains) == 1 and domains[0] in SITE_SEARCH_URLS else None
+        )
         selected: dict[str, PublicSearchLead] = {}
         order: list[str] = []
         initial_metadata: dict[str, bool] = {}
-        for item in results:
-            try:
-                lead = PublicSearchLead(
-                    url=_canonical_page_url(item.url),
-                    title=" ".join(item.title.split())[:500],
-                    description=" ".join(item.description.split())[:1_000],
-                )
-            except ValueError:
-                continue
-            if domains and not _url_matches_any_domain(lead.url, domains):
-                continue
-            if len(domains) == 1 and not _is_known_site_result(lead.url, domains[0]):
-                continue
-            current = selected.get(lead.url)
-            if current is None:
-                order.append(lead.url)
-                initial_metadata[lead.url] = bool(lead.title.strip() or lead.description.strip())
-                selected[lead.url] = lead
-            elif len(lead.title) + len(lead.description) > len(current.title) + len(
-                current.description
-            ):
-                selected[lead.url] = lead
+
+        def add_results(results: list[BrowserSearchSnapshot]) -> None:
+            for item in results:
+                try:
+                    lead = PublicSearchLead(
+                        url=_canonical_page_url(item.url),
+                        title=" ".join(item.title.split())[:500],
+                        description=" ".join(item.description.split())[:1_000],
+                    )
+                except ValueError:
+                    continue
+                if domains and not _url_matches_any_domain(lead.url, domains):
+                    continue
+                if len(domains) == 1 and not _is_known_site_result(lead.url, domains[0]):
+                    continue
+                current = selected.get(lead.url)
+                if current is None:
+                    order.append(lead.url)
+                    initial_metadata[lead.url] = bool(
+                        lead.title.strip() or lead.description.strip()
+                    )
+                    selected[lead.url] = lead
+                elif len(lead.title) + len(lead.description) > len(current.title) + len(
+                    current.description
+                ):
+                    selected[lead.url] = lead
+
+        used_fallback = False
+        try:
+            add_results(self.backend.search(search_url))
+        except (TimeoutError, PlaywrightTimeoutError):
+            if fallback_domain is None:
+                raise
+            add_results(
+                self.backend.search(_broader_site_search_url(bounded_query, fallback_domain))
+            )
+            used_fallback = True
+        site_results_irrelevant = bool(selected) and all(
+            initial_metadata[url]
+            and public_search_relevance_score(
+                bounded_query,
+                title=selected[url].title,
+                description=selected[url].description,
+                url=selected[url].url,
+            )
+            <= 0
+            for url in order
+        )
+        metadata_urls = [
+            url
+            for url in order[:limit]
+            if selected[url].title.strip() or selected[url].description.strip()
+        ]
+        site_results_typology_mismatch = bool(metadata_urls) and not any(
+            _search_lead_matches_query_typology(bounded_query, selected[url])
+            for url in metadata_urls
+        )
+        if (
+            fallback_domain is not None
+            and (not selected or site_results_irrelevant or site_results_typology_mismatch)
+            and not used_fallback
+        ):
+            if site_results_irrelevant or site_results_typology_mismatch:
+                selected.clear()
+                order.clear()
+                initial_metadata.clear()
+            add_results(
+                self.backend.search(_broader_site_search_url(bounded_query, fallback_domain))
+            )
         preserve_site_order = bool(order[:limit]) and all(
             not initial_metadata[url] for url in order[:limit]
         )
@@ -491,6 +571,23 @@ def select_project_page_links(page: ParsedPublicPage, *, limit: int = 2) -> list
 
 def is_concrete_project_page(page: ParsedPublicPage, *, source_title: str = "") -> bool:
     if _normalized_host(page.source_url) not in ARCHDAILY_DOMAINS:
+        path_segments = {
+            unquote(segment).casefold()
+            for segment in urlparse(page.source_url).path.split("/")
+            if segment
+        }
+        title = " ".join(page.title.split()).casefold()
+        if path_segments & {
+            "archive",
+            "archives",
+            "category",
+            "search",
+            "tag",
+            "tags",
+            "topic",
+            "topics",
+        } or any(marker in title for marker in ("roundup", "search result", "tag page")):
+            return False
         return True
     title = f"{page.title} {source_title}"
     return " / " in title and _is_archdaily_numeric_project_path(page.source_url)
@@ -1013,6 +1110,38 @@ def _contains_any(value: str, terms: tuple[str, ...]) -> bool:
     return any(term in value for term in terms)
 
 
+def _search_lead_matches_query_typology(query: str, lead: PublicSearchLead) -> bool:
+    query_text = query.casefold()
+    lead_text = " ".join(
+        (lead.title, lead.description, unquote(urlparse(lead.url).path))
+    ).casefold()
+    if _contains_any(query_text, ("图书馆", "library")):
+        return _contains_any(lead_text, ("图书馆", "library"))
+    if _contains_any(query_text, ("工业", "厂房", "industrial", "factory")):
+        return _contains_any(
+            lead_text,
+            (
+                "工业",
+                "厂房",
+                "仓库",
+                "电厂",
+                "factory",
+                "industrial",
+                "mill",
+                "plant",
+                "power station",
+                "textile",
+                "warehouse",
+            ),
+        )
+    if _contains_any(query_text, ("文化中心", "cultural center", "cultural centre")):
+        return _contains_any(
+            lead_text,
+            ("文化", "艺术", "cultural", "culture", "arts", "museum"),
+        )
+    return True
+
+
 def _compact_browser_query(query: str, domains: list[str]) -> str:
     embedded_domains = re.findall(r"\bsite:([A-Za-z0-9.-]+)", query, flags=re.IGNORECASE)
     selected_domains = domains or _bounded_domains(embedded_domains)
@@ -1027,36 +1156,358 @@ def _browser_search_url(query: str, domains: list[str], limit: int) -> str:
     if len(domains) == 1 and domains[0] in SITE_SEARCH_URLS:
         site_query = _compact_site_query(query, target_domain=domains[0])
         return SITE_SEARCH_URLS[domains[0]].format(query=quote_plus(site_query))
+    return _bounded_bing_search_url(query, domains, limit)
+
+
+def _bounded_bing_search_url(query: str, domains: list[str], limit: int) -> str:
+    if len(domains) == 1 and domains[0] in SITE_SEARCH_URLS:
+        query = _compact_site_query(query, target_domain=domains[0])
     browser_query = _compact_browser_query(query, domains)
     return f"{LOCAL_BROWSER_SEARCH_URL}?format=rss&q={quote_plus(browser_query)}&count={limit}"
 
 
+def _broader_site_search_url(query: str, target_domain: str) -> str:
+    site_query = _compact_site_fallback_query(query, target_domain=target_domain)
+    return SITE_SEARCH_URLS[target_domain].format(query=quote_plus(site_query))
+
+
+def _compact_site_fallback_query(query: str, *, target_domain: str) -> str:
+    project_anchor = _explicit_project_name(query)
+    normalized = re.sub(r"\bsite:[A-Za-z0-9.-]+", " ", query, flags=re.IGNORECASE).casefold()
+    contains_chinese = bool(re.search(r"[\u4e00-\u9fff]", normalized))
+    contains_latin = bool(re.search(r"[a-z]", normalized))
+    chinese = contains_chinese
+    if contains_chinese and contains_latin:
+        chinese = target_domain == "archdaily.cn"
+
+    terms: list[str] = [project_anchor] if project_anchor else []
+    if project_anchor and any(
+        term in normalized
+        for term in ("新建", "new-build", "new build", "purpose-built", "purpose built")
+    ):
+        terms.append("新建" if chinese else "new")
+    elif project_anchor and any(
+        term in normalized for term in ("改造", "更新", "reuse", "renovation", "conversion")
+    ):
+        terms.append("改造" if chinese else "adaptive reuse")
+    industrial = any(term in normalized for term in ("工业", "厂房", "industrial", "factory"))
+    cultural = any(
+        term in normalized for term in ("文化中心", "cultural center", "cultural centre")
+    )
+    extension = has_project_extension_condition(normalized)
+    reuse = any(
+        term in normalized for term in ("旧", "改造", "更新", "reuse", "renovation", "conversion")
+    )
+    if any(term in normalized for term in ("图书馆", "library")):
+        community = any(term in normalized for term in ("社区", "community"))
+        terms.append(
+            "社区图书馆"
+            if chinese and community
+            else "公共图书馆"
+            if chinese
+            else "community library"
+            if community
+            else "public library"
+        )
+    elif industrial:
+        terms.append(
+            "工业改造"
+            if chinese and reuse
+            else "工业建筑"
+            if chinese
+            else "industrial adaptive reuse"
+            if reuse
+            else "industrial building"
+        )
+        if cultural:
+            terms.append("文化中心" if chinese else "cultural center")
+    elif cultural:
+        if reuse:
+            terms.append("改造" if chinese else "adaptive reuse")
+        terms.append("文化中心" if chinese else "cultural center")
+    elif any(term in normalized for term in ("社区", "community")):
+        terms.append("社区中心" if chinese else "community center")
+    else:
+        terms.append("公共建筑" if chinese else "public building")
+    if extension:
+        terms.append(_project_extension_search_term(normalized, chinese=chinese))
+
+    intent = infer_research_issue_intent(normalized)
+    intent_terms = {
+        "interface": "保留结构" if chinese else "retained structure",
+        "flow": "流线" if chinese else "circulation",
+        "daylight": "采光" if chinese else "daylight",
+        "program": "中庭"
+        if chinese and "中庭" in normalized
+        else "功能"
+        if chinese
+        else "atrium"
+        if "atrium" in normalized
+        else "program",
+        "section": "剖面" if chinese else "section",
+    }
+    if intent in intent_terms:
+        terms.append(intent_terms[intent])
+    evidence_term = _compact_requested_evidence_term(
+        normalized,
+        chinese=chinese,
+        intent=intent,
+    )
+    if evidence_term:
+        terms.append(evidence_term)
+    return " ".join(terms)
+
+
 def _compact_site_query(query: str, *, target_domain: str | None = None) -> str:
+    project_anchor = _explicit_project_name(query)
     normalized = re.sub(r"\bsite:[A-Za-z0-9.-]+", " ", query, flags=re.IGNORECASE).casefold()
     contains_chinese = bool(re.search(r"[\u4e00-\u9fff]", normalized))
     contains_latin = bool(re.search(r"[a-z]", normalized))
     chinese = contains_chinese
     if contains_chinese and contains_latin and target_domain in SITE_SEARCH_URLS:
         chinese = target_domain == "archdaily.cn"
+    new_build = any(
+        term in normalized
+        for term in ("新建", "new-build", "new build", "purpose-built", "purpose built")
+    )
+    if new_build:
+        return _compact_new_build_site_query(
+            normalized,
+            chinese=chinese,
+            project_anchor=project_anchor,
+        )
+    adaptive_reuse = any(
+        term in normalized for term in ("旧", "改造", "更新", "reuse", "renovation", "conversion")
+    )
+    extension = has_project_extension_condition(normalized)
+    industrial = any(term in normalized for term in ("工业", "厂房", "industrial", "factory"))
     typology_terms: list[str] = []
-    if any(term in normalized for term in ("工业", "厂房", "industrial", "factory")):
-        typology_terms.append("工业改造" if chinese else "industrial reuse")
-    if any(term in normalized for term in ("社区", "文化", "community", "cultural")):
+    if extension:
+        typology_terms.append(_project_extension_search_term(normalized, chinese=chinese))
+    if industrial:
+        typology_terms.append(
+            "工业改造"
+            if chinese and adaptive_reuse
+            else "工业建筑"
+            if chinese
+            else "industrial reuse"
+            if adaptive_reuse
+            else "industrial building"
+        )
+    elif adaptive_reuse:
+        typology_terms.append("改造" if chinese else "adaptive reuse")
+    if any(term in normalized for term in ("图书馆", "library")):
+        community = any(term in normalized for term in ("社区", "community"))
+        typology_terms.append(
+            "社区图书馆"
+            if chinese and community
+            else "公共图书馆"
+            if chinese
+            else "community library"
+            if community
+            else "public library"
+        )
+    elif any(term in normalized for term in ("社区", "文化", "community", "cultural")):
         typology_terms.append("社区文化中心" if chinese else "community cultural center")
     if not typology_terms:
-        typology_terms.append("适应性改造" if chinese else "adaptive reuse")
+        typology_terms.append("公共建筑" if chinese else "public building")
 
     intent = infer_research_issue_intent(normalized)
+    service_flow = any(
+        term in normalized
+        for term in (
+            "后勤",
+            "工作人员",
+            "货运",
+            "service route",
+            "back-of-house",
+            "staff",
+            "loading",
+        )
+    )
     intent_terms = {
         "interface": "新旧构造界面" if chinese else "old new structural interface",
-        "flow": "公众后勤流线" if chinese else "visitor staff back-of-house circulation",
+        "flow": (
+            "公众后勤流线"
+            if chinese and service_flow
+            else "公共流线"
+            if chinese
+            else "visitor staff back-of-house circulation"
+            if service_flow
+            else "public circulation"
+        ),
         "daylight": "采光策略" if chinese else "daylight strategy",
         "program": "功能植入" if chinese else "program insertion",
         "section": "剖面层次" if chinese else "sectional hierarchy",
     }
     if intent in intent_terms:
         typology_terms.append(intent_terms[intent])
+    evidence_term = _compact_requested_evidence_term(
+        normalized,
+        chinese=chinese,
+        intent=intent,
+    )
+    if evidence_term:
+        typology_terms.append(evidence_term)
+    if project_anchor:
+        typology_terms.insert(0, project_anchor)
     return " ".join(typology_terms)
+
+
+def _compact_requested_evidence_term(
+    normalized: str,
+    *,
+    chinese: bool,
+    intent: str,
+) -> str:
+    markers = {
+        "floor_plan": ("平面图", "floor plan"),
+        "section": ("剖面图", "剖面", "section"),
+        "axonometric": ("轴测图", "轴测", "axonometric"),
+        "project_description": ("项目说明", "project description"),
+    }
+    preferred = (
+        ("floor_plan", "section", "axonometric", "project_description")
+        if intent in {"flow", "program"}
+        else ("section", "floor_plan", "axonometric", "project_description")
+    )
+    labels = {
+        "floor_plan": "平面图" if chinese else "floor plan",
+        "section": "剖面图" if chinese else "section",
+        "axonometric": "轴测图" if chinese else "axonometric",
+        "project_description": "项目说明" if chinese else "project description",
+    }
+    for evidence_type in preferred:
+        if any(marker in normalized for marker in markers[evidence_type]):
+            return labels[evidence_type]
+    return ""
+
+
+def has_project_extension_condition(value: str) -> bool:
+    normalized = " ".join(value.casefold().split())
+    if re.search(r"(?<!屋顶)(?<!竖向)(?<!垂直)扩建", normalized):
+        return True
+    return PROJECT_EXTENSION_PATTERN.search(normalized) is not None
+
+
+def _project_extension_search_term(normalized: str, *, chinese: bool) -> str:
+    if chinese:
+        return "扩建"
+    if re.search(r"\bnew wing\b", normalized):
+        return "new wing"
+    if re.search(r"\baddition\b", normalized):
+        return "addition"
+    if re.search(r"\b(?:expansion|expanded)\b", normalized):
+        return "expansion"
+    return "extension"
+
+
+def _explicit_project_name(value: str) -> str:
+    match = EXPLICIT_PROJECT_NAME_PATTERN.search(value)
+    return " ".join(match.group(0).split()) if match is not None else ""
+
+
+def _compact_new_build_site_query(
+    normalized: str,
+    *,
+    chinese: bool,
+    project_anchor: str = "",
+) -> str:
+    terms = [*([project_anchor] if project_anchor else []), "新建" if chinese else "new"]
+    if any(term in normalized for term in ("图书馆", "library")):
+        community = any(term in normalized for term in ("社区", "community"))
+        terms.append(
+            "社区图书馆"
+            if chinese and community
+            else "公共图书馆"
+            if chinese
+            else "community library"
+            if community
+            else "public library"
+        )
+    elif any(term in normalized for term in ("工业", "厂房", "industrial", "factory")):
+        terms.append("工业建筑" if chinese else "industrial building")
+    elif any(term in normalized for term in ("文化", "cultural")):
+        terms.append("文化中心" if chinese else "cultural center")
+    elif any(term in normalized for term in ("社区", "community")):
+        terms.append("社区中心" if chinese else "community center")
+    else:
+        terms.append("公共建筑" if chinese else "public building")
+
+    structure_focused = any(
+        term in normalized
+        for term in (
+            "结构",
+            "柱网",
+            "大跨",
+            "悬挑",
+            "桁架",
+            "structure",
+            "structural",
+            "column grid",
+            "long-span",
+            "long span",
+            "cantilever",
+            "truss",
+            "ring-beam",
+        )
+    )
+    intent = infer_research_issue_intent(normalized)
+    if structure_focused:
+        long_span = any(
+            term in normalized for term in ("大跨", "悬挑", "long-span", "long span", "cantilever")
+        )
+        terms.append(
+            "大跨结构"
+            if chinese and long_span
+            else "结构"
+            if chinese
+            else "long-span structure"
+            if long_span
+            else "structure"
+        )
+    elif intent == "daylight":
+        roof_focused = any(
+            term in normalized for term in ("屋顶", "天窗", "roof", "rooflight", "skylight")
+        )
+        terms.append(
+            "屋顶采光"
+            if chinese and roof_focused
+            else "采光"
+            if chinese
+            else "roof daylight"
+            if roof_focused
+            else "daylight"
+        )
+    elif intent == "flow":
+        if any(term in normalized for term in ("中庭", "atrium")):
+            terms.append("中庭" if chinese else "atrium")
+        if any(
+            term in normalized
+            for term in ("阶梯阅读", "阶梯阅览", "stepped reading", "reading steps")
+        ):
+            terms.append("阶梯阅读" if chinese else "stepped reading")
+        terms.append("流线" if chinese else "circulation")
+    elif intent == "program":
+        if any(term in normalized for term in ("中庭", "atrium")):
+            terms.append("中庭" if chinese else "atrium")
+        terms.append("功能布局" if chinese else "program layout")
+    elif intent == "section":
+        terms.append("剖面层次" if chinese else "sectional hierarchy")
+    elif any(term in normalized for term in ("中庭", "atrium")):
+        terms.append("中庭" if chinese else "atrium")
+
+    if intent == "flow" and any(term in normalized for term in ("平面图", "floor plan")):
+        terms.append("平面图" if chinese else "floor plan")
+    elif any(term in normalized for term in ("剖面图", "剖面", "section")):
+        terms.append("剖面图" if chinese else "section")
+    elif any(term in normalized for term in ("轴测图", "轴测", "axonometric")):
+        terms.append("轴测图" if chinese else "axonometric")
+    elif any(term in normalized for term in ("平面图", "floor plan")):
+        terms.append("平面图" if chinese else "floor plan")
+    else:
+        terms.append("项目说明" if chinese else "project description")
+    return " ".join(terms)
 
 
 def infer_research_issue_intent(text: str) -> str:
@@ -1067,12 +1518,14 @@ def infer_research_issue_intent(text: str) -> str:
             ("新旧结构界面", 6),
             ("构造界面", 5),
             ("结构界面", 5),
+            ("保留结构", 5),
             ("old-new structural interface", 6),
             ("old new structural interface", 6),
             ("structural interface", 5),
             ("material interface", 5),
             ("retained column", 2),
             ("retained frame", 2),
+            ("retained structure", 5),
             ("柱网", 2),
             ("楼板", 2),
             ("slab", 2),
@@ -1095,6 +1548,17 @@ def infer_research_issue_intent(text: str) -> str:
         "flow": (
             ("流线", 4),
             ("circulation", 4),
+            ("环廊", 4),
+            ("公共楼梯", 4),
+            ("折返楼梯", 4),
+            ("坡道", 3),
+            ("停留", 2),
+            ("public stair", 4),
+            ("inhabited staircase", 5),
+            ("staircase", 3),
+            ("ramp", 3),
+            ("promenade", 4),
+            ("landing", 3),
             ("后勤", 3),
             ("back-of-house", 3),
             ("service route", 3),
@@ -1113,16 +1577,78 @@ def infer_research_issue_intent(text: str) -> str:
             ("daylight strategy", 5),
             ("采光", 3),
             ("daylight", 3),
+            ("自然光", 4),
+            ("natural light", 4),
+            ("光井", 5),
+            ("屋顶开洞", 4),
+            ("采光顶", 3),
+            ("lightwell", 5),
+            ("rooflight", 3),
+            ("roof lantern", 4),
+            ("roof opening", 3),
+            ("daylit", 4),
             ("天窗", 2),
             ("skylight", 2),
             ("高侧窗", 2),
             ("clerestory", 2),
+            ("侧高窗", 2),
+            ("眩光", 4),
+            ("glare", 4),
             ("庭院", 1),
             ("courtyard", 1),
         ),
         "program": (
             ("功能植入", 5),
             ("program insertion", 5),
+            ("功能分区", 6),
+            ("分层布置", 4),
+            ("分时运营", 4),
+            ("共享大厅", 4),
+            ("公共活动", 4),
+            ("展览", 3),
+            ("工作坊", 3),
+            ("餐饮", 2),
+            ("program zoning", 6),
+            ("program layout", 6),
+            ("program distribution", 6),
+            ("program adjacency", 5),
+            ("operating hours", 4),
+            ("public event", 4),
+            ("shared space", 3),
+            ("flexible space", 3),
+            ("exhibition", 3),
+            ("workshop", 3),
+            ("restaurant", 2),
+            ("阅览平台", 5),
+            ("多功能房", 4),
+            ("公共客厅", 5),
+            ("活动房", 4),
+            ("辅助空间", 3),
+            ("reading terrace", 5),
+            ("multipurpose room", 4),
+            ("civic living room", 5),
+            ("reading commons", 5),
+            ("event room", 4),
+            ("support space", 3),
+            ("共享阅览", 5),
+            ("共享阅读", 5),
+            ("shared reading", 5),
+            ("社区活动", 5),
+            ("community activities", 5),
+            ("活动空间", 4),
+            ("event spaces", 4),
+            ("公共核心", 3),
+            ("public core", 3),
+            ("空间转换", 3),
+            ("空间分区", 6),
+            ("space zoning", 6),
+            ("动静分区", 6),
+            ("声学", 6),
+            ("acoustic", 6),
+            ("噪声", 5),
+            ("noise", 5),
+            ("安静阅览", 4),
+            ("quiet reading", 4),
             ("盒中盒", 4),
             ("box-in-box", 4),
             ("inserted volume", 4),
@@ -1138,6 +1664,8 @@ def infer_research_issue_intent(text: str) -> str:
         "section": (
             ("剖面层次", 5),
             ("sectional hierarchy", 5),
+            ("竖向层次", 5),
+            ("vertical hierarchy", 5),
             ("垂直组织", 4),
             ("vertical organization", 4),
             ("垂直关系", 3),

@@ -9,7 +9,7 @@ from ..providers import (
     requested_visual_drawing_type,
     visual_style_directions,
 )
-from ..public_pages import infer_research_issue_intent
+from ..public_pages import has_project_extension_condition, infer_research_issue_intent
 from ..schemas import (
     DEPTH_TARGETS,
     BudgetMode,
@@ -18,9 +18,11 @@ from ..schemas import (
     ResearchSubquestion,
 )
 
-PRECEDENT_PUBLIC_SEARCH_DOMAIN_ROTATION = (
+PRECEDENT_PUBLIC_SEARCH_RELIABLE_DOMAINS = (
     "archdaily.com",
     "designboom.com",
+)
+PRECEDENT_PUBLIC_SEARCH_RECOVERY_DOMAINS = (
     "dezeen.com",
     "divisare.com",
     "archdaily.cn",
@@ -243,7 +245,7 @@ def build_public_search_query(
         f"{research_question} {subquestion} {research_context}", query_language
     )
     if query_language == "zh":
-        query = f"建筑项目图纸：{focus} {issue_focus} {zh_terms} {round_focus[0]}"
+        query = f"建筑项目图纸：{typology_focus} {focus} {issue_focus} {zh_terms} {round_focus[0]}"
     else:
         query = (
             f"architecture project drawings: {typology_focus} {issue_focus} "
@@ -265,26 +267,53 @@ def select_public_search_domains(
     if allowed_domains:
         return allowed_domains
     if goal is ResearchGoal.precedent_research:
-        recovery_index = round_number + round_query_index - 2
-        domain = PRECEDENT_PUBLIC_SEARCH_DOMAIN_ROTATION[
-            recovery_index % len(PRECEDENT_PUBLIC_SEARCH_DOMAIN_ROTATION)
-        ]
+        if round_number <= len(PRECEDENT_PUBLIC_SEARCH_RELIABLE_DOMAINS):
+            domain_index = round_number + round_query_index - 2
+            domain = PRECEDENT_PUBLIC_SEARCH_RELIABLE_DOMAINS[
+                domain_index % len(PRECEDENT_PUBLIC_SEARCH_RELIABLE_DOMAINS)
+            ]
+        elif round_number == len(PRECEDENT_PUBLIC_SEARCH_RELIABLE_DOMAINS) + 1:
+            domain = PRECEDENT_PUBLIC_SEARCH_RELIABLE_DOMAINS[
+                round_query_index % len(PRECEDENT_PUBLIC_SEARCH_RELIABLE_DOMAINS)
+            ]
+        else:
+            domain_index = round_number + round_query_index - 5
+            domain = PRECEDENT_PUBLIC_SEARCH_RECOVERY_DOMAINS[
+                domain_index % len(PRECEDENT_PUBLIC_SEARCH_RECOVERY_DOMAINS)
+            ]
         return [domain]
     return []
 
 
 def _public_typology_focus(subquestion: str, language: str) -> str:
     normalized = subquestion.casefold()
-    if language == "zh":
-        return ""
     terms: list[str] = []
-    if any(term in normalized for term in ("旧", "改造", "reuse", "renovation", "existing")):
-        terms.append("adaptive reuse")
+    adaptive_reuse = any(
+        term in normalized for term in ("旧", "改造", "reuse", "renovation", "existing")
+    )
+    extension = has_project_extension_condition(normalized)
+    if adaptive_reuse:
+        terms.append("旧建筑改造" if language == "zh" else "adaptive reuse")
+    if extension:
+        terms.append("扩建" if language == "zh" else "extension")
+    elif not adaptive_reuse and any(
+        term in normalized for term in ("新建", "new-build", "new build")
+    ):
+        terms.append("新建" if language == "zh" else "new-build")
     if any(term in normalized for term in ("工业", "厂房", "factory", "industrial")):
-        terms.append("industrial building")
-    if any(term in normalized for term in ("社区", "文化", "community", "cultural")):
-        terms.append("community cultural center")
-    return " ".join(terms) or "adaptive reuse"
+        terms.append("工业建筑" if language == "zh" else "industrial building")
+    if any(term in normalized for term in ("图书馆", "library")):
+        if language == "zh":
+            terms.append("社区图书馆" if "社区" in normalized else "公共图书馆")
+        else:
+            terms.append("public library community library")
+    elif any(term in normalized for term in ("社区", "community")) and any(
+        term in normalized for term in ("文化", "cultural")
+    ):
+        terms.append("社区文化中心" if language == "zh" else "community cultural center")
+    elif any(term in normalized for term in ("社区", "community")):
+        terms.append("社区中心" if language == "zh" else "community center")
+    return " ".join(terms) or ("公共建筑" if language == "zh" else "public building")
 
 
 def _public_issue_focus(subquestion: str, language: str) -> str:
@@ -292,35 +321,101 @@ def _public_issue_focus(subquestion: str, language: str) -> str:
     intent = infer_research_issue_intent(normalized)
 
     if intent == "interface":
+        adaptive_reuse = any(
+            term in normalized
+            for term in (
+                "旧",
+                "改造",
+                "新旧",
+                "保留",
+                "reuse",
+                "renovation",
+                "existing",
+                "retained",
+                "old new",
+            )
+        )
+        if not adaptive_reuse:
+            return (
+                "结构体系 屋顶结构 柱网 桁架 大跨 中庭 剖面图 节点图"
+                if language == "zh"
+                else (
+                    "structural system roof structure column grid truss span long-span "
+                    "atrium section detail"
+                )
+            )
         return (
             "新旧构造界面 柱网 楼板 桁架 开洞 退让 跨接 加固 节点图 剖面图"
             if language == "zh"
             else (
-                "old new structural interface retained frame slab truss opening setback "
+                "old new structural interface retained structure retained frame slab truss "
+                "opening setback "
                 "bridge reinforcement connection detail section"
             )
         )
     if intent == "flow":
+        service_flow = any(
+            term in normalized
+            for term in (
+                "后勤",
+                "工作人员",
+                "货运",
+                "service route",
+                "back-of-house",
+                "staff",
+                "loading",
+            )
+        )
+        if not service_flow:
+            return (
+                "连续环流 无障碍路径 疏散楼梯 公共空间 平面图"
+                if language == "zh"
+                else (
+                    "continuous circulation loop accessible route egress stair "
+                    "public space floor plan"
+                )
+            )
         return (
             "公众与后勤分流 独立入口 服务廊道 平面图"
             if language == "zh"
-            else (
-                "visitor circulation staff circulation back-of-house service entrance "
-                "loading dock floor plan"
-            )
+            else ("visitor circulation staff circulation back-of-house service entrance floor plan")
         )
     if intent == "daylight":
         return (
-            "天窗 高侧窗 庭院 采光 剖面图"
-            if language == "zh"
-            else "skylight clerestory courtyard daylight section drawings"
-        )
-    if intent == "program":
-        return (
-            "功能植入 盒中盒 独立结构 展览 工作坊 平面图 剖面图"
+            "天窗 高侧窗 庭院 采光 剖面图 屋顶结构 柱网 桁架 大跨"
             if language == "zh"
             else (
-                "program insertion box-in-box inserted volume independent structure "
+                "skylight clerestory courtyard daylight roof structure column grid "
+                "truss span section drawings"
+            )
+        )
+    if intent == "program":
+        adaptive_reuse = any(
+            term in normalized
+            for term in (
+                "旧",
+                "改造",
+                "植入",
+                "reuse",
+                "renovation",
+                "existing",
+                "insertion",
+            )
+        )
+        if not adaptive_reuse:
+            return (
+                "功能分区 动静分区 空间邻接 公共空间 平面图 剖面图"
+                if language == "zh"
+                else (
+                    "program zoning quiet active spaces spatial adjacency public space "
+                    "floor plan section"
+                )
+            )
+        return (
+            "功能植入 新增体量 独立结构 展览 工作坊 平面图 剖面图"
+            if language == "zh"
+            else (
+                "program insertion inserted volume independent structure "
                 "exhibition workshop public activity floor plan section"
             )
         )
