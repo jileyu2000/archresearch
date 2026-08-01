@@ -120,6 +120,39 @@ class PageWithFragmentedContentRoots(PageWithoutDescription):
         return super().locator(selector)
 
 
+class PageWithLongArticleAndLongerBody(PageWithoutDescription):
+    article_text = "Project evidence with plans and sections. " * 30
+
+    def locator(self, selector: str) -> FakeLocator:
+        if selector.startswith("meta[name"):
+            return FakeLocator(count=0)
+        if selector == "article, main, [role=main]":
+            return FakeLocator(evaluated=[{"text": self.article_text}])
+        if selector == "body":
+            return FakeLocator(
+                text=self.article_text + ("Unrelated sidebar story and navigation. " * 80)
+            )
+        return super().locator(selector)
+
+
+class PageWithDesignboomEmbeddedRecommendations(PageWithoutDescription):
+    url = "https://www.designboom.com/architecture/community-library-project"
+    article_text = "Community library project evidence with plans and sections. " * 30
+    recommendation_text = (
+        "architecture\nconnections : +810 PLAY school architecture and design "
+        "MVRDV competition with rounded rock-like forms."
+    )
+
+    def locator(self, selector: str) -> FakeLocator:
+        if selector.startswith("meta[name"):
+            return FakeLocator(count=0)
+        if selector == "article, main, [role=main]":
+            return FakeLocator(evaluated=[{"text": self.article_text + self.recommendation_text}])
+        if selector == "body":
+            return FakeLocator(text=self.article_text + self.recommendation_text)
+        return super().locator(selector)
+
+
 class SemanticRootLocator(FakeLocator):
     def evaluate_all(self, script: str) -> list[dict[str, object]]:
         project_text = "Complete project article with plans, sections, and evidence. " * 30
@@ -313,6 +346,23 @@ def test_playwright_reader_uses_body_when_semantic_roots_are_fragments() -> None
     assert page.text == "Complete project body with evidence and drawing captions"
 
 
+def test_playwright_reader_prefers_a_complete_article_over_a_longer_page_body() -> None:
+    page = PlaywrightBrowserBackend._read_page(PageWithLongArticleAndLongerBody())  # type: ignore[arg-type]
+
+    assert page.text == PageWithLongArticleAndLongerBody.article_text
+    assert "Unrelated sidebar story" not in page.text
+
+
+def test_playwright_reader_removes_designboom_recommendations_from_article_text() -> None:
+    page = PlaywrightBrowserBackend._read_page(  # type: ignore[arg-type]
+        PageWithDesignboomEmbeddedRecommendations()
+    )
+
+    assert page.text == PageWithDesignboomEmbeddedRecommendations.article_text.rstrip()
+    assert "architecture\nconnections :" not in page.text
+    assert "rounded rock-like forms" not in page.text
+
+
 def test_playwright_reader_limits_images_to_the_longest_semantic_root() -> None:
     page = PlaywrightBrowserBackend._read_page(PageWithSemanticProjectImages())  # type: ignore[arg-type]
 
@@ -452,10 +502,11 @@ def test_local_browser_search_is_site_bounded_and_filters_untrusted_results() ->
     assert search_url.hostname == "www.archdaily.com"
     assert search_url.path == "/search/projects"
     query = parse_qs(search_url.query)["q"][0]
-    assert query == "industrial reuse sectional hierarchy"
+    assert query == "industrial reuse sectional hierarchy section"
     assert "site:" not in query
     assert parser.name == "local_browser"
     assert parser.worst_case_call_seconds == 20.0
+    assert parser.worst_case_search_seconds == 40.0
 
 
 @pytest.mark.parametrize(
@@ -464,7 +515,7 @@ def test_local_browser_search_is_site_bounded_and_filters_untrusted_results() ->
         (
             "adaptive reuse industrial building program insertion box-in-box floor plan section "
             "separate entrance service space circulation core",
-            "industrial reuse program insertion",
+            "industrial reuse program insertion floor plan",
         ),
         (
             "adaptive reuse industrial building visitor circulation staff circulation "
@@ -479,12 +530,15 @@ def test_local_browser_search_is_site_bounded_and_filters_untrusted_results() ->
         (
             "adaptive reuse industrial building sectional hierarchy mezzanine roof extension "
             "vertical circulation separate entrance",
-            "industrial reuse sectional hierarchy",
+            "industrial reuse sectional hierarchy section",
         ),
-        ("旧工业建筑更新 功能植入 盒中盒 剖面图", "工业改造 功能植入"),
+        ("旧工业建筑更新 功能植入 盒中盒 剖面图", "工业改造 功能植入 剖面图"),
         ("旧工业建筑更新 公共后勤流线 独立入口 屋顶加建", "工业改造 公众后勤流线"),
-        ("旧工业建筑更新 采光策略 插入天窗 剖面图", "工业改造 采光策略"),
-        ("旧工业建筑更新 剖面层次 夹层 下沉 屋顶加建 后勤需求", "工业改造 剖面层次"),
+        ("旧工业建筑更新 采光策略 插入天窗 剖面图", "工业改造 采光策略 剖面图"),
+        (
+            "旧工业建筑更新 剖面层次 夹层 下沉 屋顶加建 后勤需求",
+            "工业改造 剖面层次 剖面图",
+        ),
         (
             "community cultural center visitor staff circulation",
             "community cultural center visitor staff back-of-house circulation",
@@ -516,6 +570,223 @@ def test_known_site_query_compaction_preserves_typology_and_weighted_issue_inten
 
     search_url = urlparse(backend.search_urls[0])
     assert parse_qs(search_url.query)["q"] == [expected]
+
+
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        (
+            "new-build community library atrium stepped reading loop circulation "
+            "floor plan section project description",
+            "new community library atrium stepped reading circulation floor plan",
+        ),
+        (
+            "new-build community library roof daylight skylight glare thermal comfort "
+            "section project description",
+            "new community library roof daylight section",
+        ),
+        (
+            "new-build community library central atrium shared reading community activities "
+            "multilevel public core floor plan section project description",
+            "new community library atrium program layout section",
+        ),
+        (
+            "new-build civic facility atrium circulation floor plan",
+            "new public building atrium circulation floor plan",
+        ),
+        (
+            "architecture project drawings: public library community library skylight "
+            "clerestory daylight roof structure section project page",
+            "community library daylight strategy section",
+        ),
+        (
+            "new-build community library central atrium public stair ramp continuous "
+            "promenade floor plan section project description",
+            "new community library atrium circulation floor plan",
+        ),
+        (
+            "new-build community library central atrium inhabited staircase bridges "
+            "multi-level promenade activity landings section axonometric project description",
+            "new community library atrium circulation section",
+        ),
+        (
+            "新建社区图书馆 中央中庭 环廊 折返公共楼梯 坡道 多层停留观演 剖面图 轴测图 项目说明",
+            "新建 社区图书馆 中庭 流线 剖面图",
+        ),
+        (
+            "purpose-built community library central atrium reading terraces multipurpose "
+            "rooms support spaces open layered reconfigurable floor plan section project "
+            "description",
+            "new community library atrium program layout section",
+        ),
+        (
+            "new-build community library central atrium civic living room reading commons "
+            "event rooms support spaces perimeter adjacency stepped levels operable partitions "
+            "floor plan section",
+            "new community library atrium program layout section",
+        ),
+    ],
+)
+def test_known_site_query_compaction_preserves_new_build_search_contract(
+    query: str,
+    expected: str,
+) -> None:
+    backend = FakeBrowserBackend()
+    parser = LocalBrowserPageParser(backend=backend)
+
+    parser.search(query, limit=4, include_domains=["archdaily.com"])
+
+    search_url = urlparse(backend.search_urls[0])
+    compact_query = parse_qs(search_url.query)["q"][0]
+    assert compact_query == expected
+    assert "adaptive reuse" not in compact_query
+    assert "box-in-box" not in compact_query
+    assert "loading dock" not in compact_query
+
+
+@pytest.mark.parametrize(
+    ("query", "required_terms", "forbidden_terms"),
+    [
+        (
+            "adaptive reuse industrial building community cultural center retained "
+            "structure connection floor plan section project description",
+            (
+                "industrial reuse",
+                "community cultural center",
+                "old new structural interface",
+                "section",
+            ),
+            ("box-in-box", "loading dock"),
+        ),
+        (
+            "community cultural center extension public stair bridge social landing "
+            "axonometric project description",
+            ("extension", "community cultural center", "circulation", "axonometric"),
+            ("adaptive reuse", "back-of-house", "loading dock"),
+        ),
+    ],
+)
+def test_known_site_compaction_keeps_condition_typology_mechanism_and_evidence(
+    query: str,
+    required_terms: tuple[str, ...],
+    forbidden_terms: tuple[str, ...],
+) -> None:
+    backend = FakeBrowserBackend()
+    parser = LocalBrowserPageParser(backend=backend)
+
+    parser.search(query, limit=4, include_domains=["archdaily.com"])
+
+    search_url = urlparse(backend.search_urls[0])
+    compact_query = parse_qs(search_url.query)["q"][0]
+    for term in required_terms:
+        assert term in compact_query
+    for term in forbidden_terms:
+        assert term not in compact_query
+
+
+@pytest.mark.parametrize(
+    ("condition", "expected_condition"),
+    [
+        ("extension", "extension"),
+        ("expansion", "expansion"),
+        ("new wing", "new wing"),
+        ("addition to existing building", "addition"),
+    ],
+)
+def test_known_site_compaction_preserves_explicit_extension_synonyms(
+    condition: str,
+    expected_condition: str,
+) -> None:
+    backend = FakeBrowserBackend()
+    parser = LocalBrowserPageParser(backend=backend)
+
+    parser.search(
+        f"community cultural center {condition} public stair bridge circulation axonometric",
+        limit=4,
+        include_domains=["designboom.com"],
+    )
+
+    search_url = urlparse(backend.search_urls[0])
+    compact_query = parse_qs(search_url.query)["s"][0]
+    assert expected_condition in compact_query
+    assert "community cultural center" in compact_query
+    assert "circulation" in compact_query
+    assert "axonometric" in compact_query
+    assert "adaptive reuse" not in compact_query
+
+
+@pytest.mark.parametrize("mechanism", ["roof extension", "vertical extension"])
+def test_site_compaction_does_not_promote_section_mechanism_to_project_extension(
+    mechanism: str,
+) -> None:
+    backend = FakeBrowserBackend()
+    parser = LocalBrowserPageParser(backend=backend)
+
+    parser.search(
+        f"adaptive reuse industrial building sectional hierarchy {mechanism} section",
+        limit=4,
+        include_domains=["archdaily.com"],
+    )
+
+    search_url = urlparse(backend.search_urls[0])
+    compact_query = parse_qs(search_url.query)["q"][0]
+    assert compact_query == "industrial reuse sectional hierarchy section"
+    assert "extension" not in compact_query
+
+
+def test_known_site_query_compaction_preserves_an_explicit_project_name() -> None:
+    backend = FakeBrowserBackend()
+    parser = LocalBrowserPageParser(backend=backend)
+
+    parser.search(
+        "Calgary New Central Library new-build public library central atrium public "
+        "activities floor plan project description",
+        limit=4,
+        include_domains=["archdaily.com"],
+    )
+
+    search_url = urlparse(backend.search_urls[0])
+    assert parse_qs(search_url.query)["q"] == [
+        "Calgary New Central Library new public library atrium floor plan"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        (
+            "industrial factory cultural center renovation exhibition workshop restaurant "
+            "public events circulation shared space operating hours floor plan section "
+            "project description",
+            "industrial reuse community cultural center program insertion floor plan",
+        ),
+        (
+            "industrial factory renovation cultural center program zoning circulation "
+            "independent access shared flexible space floor plan project description",
+            "industrial reuse community cultural center program insertion floor plan",
+        ),
+        (
+            "industrial factory renovation cultural center rooflight lightwell circulation "
+            "gallery gathering space section project description",
+            "industrial reuse community cultural center daylight strategy section",
+        ),
+        (
+            "旧工业厂房改造 文化中心 光井 屋顶开洞 环廊 跨层连接 公共聚集空间 剖面图 项目说明",
+            "工业改造 社区文化中心 采光策略 剖面图",
+        ),
+    ],
+)
+def test_known_site_query_compaction_preserves_adaptive_reuse_subquestion_mechanism(
+    query: str,
+    expected: str,
+) -> None:
+    backend = FakeBrowserBackend()
+    parser = LocalBrowserPageParser(backend=backend)
+
+    parser.search(query, limit=4, include_domains=["designboom.com"])
+
+    search_url = urlparse(backend.search_urls[0])
+    assert parse_qs(search_url.query)["s"] == [expected]
 
 
 @pytest.mark.parametrize(
@@ -605,6 +876,149 @@ def test_known_architecture_site_searches_drop_navigation_links(
 
     assert [lead.url for lead in leads] == [result_url.rstrip("/")]
     assert urlparse(backend.search_urls[0]).hostname == search_host
+
+
+@pytest.mark.parametrize("failure_mode", ["empty", "timeout", "irrelevant", "weak"])
+def test_known_site_search_falls_back_to_broader_site_query(
+    failure_mode: str,
+) -> None:
+    result_url = (
+        "https://www.designboom.com/architecture/skylit-community-library-central-atrium-08-01-2026"
+    )
+
+    class SiteFallbackBackend(FakeBrowserBackend):
+        def search(self, url: str) -> list[BrowserSearchSnapshot]:
+            self.search_urls.append(url)
+            if len(self.search_urls) == 1:
+                if failure_mode == "timeout":
+                    raise TimeoutError("known site search timed out")
+                if failure_mode == "irrelevant":
+                    return [
+                        BrowserSearchSnapshot(
+                            url=(
+                                "https://www.designboom.com/architecture/"
+                                "fluid-spatial-evolution-room-for-dreams-podcast"
+                            ),
+                            title=(
+                                "Beyond the blueprint: breaking rigid structures to embrace "
+                                "fluid spatial evolution"
+                            ),
+                        )
+                    ]
+                if failure_mode == "weak":
+                    return [
+                        BrowserSearchSnapshot(
+                            url=(
+                                "https://www.designboom.com/architecture/"
+                                "community-center-roof-pavilion-08-01-2026"
+                            ),
+                            title="Community center roof pavilion",
+                            description="A new cultural venue with a public terrace.",
+                        )
+                    ]
+                return []
+            return [
+                BrowserSearchSnapshot(
+                    url=result_url,
+                    title="Skylit Community Library / Studio Example",
+                    description="A rooflight brings daylight through the central atrium.",
+                )
+            ]
+
+    backend = SiteFallbackBackend()
+    parser = LocalBrowserPageParser(backend=backend)
+
+    leads = parser.search(
+        "new-build community library central atrium roof daylight section project description",
+        limit=4,
+        include_domains=["designboom.com"],
+    )
+
+    assert [lead.url for lead in leads] == [result_url]
+    assert [urlparse(url).hostname for url in backend.search_urls] == [
+        "www.designboom.com",
+        "www.designboom.com",
+    ]
+    assert parse_qs(urlparse(backend.search_urls[1]).query)["s"] == [
+        "community library daylight section"
+    ]
+
+
+def test_named_project_site_fallback_preserves_the_search_contract() -> None:
+    project_url = (
+        "https://www.designboom.com/architecture/dellekamp-arquitectos-daegu-gosan-park-library"
+    )
+
+    class NamedProjectFallbackBackend(FakeBrowserBackend):
+        def search(self, url: str) -> list[BrowserSearchSnapshot]:
+            self.search_urls.append(url)
+            if len(self.search_urls) == 1:
+                return [
+                    BrowserSearchSnapshot(
+                        url=(
+                            "https://www.designboom.com/architecture/concrete-rooftop-garden-house"
+                        ),
+                        title="Rooftop garden crowns concrete house",
+                    )
+                ]
+            return [
+                BrowserSearchSnapshot(
+                    url=project_url,
+                    title="Dellekamp Arquitectos: Daegu Gosan Park Library",
+                    description="An ascending promenade wraps the central atrium.",
+                )
+            ]
+
+    backend = NamedProjectFallbackBackend()
+    parser = LocalBrowserPageParser(backend=backend)
+
+    leads = parser.search(
+        "Daegu Gosan Park Library new-build public library central atrium continuous "
+        "walkway stair ramp floor plan section axonometric project description",
+        limit=4,
+        include_domains=["designboom.com"],
+    )
+
+    assert [lead.url for lead in leads] == [project_url]
+    assert parse_qs(urlparse(backend.search_urls[1]).query)["s"] == [
+        "Daegu Gosan Park Library new public library circulation floor plan"
+    ]
+
+
+def test_known_site_search_broadening_keeps_adaptive_reuse_typology_and_mechanism() -> None:
+    result_url = "https://www.archdaily.com/1032468/gate-m-west-bund-dream-center-mvrdv"
+
+    class IndustrialFallbackBackend(FakeBrowserBackend):
+        def search(self, url: str) -> list[BrowserSearchSnapshot]:
+            self.search_urls.append(url)
+            if len(self.search_urls) == 1:
+                return [
+                    BrowserSearchSnapshot(
+                        url="https://www.archdaily.com/609963/emerson-process-management-hga",
+                        title="RENOVATION Emerson Process Management / HGA",
+                    )
+                ]
+            return [
+                BrowserSearchSnapshot(
+                    url=result_url,
+                    title="PUBLIC SPACE GATE M West Bund Dream Center / MVRDV",
+                )
+            ]
+
+    backend = IndustrialFallbackBackend()
+    parser = LocalBrowserPageParser(backend=backend)
+
+    leads = parser.search(
+        "industrial factory renovation cultural center program zoning circulation "
+        "shared flexible space floor plan project description",
+        limit=4,
+        include_domains=["archdaily.com"],
+    )
+
+    assert [lead.url for lead in leads] == [result_url]
+    assert parse_qs(urlparse(backend.search_urls[1]).query)["q"] == [
+        "industrial adaptive reuse cultural center program floor plan"
+    ]
 
 
 @pytest.mark.parametrize(
