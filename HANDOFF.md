@@ -146,4 +146,4 @@
 
 ## 当前唯一下一步
 
-唯一下一步：推送当前分支并创建面向 `main` 的 `v2.2.3` PR，随后等待 Windows Hosted CI。24 个跟踪文件已形成统一发布提交，`.artifacts/` 与 `.archresearch/` 未提交。独立扩展 ZIP 和 Windows 安装器均已构建并记录 SHA-256，安装器真实安装/自检/健康/卸载 smoke 已通过；权威完整门禁为 API 474、Board 179、Extension 174、packaged E2E 8。四条正式验收已全部通过：建筑 Run `5c785452-d1f0-434e-b8fd-81d7a88daa73`、`9f31598c-2601-4fac-9caa-b84be01a9aad`，XHS Run `f6a7fb48-cd22-4033-b90f-14af3fbb762c`、`7405fca2-003c-4446-beaa-48c96cb52d34`。项目 Playwright 已逐页验证 Board 完整显示并保存四张 QA 截图。当前正式验收为 4/4。
+当前无待办，等待用户提出新任务。`v2.2.3` 已通过 PR #13 和 Windows Hosted CI run `30718825811` 正式发布；远端 `main` 与 `v2.2.3` tag 均指向 `fc4e7a72dd7c86b61ffb3ad91c76d3c690e9fe47`。Release 非草稿、非预发布，Windows 安装器与独立扩展 ZIP 的 GitHub 大小和 SHA-256 均与本地 smoke 产物一致。权威完整门禁为 API 474、Board 179、Extension 174、packaged E2E 8。四条正式验收已全部通过：建筑 Run `5c785452-d1f0-434e-b8fd-81d7a88daa73`、`9f31598c-2601-4fac-9caa-b84be01a9aad`，XHS Run `f6a7fb48-cd22-4033-b90f-14af3fbb762c`、`7405fca2-003c-4446-beaa-48c96cb52d34`。项目 Playwright 已逐页验证 Board 完整显示并保存四张 QA 截图。当前正式验收为 4/4。
