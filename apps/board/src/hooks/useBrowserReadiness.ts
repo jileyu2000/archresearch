@@ -14,6 +14,11 @@ type UseBrowserReadinessOptions = {
   onError: (message: string) => void
 }
 
+type XiaohongshuLoginFlow = 'idle' | 'opening' | 'waiting' | 'timed_out'
+
+const XIAOHONGSHU_LOGIN_POLL_ATTEMPTS = 20
+const XIAOHONGSHU_LOGIN_POLL_INTERVAL_MILLISECONDS = 1_500
+
 function apiMessage(error: unknown) {
   return error instanceof Error
     ? error.message
@@ -30,6 +35,8 @@ export function useBrowserReadiness({
   const [xiaohongshuSessionStatus, setXiaohongshuSessionStatus] =
     useState<XiaohongshuSessionStatus | 'unchecked'>('unchecked')
   const [xiaohongshuSessionLoading, setXiaohongshuSessionLoading] = useState(false)
+  const [xiaohongshuLoginFlow, setXiaohongshuLoginFlow] =
+    useState<XiaohongshuLoginFlow>('idle')
   const [browserReadinessLoading, setBrowserReadinessLoading] = useState(!demoMode)
   const [browserReadinessError, setBrowserReadinessError] = useState('')
   const [preflightBridgeStatus, setPreflightBridgeStatus] =
@@ -39,6 +46,10 @@ export function useBrowserReadiness({
   const readinessRequestRef = useRef(0)
   const xiaohongshuRequestRef = useRef(0)
   const xiaohongshuCheckPromiseRef = useRef<Promise<XiaohongshuSessionStatus> | null>(null)
+  const xiaohongshuLoginRecoveryRef = useRef(0)
+  const xiaohongshuLoginRecoveryPromiseRef = useRef<Promise<boolean> | null>(null)
+  const xiaohongshuLoginPollTimerRef = useRef<number | null>(null)
+  const xiaohongshuLoginPollResolveRef = useRef<(() => void) | null>(null)
   const chromeConnectAttemptedRef = useRef(false)
   const chromeConnectRequested = useMemo(
     () => new URLSearchParams(window.location.search).get('connect') === 'chrome',
@@ -94,6 +105,7 @@ export function useBrowserReadiness({
       const status = await pending
       if (xiaohongshuRequestRef.current !== requestId) return 'unknown'
       setXiaohongshuSessionStatus(status)
+      if (status === 'logged_in') setXiaohongshuLoginFlow('idle')
       return status
     } finally {
       if (xiaohongshuCheckPromiseRef.current === pending) {
@@ -205,6 +217,78 @@ export function useBrowserReadiness({
     }
   }, [onAnnouncement])
 
+  const startXiaohongshuLoginRecovery = useCallback((): Promise<boolean> => {
+    if (demoMode) return Promise.resolve(false)
+    if (xiaohongshuLoginRecoveryPromiseRef.current) {
+      return xiaohongshuLoginRecoveryPromiseRef.current
+    }
+    const recoveryId = xiaohongshuLoginRecoveryRef.current + 1
+    xiaohongshuLoginRecoveryRef.current = recoveryId
+    const pending = (async () => {
+      setXiaohongshuLoginFlow('opening')
+      try {
+        if (browserConnected !== true) await handleConnectBrowser()
+        if (xiaohongshuLoginRecoveryRef.current !== recoveryId) return false
+        await apiClient.openXiaohongshuLogin()
+        if (xiaohongshuLoginRecoveryRef.current !== recoveryId) return false
+        setXiaohongshuLoginFlow('waiting')
+        for (let attempt = 0; attempt < XIAOHONGSHU_LOGIN_POLL_ATTEMPTS; attempt += 1) {
+          const status = await checkXiaohongshuSession()
+          if (xiaohongshuLoginRecoveryRef.current !== recoveryId) return false
+          if (status === 'logged_in') {
+            setXiaohongshuLoginFlow('idle')
+            onAnnouncement('已检测到小红书登录')
+            return true
+          }
+          if (attempt < XIAOHONGSHU_LOGIN_POLL_ATTEMPTS - 1) {
+            await new Promise<void>((resolve) => {
+              xiaohongshuLoginPollResolveRef.current = resolve
+              xiaohongshuLoginPollTimerRef.current = window.setTimeout(() => {
+                xiaohongshuLoginPollTimerRef.current = null
+                xiaohongshuLoginPollResolveRef.current = null
+                resolve()
+              }, XIAOHONGSHU_LOGIN_POLL_INTERVAL_MILLISECONDS)
+            })
+          }
+        }
+        if (xiaohongshuLoginRecoveryRef.current === recoveryId) {
+          setXiaohongshuLoginFlow('timed_out')
+        }
+        return false
+      } catch (error) {
+        if (xiaohongshuLoginRecoveryRef.current === recoveryId) {
+          setXiaohongshuLoginFlow('timed_out')
+          onError(`无法自动打开小红书登录：${apiMessage(error)}`)
+        }
+        return false
+      }
+    })()
+    xiaohongshuLoginRecoveryPromiseRef.current = pending
+    void pending.finally(() => {
+      if (xiaohongshuLoginRecoveryPromiseRef.current === pending) {
+        xiaohongshuLoginRecoveryPromiseRef.current = null
+      }
+    })
+    return pending
+  }, [
+    browserConnected,
+    checkXiaohongshuSession,
+    demoMode,
+    handleConnectBrowser,
+    onAnnouncement,
+    onError,
+  ])
+
+  useEffect(() => () => {
+    xiaohongshuLoginRecoveryRef.current += 1
+    if (xiaohongshuLoginPollTimerRef.current !== null) {
+      window.clearTimeout(xiaohongshuLoginPollTimerRef.current)
+      xiaohongshuLoginPollTimerRef.current = null
+    }
+    xiaohongshuLoginPollResolveRef.current?.()
+    xiaohongshuLoginPollResolveRef.current = null
+  }, [])
+
   useEffect(() => {
     if (
       demoMode
@@ -304,7 +388,14 @@ export function useBrowserReadiness({
   const researchEnvironmentReady = (
     xiaohongshuSessionCheckAvailable && xiaohongshuSessionStatus === 'logged_in'
   )
-  const researchEnvironmentTitle = !xiaohongshuSessionCheckAvailable
+  const xiaohongshuLoginRecoveryActive = (
+    xiaohongshuLoginFlow === 'opening' || xiaohongshuLoginFlow === 'waiting'
+  )
+  const researchEnvironmentTitle = xiaohongshuLoginRecoveryActive
+    ? xiaohongshuLoginFlow === 'opening'
+      ? '正在打开小红书登录'
+      : '等待小红书登录'
+    : !xiaohongshuSessionCheckAvailable
     ? browserReadinessState === 'loading'
       ? '正在检查研究环境'
       : browserReadinessState === 'unknown'
@@ -333,7 +424,13 @@ export function useBrowserReadiness({
       ? '小红书负责查找灵感 · Chrome 可读取当前页面高清图'
       : '小红书负责查找灵感 · 连接 Chrome 可读取当前页面高清图'
     : 'Chrome 可读取当前页面高清图 · 小红书登录已确认'
-  const researchEnvironmentDetail = !xiaohongshuSessionCheckAvailable
+  const researchEnvironmentDetail = xiaohongshuLoginRecoveryActive
+    ? xiaohongshuLoginFlow === 'opening'
+      ? '正在打开系统 Chrome；首次使用也会尝试连接 ArchResearch 扩展'
+      : '请在新打开的 Chrome 完成登录，本页会自动检测'
+    : xiaohongshuLoginFlow === 'timed_out'
+      ? '暂未检测到登录；登录完成后可重新检测，或再次打开登录页'
+      : !xiaohongshuSessionCheckAvailable
     ? unavailableEnvironmentDetail
     : xiaohongshuSessionLoading
       ? '正在验证当前 Chrome 中的小红书会话'
@@ -364,7 +461,10 @@ export function useBrowserReadiness({
     researchEnvironmentReady,
     researchEnvironmentTitle,
     showBrowserConnectAction,
-    showXiaohongshuLoginAction: xiaohongshuSessionStatus === 'not_logged_in',
+    showXiaohongshuLoginAction: xiaohongshuSessionStatus !== 'logged_in',
+    startXiaohongshuLoginRecovery,
+    xiaohongshuLoginFlow,
+    xiaohongshuLoginRecoveryActive,
     xiaohongshuSessionCheckAvailable,
     xiaohongshuSessionLoading,
     xiaohongshuSessionStatus,

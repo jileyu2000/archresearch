@@ -30,6 +30,7 @@ function composerProps(
     researchEnvironmentDetail: '连接 Chrome 后可搜索小红书，并读取当前页面高清图',
     showBrowserConnectAction: true,
     showXiaohongshuLoginAction: false,
+    xiaohongshuLoginFlow: 'idle' as const,
     browserConnecting: false,
     browserReadinessLoading: false,
     browserReadinessError: '',
@@ -43,6 +44,7 @@ function composerProps(
     onFilesChange: vi.fn(),
     onReferenceUrlChange: vi.fn(),
     onConnectBrowser: vi.fn(),
+    onOpenXiaohongshuLogin: vi.fn(),
     onRefreshBrowserReadiness: vi.fn(),
     onCancel: vi.fn(),
     onRetry: vi.fn(),
@@ -112,14 +114,12 @@ describe('home view components', () => {
     expect(within(environment).getByText('研究环境已就绪')).toBeVisible()
     expect(within(environment).getByText('图纸提取扩展已连接')).toBeVisible()
     expect(screen.queryByRole('group', { name: '研究方式' })).not.toBeInTheDocument()
-    expect(within(environment).getByRole('link', { name: '打开小红书登录' })).toHaveAttribute(
-      'href',
-      'https://www.xiaohongshu.com/explore',
-    )
+    await user.click(within(environment).getByRole('button', { name: '打开小红书登录' }))
 
     await user.click(within(environment).getByRole('button', { name: '连接 Chrome 读取高清图纸' }))
     await user.click(within(environment).getByRole('button', { name: '重新检测' }))
     expect(props.onConnectBrowser).toHaveBeenCalledOnce()
+    expect(props.onOpenXiaohongshuLogin).toHaveBeenCalledOnce()
     expect(props.onRefreshBrowserReadiness).toHaveBeenCalledOnce()
   })
 
