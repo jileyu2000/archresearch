@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from time import monotonic
-from typing import Literal, TypedDict
+from typing import Literal, NamedTuple, TypedDict
 from urllib.parse import unquote, urlparse
 
 from sqlalchemy import func, select
@@ -81,17 +81,20 @@ from .providers import (
     explicit_project_names,
     is_recoverable_public_page_analysis_error,
     requested_visual_drawing_type,
+    visual_reference_search_query,
 )
 from .public_pages import (
     ParsedPageImage,
     ParsedPublicPage,
     PublicPageParser,
+    PublicSearchLead,
     PublicSearchProvider,
     infer_architecture_asset_type,
     infer_research_issue_intent,
     is_concrete_project_page,
     project_image_identity_score,
     public_search_relevance_score,
+    search_lead_matches_building_type,
     select_project_page_links,
 )
 from .schemas import (
@@ -154,6 +157,32 @@ REMOTE_VISUAL_BATCH_LIMIT = 4
 REMOTE_VISUAL_MIN_RELEVANCE = 2
 XIAOHONGSHU_VISUAL_NOTE_LIMIT = 4
 XIAOHONGSHU_VISUAL_NOTE_TARGET = 3
+XIAOHONGSHU_VISUAL_SOURCE_POOL_LIMIT = 8
+XIAOHONGSHU_ARCHITECTURE_DRAWING_TITLE_TERMS = (
+    "建筑",
+    "图纸",
+    "空间设计",
+    "室内设计",
+    "景观设计",
+    "建筑渲染",
+    "室内",
+    "景观",
+    "方案",
+    "作品集",
+    "制图",
+)
+XIAOHONGSHU_NON_ARCHITECTURE_VISUAL_TITLE_TERMS = (
+    "摄影",
+    "电影",
+    "影视",
+    "分镜",
+    "产品",
+    "包装",
+    "海报",
+    "插画",
+    "美妆",
+    "穿搭",
+)
 UNCOVERED_BRANCH_PAGE_ANALYSIS_LIMIT = 3
 UNCOVERED_BRANCH_FOLLOWUP_PAGE_ANALYSIS_LIMIT = 1
 PROJECT_TEXT_SUPPLEMENT_PAGE_LIMIT = 2
@@ -307,9 +336,17 @@ def execute_research_run(
         )
 
         with db.session_factory() as session:
-            prior_source_urls = set(
-                session.scalars(select(SourcePage.url).where(SourcePage.run_id == run_id))
+            prior_source_pages = list(
+                session.scalars(select(SourcePage).where(SourcePage.run_id == run_id))
             )
+            prior_source_urls = {
+                page.url for page in prior_source_pages if page.access_status != "pending"
+            }
+            prior_source_titles = [
+                page.title
+                for page in prior_source_pages
+                if page.access_status != "pending" and page.title
+            ]
             prior_project_names = list(
                 session.scalars(
                     select(AssetCandidate.project_name).where(AssetCandidate.run_id == run_id)
@@ -323,6 +360,8 @@ def execute_research_run(
                 )
             )
         public_queries_by_subquestion: dict[str, list[str]] = {}
+        public_search_feedback_by_subquestion: dict[str, list[str]] = {}
+        public_search_low_yield_domains_by_subquestion: dict[str, set[str]] = {}
         for prior_query in prior_queries:
             if prior_query.subquestion_id:
                 public_queries_by_subquestion.setdefault(prior_query.subquestion_id, []).extend(
@@ -338,8 +377,17 @@ def execute_research_run(
                 if identity
             }
         )
+        excluded_search_project_names = (
+            set()
+            if retrying_without_coverage
+            else {
+                name
+                for name in (*prior_source_titles, *prior_project_names)
+                if name and name.strip()
+            }
+        )
         round_added_usable_assets = 0
-        resumed_rounds = {round_number for round_number, _, _ in completed_query_keys}
+        resumed_rounds = {round_number for round_number, _ in completed_query_keys}
         inspected_urls = set() if retrying_without_coverage else set(prior_source_urls)
         parsed_pages: dict[str, ParsedPublicPage | None] = {}
         project_text_supplement_attempted: set[str] = set()
@@ -451,7 +499,7 @@ def execute_research_run(
                     coverage_incomplete or completion_continuation
                 ):
                     continue
-            query_key = (round_number, language, subquestion_id)
+            query_key = (round_number, subquestion_id)
             if query_key in completed_query_keys:
                 continue
             raise_if_cancelled(db, run_id)
@@ -469,8 +517,18 @@ def execute_research_run(
                 else None
             )
             remaining_seconds = research_deadline - clock()
+            public_search_budget_available = (
+                public_search_provider is not None
+                and _public_search_budget_available(
+                    db,
+                    run_id,
+                    public_search_provider,
+                )
+            )
             can_search_publicly = (
-                public_search_provider is not None and remaining_seconds >= public_search_reserve
+                public_search_provider is not None
+                and remaining_seconds >= public_search_reserve
+                and public_search_budget_available
             )
             is_model_timeout_recovery = (
                 model_search_timed_out
@@ -504,8 +562,20 @@ def execute_research_run(
                 stop_reason = "visual_budget_exhausted"
                 break
             if not (can_search_publicly or can_search_with_model or can_search_xiaohongshu):
-                stop_reason = "time_budget_exhausted"
+                stop_reason = (
+                    "query_budget_exhausted"
+                    if goal is ResearchGoal.precedent_research
+                    and public_search_provider is not None
+                    and remaining_seconds >= public_search_reserve
+                    and not public_search_budget_available
+                    else "time_budget_exhausted"
+                )
                 break
+            xiaohongshu_query = (
+                visual_reference_search_query(subquestion_text[subquestion_id])
+                if can_search_xiaohongshu
+                else None
+            )
             provider_query = _query_with_source_preferences(
                 query,
                 goal=goal,
@@ -516,7 +586,11 @@ def execute_research_run(
                 round_number=round_number,
                 language=language,
                 subquestion_id=subquestion_id,
-                query=provider_query,
+                query=(
+                    xiaohongshu_query
+                    if xiaohongshu_only_visual and xiaohongshu_query is not None
+                    else provider_query
+                ),
                 purpose=goal.value,
                 provider_name=(
                     public_search_provider.name
@@ -536,6 +610,8 @@ def execute_research_run(
                 },
             )
             public_sources: list[ProviderSource] = []
+            public_search_failure_reason: str | None = None
+            selected_public_sources: list[ProviderSource] = []
             named_project_names: list[str] = []
             trusted_public_recovery = False
             selected_xiaohongshu_source = False
@@ -559,8 +635,33 @@ def execute_research_run(
                     db,
                     run_id,
                     xiaohongshu_searchers,
-                    subquestion_text[subquestion_id],
+                    xiaohongshu_query or subquestion_text[subquestion_id],
+                    limit=(XIAOHONGSHU_VISUAL_SOURCE_POOL_LIMIT if xiaohongshu_only_visual else 4),
                 )
+                if xiaohongshu_only_visual:
+                    pooled_source_count = len(xiaohongshu_sources)
+                    xiaohongshu_sources = _rank_xiaohongshu_visual_sources(
+                        xiaohongshu_sources,
+                        subquestion_text[subquestion_id],
+                        limit=XIAOHONGSHU_VISUAL_NOTE_LIMIT,
+                    )
+                    requested_label = requested_visual_drawing_type(
+                        subquestion_text[subquestion_id]
+                    )
+                    checkpoint(
+                        db,
+                        run_id,
+                        RunStatus.searching,
+                        {
+                            "source_pool_count": pooled_source_count,
+                            "retained_source_count": len(xiaohongshu_sources),
+                            "drawing_type_match_count": sum(
+                                bool(requested_label and requested_label in source.title)
+                                for source in xiaohongshu_sources
+                            ),
+                        },
+                        tool="xiaohongshu_candidate_pool",
+                    )
                 if xiaohongshu_required:
                     browser_inspection_failed = browser_inspection_failed or search_failed
                 public_sources.extend(xiaohongshu_sources)
@@ -574,6 +675,10 @@ def execute_research_run(
                     allowed_domains,
                     round_number=round_number,
                     round_query_index=subquestion_domain_slots[subquestion_id],
+                    low_yield_domains=public_search_low_yield_domains_by_subquestion.get(
+                        subquestion_id,
+                        set(),
+                    ),
                 )
                 preferred_language = (
                     "zh"
@@ -601,11 +706,49 @@ def execute_research_run(
                     subquestion_id,
                     [],
                 )
+                stage_failure_reasons = public_search_feedback_by_subquestion.get(
+                    subquestion_id,
+                    [],
+                )
                 failure_reasons = [
                     *current_coverage.get("gaps", []),
                     *current_coverage.get("enrichment_gaps", []),
+                    *stage_failure_reasons,
                 ]
-                assistance_reserve = public_search_reserve + provider_call_reserve * 2
+                query_limit = (
+                    2
+                    if any(
+                        reason
+                        in {
+                            "local_search_no_candidates",
+                            "no_new_local_candidates",
+                            "candidate_reranking_rejected_all",
+                            "public_page_analysis_incomplete",
+                        }
+                        for reason in stage_failure_reasons
+                    )
+                    else 1
+                )
+                query_limit = min(
+                    query_limit,
+                    _public_search_budget_remaining(
+                        db,
+                        run_id,
+                        public_search_provider,
+                    ),
+                )
+                query_planning_reserve = float(
+                    getattr(
+                        search_query_planner,
+                        "worst_case_search_query_planning_seconds",
+                        provider_call_reserve,
+                    )
+                )
+                assistance_reserve = (
+                    public_search_reserve * query_limit
+                    + query_planning_reserve
+                    + provider_call_reserve
+                )
                 planner_has_time = (
                     search_query_planner is not None
                     and research_deadline - clock() >= assistance_reserve
@@ -621,8 +764,10 @@ def execute_research_run(
                     research_context=research_context,
                     previous_queries=previous_public_queries,
                     excluded_sources=sorted(excluded_public_urls),
+                    excluded_projects=sorted(excluded_search_project_names),
                     failure_reasons=failure_reasons,
                     fallback_query=fallback_public_query,
+                    query_limit=query_limit,
                     unavailable_error_type=(
                         "InsufficientTimeReserve"
                         if search_query_planner is not None and not planner_has_time
@@ -630,13 +775,24 @@ def execute_research_run(
                     ),
                 )
                 planned_public_queries = [item.query for item in query_plan.queries]
+                structured_project_names = [
+                    item.anchors.project_name
+                    for item in query_plan.queries
+                    if item.anchors is not None and item.anchors.project_name
+                ]
                 named_project_names = list(
                     dict.fromkeys(
-                        name
-                        for public_query in planned_public_queries
-                        for name in explicit_project_names(public_query)
+                        [
+                            *structured_project_names,
+                            *(
+                                name
+                                for public_query in planned_public_queries
+                                for name in explicit_project_names(public_query)
+                            ),
+                        ]
                     )
                 )
+                excluded_search_project_names.update(structured_project_names)
                 previous_public_queries.extend(planned_public_queries)
                 _update_query_attempt_text(
                     db,
@@ -644,19 +800,27 @@ def execute_research_run(
                     query_plan.queries,
                 )
                 local_public_sources: list[ProviderSource] = []
-                for public_query in planned_public_queries:
+                for planned_query in query_plan.queries:
+                    public_query = planned_query.query
+                    structured_query_project_names = (
+                        [planned_query.anchors.project_name]
+                        if planned_query.anchors is not None and planned_query.anchors.project_name
+                        else []
+                    )
                     query_sources = _try_public_search(
                         db,
                         run_id,
                         public_search_provider,
                         public_query,
                         public_search_domains,
+                        structured_query=planned_query,
                     )
                     local_public_sources = _merge_source_lists(
                         local_public_sources,
                         _filter_named_project_query_sources(
                             query_sources,
                             public_query,
+                            project_names=structured_query_project_names,
                         ),
                     )
                 candidates, candidate_sources = _prepare_local_search_candidates(
@@ -676,7 +840,7 @@ def execute_research_run(
                     provider_call_enabled=reranker_has_time,
                     question=question,
                     subquestion=subquestions_by_id[subquestion_id],
-                    search_queries=planned_public_queries,
+                    planned_queries=query_plan.queries,
                     candidates=candidates,
                     candidate_sources=candidate_sources,
                     relevance_context=public_relevance_context,
@@ -686,11 +850,31 @@ def execute_research_run(
                         else "ProviderUnavailable"
                     ),
                 )
+                if not local_public_sources:
+                    public_search_failure_reason = "local_search_no_candidates"
+                elif not candidates:
+                    public_search_failure_reason = "no_new_local_candidates"
+                elif not selected_public_sources:
+                    public_search_failure_reason = "candidate_reranking_rejected_all"
+                selected_public_urls = {source.url for source in selected_public_sources}
+                rejected_public_sources: list[ProviderSource] = []
                 for source in candidate_sources.values():
+                    if source.url in selected_public_urls:
+                        continue
+                    rejected_public_sources.append(source)
                     excluded_public_urls.add(source.url)
+                    if source.title:
+                        excluded_search_project_names.add(source.title)
                     project_key = _project_identity_key(source.title)
                     if project_key:
                         excluded_project_keys.add(project_key)
+                if rejected_public_sources:
+                    _persist_sources(
+                        db,
+                        run_id,
+                        ProviderSearchResult(sources=rejected_public_sources, assets=[]),
+                        access_status="irrelevant",
+                    )
                 public_sources = _merge_source_lists(
                     public_sources,
                     selected_public_sources,
@@ -700,6 +884,7 @@ def execute_research_run(
                         db,
                         run_id,
                         ProviderSearchResult(sources=public_sources, assets=[]),
+                        access_status="pending",
                     )
                 trusted_public_recovery = (
                     goal is ResearchGoal.precedent_research
@@ -983,7 +1168,8 @@ def execute_research_run(
                         source,
                         public_page_parser,
                     )
-                    parsed_pages[source.url] = parsed_page
+                    if parsed_page is not None:
+                        parsed_pages[source.url] = parsed_page
                     public_page_inspection_succeeded = (
                         public_page_inspection_succeeded or parsed_page is not None
                     )
@@ -1489,6 +1675,24 @@ def execute_research_run(
                 if reused:
                     reused_article_ready_branches.add(subquestion_id)
                     browser_added += reused_added
+            visited_public_sources: list[ProviderSource] = []
+            for source in selected_public_sources:
+                if parsed_pages.get(source.url) is None and source.url not in inspected_urls:
+                    continue
+                visited_public_sources.append(source)
+                excluded_public_urls.add(source.url)
+                if source.title:
+                    excluded_search_project_names.add(source.title)
+                project_key = _project_identity_key(source.title)
+                if project_key:
+                    excluded_project_keys.add(project_key)
+            if visited_public_sources:
+                _persist_sources(
+                    db,
+                    run_id,
+                    ProviderSearchResult(sources=visited_public_sources, assets=[]),
+                    access_status="available",
+                )
             checkpoint(
                 db,
                 run_id,
@@ -1497,6 +1701,28 @@ def execute_research_run(
             )
             mark_query_completed(db, query_attempt_id)
             added_usable_assets += browser_added
+            if can_search_publicly and public_search_provider is not None:
+                feedback = public_search_feedback_by_subquestion.setdefault(
+                    subquestion_id,
+                    [],
+                )
+                if added_usable_assets > 0:
+                    feedback.clear()
+                    low_yield = public_search_low_yield_domains_by_subquestion.get(subquestion_id)
+                    if low_yield is not None:
+                        low_yield.difference_update(public_search_domains)
+                else:
+                    reason = public_search_failure_reason
+                    if reason is None and selected_public_sources:
+                        reason = "public_page_analysis_incomplete"
+                    if reason is not None and reason not in feedback:
+                        feedback.append(reason)
+                        del feedback[:-3]
+                    if reason is not None:
+                        public_search_low_yield_domains_by_subquestion.setdefault(
+                            subquestion_id,
+                            set(),
+                        ).update(public_search_domains)
             round_added_usable_assets += added_usable_assets
 
             checkpoint(db, run_id, RunStatus.verifying, {"method": "source_binding"})
@@ -1704,6 +1930,39 @@ def _public_search_worst_case_seconds(provider: PublicSearchProvider) -> float:
     )
 
 
+def _public_search_budget_available(
+    db: Database,
+    run_id: str,
+    provider: PublicSearchProvider,
+) -> bool:
+    return _public_search_budget_remaining(db, run_id, provider) > 0
+
+
+def _public_search_budget_remaining(
+    db: Database,
+    run_id: str,
+    provider: PublicSearchProvider,
+) -> int:
+    with db.session_factory() as session:
+        run = get_run(session, run_id)
+        budget = run.budget or {}
+        default_recovery_rounds = 1 if run.goal == ResearchGoal.precedent_research.value else 0
+        recovery_rounds = int(budget.get("completion_recovery_rounds", default_recovery_rounds))
+        query_limit = (
+            int(budget.get("max_queries", 0)) + len(run.subquestions or []) * recovery_rounds
+        )
+        used_calls = session.scalar(
+            select(func.count())
+            .select_from(TraceEvent)
+            .where(
+                TraceEvent.run_id == run_id,
+                TraceEvent.retry_count == run.attempt,
+                TraceEvent.tool == f"{provider.name}_search",
+            )
+        )
+    return max(0, query_limit - int(used_calls or 0))
+
+
 def _try_public_search(
     db: Database,
     run_id: str,
@@ -1713,14 +1972,36 @@ def _try_public_search(
     *,
     limit: int = 4,
     purpose: str | None = None,
+    structured_query: SearchQuery | None = None,
 ) -> list[ProviderSource]:
     tool_name = f"{provider.name}_search"
+    if not _public_search_budget_available(db, run_id, provider):
+        return []
     try:
-        leads = provider.search(
-            query,
-            limit=limit,
-            include_domains=allowed_domains,
-        )
+        structured_search = getattr(provider, "search_structured", None)
+        anchors = structured_query.anchors if structured_query is not None else None
+        if anchors is not None and callable(structured_search):
+            leads = structured_search(
+                query,
+                building_type=anchors.building_type,
+                project_condition=anchors.project_condition,
+                spatial_focus=anchors.spatial_focus,
+                evidence_type=anchors.evidence_type,
+                project_name=anchors.project_name,
+                search_scope=(
+                    "space_first"
+                    if structured_query is not None and structured_query.strategy == "space_first"
+                    else "project_context"
+                ),
+                limit=limit,
+                include_domains=allowed_domains,
+            )
+        else:
+            leads = provider.search(
+                query,
+                limit=limit,
+                include_domains=allowed_domains,
+            )
         sources: list[ProviderSource] = []
         for lead in leads[:limit]:
             source = ProviderSource(
@@ -1734,9 +2015,17 @@ def _try_public_search(
         summary: dict[str, object] = {
             "status": "completed",
             "result_count": len(sources),
+            "structured_query": anchors is not None and callable(structured_search),
+            "domains": list(allowed_domains),
         }
         if purpose is not None:
             summary["purpose"] = purpose
+        if anchors is not None:
+            summary["search_scope"] = (
+                "space_first"
+                if structured_query is not None and structured_query.strategy == "space_first"
+                else "project_context"
+            )
         checkpoint(
             db,
             run_id,
@@ -1768,8 +2057,10 @@ def _try_search_query_plan(
     research_context: str,
     previous_queries: Sequence[str],
     excluded_sources: Sequence[str],
+    excluded_projects: Sequence[str],
     failure_reasons: Sequence[str],
     fallback_query: str,
+    query_limit: int,
     unavailable_error_type: str,
 ) -> SearchQueryPlan:
     error_type = unavailable_error_type
@@ -1783,8 +2074,9 @@ def _try_search_query_plan(
                 research_context=research_context,
                 previous_queries=previous_queries,
                 excluded_sources=excluded_sources,
+                excluded_projects=excluded_projects,
                 failure_reasons=failure_reasons,
-                query_limit=1,
+                query_limit=query_limit,
             )
         except Exception as exc:
             error_type = type(exc).__name__
@@ -1799,6 +2091,7 @@ def _try_search_query_plan(
                     "subquestion_id": subquestion.id,
                     "round": round_number,
                     "query_count": len(plan.queries),
+                    "strategies": [item.strategy for item in plan.queries],
                 },
                 tool="search_query_planning",
             )
@@ -1893,14 +2186,16 @@ def _prepare_local_search_candidates(
 def _filter_named_project_query_sources(
     sources: Sequence[ProviderSource],
     query: str,
+    *,
+    project_names: Sequence[str] = (),
 ) -> list[ProviderSource]:
-    project_names = explicit_project_names(query)
-    if not project_names:
+    focused_project_names = list(project_names) or explicit_project_names(query)
+    if not focused_project_names:
         return list(sources)
     return [
         source
         for source in sources
-        if any(_source_matches_project_name(source, name) for name in project_names)
+        if any(_source_matches_project_name(source, name) for name in focused_project_names)
     ]
 
 
@@ -1944,7 +2239,7 @@ def _try_candidate_reranking(
     provider_call_enabled: bool,
     question: str,
     subquestion: ResearchSubquestion,
-    search_queries: Sequence[str],
+    planned_queries: Sequence[SearchQuery],
     candidates: Sequence[LocalSearchCandidate],
     candidate_sources: dict[str, ProviderSource],
     relevance_context: str,
@@ -1971,29 +2266,51 @@ def _try_candidate_reranking(
             reranking = provider.rerank_search_candidates(
                 question=question,
                 subquestion=subquestion,
-                search_queries=search_queries,
+                search_queries=[item.query for item in planned_queries],
                 candidates=candidates,
             )
         except Exception as exc:
             error_type = type(exc).__name__
         else:
-            retained = sorted(
-                (
-                    item
-                    for item in reranking.assessments
-                    if item.retain and item.relevance >= 2 and item.typology_match >= 2
-                ),
+            eligible_assessments = [
+                item
+                for item in reranking.assessments
+                if item.retain and item.relevance >= 2 and item.source_trust >= 2
+            ]
+            spatial_assessments = sorted(
+                (item for item in eligible_assessments if item.spatial_relevance >= 2),
                 key=lambda item: (
+                    item.spatial_relevance,
                     item.relevance,
-                    item.typology_match,
                     item.drawing_availability,
                     item.source_trust,
+                    item.typology_match,
                 ),
                 reverse=True,
-            )[:4]
+            )
+            type_context_assessments = sorted(
+                (
+                    item
+                    for item in eligible_assessments
+                    if item.spatial_relevance < 2
+                    and item.typology_match >= 3
+                    and item.source_trust >= 3
+                ),
+                key=lambda item: (
+                    item.spatial_relevance,
+                    item.relevance,
+                    item.drawing_availability,
+                    item.source_trust,
+                    item.typology_match,
+                ),
+                reverse=True,
+            )
+            retained_assessments = spatial_assessments[:4]
+            if len(retained_assessments) < 4 and type_context_assessments:
+                retained_assessments.append(type_context_assessments[0])
             selected = [
                 candidate_sources[item.candidate_id]
-                for item in retained
+                for item in retained_assessments
                 if item.candidate_id in candidate_sources
             ]
             checkpoint(
@@ -2006,27 +2323,73 @@ def _try_candidate_reranking(
                     "subquestion_id": subquestion.id,
                     "candidate_count": len(candidates),
                     "retained_count": len(selected),
+                    "direct_retained_count": len(
+                        [item for item in retained_assessments if item.typology_match >= 2]
+                    ),
+                    "analogical_retained_count": len(
+                        [item for item in retained_assessments if item.typology_match < 2]
+                    ),
+                    "spatial_retained_count": len(
+                        [item for item in retained_assessments if item.typology_match < 2]
+                    ),
+                    "type_context_probe_count": len(
+                        [item for item in retained_assessments if item.spatial_relevance < 2]
+                    ),
                 },
                 tool="candidate_reranking",
             )
             return selected
-    fallback_sources = sorted(
-        (
-            source
-            for source in candidate_sources.values()
-            if provider is None
-            or (
-                _source_matches_research_typology(source, relevance_context)
-                and _source_relevance_score(source, relevance_context) > 0
+    space_first_planned = any(item.strategy == "space_first" for item in planned_queries)
+    fallback_relevance_context = _candidate_fallback_relevance_context(
+        planned_queries,
+        relevance_context,
+    )
+    structured_building_types = list(
+        dict.fromkeys(
+            item.anchors.building_type for item in planned_queries if item.anchors is not None
+        )
+    )
+    candidate_descriptions = {item.url: item.description for item in candidates}
+
+    def fallback_source_relevance_score(source: ProviderSource) -> int:
+        return public_search_relevance_score(
+            fallback_relevance_context,
+            title=source.title,
+            description=candidate_descriptions.get(source.url, source._search_description),
+            url=source.url,
+        )
+
+    def fallback_source_eligible(source: ProviderSource) -> bool:
+        if provider is None:
+            return True
+        if fallback_source_relevance_score(source) <= 0:
+            return False
+        if space_first_planned:
+            return True
+        if structured_building_types:
+            lead = PublicSearchLead(
+                url=source.url,
+                title=source.title,
+                description=source._search_description,
             )
-        ),
-        key=lambda source: _inspection_source_sort_key(
-            source,
-            ResearchGoal.precedent_research,
-            relevance_context,
+            return any(
+                search_lead_matches_building_type(building_type, lead)
+                for building_type in structured_building_types
+            )
+        return _source_matches_research_typology(source, relevance_context)
+
+    fallback_sources = sorted(
+        (source for source in candidate_sources.values() if fallback_source_eligible(source)),
+        key=lambda source: (
+            fallback_source_relevance_score(source),
+            _inspection_source_sort_key(
+                source,
+                ResearchGoal.precedent_research,
+                fallback_relevance_context,
+            ),
         ),
         reverse=True,
-    )[:4]
+    )[: 4 if provider is None else 2]
     checkpoint(
         db,
         run_id,
@@ -2042,6 +2405,21 @@ def _try_candidate_reranking(
         tool="candidate_reranking",
     )
     return fallback_sources
+
+
+def _candidate_fallback_relevance_context(
+    planned_queries: Sequence[SearchQuery],
+    fallback_context: str,
+) -> str:
+    space_first_focuses = [
+        " ".join((item.anchors.spatial_focus, item.anchors.evidence_type))
+        for item in planned_queries
+        if item.strategy == "space_first" and item.anchors is not None
+    ]
+    if space_first_focuses:
+        return " ".join(space_first_focuses)
+    planned_text = " ".join(item.query for item in planned_queries)
+    return planned_text or fallback_context
 
 
 def _inferred_publication_tier(url: str) -> PublicationTier:
@@ -2061,12 +2439,14 @@ def _try_xiaohongshu_search(
     run_id: str,
     searches: list[XiaohongshuSearch],
     query: str,
+    *,
+    limit: int = 4,
 ) -> tuple[list[ProviderSource], bool]:
     failed_backends = 0
     while searches:
         search = searches[0]
         try:
-            sources = search.search(query, limit=4)
+            sources = search.search(query, limit=limit)
             if not sources and len(searches) > 1:
                 searches.pop(0)
                 failed_backends += 1
@@ -2110,6 +2490,66 @@ def _try_xiaohongshu_search(
                 tool="xiaohongshu_search",
             )
     return [], True
+
+
+def _rank_xiaohongshu_visual_sources(
+    sources: Sequence[ProviderSource],
+    direction: str,
+    *,
+    limit: int,
+) -> list[ProviderSource]:
+    requested_label = requested_visual_drawing_type(direction) or ""
+    drawing_root = requested_label.removesuffix("图")
+    style = direction.replace(f"建筑{requested_label}", " ").replace(requested_label, " ")
+    style_characters = "".join(re.findall(r"[\u4e00-\u9fff]", style))
+    style_bigrams = {
+        style_characters[index : index + 2] for index in range(max(0, len(style_characters) - 1))
+    }
+
+    deduplicated: list[ProviderSource] = []
+    seen_urls: set[str] = set()
+    for source in sources:
+        source_key = urlparse(source.url).path.rstrip("/") or source.url
+        if source_key in seen_urls:
+            continue
+        seen_urls.add(source_key)
+        deduplicated.append(source)
+
+    def source_score(
+        indexed_source: tuple[int, ProviderSource],
+    ) -> tuple[int, int, int, int, int]:
+        index, source = indexed_source
+        title_characters = "".join(re.findall(r"[\u4e00-\u9fff]", source.title))
+        title_bigrams = {
+            title_characters[position : position + 2]
+            for position in range(max(0, len(title_characters) - 1))
+        }
+        architecture_context = int(
+            any(term in source.title for term in XIAOHONGSHU_ARCHITECTURE_DRAWING_TITLE_TERMS)
+        )
+        non_architecture_context = int(
+            any(term in source.title for term in XIAOHONGSHU_NON_ARCHITECTURE_VISUAL_TITLE_TERMS)
+        )
+        drawing_type_match = int(bool(requested_label and requested_label in source.title))
+        drawing_root_match = int(bool(drawing_root and drawing_root in source.title))
+        style_overlap = len(style_bigrams & title_bigrams)
+        relevance_score = (
+            drawing_type_match * 4
+            + drawing_root_match * 2
+            + architecture_context * 2
+            - non_architecture_context * (1 - architecture_context) * 5
+            + min(style_overlap, 3)
+        )
+        return (
+            relevance_score,
+            drawing_type_match,
+            drawing_root_match,
+            style_overlap,
+            -index,
+        )
+
+    ranked = sorted(enumerate(deduplicated), key=source_score, reverse=True)
+    return [source for _, source in ranked[: max(0, limit)]]
 
 
 def _query_with_source_preferences(
@@ -2801,6 +3241,12 @@ def _public_page_branch_analysis_budget_available(
     return current_attempts - attempts_before_query < attempt_limit
 
 
+class _PublicPageAnalysisOutcome(NamedTuple):
+    added: int
+    direct_match: bool | None
+    evidence_chain_status: str
+
+
 def _try_public_page_branch_analysis(
     db: Database,
     run_id: str,
@@ -2824,7 +3270,7 @@ def _try_public_page_branch_analysis(
         return 0
     drawings = _public_page_drawings(db, run_id, source.url, page)
     attempted_branches.add(analysis_key)
-    added = _try_public_page_analysis(
+    outcome = _try_public_page_analysis(
         db,
         run_id,
         provider,
@@ -2835,8 +3281,11 @@ def _try_public_page_branch_analysis(
         subquestion_id=subquestion_id,
         analysis_requirements=analysis_requirements,
     )
+    added = outcome.added
     if (
-        public_search_provider is None
+        outcome.direct_match is not True
+        or outcome.evidence_chain_status == "complete"
+        or public_search_provider is None
         or public_page_parser is None
         or parsed_pages is None
         or supplement_attempted is None
@@ -2882,6 +3331,11 @@ def _try_project_text_supplement(
     project_identity = _project_identity_key(source.title or page.title)
     if not project_identity:
         return 0
+    if source.publication_tier not in {
+        PublicationTier.primary,
+        PublicationTier.trusted_secondary,
+    } or not is_concrete_project_page(page, source_title=source.title):
+        return 0
     project_identities = {
         identity
         for identity in (
@@ -2908,8 +3362,6 @@ def _try_project_text_supplement(
             for item in candidates
             if _project_identity_key(item.project_name) in project_identities
         ]
-        if not project_candidates:
-            return 0
         project_context = ""
         design_mechanism = ""
         has_transfer_strategy = False
@@ -2941,8 +3393,6 @@ def _try_project_text_supplement(
             )
         if project_context and design_mechanism and has_transfer_strategy:
             return 0
-        if not project_context and not design_mechanism and not has_project_mechanism:
-            return 0
 
     supporting_pages = next(
         (
@@ -2955,7 +3405,10 @@ def _try_project_text_supplement(
     if supporting_pages is None:
         if project_identities & supplement_attempted:
             return 0
-        search_reserve = _public_search_worst_case_seconds(public_search_provider)
+        search_domains = _project_text_supplement_domains(source.url)
+        search_reserve = _public_search_worst_case_seconds(public_search_provider) * len(
+            search_domains
+        )
         parser_reserve = float(getattr(public_page_parser, "worst_case_call_seconds", 0.0))
         required_seconds = (
             search_reserve
@@ -2966,15 +3419,35 @@ def _try_project_text_supplement(
             return 0
         supplement_attempted.update(project_identities)
         project_name = _project_display_name(source.title or page.title)
-        supplement_sources = _try_public_search(
-            db,
-            run_id,
-            public_search_provider,
-            _project_text_supplement_query(project_name, question),
-            list(TRUSTED_ARCHITECTURE_PUBLICATION_DOMAINS),
-            limit=PROJECT_TEXT_SUPPLEMENT_PAGE_LIMIT,
-            purpose="project_text_supplement",
-        )
+        supplement_query = _project_text_supplement_query(project_name, question)
+        supplement_sources: list[ProviderSource] = []
+        primary_titles = [source.title, page.title]
+        for domain in search_domains:
+            remaining_limit = PROJECT_TEXT_SUPPLEMENT_PAGE_LIMIT - len(supplement_sources)
+            if remaining_limit <= 0:
+                break
+            domain_sources = _try_public_search(
+                db,
+                run_id,
+                public_search_provider,
+                supplement_query,
+                [domain],
+                limit=remaining_limit,
+                purpose="project_text_supplement",
+            )
+            matching_sources = [
+                candidate
+                for candidate in domain_sources
+                if not _project_identity_key(candidate.title)
+                or any(
+                    _same_project_identity(candidate.title, primary_title)
+                    for primary_title in primary_titles
+                )
+            ]
+            supplement_sources = _merge_source_lists(
+                supplement_sources,
+                matching_sources,
+            )[:PROJECT_TEXT_SUPPLEMENT_PAGE_LIMIT]
         _persist_sources(
             db,
             run_id,
@@ -2984,8 +3457,10 @@ def _try_project_text_supplement(
         for supplement_source in supplement_sources:
             if supplement_source.url == source.url:
                 continue
-            lead_identity = _project_identity_key(supplement_source.title)
-            if lead_identity and lead_identity != project_identity:
+            if _project_identity_key(supplement_source.title) and not any(
+                _same_project_identity(supplement_source.title, primary_title)
+                for primary_title in primary_titles
+            ):
                 continue
             if supplement_source.url in parsed_pages:
                 supplement_page = parsed_pages[supplement_source.url]
@@ -3010,7 +3485,10 @@ def _try_project_text_supplement(
                 parsed_pages[supplement_source.url] = supplement_page
             if supplement_page is None:
                 continue
-            if _project_identity_key(supplement_page.title) != project_identity:
+            if not any(
+                _same_project_identity(supplement_page.title, primary_title)
+                for primary_title in primary_titles
+            ):
                 continue
             if supplement_source.publication_tier not in {
                 PublicationTier.primary,
@@ -3056,7 +3534,17 @@ def _try_project_text_supplement(
         subquestion_id=subquestion_id,
         analysis_requirements=analysis_requirements,
         evidence_pages=evidence_pages,
-    )
+    ).added
+
+
+def _project_text_supplement_domains(source_url: str) -> list[str]:
+    source_host = (urlparse(source_url).hostname or "").casefold().removeprefix("www.")
+    preferred = ("archdaily.com", "designboom.com", "dezeen.com")
+    return [
+        domain
+        for domain in preferred
+        if source_host != domain and not source_host.endswith(f".{domain}")
+    ][:2]
 
 
 def _project_text_supplement_query(project_name: str, question: str) -> str:
@@ -3328,6 +3816,25 @@ def _project_identity_key(value: str) -> str:
     return " ".join(re.findall(r"[a-z0-9\u4e00-\u9fff]+", _project_display_name(value).casefold()))
 
 
+def _same_project_identity(left: str, right: str) -> bool:
+    left_key = _project_identity_key(left)
+    right_key = _project_identity_key(right)
+    if not left_key or not right_key:
+        return False
+    if left_key == right_key:
+        return True
+    left_tokens = set(left_key.split())
+    right_tokens = set(right_key.split())
+    if min(len(left_tokens), len(right_tokens)) >= 2 and (
+        left_key in right_key or right_key in left_key
+    ):
+        return True
+    if min(len(left_tokens), len(right_tokens)) < 5:
+        return False
+    shared = left_tokens & right_tokens
+    return len(shared) >= 3 and len(shared) / min(len(left_tokens), len(right_tokens)) >= 0.6
+
+
 def _supported_project_facts(
     evidence_pages: Sequence[tuple[ProviderSource, ParsedPublicPage]],
     facts: Sequence[PublicPageSupportedFact],
@@ -3352,6 +3859,23 @@ def _supported_project_facts(
     return supported
 
 
+def _public_page_evidence_chain_status(
+    evidence_pages: Sequence[tuple[ProviderSource, ParsedPublicPage]],
+    analysis: PublicPageAnalysis,
+) -> tuple[str, int]:
+    if not analysis.direct_match:
+        return "not_direct_match", 0
+    supported_facts = _supported_project_facts(evidence_pages, analysis.facts)
+    supported_statements = {fact.statement for fact, _ in supported_facts}
+    has_context = analysis.project_context in supported_statements
+    has_mechanism = analysis.design_mechanism in supported_statements
+    if has_context and has_mechanism and analysis.transfer_strategy:
+        return "complete", len(supported_facts)
+    if supported_facts:
+        return "partial", len(supported_facts)
+    return "no_verbatim_facts", 0
+
+
 def _try_public_page_analysis(
     db: Database,
     run_id: str,
@@ -3364,7 +3888,7 @@ def _try_public_page_analysis(
     subquestion_id: str,
     analysis_requirements: Sequence[str],
     evidence_pages: Sequence[tuple[ProviderSource, ParsedPublicPage]] | None = None,
-) -> int:
+) -> _PublicPageAnalysisOutcome:
     fallback_error_type: str | None = None
     analysis: PublicPageAnalysis | None = None
     try:
@@ -3399,8 +3923,13 @@ def _try_public_page_analysis(
                 },
                 tool="public_page_analysis",
             )
-            return 0
+            return _PublicPageAnalysisOutcome(0, None, "analysis_failed")
     assert analysis is not None
+    project_pages = list(evidence_pages or [(source, page)])
+    evidence_chain_status, supported_fact_count = _public_page_evidence_chain_status(
+        project_pages,
+        analysis,
+    )
     added = _persist_public_page_analysis(
         db,
         run_id,
@@ -3419,7 +3948,10 @@ def _try_public_page_analysis(
         "relevance": analysis.relevance,
         "drawing_count": len(analysis.drawing_ids),
         "enriched": added,
-        "source_count": len(evidence_pages or [(source, page)]),
+        "source_count": len(project_pages),
+        "direct_match": analysis.direct_match,
+        "supported_fact_count": supported_fact_count,
+        "evidence_chain_status": evidence_chain_status,
     }
     if fallback_error_type is not None:
         summary.update(
@@ -3429,7 +3961,11 @@ def _try_public_page_analysis(
             }
         )
     checkpoint(db, run_id, RunStatus.analyzing, summary, tool="public_page_analysis")
-    return added
+    return _PublicPageAnalysisOutcome(
+        added,
+        analysis.direct_match,
+        evidence_chain_status,
+    )
 
 
 def _persist_public_page_analysis(
@@ -3744,18 +4280,7 @@ def _public_page_analysis_text(page: ParsedPublicPage) -> str:
 
 
 def _public_page_analysis_question(question: str) -> str:
-    focus = {
-        "interface": (
-            "保留柱网、楼板、桁架、围护和设备遗存与新介入通过脱开、开洞、退让、"
-            "跨接或加固形成可核验的构造界面。"
-        ),
-        "program": "新功能通过空间、结构或构造介入，并在平面与剖面中形成可辨识的新旧关系。",
-        "flow": "公众、员工、后勤、设备与消防流线通过入口、通道、核心筒和节点组织分离或交叉。",
-        "daylight": "天窗、高侧窗、庭院与挑空如何形成可核验的采光机制。",
-        "section": "原有层高、夹层、挑空、地下空间、屋顶介入与竖向交通共同组织剖面层次。",
-    }.get(infer_research_issue_intent(question))
-    bounded = question.strip()
-    return bounded if focus is None else f"{bounded}\n稳定分析焦点：{focus}"
+    return question.strip()
 
 
 def _public_page_context(page: ParsedPublicPage | None) -> str:
@@ -4115,7 +4640,13 @@ def _architecture_discovery_priority(source: ProviderSource) -> int:
     return 0
 
 
-def _persist_sources(db: Database, run_id: str, result: ProviderSearchResult) -> None:
+def _persist_sources(
+    db: Database,
+    run_id: str,
+    result: ProviderSearchResult,
+    *,
+    access_status: str | None = None,
+) -> None:
     result = _constrain_sparse_visual_platform_result(result)
     expires_at = datetime.now(UTC) + timedelta(days=30)
     with db.session_factory() as session:
@@ -4126,6 +4657,10 @@ def _persist_sources(db: Database, run_id: str, result: ProviderSearchResult) ->
         for source in result.sources:
             existing_page = existing.get(source.url)
             if existing_page is not None:
+                if access_status is not None and (
+                    access_status == "available" or existing_page.access_status == "pending"
+                ):
+                    existing_page.access_status = access_status
                 if _is_sparse_visual_platform_url(source.url):
                     existing_page.publication_tier = PublicationTier.aggregator.value
                     existing_page.publisher = source.publisher
@@ -4144,7 +4679,7 @@ def _persist_sources(db: Database, run_id: str, result: ProviderSearchResult) ->
                 publisher=source.publisher,
                 title=source.title,
                 publication_tier=source.publication_tier.value,
-                access_status="available",
+                access_status=access_status or "available",
                 content_hash=hashlib.sha256(source.url.encode()).hexdigest(),
                 expires_at=expires_at,
             )

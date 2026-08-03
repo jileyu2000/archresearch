@@ -76,6 +76,33 @@ class RecordingBrowser:
         raise AssertionError(f"unexpected browser action: {action}")
 
 
+class SessionBrowser:
+    connected = True
+
+    def __init__(self, status: str) -> None:
+        self.status = status
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+
+    def send_command_sync(
+        self,
+        action: str,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: float = 30,
+    ) -> Any:
+        del timeout_seconds
+        self.calls.append((action, payload))
+        if action == "open_url":
+            return {"tab_id": 23, "url": payload["url"]}
+        if action == "wait":
+            return {"waited_ms": payload["milliseconds"]}
+        if action == "xiaohongshu_session_status":
+            return {"status": self.status}
+        if action == "close_tab":
+            return {"closed": True}
+        raise AssertionError(f"unexpected browser action: {action}")
+
+
 def test_visible_xiaohongshu_search_returns_bounded_note_sources() -> None:
     browser = RecordingBrowser()
     sleeps: list[float] = []
@@ -97,6 +124,25 @@ def test_visible_xiaohongshu_search_returns_bounded_note_sources() -> None:
     assert [action for action, _ in browser.calls].count("enumerate_media") == 2
     assert [action for action, _ in browser.calls].count("wait") == 0
     assert sleeps == [3.5, 1.0]
+
+
+@pytest.mark.parametrize("status", ["logged_in", "not_logged_in", "unknown"])
+def test_browser_xiaohongshu_login_preflight_returns_only_bounded_status(status: str) -> None:
+    browser = SessionBrowser(status)
+    sleeps: list[float] = []
+    search = XiaohongshuBrowserSearch(browser, sleep=sleeps.append)
+
+    assert search.check_login() == status
+    assert [action for action, _ in browser.calls] == [
+        "open_url",
+        "wait",
+        "xiaohongshu_session_status",
+        "close_tab",
+    ]
+    assert browser.calls[0][1]["url"].startswith(
+        "https://www.xiaohongshu.com/search_result?keyword="
+    )
+    assert sleeps == []
 
 
 class RecordingRunner:
@@ -177,6 +223,65 @@ def test_opencli_search_uses_fixed_shell_free_json_command(tmp_path: Path) -> No
     assert kwargs["text"] is True
     assert kwargs["timeout"] == 30
     assert kwargs["env"]["NODE_NO_WARNINGS"] == "1"
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        ([{"site": "xiaohongshu", "status": "logged_in", "logged_in": True}], "logged_in"),
+        (
+            [{"site": "xiaohongshu", "status": "not_logged_in", "logged_in": False}],
+            "not_logged_in",
+        ),
+        ([{"site": "xiaohongshu", "status": "unknown", "logged_in": ""}], "unknown"),
+    ],
+)
+def test_opencli_login_preflight_uses_fixed_auth_status_command(
+    tmp_path: Path,
+    payload: list[dict[str, object]],
+    expected: str,
+) -> None:
+    entry = tmp_path / "main.js"
+    entry.write_text("// fixture", encoding="utf-8")
+    runner = RecordingRunner(json.dumps(payload))
+    search = OpenCliXiaohongshuSearch(
+        node_executable="node.exe",
+        entry_path=entry,
+        run_command=runner,
+    )
+
+    assert search.check_login() == expected
+    command, kwargs = runner.calls[0]
+    assert command == [
+        "node.exe",
+        str(entry),
+        "auth",
+        "status",
+        "--site",
+        "xiaohongshu",
+        "--timeout",
+        "8",
+        "-f",
+        "json",
+    ]
+    assert kwargs["shell"] is False
+    assert kwargs["capture_output"] is True
+
+
+def test_opencli_login_preflight_rejects_private_or_malformed_output(tmp_path: Path) -> None:
+    entry = tmp_path / "main.js"
+    entry.write_text("// fixture", encoding="utf-8")
+    runner = RecordingRunner('private-account {"status":"logged_in"}')
+    search = OpenCliXiaohongshuSearch(
+        node_executable="node.exe",
+        entry_path=entry,
+        run_command=runner,
+    )
+
+    with pytest.raises(OpenCliCommandError) as error:
+        search.check_login()
+
+    assert "private-account" not in str(error.value)
 
 
 def test_opencli_search_rejects_malformed_json_without_leaking_output(tmp_path: Path) -> None:

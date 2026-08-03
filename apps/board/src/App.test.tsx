@@ -83,6 +83,7 @@ interface LiveFetchOptions {
   eventTool?: string
   browserConnected?: boolean
   xiaohongshuSearchAvailable?: boolean
+  xiaohongshuSessionStatus?: 'logged_in' | 'not_logged_in' | 'unknown' | 'unavailable'
   browserStatuses?: boolean[]
   pollCoverageReport?: Record<string, unknown>
   pairingCode?: string
@@ -139,6 +140,13 @@ function createLiveFetch(options: LiveFetchOptions = {}) {
     }
     if (path === '/v1/browser/open-chrome' && method === 'POST') {
       return Promise.resolve(jsonResponse({ opened: true }))
+    }
+    if (path === '/v1/browser/xiaohongshu-session' && method === 'POST') {
+      const status = options.xiaohongshuSessionStatus ?? 'logged_in'
+      return Promise.resolve(jsonResponse({
+        status,
+        channel: options.xiaohongshuSearchAvailable ? 'local_search' : 'chrome_extension',
+      }))
     }
     if (path === '/v1/data-backups' && method === 'POST') {
       return Promise.resolve(new Response(new Blob(['backup']), {
@@ -1679,7 +1687,7 @@ describe('research board', () => {
     await screen.findByText('真实工作区')
     await user.click(screen.getByRole('button', { name: /图纸灵感.*配色、线型、版式与分析图/ }))
     await screen.findByText('研究环境已就绪')
-    await user.click(screen.getByRole('button', { name: '刷新环境状态' }))
+    await user.click(screen.getByRole('button', { name: '重新检测' }))
     await waitFor(() => {
       expect(fetchMock.mock.calls.filter(([path]) => path === '/v1/browser/status')).toHaveLength(2)
     })
@@ -2501,6 +2509,9 @@ describe('research board', () => {
       '/v1/workspaces/workspace-live/runs',
       expect.objectContaining({ method: 'POST' }),
     )
+    expect(fetchMock).not.toHaveBeenCalledWith('/v1/browser/xiaohongshu-session', {
+      method: 'POST',
+    })
     expect(await screen.findByRole('heading', { name: liveQuestion })).toBeVisible()
     expect(screen.getByText('正在从公开网页中寻找相关项目与原始来源')).toBeVisible()
     expect(screen.queryByRole('heading', { name: '从一个具体设计问题开始' })).not.toBeInTheDocument()
@@ -2541,6 +2552,50 @@ describe('research board', () => {
     )
   })
 
+  it('blocks Xiaohongshu research before creating a run when the local session is logged out', async () => {
+    const user = userEvent.setup()
+    const fetchMock = createLiveFetch({
+      browserConnected: false,
+      xiaohongshuSearchAvailable: true,
+      xiaohongshuSessionStatus: 'not_logged_in',
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    await startVisualResearch(user)
+
+    expect(fetchMock).toHaveBeenCalledWith('/v1/browser/xiaohongshu-session', {
+      method: 'POST',
+    })
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/v1/workspaces/workspace-live/runs',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent('请先登录小红书')
+    expect(screen.getByRole('link', { name: '打开小红书登录' })).toHaveAttribute(
+      'href',
+      'https://www.xiaohongshu.com/explore',
+    )
+  })
+
+  it('fails closed when Xiaohongshu login status cannot be confirmed', async () => {
+    const user = userEvent.setup()
+    const fetchMock = createLiveFetch({
+      browserConnected: true,
+      xiaohongshuSessionStatus: 'unknown',
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    await startVisualResearch(user)
+
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/v1/workspaces/workspace-live/runs',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent('无法确认小红书登录状态')
+  })
+
   it('starts Xiaohongshu research through the configured OpenCLI backend without the extension', async () => {
     const user = userEvent.setup()
     const fetchMock = createLiveFetch({
@@ -2559,6 +2614,9 @@ describe('research board', () => {
     await user.type(screen.getByRole('textbox', { name: '研究问题' }), '从小红书寻找旧建筑剖面灵感')
     await user.click(screen.getByRole('button', { name: '查找灵感' }))
 
+    expect(fetchMock).toHaveBeenCalledWith('/v1/browser/xiaohongshu-session', {
+      method: 'POST',
+    })
     expect(fetchMock).toHaveBeenCalledWith(
       '/v1/workspaces/workspace-live/runs',
       expect.objectContaining({ method: 'POST' }),

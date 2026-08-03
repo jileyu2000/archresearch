@@ -163,7 +163,7 @@ def record_query(
 def completed_query_keys_for_resume(
     db: Database,
     run_id: str,
-) -> set[tuple[int, str, str]]:
+) -> set[tuple[int, str]]:
     with db.session_factory() as session:
         run = get_run(session, run_id)
         attempts = list(
@@ -178,11 +178,11 @@ def completed_query_keys_for_resume(
     for attempt in attempts:
         attempts_by_generation.setdefault(attempt.run_attempt, []).append(attempt)
 
-    def latest_states(items: list[QueryAttempt]) -> dict[tuple[int, str, str], str]:
-        states: dict[tuple[int, str, str], str] = {}
+    def latest_states(items: list[QueryAttempt]) -> dict[tuple[int, str], str]:
+        states: dict[tuple[int, str], str] = {}
         for item in items:
             if item.subquestion_id is not None:
-                states[(item.round_number, item.language, item.subquestion_id)] = item.status
+                states[(item.round_number, item.subquestion_id)] = item.status
         return states
 
     current_states = latest_states(attempts_by_generation.get(run.attempt, []))

@@ -58,6 +58,59 @@ def test_planning_boundary_falls_back_without_running_tools() -> None:
     assert len({item.id for item in result.plan.subquestions}) == 3
 
 
+def test_broad_early_inspiration_fallback_does_not_prescribe_a_design_solution() -> None:
+    result = build_research_plan(
+        FailingPlanningProvider(),
+        question="新建海洋科研馆在概念初期有哪些案例和空间思路值得参考？",
+        goal=ResearchGoal.precedent_research,
+        budget_mode=BudgetMode.quick,
+        research_context="",
+        existing_subquestions=[],
+    )
+
+    combined = " ".join(f"{item.question} {item.rationale}" for item in result.plan.subquestions)
+    assert [item.id for item in result.plan.subquestions] == [
+        "spatial_options",
+        "use_experience",
+        "environment_system",
+    ]
+    assert "新建海洋科研馆" in result.plan.subquestions[0].question
+    assert all("新建海洋科研馆" not in item.question for item in result.plan.subquestions[1:])
+    for prescribed_term in (
+        "新旧功能",
+        "消防流线",
+        "核心筒",
+        "空间高潮",
+        "依附",
+        "脱开",
+        "穿越原有结构",
+    ):
+        assert prescribed_term not in combined
+
+
+def test_concept_stage_is_the_default_fallback_without_a_magic_phrase() -> None:
+    result = build_research_plan(
+        FailingPlanningProvider(),
+        question=(
+            "一处面向住区的公共运动与邻里休憩场所，可以从哪些空间关系、"
+            "日常体验和场地回应中获得参考？"
+        ),
+        goal=ResearchGoal.precedent_research,
+        budget_mode=BudgetMode.quick,
+        research_context="",
+        existing_subquestions=[],
+    )
+
+    combined = " ".join(f"{item.question} {item.rationale}" for item in result.plan.subquestions)
+    assert [item.id for item in result.plan.subquestions] == [
+        "spatial_options",
+        "use_experience",
+        "environment_system",
+    ]
+    for unrequested_term in ("消防", "核心筒", "夹层", "屋盖", "结构体系"):
+        assert unrequested_term not in combined
+
+
 def test_query_planning_is_bounded_and_keeps_untrusted_context() -> None:
     subquestions = [
         ResearchSubquestion(id="program", question="功能怎样植入？", rationale="功能边界"),
@@ -123,6 +176,49 @@ def test_first_recovery_round_returns_to_reliable_sites_before_broader_domains()
     assert first_recovery == ["designboom.com", "archdaily.com", "designboom.com"]
 
 
+def test_later_recovery_rounds_rotate_across_broader_architecture_sites() -> None:
+    expected = {
+        4: {"dezeen.com", "divisare.com", "archdaily.cn"},
+        5: {"dezeen.com", "divisare.com", "archdaily.cn"},
+    }
+    for round_number, expected_domains in expected.items():
+        actual = {
+            select_public_search_domains(
+                ResearchGoal.precedent_research,
+                [],
+                round_number=round_number,
+                round_query_index=subquestion_slot,
+            )[0]
+            for subquestion_slot in (1, 2, 3)
+        }
+        assert actual == expected_domains
+
+
+def test_low_yield_sites_are_not_repeated_before_other_supported_sites() -> None:
+    low_yield_domains: set[str] = set()
+    selected: list[str] = []
+
+    for round_number in range(1, 6):
+        domain = select_public_search_domains(
+            ResearchGoal.precedent_research,
+            [],
+            round_number=round_number,
+            round_query_index=1,
+            low_yield_domains=low_yield_domains,
+        )[0]
+        selected.append(domain)
+        low_yield_domains.add(domain)
+
+    assert selected[:2] == ["archdaily.com", "designboom.com"]
+    assert set(selected) == {
+        "archdaily.com",
+        "designboom.com",
+        "dezeen.com",
+        "divisare.com",
+        "archdaily.cn",
+    }
+
+
 def test_new_community_library_queries_keep_the_real_typology_and_design_issue() -> None:
     research_question = "社区图书馆如何围绕中庭组织阶梯式阅读空间、环形流线、自然采光与结构体系？"
     program_query = build_public_search_query(
@@ -159,14 +255,25 @@ def test_new_community_library_queries_keep_the_real_typology_and_design_issue()
     assert "public library community library" in program_query
     assert "community cultural center" not in program_query
     assert "adaptive reuse" not in program_query
-    assert "program zoning quiet active spaces" in program_query
+    assert "atrium" in program_query
+    assert "stepped reading" in program_query
+    assert "quiet reading" in program_query
+    assert "public activity" in program_query
+    assert "visual connections" in program_query
+    assert "quiet active spaces" not in program_query
     assert "continuous circulation loop" not in program_query
-    assert "continuous circulation loop" in circulation_query
+    assert "atrium" in circulation_query
+    assert "circulation" in circulation_query
     assert "accessible route" in circulation_query
+    assert "egress" in circulation_query
     assert "back-of-house" not in circulation_query
+    assert "skylight" in daylight_query
+    assert "clerestory" in daylight_query
+    assert "daylight" in daylight_query
     assert "roof structure" in daylight_query
-    assert "column grid" in daylight_query
-    assert "truss span" in daylight_query
+    assert "glare" in daylight_query
+    assert "column grid" not in daylight_query
+    assert "truss" not in daylight_query
     assert "continuous circulation loop" not in daylight_query
     assert len({program_query, circulation_query, daylight_query}) == 3
 
@@ -184,6 +291,80 @@ def test_new_library_fallback_query_keeps_condition_from_the_research_question()
     assert "new-build" in query
     assert "public library community library" in query
     assert "adaptive reuse" not in query
+
+
+def test_broad_early_inspiration_fallback_search_uses_neutral_research_dimensions() -> None:
+    query = build_public_search_query(
+        ResearchGoal.precedent_research,
+        "en",
+        "新建海洋科研馆有哪些空间组织思路值得参考？",
+        1,
+        research_question="新建海洋科研馆概念初期案例研究",
+        trusted_domain="archdaily.com",
+    )
+
+    assert "program relationships" in query
+    assert "spatial organization" in query
+    assert "quiet active spaces" not in query
+    assert "atrium" not in query
+    assert "ring circulation" not in query
+
+
+def test_explicit_spaces_drive_fallback_search_without_invented_typology_templates() -> None:
+    query = build_public_search_query(
+        ResearchGoal.precedent_research,
+        "en",
+        "互动展厅与教育空间如何围绕中庭形成空间联系？",
+        1,
+        research_question="儿童科学馆互动展厅、教育空间与中庭案例研究",
+        trusted_domain="archdaily.com",
+    )
+
+    assert "interactive exhibition space" in query
+    assert "education space" in query
+    assert "atrium" in query
+    assert "spatial relationships" in query
+    for invented_term in (
+        "quiet active spaces",
+        "continuous circulation loop",
+        "workshop",
+        "column grid",
+        "truss",
+        "core",
+    ):
+        assert invented_term not in query
+
+
+def test_unknown_typology_fallback_preserves_the_question_without_inventing_a_type() -> None:
+    query = build_public_search_query(
+        ResearchGoal.precedent_research,
+        "en",
+        "How does a planetarium organize acoustic zoning and visitor circulation?",
+        4,
+        research_question="Planetarium precedent research",
+        trusted_domain="archdaily.com",
+    )
+
+    assert "planetarium" in query.casefold()
+    assert "adaptive reuse" not in query.casefold()
+    assert "public building" not in query.casefold()
+    assert "service space" not in query.casefold()
+
+
+def test_unknown_chinese_typology_fallback_preserves_the_declared_scope() -> None:
+    query = build_public_search_query(
+        ResearchGoal.precedent_research,
+        "en",
+        "样本物流如何与访客流线分离？",
+        3,
+        research_question="新建滨海珊瑚保育实验站如何组织样本物流？",
+        trusted_domain="divisare.com",
+    )
+
+    assert "滨海珊瑚保育实验站" in query
+    assert "新建" in query
+    assert "public building" not in query.casefold()
+    assert "adaptive reuse" not in query.casefold()
 
 
 def test_adaptive_reuse_factory_query_keeps_project_condition_and_retained_structure() -> None:
@@ -241,5 +422,8 @@ def test_cultural_center_extension_query_keeps_the_project_condition() -> None:
 
     assert "extension" in query
     assert "community cultural center" in query
-    assert "continuous circulation loop" in query
+    assert "public stair" in query
+    assert "bridge" in query
+    assert "spatial relationships" in query
+    assert "continuous circulation loop" not in query
     assert "adaptive reuse" not in query

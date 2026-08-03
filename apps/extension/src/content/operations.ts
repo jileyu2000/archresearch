@@ -14,6 +14,7 @@ export type MediaCandidate = {
 export type ContentCommand =
   | { action: "page_metadata" }
   | { action: "page_snapshot" }
+  | { action: "xiaohongshu_session_status" }
   | { action: "enumerate_media" }
   | { action: "viewport_metrics" }
   | { action: "scroll"; direction: "up" | "down"; distance: number }
@@ -127,6 +128,8 @@ export function executeContentCommand(
       return readPageMetadata(root, view);
     case "page_snapshot":
       return readPageSnapshot(root);
+    case "xiaohongshu_session_status":
+      return readXiaohongshuSessionStatus(root, view);
     case "enumerate_media":
       return { media: collectMedia(root) };
     case "viewport_metrics":
@@ -142,6 +145,39 @@ export function executeContentCommand(
     case "type_search_query":
       return typeSearchQuery(root, view, command.query);
   }
+}
+
+function readXiaohongshuSessionStatus(
+  root: Document,
+  view: Window & typeof globalThis,
+): { status: "logged_in" | "not_logged_in" | "unknown" } {
+  const path = `${view.location.pathname}${view.location.search}`;
+  if (
+    /(?:^|\/)login(?:[/?#]|$)|website-login\/error|error_code=(?:300017|300031)/iu.test(
+      path,
+    )
+  ) {
+    return { status: "not_logged_in" };
+  }
+  const pageText = (root.body?.innerText || root.body?.textContent || "").slice(
+    0,
+    100_000,
+  );
+  if (
+    root.querySelector('input[type="password"]') ||
+    /(?:登录后查看搜索结果|登录后查看|请先登录)/u.test(pageText)
+  ) {
+    return { status: "not_logged_in" };
+  }
+  if (
+    view.location.pathname.startsWith("/search_result") &&
+    root.querySelector(
+      'section.note-item a[href*="/search_result/"], section.note-item a[href*="/explore/"], section:has(a[href*="/search_result/"]), section:has(a[href*="/explore/"])',
+    )
+  ) {
+    return { status: "logged_in" };
+  }
+  return { status: "unknown" };
 }
 
 function readPageSnapshot(root: Document): {

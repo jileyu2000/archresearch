@@ -4,7 +4,7 @@ import ipaddress
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Protocol, TypeVar, runtime_checkable
+from typing import Any, Literal, Protocol, TypeVar, runtime_checkable
 from urllib.parse import quote_plus, unquote, urlparse
 
 from playwright.sync_api import Page, Route, sync_playwright
@@ -65,6 +65,9 @@ PROJECT_EXTENSION_PATTERN = re.compile(
     r"industrial building|cultural (?:center|centre)|community (?:center|centre))|"
     r"new wing|expanded (?:building|library|museum|factory|warehouse)"
     r")\b"
+)
+NEW_BUILD_PATTERN = re.compile(
+    r"\b(?:new[- ]build|newly built|new construction|newly constructed|purpose[- ]built)\b"
 )
 
 
@@ -141,6 +144,16 @@ class BrowserLinkSnapshot:
 class BrowserImageSnapshot:
     url: str
     alt: str = ""
+
+
+@dataclass(frozen=True)
+class _StructuredSiteSearch:
+    building_type: str
+    project_condition: str
+    spatial_focus: str
+    evidence_type: str
+    project_name: str
+    search_scope: Literal["space_first", "project_context"]
 
 
 @dataclass(frozen=True)
@@ -360,7 +373,7 @@ class PlaywrightBrowserBackend:
 
 class LocalBrowserPageParser:
     name = "local_browser"
-    worst_case_call_seconds = LOCAL_BROWSER_TIMEOUT_SECONDS
+    worst_case_call_seconds = LOCAL_BROWSER_TIMEOUT_SECONDS * 2
     worst_case_search_seconds = LOCAL_BROWSER_TIMEOUT_SECONDS * 2
 
     def __init__(self, backend: LocalBrowserBackend | None = None) -> None:
@@ -372,6 +385,7 @@ class LocalBrowserPageParser:
         *,
         limit: int = 4,
         include_domains: list[str] | None = None,
+        _structured_terms: _StructuredSiteSearch | None = None,
     ) -> list[PublicSearchLead]:
         bounded_query = " ".join(query.split())[:500]
         if not bounded_query:
@@ -379,7 +393,12 @@ class LocalBrowserPageParser:
         if limit < 1 or limit > 10:
             raise ValueError("Public search limit must be between 1 and 10")
         domains = _bounded_domains(include_domains or [])
-        search_url = _browser_search_url(bounded_query, domains, limit)
+        search_url = _browser_search_url(
+            bounded_query,
+            domains,
+            limit,
+            structured_terms=_structured_terms,
+        )
         fallback_domain = (
             domains[0] if len(domains) == 1 and domains[0] in SITE_SEARCH_URLS else None
         )
@@ -420,7 +439,13 @@ class LocalBrowserPageParser:
             if fallback_domain is None:
                 raise
             add_results(
-                self.backend.search(_broader_site_search_url(bounded_query, fallback_domain))
+                self.backend.search(
+                    _broader_site_search_url(
+                        bounded_query,
+                        fallback_domain,
+                        structured_terms=_structured_terms,
+                    )
+                )
             )
             used_fallback = True
         site_results_irrelevant = bool(selected) and all(
@@ -440,7 +465,11 @@ class LocalBrowserPageParser:
             if selected[url].title.strip() or selected[url].description.strip()
         ]
         site_results_typology_mismatch = bool(metadata_urls) and not any(
-            _search_lead_matches_query_typology(bounded_query, selected[url])
+            (
+                _search_lead_matches_structured_typology(_structured_terms, selected[url])
+                if _structured_terms is not None
+                else _search_lead_matches_query_typology(bounded_query, selected[url])
+            )
             for url in metadata_urls
         )
         if (
@@ -448,12 +477,20 @@ class LocalBrowserPageParser:
             and (not selected or site_results_irrelevant or site_results_typology_mismatch)
             and not used_fallback
         ):
-            if site_results_irrelevant or site_results_typology_mismatch:
+            if site_results_irrelevant or (
+                site_results_typology_mismatch and _structured_terms is None
+            ):
                 selected.clear()
                 order.clear()
                 initial_metadata.clear()
             add_results(
-                self.backend.search(_broader_site_search_url(bounded_query, fallback_domain))
+                self.backend.search(
+                    _broader_site_search_url(
+                        bounded_query,
+                        fallback_domain,
+                        structured_terms=_structured_terms,
+                    )
+                )
             )
         preserve_site_order = bool(order[:limit]) and all(
             not initial_metadata[url] for url in order[:limit]
@@ -478,9 +515,39 @@ class LocalBrowserPageParser:
         )
         return [selected[url] for url in ranked[:limit]]
 
+    def search_structured(
+        self,
+        query: str,
+        *,
+        building_type: str,
+        project_condition: str,
+        spatial_focus: str,
+        evidence_type: str,
+        project_name: str,
+        search_scope: Literal["space_first", "project_context"] = "project_context",
+        limit: int = 4,
+        include_domains: list[str] | None = None,
+    ) -> list[PublicSearchLead]:
+        return self.search(
+            query,
+            limit=limit,
+            include_domains=include_domains,
+            _structured_terms=_StructuredSiteSearch(
+                building_type=building_type,
+                project_condition=project_condition,
+                spatial_focus=spatial_focus,
+                evidence_type=evidence_type,
+                project_name=project_name,
+                search_scope=search_scope,
+            ),
+        )
+
     def parse(self, url: str) -> ParsedPublicPage:
         source_url = _public_http_url(url)
-        snapshot = self.backend.read(source_url)
+        try:
+            snapshot = self.backend.read(source_url)
+        except (TimeoutError, PlaywrightTimeoutError):
+            snapshot = self.backend.read(source_url)
         final_url = _public_http_url(snapshot.url)
         safe_links = _safe_link_snapshots(snapshot.links or [])
         link_markdown = "\n".join(f"[{link.text}]({link.url})" for link in safe_links if link.text)
@@ -1142,6 +1209,66 @@ def _search_lead_matches_query_typology(query: str, lead: PublicSearchLead) -> b
     return True
 
 
+def _search_lead_matches_structured_typology(
+    terms: _StructuredSiteSearch,
+    lead: PublicSearchLead,
+) -> bool:
+    if terms.search_scope == "space_first":
+        return True
+    return search_lead_matches_building_type(terms.building_type, lead)
+
+
+def search_lead_matches_building_type(
+    building_type: str,
+    lead: PublicSearchLead,
+) -> bool:
+    building_type = building_type.casefold()
+    lead_text = " ".join(
+        (lead.title, lead.description, unquote(urlparse(lead.url).path))
+    ).casefold()
+    if re.search(r"[\u4e00-\u9fff]", building_type):
+        anchor = re.sub(r"\s+", "", building_type)
+        for generic in (
+            "新建",
+            "改造",
+            "扩建",
+            "既有",
+            "公共",
+            "社区",
+            "市政",
+            "城市",
+            "建筑",
+            "中心",
+            "项目",
+            "设施",
+        ):
+            anchor = anchor.replace(generic, "")
+        anchor = anchor or re.sub(r"\s+", "", building_type)
+        return anchor in re.sub(r"\s+", "", lead_text)
+
+    generic_tokens = {
+        "architecture",
+        "building",
+        "center",
+        "centre",
+        "civic",
+        "community",
+        "complex",
+        "existing",
+        "facility",
+        "municipal",
+        "new",
+        "project",
+        "public",
+        "urban",
+    }
+    anchor_tokens = set(re.findall(r"[a-z0-9]+", building_type))
+    meaningful_tokens = anchor_tokens - generic_tokens or anchor_tokens
+    lead_tokens = set(re.findall(r"[a-z0-9]+", lead_text))
+    required_matches = 1 if len(meaningful_tokens) <= 2 else (len(meaningful_tokens) + 1) // 2
+    return len(meaningful_tokens & lead_tokens) >= required_matches
+
+
 def _compact_browser_query(query: str, domains: list[str]) -> str:
     embedded_domains = re.findall(r"\bsite:([A-Za-z0-9.-]+)", query, flags=re.IGNORECASE)
     selected_domains = domains or _bounded_domains(embedded_domains)
@@ -1152,23 +1279,80 @@ def _compact_browser_query(query: str, domains: list[str]) -> str:
     return " ".join(part for part in (site_clause, compact_terms) if part)[:300]
 
 
-def _browser_search_url(query: str, domains: list[str], limit: int) -> str:
+def _browser_search_url(
+    query: str,
+    domains: list[str],
+    limit: int,
+    *,
+    structured_terms: _StructuredSiteSearch | None = None,
+) -> str:
     if len(domains) == 1 and domains[0] in SITE_SEARCH_URLS:
-        site_query = _compact_site_query(query, target_domain=domains[0])
+        site_query = (
+            query
+            if structured_terms is not None
+            else _compact_site_query(query, target_domain=domains[0])
+        )
         return SITE_SEARCH_URLS[domains[0]].format(query=quote_plus(site_query))
-    return _bounded_bing_search_url(query, domains, limit)
+    return _bounded_bing_search_url(
+        query,
+        domains,
+        limit,
+        structured_terms=structured_terms,
+    )
 
 
-def _bounded_bing_search_url(query: str, domains: list[str], limit: int) -> str:
+def _bounded_bing_search_url(
+    query: str,
+    domains: list[str],
+    limit: int,
+    *,
+    structured_terms: _StructuredSiteSearch | None = None,
+) -> str:
+    if structured_terms is not None:
+        query = _structured_site_query(structured_terms)
+        site_clause = " OR ".join(f"site:{domain}" for domain in domains[:4])
+        browser_query = " ".join(part for part in (site_clause, query) if part)
+        return f"{LOCAL_BROWSER_SEARCH_URL}?format=rss&q={quote_plus(browser_query)}&count={limit}"
     if len(domains) == 1 and domains[0] in SITE_SEARCH_URLS:
         query = _compact_site_query(query, target_domain=domains[0])
     browser_query = _compact_browser_query(query, domains)
     return f"{LOCAL_BROWSER_SEARCH_URL}?format=rss&q={quote_plus(browser_query)}&count={limit}"
 
 
-def _broader_site_search_url(query: str, target_domain: str) -> str:
-    site_query = _compact_site_fallback_query(query, target_domain=target_domain)
+def _broader_site_search_url(
+    query: str,
+    target_domain: str,
+    *,
+    structured_terms: _StructuredSiteSearch | None = None,
+) -> str:
+    site_query = (
+        _structured_site_query(structured_terms)
+        if structured_terms is not None
+        else _compact_site_fallback_query(query, target_domain=target_domain)
+    )
     return SITE_SEARCH_URLS[target_domain].format(query=quote_plus(site_query))
+
+
+def _structured_site_query(terms: _StructuredSiteSearch) -> str:
+    selected: list[str] = []
+    values = (
+        (terms.spatial_focus, terms.evidence_type)
+        if terms.search_scope == "space_first"
+        else (
+            terms.project_name,
+            terms.spatial_focus,
+            terms.project_condition,
+            terms.building_type,
+            terms.evidence_type,
+        )
+    )
+    for value in values:
+        normalized_value = " ".join(value.split())
+        if normalized_value and normalized_value.casefold() not in {
+            item.casefold() for item in selected
+        }:
+            selected.append(normalized_value)
+    return " ".join(selected)
 
 
 def _compact_site_fallback_query(query: str, *, target_domain: str) -> str:
@@ -1181,10 +1365,8 @@ def _compact_site_fallback_query(query: str, *, target_domain: str) -> str:
         chinese = target_domain == "archdaily.cn"
 
     terms: list[str] = [project_anchor] if project_anchor else []
-    if project_anchor and any(
-        term in normalized
-        for term in ("新建", "new-build", "new build", "purpose-built", "purpose built")
-    ):
+    new_build = has_new_build_condition(normalized)
+    if project_anchor and new_build:
         terms.append("新建" if chinese else "new")
     elif project_anchor and any(
         term in normalized for term in ("改造", "更新", "reuse", "renovation", "conversion")
@@ -1198,6 +1380,10 @@ def _compact_site_fallback_query(query: str, *, target_domain: str) -> str:
     reuse = any(
         term in normalized for term in ("旧", "改造", "更新", "reuse", "renovation", "conversion")
     )
+    if not project_anchor and new_build:
+        terms.append("新建" if chinese else "new")
+    elif not project_anchor and reuse and not industrial and not cultural:
+        terms.append("改造" if chinese else "adaptive reuse")
     if any(term in normalized for term in ("图书馆", "library")):
         community = any(term in normalized for term in ("社区", "community"))
         terms.append(
@@ -1266,10 +1452,7 @@ def _compact_site_query(query: str, *, target_domain: str | None = None) -> str:
     chinese = contains_chinese
     if contains_chinese and contains_latin and target_domain in SITE_SEARCH_URLS:
         chinese = target_domain == "archdaily.cn"
-    new_build = any(
-        term in normalized
-        for term in ("新建", "new-build", "new build", "purpose-built", "purpose built")
-    )
+    new_build = has_new_build_condition(normalized)
     if new_build:
         return _compact_new_build_site_query(
             normalized,
@@ -1388,6 +1571,11 @@ def has_project_extension_condition(value: str) -> bool:
     if re.search(r"(?<!屋顶)(?<!竖向)(?<!垂直)扩建", normalized):
         return True
     return PROJECT_EXTENSION_PATTERN.search(normalized) is not None
+
+
+def has_new_build_condition(value: str) -> bool:
+    normalized = " ".join(value.casefold().split())
+    return "新建" in normalized or NEW_BUILD_PATTERN.search(normalized) is not None
 
 
 def _project_extension_search_term(normalized: str, *, chinese: bool) -> str:

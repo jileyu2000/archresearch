@@ -204,6 +204,7 @@ export default function App() {
     browserPairingStatus,
     browserReadinessError,
     browserReadinessLoading,
+    checkXiaohongshuSession,
     ensureBrowserResearchAccess,
     handleConnectBrowser,
     loadBrowserReadiness,
@@ -213,11 +214,32 @@ export default function App() {
     researchEnvironmentReady,
     researchEnvironmentTitle,
     showBrowserConnectAction,
+    showXiaohongshuLoginAction,
+    xiaohongshuSessionCheckAvailable,
+    xiaohongshuSessionLoading,
+    xiaohongshuSessionStatus,
   } = useBrowserReadiness({
     demoMode,
     onAnnouncement: setAnnouncement,
     onError: setActionError,
   })
+  useEffect(() => {
+    if (
+      demoMode
+      || goal !== 'visual_reference_search'
+      || !xiaohongshuSessionCheckAvailable
+      || xiaohongshuSessionLoading
+      || xiaohongshuSessionStatus !== 'unchecked'
+    ) return
+    void checkXiaohongshuSession()
+  }, [
+    checkXiaohongshuSession,
+    demoMode,
+    goal,
+    xiaohongshuSessionCheckAvailable,
+    xiaohongshuSessionLoading,
+    xiaohongshuSessionStatus,
+  ])
   const initialRunPayload = useMemo(() => ({
     ...defaultRunPayload,
     results: demoProfile?.results ?? [],
@@ -1255,6 +1277,7 @@ export default function App() {
             researchEnvironmentTitle={researchEnvironmentTitle}
             researchEnvironmentDetail={researchEnvironmentDetail}
             showBrowserConnectAction={showBrowserConnectAction}
+            showXiaohongshuLoginAction={showXiaohongshuLoginAction}
             browserConnecting={browserConnecting}
             browserReadinessLoading={browserReadinessLoading}
             browserReadinessError={browserReadinessError}

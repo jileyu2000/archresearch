@@ -28,6 +28,60 @@ PRECEDENT_PUBLIC_SEARCH_RECOVERY_DOMAINS = (
     "archdaily.cn",
 )
 
+_EXPLICIT_PUBLIC_ISSUE_VOCABULARY = (
+    (("互动展厅", "interactive exhibition"), "互动展厅", "interactive exhibition space"),
+    (("教育空间", "education space", "learning space"), "教育空间", "education space"),
+    (("展览空间", "展览", "exhibition space"), "展览空间", "exhibition space"),
+    (("工作坊", "workshop"), "工作坊", "workshop"),
+    (("工作室", "studio"), "工作室", "studio"),
+    (("实验室", "laboratory", "lab space"), "实验室", "laboratory"),
+    (("公共活动", "public activity"), "公共活动", "public activity"),
+    (("公共空间", "public space"), "公共空间", "public space"),
+    (("中庭", "atrium"), "中庭", "atrium"),
+    (("庭院", "courtyard"), "庭院", "courtyard"),
+    (("阶梯式阅读", "阶梯阅读", "阶梯阅览", "stepped reading"), "阶梯阅读", "stepped reading"),
+    (("安静阅览", "安静阅读", "quiet reading"), "安静阅览", "quiet reading"),
+    (("功能植入", "植入", "program insertion"), "功能植入", "program insertion"),
+    (("插入盒体", "独立盒体", "inserted volume"), "插入体量", "inserted volume"),
+    (("保留结构", "旧结构", "retained structure"), "保留结构", "retained structure"),
+    (("屋顶结构", "roof structure"), "屋顶结构", "roof structure"),
+    (("柱网", "column grid"), "柱网", "column grid"),
+    (("桁架", "truss"), "桁架", "truss"),
+    (("大跨", "long-span", "long span"), "大跨", "long-span"),
+    (("天窗", "skylight"), "天窗", "skylight"),
+    (("高侧窗", "侧高窗", "clerestory"), "高侧窗", "clerestory"),
+    (("自然采光", "自然光", "采光", "natural light", "daylight"), "自然采光", "daylight"),
+    (("眩光", "glare"), "眩光", "glare"),
+    (("阴影", "shadow"), "阴影", "shadow"),
+    (("结构遮挡", "structural obstruction"), "结构遮挡", "structural obstruction"),
+    (("无障碍路径", "无障碍", "accessible route"), "无障碍路径", "accessible route"),
+    (("疏散", "egress"), "疏散", "egress"),
+    (
+        ("公众流线", "访客流线", "公众与后勤", "访客与后勤", "visitor circulation"),
+        "公众流线",
+        "visitor circulation",
+    ),
+    (("工作人员流线", "staff circulation"), "工作人员流线", "staff circulation"),
+    (("后勤流线", "后勤", "back-of-house"), "后勤流线", "back-of-house circulation"),
+    (("服务廊道", "service corridor"), "服务廊道", "service corridor"),
+    (("独立入口", "independent entrance"), "独立入口", "independent entrance"),
+    (("公共楼梯", "public stair"), "公共楼梯", "public stair"),
+    (("核心筒", "core"), "核心筒", "core"),
+    (("环形流线", "circulation loop"), "环形流线", "circulation loop"),
+    (("流线", "circulation"), "流线", "circulation"),
+    (("剖面层次", "sectional hierarchy"), "剖面层次", "sectional hierarchy"),
+    (("挑空", "double-height"), "挑空", "double-height"),
+    (("夹层", "mezzanine"), "夹层", "mezzanine"),
+    (("下沉", "sunken space", "sunken floor"), "下沉空间", "sunken space"),
+    (("屋顶加建", "roof extension"), "屋顶加建", "roof extension"),
+    (("竖向交通", "vertical circulation"), "竖向交通", "vertical circulation"),
+    (("垂直关系", "竖向关系", "vertical relationship"), "竖向关系", "vertical relationships"),
+    (("连桥", "bridge"), "连桥", "bridge"),
+    (("开洞", "opening"), "开洞", "openings"),
+    (("退让", "setback"), "退让", "setbacks"),
+    (("声学分区", "acoustic zoning"), "声学分区", "acoustic zoning"),
+)
+
 
 class PlanningResult(NamedTuple):
     plan: ResearchPlan
@@ -106,39 +160,41 @@ def fallback_plan(
     target_count: int,
     question: str = "",
 ) -> ResearchPlan:
+    scope = " ".join(question.split())[:180] or "当前建筑项目"
+    exploratory_candidates = [
+        ResearchSubquestion(
+            id="spatial_options",
+            question=f"围绕“{scope}”，不同案例呈现了哪些空间组织与关系？",
+            rationale="比较空间层次、功能关系和组织取舍，不预设具体形式。",
+        ),
+        ResearchSubquestion(
+            id="use_experience",
+            question="哪些使用体验和活动关系值得研究？",
+            rationale="从案例观察到达、停留、交流与日常使用的不同可能性。",
+        ),
+        ResearchSubquestion(
+            id="environment_system",
+            question="环境、场地与建造条件怎样影响空间？",
+            rationale="归纳空间回应气候、场地和建造条件的思路及适用边界。",
+        ),
+        ResearchSubquestion(
+            id="case_comparison",
+            question="不同案例的空间思路有哪些共同点和差异？",
+            rationale="比较可迁移做法、代价和成立条件，不把单一案例当作答案。",
+        ),
+        ResearchSubquestion(
+            id="development_paths",
+            question="哪些概念方向值得进入下一轮方案比较？",
+            rationale="把案例证据转化为可继续推演的方向，并保留待核验问题。",
+        ),
+        ResearchSubquestion(
+            id="representation",
+            question="哪些图纸最能帮助理解案例的空间关系？",
+            rationale="用平面、剖面、轴测和项目说明核对空间判断。",
+        ),
+    ]
     candidates = {
-        ResearchGoal.precedent_research: [
-            ResearchSubquestion(
-                id="program",
-                question="新旧功能怎样分区、邻接并保留清晰的空间秩序？",
-                rationale="先确认功能植入的基本组织方式与项目条件。",
-            ),
-            ResearchSubquestion(
-                id="circulation",
-                question="公共、后勤与消防流线怎样分离并处理交叉节点？",
-                rationale="流线冲突通常决定平面入口、核心筒与服务边界。",
-            ),
-            ResearchSubquestion(
-                id="section",
-                question="剖面中怎样建立连续层次、竖向联系与空间高潮？",
-                rationale="用剖面案例核对高度、视线、采光与公共序列。",
-            ),
-            ResearchSubquestion(
-                id="structure",
-                question="新增体量怎样依附、脱开或穿越原有结构体系？",
-                rationale="判断新旧构造关系及其对空间和施工的限制。",
-            ),
-            ResearchSubquestion(
-                id="envelope",
-                question="立面、屋面与开口怎样表达新旧关系并改善环境性能？",
-                rationale="补足外壳、采光、通风和材料界面的参考证据。",
-            ),
-            ResearchSubquestion(
-                id="representation",
-                question="哪些图纸组合最能清楚表达该设计策略及其因果关系？",
-                rationale="确认平面、剖面、轴测与分析图之间的表达分工。",
-            ),
-        ],
+        ResearchGoal.precedent_research: exploratory_candidates,
         ResearchGoal.visual_reference_search: visual_style_directions(
             requested_visual_drawing_type(question) or "图纸"
         ),
@@ -237,18 +293,37 @@ def build_public_search_query(
         ("具体项目与完整图纸", "specific built project with complete drawings"),
         ("事务所官网与英文项目页", "architect office case study and project page"),
         ("ArchDaily 项目页与图纸", "ArchDaily project page and drawings"),
-        ("独立入口、服务空间与交通核", "separate entrance, service space and circulation core"),
+        ("项目业主或技术案例说明", "project owner or technical case study"),
         ("替代案例与可核验图纸", "alternative precedent with verifiable drawings"),
     )[min(round_number - 1, 4)]
-    issue_focus = _public_issue_focus(subquestion, query_language)
-    typology_focus = _public_typology_focus(
-        f"{research_question} {subquestion} {research_context}", query_language
+    full_scope = f"{research_question} {subquestion} {research_context}"
+    early_inspiration = _is_broad_early_inspiration(f"{research_question} {research_context}")
+    issue_focus = _public_issue_focus(
+        full_scope if early_inspiration else subquestion,
+        query_language,
     )
+    typology_focus = "" if early_inspiration else _public_typology_focus(full_scope, query_language)
     if query_language == "zh":
-        query = f"建筑项目图纸：{typology_focus} {focus} {issue_focus} {zh_terms} {round_focus[0]}"
-    else:
+        source_focus = "" if early_inspiration else focus
         query = (
-            f"architecture project drawings: {typology_focus} {issue_focus} "
+            f"建筑项目图纸：{issue_focus} {typology_focus} {source_focus} "
+            f"{zh_terms} {round_focus[0]}"
+        )
+    else:
+        source_focus = (
+            ""
+            if early_inspiration
+            else focus
+            if focus.isascii()
+            else (
+                " ".join(f"{research_question} {subquestion}".split())[:260]
+                if typology_focus
+                in {"new-build", "adaptive reuse", "extension", "architecture project"}
+                else ""
+            )
+        )
+        query = (
+            f"architecture project drawings: {issue_focus} {typology_focus} {source_focus} "
             f"{en_terms} {round_focus[1]}"
         )
     if trusted_domain:
@@ -263,6 +338,7 @@ def select_public_search_domains(
     *,
     round_number: int,
     round_query_index: int,
+    low_yield_domains: Sequence[str] = (),
 ) -> list[str]:
     if allowed_domains:
         return allowed_domains
@@ -281,6 +357,24 @@ def select_public_search_domains(
             domain = PRECEDENT_PUBLIC_SEARCH_RECOVERY_DOMAINS[
                 domain_index % len(PRECEDENT_PUBLIC_SEARCH_RECOVERY_DOMAINS)
             ]
+        low_yield = set(low_yield_domains)
+        if domain in low_yield:
+            reliable_offset = (round_query_index - 1) % len(
+                PRECEDENT_PUBLIC_SEARCH_RELIABLE_DOMAINS
+            )
+            recovery_offset = (round_query_index - 1) % len(
+                PRECEDENT_PUBLIC_SEARCH_RECOVERY_DOMAINS
+            )
+            candidate_order = (
+                PRECEDENT_PUBLIC_SEARCH_RELIABLE_DOMAINS[reliable_offset:]
+                + PRECEDENT_PUBLIC_SEARCH_RELIABLE_DOMAINS[:reliable_offset]
+                + PRECEDENT_PUBLIC_SEARCH_RECOVERY_DOMAINS[recovery_offset:]
+                + PRECEDENT_PUBLIC_SEARCH_RECOVERY_DOMAINS[:recovery_offset]
+            )
+            domain = next(
+                (candidate for candidate in candidate_order if candidate not in low_yield),
+                domain,
+            )
         return [domain]
     return []
 
@@ -313,125 +407,144 @@ def _public_typology_focus(subquestion: str, language: str) -> str:
         terms.append("社区文化中心" if language == "zh" else "community cultural center")
     elif any(term in normalized for term in ("社区", "community")):
         terms.append("社区中心" if language == "zh" else "community center")
-    return " ".join(terms) or ("公共建筑" if language == "zh" else "public building")
+    return " ".join(terms) or ("建筑项目" if language == "zh" else "architecture project")
 
 
 def _public_issue_focus(subquestion: str, language: str) -> str:
     normalized = subquestion.casefold()
-    intent = infer_research_issue_intent(normalized)
-
-    if intent == "interface":
-        adaptive_reuse = any(
-            term in normalized
-            for term in (
-                "旧",
-                "改造",
-                "新旧",
-                "保留",
-                "reuse",
-                "renovation",
-                "existing",
-                "retained",
-                "old new",
-            )
-        )
-        if not adaptive_reuse:
+    explicit_terms = _explicit_public_issue_terms(normalized, language)
+    if explicit_terms:
+        relationship_focus = _neutral_relationship_focus(normalized, language)
+        evidence_focus = _neutral_evidence_focus(normalized, language)
+        return " ".join(dict.fromkeys([*explicit_terms, relationship_focus, evidence_focus]))
+    if _is_broad_early_inspiration(normalized):
+        if any(term in normalized for term in ("体验", "使用", "活动", "experience", "use")):
             return (
-                "结构体系 屋顶结构 柱网 桁架 大跨 中庭 剖面图 节点图"
+                "使用体验 活动关系 空间联系 项目说明 平面图"
                 if language == "zh"
-                else (
-                    "structural system roof structure column grid truss span long-span "
-                    "atrium section detail"
-                )
+                else "user experience activity relationships spatial connections floor plan"
+            )
+        if any(
+            term in normalized
+            for term in ("环境", "场地", "气候", "建造", "environment", "site", "climate")
+        ):
+            return (
+                "环境关系 场地回应 空间组织 项目说明 剖面图"
+                if language == "zh"
+                else "environmental relationships site response spatial organization section"
             )
         return (
-            "新旧构造界面 柱网 楼板 桁架 开洞 退让 跨接 加固 节点图 剖面图"
+            "功能关系 空间组织 项目说明 平面图 剖面图"
             if language == "zh"
-            else (
-                "old new structural interface retained structure retained frame slab truss "
-                "opening setback "
-                "bridge reinforcement connection detail section"
-            )
+            else "program relationships spatial organization project description floor plan section"
+        )
+    intent = infer_research_issue_intent(normalized)
+    if intent == "interface":
+        return (
+            "结构关系 空间关系 项目说明 剖面图"
+            if language == "zh"
+            else "structural relationships spatial relationships project description section"
         )
     if intent == "flow":
-        service_flow = any(
-            term in normalized
-            for term in (
-                "后勤",
-                "工作人员",
-                "货运",
-                "service route",
-                "back-of-house",
-                "staff",
-                "loading",
-            )
-        )
-        if not service_flow:
-            return (
-                "连续环流 无障碍路径 疏散楼梯 公共空间 平面图"
-                if language == "zh"
-                else (
-                    "continuous circulation loop accessible route egress stair "
-                    "public space floor plan"
-                )
-            )
         return (
-            "公众与后勤分流 独立入口 服务廊道 平面图"
+            "流线关系 空间联系 项目说明 平面图"
             if language == "zh"
-            else ("visitor circulation staff circulation back-of-house service entrance floor plan")
+            else "circulation relationships spatial connections project description floor plan"
         )
     if intent == "daylight":
         return (
-            "天窗 高侧窗 庭院 采光 剖面图 屋顶结构 柱网 桁架 大跨"
+            "采光关系 环境回应 项目说明 剖面图"
             if language == "zh"
-            else (
-                "skylight clerestory courtyard daylight roof structure column grid "
-                "truss span section drawings"
-            )
+            else "daylight relationships environmental response project description section"
         )
     if intent == "program":
-        adaptive_reuse = any(
-            term in normalized
-            for term in (
-                "旧",
-                "改造",
-                "植入",
-                "reuse",
-                "renovation",
-                "existing",
-                "insertion",
-            )
-        )
-        if not adaptive_reuse:
-            return (
-                "功能分区 动静分区 空间邻接 公共空间 平面图 剖面图"
-                if language == "zh"
-                else (
-                    "program zoning quiet active spaces spatial adjacency public space "
-                    "floor plan section"
-                )
-            )
         return (
-            "功能植入 新增体量 独立结构 展览 工作坊 平面图 剖面图"
+            "功能关系 空间组织 项目说明 平面图"
             if language == "zh"
-            else (
-                "program insertion inserted volume independent structure "
-                "exhibition workshop public activity floor plan section"
-            )
+            else "program relationships spatial organization project description floor plan"
         )
     if intent == "section":
         return (
-            "剖面层次 层高 挑空 夹层 下沉 屋顶加建 垂直交通 剖面图"
+            "剖面关系 空间层次 项目说明 剖面图"
             if language == "zh"
-            else (
-                "sectional hierarchy floor-to-floor double-height mezzanine "
-                "sunken space roof extension vertical circulation section drawings"
-            )
+            else "sectional relationships spatial organization project description section"
         )
-    if any(term in normalized for term in ("功能", "展览", "工作坊", "program", "workshop")):
-        return (
-            "功能植入 展览 工作坊 公共活动 平面图"
-            if language == "zh"
-            else "program insertion exhibition workshop public activity floor plan"
+    return (
+        "项目说明 平面图 剖面图" if language == "zh" else "project description floor plan section"
+    )
+
+
+def _explicit_public_issue_terms(normalized: str, language: str) -> list[str]:
+    terms: list[str] = []
+    for markers, zh_term, en_term in _EXPLICIT_PUBLIC_ISSUE_VOCABULARY:
+        if any(marker in normalized for marker in markers):
+            term = zh_term if language == "zh" else en_term
+            if term not in terms:
+                terms.append(term)
+    return terms
+
+
+def _neutral_relationship_focus(normalized: str, language: str) -> str:
+    if any(term in normalized for term in ("视觉联系", "visual connection")):
+        return "视觉联系" if language == "zh" else "visual connections"
+    if any(
+        term in normalized
+        for term in (
+            "空间联系",
+            "空间关系",
+            "邻接",
+            "围绕",
+            "连接",
+            "串联",
+            "spatial relationship",
+            "spatial connection",
+            "adjacency",
+            "around",
+            "connect",
         )
-    return "建筑改造案例" if language == "zh" else "adaptive reuse precedent"
+    ):
+        return "空间关系" if language == "zh" else "spatial relationships"
+    intent = infer_research_issue_intent(normalized)
+    if intent == "interface":
+        return "结构关系" if language == "zh" else "structural relationships"
+    if intent == "flow":
+        return "流线关系" if language == "zh" else "circulation relationships"
+    if intent == "daylight":
+        return "环境关系" if language == "zh" else "environmental relationships"
+    if intent == "section":
+        return "剖面关系" if language == "zh" else "sectional relationships"
+    return "空间关系" if language == "zh" else "spatial relationships"
+
+
+def _neutral_evidence_focus(normalized: str, language: str) -> str:
+    intent = infer_research_issue_intent(normalized)
+    if intent in {"interface", "daylight", "section"}:
+        return "项目说明 剖面图" if language == "zh" else "project description section"
+    if intent in {"flow", "program"}:
+        return "项目说明 平面图" if language == "zh" else "project description floor plan"
+    return (
+        "项目说明 平面图 剖面图" if language == "zh" else "project description floor plan section"
+    )
+
+
+def _is_broad_early_inspiration(value: str) -> bool:
+    normalized = value.casefold()
+    return any(
+        marker in normalized
+        for marker in (
+            "概念初期",
+            "初期设计",
+            "前期研究",
+            "前期有哪些",
+            "空间思路",
+            "设计思路",
+            "有哪些案例",
+            "案例值得",
+            "值得参考",
+            "灵感",
+            "early concept-stage",
+            "early concept stage",
+            "concept-stage inspiration",
+            "concept stage inspiration",
+        )
+    )

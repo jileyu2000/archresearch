@@ -68,6 +68,8 @@ export class BrowserCommandExecutor {
         return this.executeInManagedTab(command.payload.tab_id, {
           action: "page_snapshot",
         });
+      case "xiaohongshu_session_status":
+        return this.executeXiaohongshuSessionCheck(command.payload.tab_id);
       case "enumerate_media":
         return this.executeInManagedTab(command.payload.tab_id, {
           action: "enumerate_media",
@@ -121,6 +123,30 @@ export class BrowserCommandExecutor {
     const result = await this.browser.sendContentCommand(tabId, command);
     await this.requireSafeManagedTab(tabId);
     return result;
+  }
+
+  private async executeXiaohongshuSessionCheck(
+    tabId: number,
+  ): Promise<unknown> {
+    this.requireManagedTab(tabId);
+    await this.requireXiaohongshuTab(tabId);
+    const result = await this.browser.sendContentCommand(tabId, {
+      action: "xiaohongshu_session_status",
+    });
+    await this.requireXiaohongshuTab(tabId);
+    return result;
+  }
+
+  private async requireXiaohongshuTab(tabId: number): Promise<void> {
+    const tab = await this.browser.getTab(tabId);
+    requireSafePublicTab(tab);
+    const hostname = new URL(tab.url!).hostname.toLowerCase();
+    if (
+      hostname !== "xiaohongshu.com" &&
+      !hostname.endsWith(".xiaohongshu.com")
+    ) {
+      throw new Error("Xiaohongshu session checks require a Xiaohongshu tab");
+    }
   }
 
   private async captureRegion(

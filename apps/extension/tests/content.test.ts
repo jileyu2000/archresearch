@@ -360,6 +360,44 @@ describe("content operations", () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
+  it("reports a Xiaohongshu login wall without returning page or account data", () => {
+    window.history.replaceState({}, "", "/website-login/error?error_code=300031");
+    document.body.innerHTML = `<main><p>登录后查看搜索结果</p><form><input type="password"></form></main>`;
+
+    expect(
+      executeContentCommand(document, window, {
+        action: "xiaohongshu_session_status",
+      }),
+    ).toEqual({ status: "not_logged_in" });
+  });
+
+  it("reports a usable Xiaohongshu search session without returning note data", () => {
+    window.history.replaceState({}, "", "/search_result?keyword=architecture");
+    document.body.innerHTML = `
+      <section class="note-item">
+        <a href="/search_result/note-42?xsec_token=private-token">
+          <span>Private account and note content</span>
+        </a>
+      </section>
+    `;
+
+    expect(
+      executeContentCommand(document, window, {
+        action: "xiaohongshu_session_status",
+      }),
+    ).toEqual({ status: "logged_in" });
+  });
+
+  it("does not infer a Xiaohongshu session from an unrelated page", () => {
+    document.body.innerHTML = `<section class="note-item"><a href="/explore/note-1">Note</a></section>`;
+
+    expect(
+      executeContentCommand(document, window, {
+        action: "xiaohongshu_session_status",
+      }),
+    ).toEqual({ status: "unknown" });
+  });
+
   it("blocks media and metadata extraction on a generic private-message page", () => {
     document.body.innerHTML = readFileSync(
       "tests/fixtures/private-message.html",

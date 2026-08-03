@@ -21,6 +21,7 @@ describe("browser command protocol", () => {
       command("wait", { milliseconds: 250 }),
       command("page_metadata", { tab_id: 1 }),
       command("page_snapshot", { tab_id: 1 }),
+      command("xiaohongshu_session_status", { tab_id: 1 }),
       command("enumerate_media", { tab_id: 1 }),
       command("scroll", { tab_id: 1, direction: "down", distance: 600 }),
       command("safe_click", { tab_id: 1, target: "next_media" }),
@@ -40,6 +41,7 @@ describe("browser command protocol", () => {
   it.each([
     command("execute_script", { code: "document.cookie" }),
     command("read_cookie", {}),
+    command("xiaohongshu_session_status", { tab_id: 1, cookie: "web_session" }),
     command("submit_form", { selector: "form" }),
     command("social_action", { action: "like" }),
   ])("rejects unapproved action $action", (message) => {

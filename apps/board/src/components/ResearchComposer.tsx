@@ -4,6 +4,7 @@ import {
   Check,
   CircleDashed,
   Eye,
+  ExternalLink,
   LayoutGrid,
   MonitorUp,
   Paperclip,
@@ -43,6 +44,7 @@ type ResearchComposerProps = {
   researchEnvironmentTitle: string
   researchEnvironmentDetail: string
   showBrowserConnectAction: boolean
+  showXiaohongshuLoginAction: boolean
   browserConnecting: boolean
   browserReadinessLoading: boolean
   browserReadinessError: string
@@ -80,6 +82,7 @@ export function ResearchComposer({
   researchEnvironmentTitle,
   researchEnvironmentDetail,
   showBrowserConnectAction,
+  showXiaohongshuLoginAction,
   browserConnecting,
   browserReadinessLoading,
   browserReadinessError,
@@ -101,8 +104,10 @@ export function ResearchComposer({
     <section className="research-composer" aria-label="新建研究">
       <header>
         <div>
-          <h1>从一个卡住你的地方开始</h1>
-          <p>空间、流线、剖面或表达，说具体一点就够了。也可以直接附上草图、图纸、PDF 或网页。</p>
+          <h1>{goal === 'visual_reference_search' ? '找图纸视觉方向' : '从一个卡住你的地方开始'}</h1>
+          <p>{goal === 'visual_reference_search'
+            ? '剖面图、爆炸图等图纸类型，与分割、构图、线型、配色或版式等视觉方向。'
+            : '空间、流线、剖面或表达，说具体一点就够了。也可以直接附上草图、图纸、PDF 或网页。'}</p>
         </div>
       </header>
       <form className="research-form" onSubmit={(event) => void onSubmit(event)}>
@@ -242,6 +247,16 @@ export function ResearchComposer({
                 </div>
               </div>
               <div className="research-preflight-actions">
+                {showXiaohongshuLoginAction && (
+                  <a
+                    className="research-preflight-login"
+                    href="https://www.xiaohongshu.com/explore"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <ExternalLink aria-hidden="true" />打开小红书登录
+                  </a>
+                )}
                 {showBrowserConnectAction && (
                   <button type="button" disabled={browserConnecting} onClick={() => void onConnectBrowser()}>
                     <MonitorUp aria-hidden="true" />{browserConnecting ? '正在连接 Chrome…' : '连接 Chrome 读取高清图纸'}
@@ -250,11 +265,11 @@ export function ResearchComposer({
                 <button
                   className="research-preflight-refresh"
                   type="button"
-                  aria-label="刷新环境状态"
+                  aria-label="重新检测"
                   disabled={browserReadinessLoading}
                   onClick={() => void onRefreshBrowserReadiness()}
                 >
-                  <RefreshCw aria-hidden="true" /><span aria-hidden="true">{browserReadinessLoading ? '检查中…' : '刷新'}</span>
+                  <RefreshCw aria-hidden="true" /><span aria-hidden="true">{browserReadinessLoading ? '检查中…' : '重新检测'}</span>
                 </button>
               </div>
             </header>

@@ -23,9 +23,11 @@ from archresearch_api.providers import (
     ResearchSynthesisCase,
     ResearchSynthesisFinding,
     SearchQuery,
+    SearchQueryAnchors,
     SearchQueryPlan,
     _focused_public_page_text,
     deterministic_public_page_analysis,
+    visual_reference_search_query,
 )
 from archresearch_api.schemas import (
     DEPTH_TARGETS,
@@ -182,7 +184,7 @@ def test_openai_provider_constructs_a_bounded_retry_client(
         }
     ]
     assert provider.worst_case_call_seconds == 45.0
-    assert provider.worst_case_page_analysis_seconds == 90.0
+    assert provider.worst_case_page_analysis_seconds == 150.0
     assert [provider.synthesis_worst_case_seconds(mode) for mode in BudgetMode] == [
         90.0,
         120.0,
@@ -234,12 +236,29 @@ def test_openai_provider_plans_local_browser_queries_without_web_search_tools() 
     expected = SearchQueryPlan(
         queries=[
             SearchQuery(
-                query=("community library atrium stepped reading circulation floor plan section"),
+                query="atrium stepped reading circulation floor plan section",
                 language="en",
+                strategy="space_first",
+                anchors=SearchQueryAnchors(
+                    building_type="community library",
+                    project_condition="new-build",
+                    spatial_focus="atrium stepped reading circulation",
+                    evidence_type="floor plan",
+                ),
             ),
             SearchQuery(
-                query="社区图书馆 中庭 阶梯阅读 环形流线 平面图 剖面图 项目说明",
-                language="zh",
+                query=(
+                    "new-build community library atrium stepped reading "
+                    "project description floor plan"
+                ),
+                language="en",
+                strategy="project_context",
+                anchors=SearchQueryAnchors(
+                    building_type="community library",
+                    project_condition="new-build",
+                    spatial_focus="atrium stepped reading",
+                    evidence_type="project description floor plan",
+                ),
             ),
         ]
     )
@@ -280,8 +299,633 @@ def test_openai_provider_plans_local_browser_queries_without_web_search_tools() 
     assert "building type" in request["input"]
     assert "project condition" in request["input"]
     assert "evidence type" in request["input"]
+    assert "structured anchors" in request["input"]
     assert "at most 2" in request["input"]
     assert "at most one explicitly named project" in request["input"]
+    assert "public_page_analysis_incomplete" in request["input"]
+    assert "named-project query" in request["input"]
+    assert "technical case study" in request["input"]
+    assert "one neutral research focus" in request["input"]
+    assert "does not need to restate every requested space" in request["input"]
+    assert "spatial objects and relationships are the primary retrieval signals" in request["input"]
+    assert "target building type is project context" in request["input"]
+    assert "one space_first query and one project-context query" in request["input"]
+
+
+def test_openai_query_planning_treats_broad_concept_topics_as_research_dimensions() -> None:
+    calls: list[dict[str, Any]] = []
+    expected = SearchQueryPlan(
+        queries=[
+            SearchQuery(
+                query=("program relationships spatial organization floor plan project description"),
+                language="en",
+                strategy="space_first",
+                anchors=SearchQueryAnchors(
+                    building_type="marine research center",
+                    project_condition="new-build",
+                    spatial_focus="program relationships spatial organization",
+                    evidence_type="floor plan project description",
+                ),
+            )
+        ]
+    )
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=expected)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+    result = provider.plan_search_queries(
+        question="新建海洋科研馆在概念初期有哪些案例和空间思路值得参考？",
+        subquestion=ResearchSubquestion(
+            id="spatial_options",
+            question="新建海洋科研馆有哪些空间组织路径值得比较？",
+            rationale="从已建案例归纳不同关系和取舍。",
+        ),
+        round_number=1,
+        preferred_language="en",
+        research_context="new-build marine research center",
+        previous_queries=[],
+        excluded_sources=[],
+        failure_reasons=[],
+        query_limit=1,
+    )
+
+    assert result == expected
+    prompt = calls[0]["input"]
+    assert "neutral research dimension" in prompt
+    assert "discover mechanisms from candidate evidence" in prompt
+    assert (
+        "must not turn it into a proposed form, geometry, material, or structural system" in prompt
+    )
+    assert "target building type is project context, not a mandatory query term" in prompt
+    assert "marine research center" not in result.queries[0].query
+    assert "new-build" not in result.queries[0].query
+
+
+def test_space_first_query_uses_a_neutral_focus_without_inventing_a_building_type() -> None:
+    query = SearchQuery(
+        query="exhibition education atrium relationships floor plan section",
+        language="en",
+        strategy="space_first",
+        anchors=SearchQueryAnchors(
+            building_type="",
+            project_condition="",
+            spatial_focus="exhibition education atrium relationships",
+            evidence_type="floor plan section",
+        ),
+    )
+
+    assert query.anchors is not None
+    assert query.anchors.building_type == ""
+    assert query.anchors.spatial_focus == "exhibition education atrium relationships"
+    assert "spatial_mechanism" not in SearchQueryAnchors.model_fields
+
+
+def test_english_space_first_query_allows_chinese_project_context_anchors() -> None:
+    query = SearchQuery(
+        query="public art community learning activity relationships floor plan",
+        language="en",
+        strategy="space_first",
+        anchors=SearchQueryAnchors(
+            building_type="城市公共艺术与社区学习中心",
+            project_condition="新建",
+            spatial_focus="public art community learning activity relationships",
+            evidence_type="floor plan",
+        ),
+    )
+
+    assert query.anchors is not None
+    assert query.anchors.building_type == "城市公共艺术与社区学习中心"
+    assert query.anchors.project_condition == "新建"
+
+
+def test_project_context_query_requires_user_stated_project_context() -> None:
+    with pytest.raises(ValidationError, match="requires a user-stated type or condition"):
+        SearchQuery(
+            query="exhibition education atrium relationships project description",
+            language="en",
+            strategy="project_context",
+            anchors=SearchQueryAnchors(
+                building_type="",
+                project_condition="",
+                spatial_focus="exhibition education atrium relationships",
+                evidence_type="project description",
+            ),
+        )
+
+
+@pytest.mark.parametrize(
+    "project_condition",
+    [
+        "conversion of a vacant small building in an old urban district",
+        "老城区一处闲置小型建筑拟改造",
+    ],
+)
+def test_project_context_query_rejects_a_brief_copied_into_project_condition(
+    project_condition: str,
+) -> None:
+    with pytest.raises(ValidationError, match="Project condition anchor must remain concise"):
+        SearchQuery(
+            query="shared work and storage relationships floor plan",
+            language="en",
+            strategy="space_first",
+            anchors=SearchQueryAnchors(
+                building_type="community maker and shared workspace",
+                project_condition=project_condition,
+                spatial_focus="shared work and storage relationships",
+                evidence_type="floor plan",
+            ),
+        )
+
+
+@pytest.mark.parametrize(
+    ("language", "building_type", "query"),
+    [
+        (
+            "en",
+            "urban community shared learning and daily service facility",
+            (
+                "urban community shared learning and daily service facility "
+                "arrival relationships floor plan"
+            ),
+        ),
+        (
+            "zh",
+            "城市社区共享学习与日常服务设施",
+            "城市社区共享学习与日常服务设施 到达关系 平面图",
+        ),
+    ],
+)
+def test_project_context_query_rejects_a_multi_program_brief_as_building_type(
+    language: str,
+    building_type: str,
+    query: str,
+) -> None:
+    with pytest.raises(
+        ValidationError,
+        match="Building type anchor must be one concise indexed category",
+    ):
+        SearchQuery(
+            query=query,
+            language=language,
+            strategy="project_context",
+            anchors=SearchQueryAnchors(
+                building_type=building_type,
+                project_condition="",
+                spatial_focus="arrival relationships" if language == "en" else "到达关系",
+                evidence_type="floor plan" if language == "en" else "平面图",
+            ),
+        )
+
+
+def test_space_first_keeps_a_full_project_brief_out_of_the_executable_query() -> None:
+    query = SearchQuery(
+        query="arrival relationships and family stay floor plan",
+        language="en",
+        strategy="space_first",
+        anchors=SearchQueryAnchors(
+            building_type="城市社区共享学习与日常服务设施",
+            project_condition="新建",
+            spatial_focus="arrival relationships and family stay",
+            evidence_type="floor plan",
+        ),
+    )
+
+    assert query.anchors is not None
+    assert query.anchors.building_type == "城市社区共享学习与日常服务设施"
+    assert "community" not in query.query
+    assert "facility" not in query.query
+
+
+def test_openai_query_planning_corrects_a_multi_program_building_type_anchor() -> None:
+    calls: list[dict[str, Any]] = []
+    invalid = {
+        "queries": [
+            {
+                "query": (
+                    "urban community shared learning and daily service facility "
+                    "arrival relationships floor plan"
+                ),
+                "language": "en",
+                "strategy": "project_context",
+                "anchors": {
+                    "building_type": ("urban community shared learning and daily service facility"),
+                    "project_condition": "",
+                    "spatial_focus": "arrival relationships",
+                    "evidence_type": "floor plan",
+                    "project_name": "",
+                },
+            }
+        ]
+    }
+    corrected = SearchQueryPlan(
+        queries=[
+            SearchQuery(
+                query="community center arrival relationships floor plan",
+                language="en",
+                strategy="project_context",
+                anchors=SearchQueryAnchors(
+                    building_type="community center",
+                    project_condition="",
+                    spatial_focus="arrival relationships",
+                    evidence_type="floor plan",
+                ),
+            )
+        ]
+    )
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=invalid if len(calls) == 1 else corrected)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+    result = provider.plan_search_queries(
+        question=("一处城市社区共享学习与日常服务场所，概念初期有哪些空间方向值得研究？"),
+        subquestion=ResearchSubquestion(
+            id="daily_arrival",
+            question="不同使用者的日常到达与停留关系有哪些可能？",
+            rationale="从案例证据中发现空间组织可能性。",
+        ),
+        round_number=2,
+        preferred_language="en",
+        research_context="",
+        previous_queries=[],
+        excluded_sources=[],
+        failure_reasons=["local_search_no_candidates"],
+        query_limit=1,
+    )
+
+    assert result == corrected
+    assert len(calls) == 2
+    assert "one concise, commonly indexed professional building category" in calls[0]["input"]
+    assert "Building type anchor must be one concise indexed category" in calls[1]["input"]
+
+
+def test_query_planning_correction_receives_bounded_validation_feedback() -> None:
+    calls: list[dict[str, Any]] = []
+    invalid = {
+        "queries": [
+            {
+                "query": "activity relationships user experience floor plan",
+                "language": "en",
+                "strategy": "space_first",
+                "anchors": {
+                    "building_type": "community learning center",
+                    "project_condition": "new-build",
+                    "spatial_focus": "activity relationships user experience",
+                    "evidence_type": "floor plan section",
+                    "project_name": "",
+                },
+            }
+        ]
+    }
+    corrected = SearchQueryPlan(
+        queries=[
+            SearchQuery(
+                query="activity relationships user experience floor plan",
+                language="en",
+                strategy="space_first",
+                anchors=SearchQueryAnchors(
+                    building_type="community learning center",
+                    project_condition="new-build",
+                    spatial_focus="activity relationships user experience",
+                    evidence_type="floor plan",
+                ),
+            )
+        ]
+    )
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=invalid if len(calls) == 1 else corrected)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+    result = provider.plan_search_queries(
+        question="新建社区学习中心概念初期有哪些空间关系值得研究？",
+        subquestion=ResearchSubquestion(
+            id="use_experience",
+            question="不同案例呈现了哪些活动关系与使用体验？",
+            rationale="从案例证据中发现不同可能性。",
+        ),
+        round_number=1,
+        preferred_language="en",
+        research_context="",
+        previous_queries=[],
+        excluded_sources=[],
+        failure_reasons=[],
+        query_limit=1,
+    )
+
+    assert result == corrected
+    assert len(calls) == 2
+    assert (
+        "With one query slot in round 1, return exactly one space_first query" in calls[0]["input"]
+    )
+    assert "Validation feedback:" in calls[1]["input"]
+    assert "evidence_type" in calls[1]["input"]
+
+
+def test_openai_query_planning_corrects_a_preferred_language_mismatch() -> None:
+    calls: list[dict[str, Any]] = []
+    mismatched = SearchQueryPlan(
+        queries=[
+            SearchQuery(
+                query="共享工作与储物空间关系 平面图",
+                language="zh",
+                strategy="space_first",
+                anchors=SearchQueryAnchors(
+                    building_type="社区手工与共享工作场所",
+                    project_condition="闲置建筑改造",
+                    spatial_focus="共享工作与储物空间关系",
+                    evidence_type="平面图",
+                ),
+            )
+        ]
+    )
+    corrected = SearchQueryPlan(
+        queries=[
+            SearchQuery(
+                query="shared work and storage relationships floor plan",
+                language="en",
+                strategy="space_first",
+                anchors=SearchQueryAnchors(
+                    building_type="社区手工与共享工作场所",
+                    project_condition="闲置建筑改造",
+                    spatial_focus="shared work and storage relationships",
+                    evidence_type="floor plan",
+                ),
+            )
+        ]
+    )
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=mismatched if len(calls) == 1 else corrected)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+
+    result = provider.plan_search_queries(
+        question="老城区闲置小建筑改造为社区手工与共享工作场所，概念初期研究什么？",
+        subquestion=ResearchSubquestion(
+            id="spatial_relations",
+            question="不同案例中的工作、交流和储物空间如何建立关系？",
+            rationale="从案例证据发现空间组织可能性。",
+        ),
+        round_number=1,
+        preferred_language="en",
+        research_context="",
+        previous_queries=[],
+        excluded_sources=[],
+        failure_reasons=[],
+        query_limit=1,
+    )
+
+    assert result == corrected
+    assert len(calls) == 2
+    assert "Preferred language: en" in calls[1]["input"]
+
+
+def test_project_context_query_preserves_an_explicit_industrial_reuse_condition() -> None:
+    query = SearchQuery(
+        query=(
+            "adaptive reuse industrial building retained structure program relationships "
+            "floor plan section"
+        ),
+        language="en",
+        strategy="project_context",
+        anchors=SearchQueryAnchors(
+            building_type="industrial building",
+            project_condition="adaptive reuse",
+            spatial_focus="retained structure program relationships",
+            evidence_type="floor plan section",
+        ),
+    )
+
+    assert query.anchors is not None
+    assert query.anchors.building_type == "industrial building"
+    assert query.anchors.project_condition == "adaptive reuse"
+
+
+def test_openai_query_planning_retries_once_on_invalid_anchor_contract() -> None:
+    calls: list[dict[str, Any]] = []
+    invalid = {
+        "queries": [
+            {
+                "query": "new-build fire station apparatus bay daylight smoke extraction section",
+                "language": "en",
+                "anchors": {
+                    "building_type": "urban fire station",
+                    "project_condition": "new-build",
+                    "spatial_focus": ("apparatus bay daylight smoke extraction"),
+                    "evidence_type": "section",
+                    "project_name": "",
+                },
+            }
+        ]
+    }
+    expected = SearchQueryPlan(
+        queries=[
+            SearchQuery(
+                query="apparatus bay daylight smoke extraction section",
+                language="en",
+                strategy="space_first",
+                anchors=SearchQueryAnchors(
+                    building_type="urban fire station",
+                    project_condition="new-build",
+                    spatial_focus="apparatus bay daylight smoke extraction",
+                    evidence_type="section",
+                ),
+            )
+        ]
+    )
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=invalid if len(calls) == 1 else expected)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+
+    result = provider.plan_search_queries(
+        question="新建城市消防站如何整合车库结构、采光与排烟？",
+        subquestion=ResearchSubquestion(
+            id="bay-section",
+            question="车库大跨结构、自然采光和排烟如何在剖面中整合？",
+            rationale="需要剖面和项目说明证据。",
+        ),
+        round_number=1,
+        preferred_language="en",
+        research_context="new-build urban fire station",
+        previous_queries=[],
+        excluded_sources=[],
+        failure_reasons=[],
+        query_limit=1,
+    )
+
+    assert result == expected
+    assert len(calls) == 2
+    assert "failed strict validation" in calls[1]["input"]
+    assert (
+        "Do not omit, paraphrase, or add words inside a query-visible anchor" in calls[1]["input"]
+    )
+    assert provider.worst_case_search_query_planning_seconds == 90.0
+
+
+def test_openai_query_planning_retries_an_overloaded_mechanism_as_a_focused_slice() -> None:
+    calls: list[dict[str, Any]] = []
+    overloaded = {
+        "queries": [
+            {
+                "query": (
+                    "new-build university engineering innovation center multilevel "
+                    "collaboration atrium linking teaching labs prototype workshops studios "
+                    "public exhibition north-facing daylight paths section"
+                ),
+                "language": "en",
+                "strategy": "evidence_angle",
+                "anchors": {
+                    "building_type": "university engineering innovation center",
+                    "project_condition": "new-build",
+                    "spatial_focus": (
+                        "multilevel collaboration atrium linking teaching labs prototype "
+                        "workshops studios public exhibition north-facing daylight paths"
+                    ),
+                    "evidence_type": "section",
+                    "project_name": "",
+                },
+            }
+        ]
+    }
+    expected = SearchQueryPlan(
+        queries=[
+            SearchQuery(
+                query=(
+                    "new-build university engineering innovation center multilevel "
+                    "collaboration atrium northlight section"
+                ),
+                language="en",
+                strategy="evidence_angle",
+                anchors=SearchQueryAnchors(
+                    building_type="university engineering innovation center",
+                    project_condition="new-build",
+                    spatial_focus="multilevel collaboration atrium northlight",
+                    evidence_type="section",
+                ),
+            )
+        ]
+    )
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=overloaded if len(calls) == 1 else expected)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+
+    result = provider.plan_search_queries(
+        question=("新建大学工程创新中心如何组织协作中庭、实验室、工坊、展示、采光与运输？"),
+        subquestion=ResearchSubquestion(
+            id="atrium-links",
+            question="多层协作中庭如何连接教学实验室、工坊、工作室和公众展示？",
+            rationale="需要平剖面和正文证据。",
+        ),
+        round_number=3,
+        preferred_language="en",
+        research_context="new-build university engineering innovation center",
+        previous_queries=[],
+        excluded_sources=[],
+        failure_reasons=["candidate_reranking_rejected_all"],
+        query_limit=1,
+    )
+
+    assert result == expected
+    assert len(calls) == 2
+    assert "failed strict validation" in calls[1]["input"]
+
+
+@pytest.mark.parametrize("building_type", ["courthouse", "crematorium", "aquarium"])
+def test_search_query_anchors_preserve_arbitrary_building_types(
+    building_type: str,
+) -> None:
+    query = f"new-build {building_type} public circulation daylight floor plan"
+
+    planned = SearchQuery(
+        query=query,
+        language="en",
+        anchors=SearchQueryAnchors(
+            building_type=building_type,
+            project_condition="new-build",
+            spatial_focus="public circulation daylight",
+            evidence_type="floor plan",
+        ),
+    )
+
+    assert planned.anchors is not None
+    assert planned.anchors.building_type == building_type
+
+
+def test_search_query_rejects_structured_anchors_missing_from_the_query() -> None:
+    with pytest.raises(ValidationError):
+        SearchQuery(
+            query="new-build courthouse public circulation floor plan",
+            language="en",
+            anchors=SearchQueryAnchors(
+                building_type="aquarium",
+                project_condition="new-build",
+                spatial_focus="public circulation",
+                evidence_type="floor plan",
+            ),
+        )
+
+
+def test_search_query_accepts_anchor_words_separated_by_query_syntax() -> None:
+    planned = SearchQuery(
+        query=(
+            "new-build public swimming pool central public hall spectator stands "
+            "organizing main and training pools floor plan section"
+        ),
+        language="en",
+        anchors=SearchQueryAnchors(
+            building_type="public swimming pool",
+            project_condition="new-build",
+            spatial_focus=(
+                "central public hall and spectator stands organizing main and training pools"
+            ),
+            evidence_type="floor plan section",
+        ),
+    )
+
+    assert planned.anchors is not None
+    assert planned.anchors.spatial_focus.startswith("central public hall")
 
 
 def test_openai_recovery_query_planning_rotates_equivalent_extension_terms() -> None:
@@ -293,6 +937,12 @@ def test_openai_recovery_query_planning_rotates_equivalent_extension_terms() -> 
                     "community cultural center new wing public stair bridge circulation axonometric"
                 ),
                 language="en",
+                anchors=SearchQueryAnchors(
+                    building_type="community cultural center",
+                    project_condition="new wing",
+                    spatial_focus="public stair bridge circulation",
+                    evidence_type="axonometric",
+                ),
             )
         ]
     )
@@ -334,6 +984,480 @@ def test_openai_recovery_query_planning_rotates_equivalent_extension_terms() -> 
     assert "does not appear" in prompt
 
 
+def test_openai_recovery_query_planning_uses_the_project_context_lane() -> None:
+    calls: list[dict[str, Any]] = []
+    expected = SearchQueryPlan(
+        queries=[
+            SearchQuery(
+                query=("new-build community sports center shared foyer circulation floor plan"),
+                language="en",
+                strategy="project_context",
+                anchors=SearchQueryAnchors(
+                    building_type="community sports center",
+                    project_condition="new-build",
+                    spatial_focus="shared foyer circulation",
+                    evidence_type="floor plan",
+                ),
+            )
+        ]
+    )
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=expected)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+
+    result = provider.plan_search_queries(
+        question="新建社区体育中心如何通过共享大厅组织公共流线？",
+        subquestion=ResearchSubquestion(
+            id="shared_hall",
+            question="共享大厅如何连接比赛馆与日常健身空间？",
+            rationale="需要平面图证据。",
+        ),
+        round_number=2,
+        preferred_language="en",
+        research_context="new-build community sports center",
+        previous_queries=["new-build community sports center shared hall circulation floor plan"],
+        excluded_sources=[],
+        failure_reasons=["local_search_no_candidates"],
+        query_limit=1,
+    )
+
+    assert result == expected
+    prompt = calls[0]["input"]
+    assert "project_context" in prompt
+    assert "target building type is project context" in prompt
+    assert "generic public building" in prompt
+    assert "local_search_no_candidates" in prompt
+
+
+def test_recovery_query_plan_uses_distinct_generic_search_strategies() -> None:
+    calls: list[dict[str, Any]] = []
+    planned = {
+        "queries": [
+            {
+                "query": "public foyer exhibition dome theater circulation floor plan",
+                "language": "en",
+                "strategy": "space_first",
+                "anchors": {
+                    "building_type": "planetarium",
+                    "project_condition": "new-build",
+                    "spatial_focus": ("public foyer exhibition dome theater circulation"),
+                    "evidence_type": "floor plan",
+                    "project_name": "",
+                },
+            },
+            {
+                "query": (
+                    "North River Planetarium new-build planetarium public foyer "
+                    "circulation project description"
+                ),
+                "language": "en",
+                "strategy": "named_precedent",
+                "anchors": {
+                    "building_type": "planetarium",
+                    "project_condition": "new-build",
+                    "spatial_focus": "public foyer circulation",
+                    "evidence_type": "project description",
+                    "project_name": "North River Planetarium",
+                },
+            },
+        ]
+    }
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=planned)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+
+    result = provider.plan_search_queries(
+        question="新建天文馆如何组织门厅和主要参观流线？",
+        subquestion=ResearchSubquestion(
+            id="public-route",
+            question="公共门厅如何衔接展厅和穹顶剧场？",
+            rationale="需要平面和项目说明证据。",
+        ),
+        round_number=2,
+        preferred_language="en",
+        research_context="new-build planetarium",
+        previous_queries=["new-build planetarium public foyer circulation floor plan"],
+        excluded_sources=[],
+        failure_reasons=["candidate_reranking_rejected_all"],
+        query_limit=2,
+    )
+
+    assert [item.strategy for item in result.queries] == [
+        "space_first",
+        "named_precedent",
+    ]
+    assert "space_first" in calls[0]["input"]
+    assert "named_precedent" in calls[0]["input"]
+    assert "Do not use a hard-coded building-type dictionary" in calls[0]["input"]
+
+
+def test_late_candidate_shortage_recovery_advances_to_a_new_strategy() -> None:
+    calls: list[dict[str, Any]] = []
+    repeated = {
+        "queries": [
+            {
+                "query": "new-build coastal observatory public route floor plan",
+                "language": "en",
+                "strategy": "project_context",
+                "anchors": {
+                    "building_type": "coastal observatory",
+                    "project_condition": "new-build",
+                    "spatial_focus": "public route",
+                    "evidence_type": "floor plan",
+                },
+            },
+            {
+                "query": (
+                    "new-build coastal observatory visitor route access control project description"
+                ),
+                "language": "en",
+                "strategy": "evidence_angle",
+                "anchors": {
+                    "building_type": "coastal observatory",
+                    "project_condition": "new-build",
+                    "spatial_focus": "visitor route access control",
+                    "evidence_type": "project description",
+                },
+            },
+        ]
+    }
+    advanced = SearchQueryPlan(
+        queries=[
+            SearchQuery(
+                query="visitor route access control project description",
+                language="en",
+                strategy="space_first",
+                anchors=SearchQueryAnchors(
+                    building_type="coastal observatory",
+                    project_condition="new-build",
+                    spatial_focus="visitor route access control",
+                    evidence_type="project description",
+                ),
+            ),
+            SearchQuery(
+                query=(
+                    "North Cape Observatory new-build coastal observatory public route axonometric"
+                ),
+                language="en",
+                strategy="named_precedent",
+                anchors=SearchQueryAnchors(
+                    building_type="coastal observatory",
+                    project_condition="new-build",
+                    spatial_focus="public route",
+                    evidence_type="axonometric",
+                    project_name="North Cape Observatory",
+                ),
+            ),
+        ]
+    )
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=repeated if len(calls) == 1 else advanced)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+
+    result = provider.plan_search_queries(
+        question="新建滨海观测站如何组织访客流线？",
+        subquestion=ResearchSubquestion(
+            id="public_route",
+            question="新建滨海观测站如何组织访客流线与权限边界？",
+            rationale="需要平面和项目说明证据。",
+        ),
+        round_number=3,
+        preferred_language="en",
+        research_context="",
+        previous_queries=[
+            "new-build coastal observatory visitor circulation floor plan",
+            "new-build ocean observatory controlled visitor sequence axonometric",
+        ],
+        excluded_sources=[],
+        failure_reasons=["candidate_reranking_rejected_all"],
+        query_limit=2,
+    )
+
+    assert [item.strategy for item in result.queries] == [
+        "space_first",
+        "named_precedent",
+    ]
+    assert len(calls) == 2
+    assert "one space_first query and one project-context query" in calls[1]["input"]
+
+
+def test_very_late_recovery_keeps_cross_type_discovery_in_space_first() -> None:
+    calls: list[dict[str, Any]] = []
+    planned = {
+        "queries": [
+            {
+                "query": "controlled visitor sequence exhibition threshold floor plan",
+                "language": "en",
+                "strategy": "space_first",
+                "anchors": {
+                    "building_type": "coastal observatory",
+                    "project_condition": "new-build",
+                    "spatial_focus": "controlled visitor sequence exhibition threshold",
+                    "evidence_type": "floor plan",
+                    "project_name": "",
+                },
+            },
+            {
+                "query": (
+                    "new-build coastal observatory controlled entry hierarchy project description"
+                ),
+                "language": "en",
+                "strategy": "evidence_angle",
+                "anchors": {
+                    "building_type": "coastal observatory",
+                    "project_condition": "new-build",
+                    "spatial_focus": "controlled entry hierarchy",
+                    "evidence_type": "project description",
+                    "project_name": "",
+                },
+            },
+        ]
+    }
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=planned)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+
+    result = provider.plan_search_queries(
+        question="新建滨海观测站如何组织访客流线？",
+        subquestion=ResearchSubquestion(
+            id="public_route",
+            question="新建滨海观测站如何组织访客流线与权限边界？",
+            rationale="需要平面和项目说明证据。",
+        ),
+        round_number=4,
+        preferred_language="en",
+        research_context="new-build coastal observatory",
+        previous_queries=[
+            "new-build coastal observatory visitor circulation floor plan",
+            "North Cape Observatory new-build coastal observatory public route section",
+        ],
+        excluded_sources=[],
+        failure_reasons=[
+            "candidate_reranking_rejected_all",
+            "public_page_analysis_incomplete",
+        ],
+        query_limit=2,
+    )
+
+    assert [item.strategy for item in result.queries] == [
+        "space_first",
+        "evidence_angle",
+    ]
+    spatial_query = result.queries[0]
+    assert spatial_query.anchors is not None
+    assert spatial_query.anchors.building_type == "coastal observatory"
+    assert "coastal observatory" not in spatial_query.query
+    assert "new-build" not in spatial_query.query
+    assert len(calls) == 1
+    assert "Cross-type discovery stays in space_first" in calls[0]["input"]
+
+
+def test_retired_mechanism_analogy_is_corrected_to_a_normal_search_lane() -> None:
+    calls: list[dict[str, Any]] = []
+    early_analogy = {
+        "queries": [
+            {
+                "query": "new-build science museum controlled visitor sequence floor plan",
+                "language": "en",
+                "strategy": "mechanism_analogy",
+                "anchors": {
+                    "building_type": "science museum",
+                    "project_condition": "new-build",
+                    "spatial_focus": "controlled visitor sequence",
+                    "evidence_type": "floor plan",
+                },
+            }
+        ]
+    }
+    corrected = {
+        "queries": [
+            {
+                "query": "new-build coastal observatory controlled visitor sequence floor plan",
+                "language": "en",
+                "strategy": "project_context",
+                "anchors": {
+                    "building_type": "coastal observatory",
+                    "project_condition": "new-build",
+                    "spatial_focus": "controlled visitor sequence",
+                    "evidence_type": "floor plan",
+                },
+            }
+        ]
+    }
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=early_analogy if len(calls) == 1 else corrected)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+    result = provider.plan_search_queries(
+        question="新建滨海观测站如何组织访客流线？",
+        subquestion=ResearchSubquestion(
+            id="public_route",
+            question="新建滨海观测站如何组织访客流线与权限边界？",
+            rationale="需要平面证据。",
+        ),
+        round_number=2,
+        preferred_language="en",
+        research_context="new-build coastal observatory",
+        previous_queries=["new-build coastal observatory visitor circulation floor plan"],
+        excluded_sources=[],
+        failure_reasons=["candidate_reranking_rejected_all"],
+        query_limit=1,
+    )
+
+    assert result.queries[0].strategy == "project_context"
+    assert len(calls) == 2
+
+
+def test_space_first_query_rejects_target_typology_in_the_executable_query() -> None:
+    with pytest.raises(ValidationError, match="context only"):
+        SearchQuery(
+            query="coastal observatory controlled visitor sequence floor plan",
+            language="en",
+            strategy="space_first",
+            anchors=SearchQueryAnchors(
+                building_type="coastal observatory",
+                project_condition="new-build",
+                spatial_focus="controlled visitor sequence",
+                evidence_type="floor plan",
+            ),
+        )
+
+
+def test_late_recovery_replaces_an_excluded_named_precedent() -> None:
+    calls: list[dict[str, Any]] = []
+    repeated = SearchQueryPlan(
+        queries=[
+            SearchQuery(
+                query=("North Cape Observatory new-build coastal observatory public route section"),
+                language="en",
+                strategy="named_precedent",
+                anchors=SearchQueryAnchors(
+                    building_type="coastal observatory",
+                    project_condition="new-build",
+                    spatial_focus="public route",
+                    evidence_type="section",
+                    project_name="North Cape Observatory",
+                ),
+            ),
+            SearchQuery(
+                query="controlled visitor route exhibition threshold axonometric",
+                language="en",
+                strategy="space_first",
+                anchors=SearchQueryAnchors(
+                    building_type="coastal observatory",
+                    project_condition="new-build",
+                    spatial_focus="controlled visitor route exhibition threshold",
+                    evidence_type="axonometric",
+                ),
+            ),
+        ]
+    )
+    corrected = repeated.model_copy(deep=True)
+    corrected.queries[0] = SearchQuery(
+        query="South Ridge Observatory new-build coastal observatory public route section",
+        language="en",
+        strategy="named_precedent",
+        anchors=SearchQueryAnchors(
+            building_type="coastal observatory",
+            project_condition="new-build",
+            spatial_focus="public route",
+            evidence_type="section",
+            project_name="South Ridge Observatory",
+        ),
+    )
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=repeated if len(calls) == 1 else corrected)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+
+    result = provider.plan_search_queries(
+        question="新建滨海观测站如何组织访客流线？",
+        subquestion=ResearchSubquestion(
+            id="public_route",
+            question="新建滨海观测站如何组织访客流线与权限边界？",
+            rationale="需要平面和剖面证据。",
+        ),
+        round_number=5,
+        preferred_language="en",
+        research_context="",
+        previous_queries=[
+            "North Cape Observatory new-build coastal observatory public route floor plan"
+        ],
+        excluded_sources=["https://example.com/north-cape-observatory"],
+        excluded_projects=["North Cape Observatory"],
+        failure_reasons=["public_page_analysis_incomplete"],
+        query_limit=2,
+    )
+
+    assert result.queries[0].anchors is not None
+    assert result.queries[0].anchors.project_name == "South Ridge Observatory"
+    assert len(calls) == 2
+    assert "North Cape Observatory" in calls[0]["input"]
+    assert "must not repeat any excluded project" in calls[1]["input"]
+    assert "include named_precedent or evidence_angle" in calls[1]["input"]
+
+
+def test_named_precedent_strategy_requires_a_project_name_anchor() -> None:
+    with pytest.raises(ValidationError):
+        SearchQuery(
+            query="new-build planetarium public foyer circulation floor plan",
+            language="en",
+            strategy="named_precedent",
+            anchors=SearchQueryAnchors(
+                building_type="planetarium",
+                project_condition="new-build",
+                spatial_focus="public foyer circulation",
+                evidence_type="floor plan",
+            ),
+        )
+
+
 def test_openai_public_query_planning_removes_xhs_source_terms_from_context() -> None:
     planned = SearchQueryPlan(
         queries=[
@@ -343,6 +1467,12 @@ def test_openai_public_query_planning_removes_xhs_source_terms_from_context() ->
                     "轴测图 项目说明 登录态小红书图纸来源"
                 ),
                 language="zh",
+                anchors=SearchQueryAnchors(
+                    building_type="社区文化中心",
+                    project_condition="扩建",
+                    spatial_focus="新旧结构界面 公共楼梯 连桥",
+                    evidence_type="平面图",
+                ),
             )
         ]
     )
@@ -393,6 +1523,13 @@ def test_openai_local_search_assistance_retries_transient_errors_within_one_call
             SearchQuery(
                 query="Daegu Gosan Park Library public library circulation section",
                 language="en",
+                anchors=SearchQueryAnchors(
+                    building_type="public library",
+                    project_condition="",
+                    spatial_focus="circulation",
+                    evidence_type="section",
+                    project_name="Daegu Gosan Park Library",
+                ),
             )
         ]
     )
@@ -516,6 +1653,12 @@ def test_openai_query_planning_splits_multiple_named_projects_into_one_project_a
                     "Community Library new-build public library atrium circulation floor plan"
                 ),
                 language="en",
+                anchors=SearchQueryAnchors(
+                    building_type="public library",
+                    project_condition="new-build",
+                    spatial_focus="atrium circulation",
+                    evidence_type="floor plan",
+                ),
             )
         ]
     )
@@ -658,10 +1801,14 @@ def test_openai_candidate_reranking_keeps_exact_typology_pages_readable_without_
     )
 
     assert result == expected
-    assert (
-        "Do not reject an exact building-type project page only because its search summary "
-        "is empty" in calls[0]["input"]
-    )
+    assert "single supplementary context probe" in calls[0]["input"]
+    assert "must not displace stronger spatial candidates" in calls[0]["input"]
+    assert "Spatial relevance is primary" in calls[0]["input"]
+    assert "building-type match is supporting context and a tie-breaker" in calls[0]["input"]
+    assert "A strong cross-type candidate qualifies" in calls[0]["input"]
+    assert "does not need to satisfy every requested project condition" in calls[0]["input"]
+    assert "semantically equivalent building type" in calls[0]["input"]
+    assert "does not require a design mechanism to be known" in calls[0]["input"]
     assert "The full local page read is the evidence check" in calls[0]["input"]
 
 
@@ -721,7 +1868,7 @@ def test_openai_provider_analyzes_a_collected_project_page_without_another_web_s
     assert request["text_format"] is PublicPageAnalysis
     assert request["reasoning"] == {"effort": "medium"}
     assert request["max_output_tokens"] == 1_600
-    assert request["timeout"] == 45.0
+    assert request["timeout"] == 75.0
     assert "tools" not in request
     assert "逐字摘录" in request["input"]
     assert "只有 text_excerpt 必须逐字出现在 page_text 中" in request["input"]
@@ -736,6 +1883,8 @@ def test_openai_provider_analyzes_a_collected_project_page_without_another_web_s
     assert "完整的 project_context、design_mechanism 和 transfer_strategy" in request["input"]
     assert "relevance 必须至少为 2" in request["input"]
     assert "direct_match 只有在案例直接回答当前研究子问题" in request["input"]
+    assert "建筑类型不同本身不能直接判定 direct_match 为 false" in request["input"]
+    assert "必须在 limitations 中明确类型、条件或尺度差异" in request["input"]
     assert "房间、家具或临时装置" in request["input"]
     assert "不得引入项目标题、来源 URL 或正文中不存在的城市或国家" in request["input"]
     assert "page_text 可能包含多个 [SOURCE n]" in request["input"]
@@ -749,7 +1898,7 @@ def test_openai_provider_analyzes_a_collected_project_page_without_another_web_s
     assert "不能把未读取的图像像素写成事实" in request["input"]
     assert "证据冲突与缺口" in request["input"]
     assert "后续跨案例比较" in request["input"]
-    assert provider.worst_case_page_analysis_seconds == 90.0
+    assert provider.worst_case_page_analysis_seconds == 150.0
 
 
 def test_openai_page_analysis_retries_once_when_relevant_result_lacks_evidence() -> None:
@@ -811,7 +1960,66 @@ def test_openai_page_analysis_retries_once_when_relevant_result_lacks_evidence()
     assert result == expected
     assert len(calls) == 2
     assert "上一次结构化结果把 relevance 设为 2 或更高" in calls[1]["input"]
-    assert provider.worst_case_page_analysis_seconds == 90.0
+    assert provider.worst_case_page_analysis_seconds == 150.0
+
+
+def test_openai_page_analysis_retry_receives_exact_bounded_evidence_feedback() -> None:
+    calls: list[dict[str, Any]] = []
+    context = "该图书馆围绕中央中庭组织主要公共空间。"
+    mechanism = "连续楼梯与阅读平台沿中庭串联各层。"
+    context_excerpt = "The library organizes its public spaces around a central atrium."
+    mechanism_excerpt = "Continuous stairs and reading terraces connect the floors around it."
+    invalid = PublicPageAnalysis(
+        relevance=3,
+        project_context=context,
+        design_mechanism=mechanism,
+        facts=[
+            PublicPageSupportedFact(
+                statement=context,
+                text_excerpt="A fabricated context sentence that is absent from the page.",
+            ),
+            PublicPageSupportedFact(
+                statement="另一条不对应设计机制的事实。",
+                text_excerpt=mechanism_excerpt,
+            ),
+        ],
+    )
+    expected = PublicPageAnalysis(
+        relevance=3,
+        project_context=context,
+        design_mechanism=mechanism,
+        transfer_strategy=["用连续阅读平台连接中庭周边楼层。"],
+        facts=[
+            PublicPageSupportedFact(statement=context, text_excerpt=context_excerpt),
+            PublicPageSupportedFact(statement=mechanism, text_excerpt=mechanism_excerpt),
+        ],
+    )
+    responses = [invalid, expected]
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=responses.pop(0))
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+
+    result = provider.analyze_public_page(
+        question="中庭和阶梯阅读如何组织连续流线？",
+        source_url="https://studio.example/library",
+        title="Community Library",
+        page_text=f"{context_excerpt} {mechanism_excerpt}",
+        drawings=[],
+    )
+
+    assert result == expected
+    assert len(calls) == 2
+    assert "project_context_excerpt_not_verbatim" in calls[1]["input"]
+    assert "design_mechanism_missing_supported_fact" in calls[1]["input"]
+    assert "transfer_strategy_missing" in calls[1]["input"]
 
 
 def test_openai_page_analysis_retries_when_core_excerpts_are_not_verbatim() -> None:
@@ -934,7 +2142,7 @@ def test_openai_page_analysis_does_not_retry_the_same_page_after_a_timeout() -> 
         )
 
     assert len(calls) == 1
-    assert provider.worst_case_page_analysis_seconds == 90.0
+    assert provider.worst_case_page_analysis_seconds == 150.0
 
 
 @pytest.mark.parametrize("error_type_name", ["APITimeoutError", "APIConnectionError"])
@@ -983,7 +2191,12 @@ def test_openai_page_analysis_retries_one_transient_error_within_existing_budget
 
     assert result == expected
     assert len(calls) == 2
-    assert provider.worst_case_page_analysis_seconds == 90.0
+    assert [call["reasoning"] for call in calls] == [
+        {"effort": "medium"},
+        {"effort": "low"},
+    ]
+    assert [call["timeout"] for call in calls] == [75.0, 75.0]
+    assert provider.worst_case_page_analysis_seconds == 150.0
 
 
 def test_focused_page_analysis_keeps_a_late_section_mechanism() -> None:
@@ -1035,6 +2248,20 @@ def test_deterministic_page_analysis_reuses_only_source_sentences() -> None:
         )
         is None
     )
+
+
+def test_deterministic_page_analysis_rejects_sentences_without_the_requested_mechanism() -> None:
+    analysis = deterministic_public_page_analysis(
+        question="天窗与木结构网格如何共同组织自然采光？",
+        title="Innovation Center / Studio Example",
+        page_text=(
+            "Completed in 2020 in Cajamar, Brazil. "
+            "The project creates successive surprises and an architecture of open spaces."
+        ),
+        drawings=[],
+    )
+
+    assert analysis is None
 
 
 def test_openai_page_analysis_does_not_fallback_after_a_non_transient_error() -> None:
@@ -1146,6 +2373,11 @@ def test_openai_provider_changes_synthesis_work_by_research_depth() -> None:
     assert "每条 statement 不超过 100 个汉字" in balanced_prompt
     assert "跨案例比较机制的共性与分歧" in deep_prompt
     assert "证据冲突和不确定性" in deep_prompt
+    assert all(
+        "类型或项目条件不同但机制可迁移的案例" in prompt
+        and "不能把类比案例写成同类型直接先例" in prompt
+        for prompt in (quick_prompt, balanced_prompt, deep_prompt)
+    )
     assert all(call["text_format"] is ResearchSynthesis for call in calls)
     assert [call["timeout"] for call in calls] == [90.0, 60.0, 90.0]
     assert [call["max_output_tokens"] for call in calls] == [1_200, 1_600, 3_200]
@@ -1477,13 +2709,25 @@ def test_openai_provider_plans_bounded_subquestions_before_searching() -> None:
             return SimpleNamespace(
                 output_parsed={
                     "subquestions": [
-                        {"id": "structure", "question": "保留什么？", "rationale": "识别结构边界"},
-                        {"id": "program", "question": "植入什么？", "rationale": "明确功能关系"},
-                        {"id": "circulation", "question": "怎样分流？", "rationale": "检查冲突"},
                         {
-                            "id": "section",
-                            "question": "怎样形成层次？",
-                            "rationale": "检查竖向空间",
+                            "id": "spatial_relations",
+                            "question": "旧建筑植入新功能时有哪些空间关系值得比较？",
+                            "rationale": "比较不同案例的空间组织关系和取舍。",
+                        },
+                        {
+                            "id": "use_experience",
+                            "question": "旧建筑植入新功能时有哪些使用体验值得研究？",
+                            "rationale": "研究到达、停留、交流和日常使用体验。",
+                        },
+                        {
+                            "id": "environment_system",
+                            "question": "旧建筑植入新功能时如何回应场地与环境条件？",
+                            "rationale": "比较环境、场地与空间之间的关系。",
+                        },
+                        {
+                            "id": "existing_conditions",
+                            "question": "旧建筑植入新功能时，保留主桁架如何影响空间选择？",
+                            "rationale": "核对用户明确提出的既有建造边界。",
                         },
                     ]
                 }
@@ -1513,6 +2757,238 @@ def test_openai_provider_plans_bounded_subquestions_before_searching() -> None:
     assert "Simplified Chinese" in request["input"]
     assert "question and rationale" in request["input"]
     assert "Do not create a standalone source-verification subquestion" in request["input"]
+
+
+def test_openai_precedent_planner_foregrounds_spaces_over_repeated_typology() -> None:
+    calls: list[dict[str, Any]] = []
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(
+                output_parsed={
+                    "subquestions": [
+                        {
+                            "id": "arrival",
+                            "question": "新建海岸气候研究站怎样组织到达序列？",
+                            "rationale": "核对公共到达与科研入口。",
+                        },
+                        {
+                            "id": "daylight",
+                            "question": "新建海岸气候研究站怎样控制自然采光？",
+                            "rationale": "核对使用空间的采光机制。",
+                        },
+                        {
+                            "id": "structure",
+                            "question": "新建海岸气候研究站怎样组织抗风结构？",
+                            "rationale": "核对结构与空间的关系。",
+                        },
+                    ]
+                }
+            )
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+
+    provider.plan(
+        "新建海岸气候研究站如何组织到达、采光与抗风结构？",
+        ResearchGoal.precedent_research,
+        BudgetMode.quick,
+        "",
+    )
+
+    prompt = calls[0]["input"]
+    assert "Foreground the spatial research lens in each subquestion" in prompt
+    assert "Do not mechanically repeat the building type and project condition" in prompt
+    assert "Every architecture research subquestion must retain" not in prompt
+    assert "Never broaden the scope to an adjacent building type" in prompt
+    assert "Do not introduce a source platform or login-state requirement" in prompt
+
+
+def test_openai_precedent_planner_keeps_broad_early_briefs_exploratory() -> None:
+    calls: list[dict[str, Any]] = []
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(
+                output_parsed={
+                    "subquestions": [
+                        {
+                            "id": "spatial_options",
+                            "question": "新建海洋科研馆有哪些空间组织路径值得比较？",
+                            "rationale": "从已建案例归纳不同关系和取舍。",
+                        },
+                        {
+                            "id": "use_experience",
+                            "question": "新建海洋科研馆有哪些使用体验策略值得研究？",
+                            "rationale": "比较到达、使用和交流体验。",
+                        },
+                        {
+                            "id": "environment_system",
+                            "question": "新建海洋科研馆如何从案例中理解环境与空间的关系？",
+                            "rationale": "归纳场地、环境和建造之间的整体思路。",
+                        },
+                    ]
+                }
+            )
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+    provider.plan(
+        "新建海洋科研馆在概念初期有哪些案例和空间思路值得参考？",
+        ResearchGoal.precedent_research,
+        BudgetMode.quick,
+        "",
+    )
+
+    prompt = calls[0]["input"]
+    assert "early concept-stage inspiration" in prompt
+    assert "open research lens" in prompt
+    assert "must not presuppose a named form, geometry, material, structural system" in prompt
+    assert "Mechanisms are findings from source evidence, not premises" in prompt
+
+
+def test_openai_precedent_planner_corrects_unrequested_solution_premises() -> None:
+    calls: list[dict[str, Any]] = []
+    invalid = {
+        "subquestions": [
+            {
+                "id": "spatial_organization",
+                "question": "新建城市青年交流与文化中心如何组织展览、工作坊和后勤流线？",
+                "rationale": "比较展览与工作坊布局，并核对公众与后勤分流。",
+            },
+            {
+                "id": "user_experience",
+                "question": "新建城市青年交流与文化中心的中庭如何促进青年偶遇？",
+                "rationale": "研究环形流线与中庭停留体验。",
+            },
+            {
+                "id": "environmental_response",
+                "question": "新建城市青年交流与文化中心如何利用天窗和剖面层次采光？",
+                "rationale": "比较天窗、柱网和桁架的组合。",
+            },
+        ]
+    }
+    corrected = {
+        "subquestions": [
+            {
+                "id": "spatial_options",
+                "question": "新建城市青年交流与文化中心有哪些空间组织关系值得比较？",
+                "rationale": "从已建案例归纳不同空间关系和组织取舍。",
+            },
+            {
+                "id": "use_experience",
+                "question": "新建城市青年交流与文化中心有哪些使用体验值得研究？",
+                "rationale": "比较到达、停留、交流和日常使用体验。",
+            },
+            {
+                "id": "environment_system",
+                "question": "新建城市青年交流与文化中心如何回应场地与环境条件？",
+                "rationale": "研究环境、场地和空间之间的关系及适用边界。",
+            },
+        ]
+    }
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=invalid if len(calls) == 1 else corrected)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+    plan = provider.plan(
+        "新建城市青年交流与文化中心概念初期，有哪些空间组织、使用体验与环境回应值得研究？",
+        ResearchGoal.precedent_research,
+        BudgetMode.quick,
+        "",
+    )
+
+    assert len(calls) == 2
+    plan_text = " ".join(
+        f"{item.question} {item.rationale}" for item in plan.subquestions
+    ).casefold()
+    for unrequested_term in (
+        "中庭",
+        "环形流线",
+        "展览",
+        "工作坊",
+        "后勤",
+        "天窗",
+        "柱网",
+        "桁架",
+    ):
+        assert unrequested_term not in plan_text
+    assert "introduced solution premises" in calls[1]["input"]
+    assert "remove every unrequested premise" in calls[1]["input"].casefold()
+
+
+def test_openai_precedent_planner_corrects_unrequested_xhs_source_terms() -> None:
+    calls: list[dict[str, Any]] = []
+    invalid = {
+        "subquestions": [
+            {
+                "id": "arrival",
+                "question": "新建海岸气候研究站怎样组织到达序列？",
+                "rationale": "在登录态小红书图纸中核对公共到达与科研入口。",
+            },
+            {
+                "id": "daylight",
+                "question": "新建海岸气候研究站怎样控制自然采光？",
+                "rationale": "核对使用空间的采光机制。",
+            },
+            {
+                "id": "structure",
+                "question": "新建海岸气候研究站怎样组织抗风结构？",
+                "rationale": "核对结构与空间的关系。",
+            },
+        ]
+    }
+    corrected = {
+        "subquestions": [
+            {
+                "id": "arrival",
+                "question": "新建海岸气候研究站怎样组织到达序列？",
+                "rationale": "结合项目正文和平面图核对公共到达与科研入口。",
+            },
+            *invalid["subquestions"][1:],
+        ]
+    }
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=invalid if len(calls) == 1 else corrected)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+
+    plan = provider.plan(
+        "新建海岸气候研究站如何组织到达、采光与抗风结构？",
+        ResearchGoal.precedent_research,
+        BudgetMode.quick,
+        "",
+    )
+
+    assert len(calls) == 2
+    assert all(
+        term not in f"{item.question} {item.rationale}".casefold()
+        for item in plan.subquestions
+        for term in ("小红书", "xiaohongshu", "xhs", "登录态")
+    )
+    assert "must not contain a source platform or login-state requirement" in calls[1]["input"]
 
 
 def test_openai_visual_planner_requests_distinct_drawing_style_directions() -> None:
@@ -1562,9 +3038,90 @@ def test_openai_visual_planner_requests_distinct_drawing_style_directions() -> N
     assert "keep that type fixed" in prompt
     assert "vary only the visible style" in prompt
     assert "Do not decompose the request into functional design problems" in prompt
+    assert "Never ask for or infer a building type" in prompt
+    assert "Only the drawing type and visible style belong in each direction" in prompt
     assert "short style-direction label" in prompt
     assert "observable visual features" in prompt
     assert "design, source-verification, or visible-reference issue" not in prompt
+
+
+def test_openai_visual_planner_corrects_dropped_explicit_style_words() -> None:
+    calls: list[dict[str, Any]] = []
+    invalid = {
+        "subquestions": [
+            {
+                "id": "monochrome_linework",
+                "question": "黑白线稿建筑爆炸图",
+                "rationale": "比较线条、留白和构件分层。",
+            },
+            {
+                "id": "red_gray_diagram",
+                "question": "红灰配色建筑爆炸图",
+                "rationale": "比较红灰色彩和构件分组。",
+            },
+            {
+                "id": "material_rendering",
+                "question": "材质渲染建筑爆炸图",
+                "rationale": "比较材质、光影和空间层次。",
+            },
+        ]
+    }
+    corrected = {
+        "subquestions": [
+            invalid["subquestions"][0],
+            {
+                **invalid["subquestions"][1],
+                "question": "红灰配色图解建筑爆炸图",
+            },
+            invalid["subquestions"][2],
+        ]
+    }
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=invalid if len(calls) == 1 else corrected)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+
+    plan = provider.plan(
+        "想比较建筑爆炸图的三种视觉方向：黑白线稿、红灰配色图解和材质渲染。",
+        ResearchGoal.visual_reference_search,
+        BudgetMode.quick,
+        "",
+    )
+
+    assert len(calls) == 2
+    assert [item.question for item in plan.subquestions] == [
+        "黑白线稿建筑爆炸图",
+        "红灰配色图解建筑爆炸图",
+        "材质渲染建筑爆炸图",
+    ]
+    assert "preserve each explicit visual-style phrase verbatim" in calls[1]["input"]
+    assert visual_reference_search_query(plan.subquestions[1].question) == (
+        "建筑爆炸图 红灰配色图解"
+    )
+
+
+@pytest.mark.parametrize(
+    ("direction", "expected"),
+    [
+        ("爆炸图：黑白线稿", "建筑爆炸图 黑白线稿"),
+        ("爆炸图: 红灰配色图解", "建筑爆炸图 红灰配色图解"),
+        ("材质渲染建筑爆炸图", "建筑爆炸图 材质渲染"),
+        ("电影感纵深构图效果图", "建筑效果图 电影感纵深构图"),
+        ("剖面图：稀疏留白", "剖面图 稀疏留白"),
+    ],
+)
+def test_visual_reference_search_query_removes_separator_around_drawing_type(
+    direction: str,
+    expected: str,
+) -> None:
+    assert visual_reference_search_query(direction) == expected
 
 
 def test_openai_visual_planner_corrects_other_types_to_the_requested_type() -> None:

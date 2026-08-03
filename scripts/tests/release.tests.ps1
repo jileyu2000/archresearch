@@ -28,8 +28,8 @@ $workflowContracts = @(
     @{ Pattern = '\./scripts/test-windows-installer-package\.ps1'; Message = "CI must install-smoke and uninstall the packaged Windows application." }
     @{ Pattern = '\./scripts/build-extension-package\.ps1'; Message = "CI must build the separately distributed Chrome extension package." }
     @{ Pattern = 'actions/upload-artifact@v4'; Message = "CI must upload release artifacts." }
-    @{ Pattern = 'ArchResearch-Windows-x64-Setup-v2\.2\.3\.exe'; Message = "CI must publish the clearly named v2.2.3 Windows installer artifact." }
-    @{ Pattern = 'archresearch-chrome-extension-only-v2\.2\.3\.zip'; Message = "CI must keep the clearly named v2.2.3 Chrome extension package separate." }
+    @{ Pattern = 'ArchResearch-Windows-x64-Setup-v2\.2\.4\.exe'; Message = "CI must publish the clearly named v2.2.4 Windows installer artifact." }
+    @{ Pattern = 'archresearch-chrome-extension-only-v2\.2\.4\.zip'; Message = "CI must keep the clearly named v2.2.4 Chrome extension package separate." }
 )
 foreach ($contract in $workflowContracts) {
     if ($workflow -notmatch $contract.Pattern) {
@@ -107,7 +107,7 @@ if ($verifyScript -match '@archresearch/(web|edge)|verify-web|wrangler') {
     throw "The authoritative local gate must not invoke the retired Web or Edge runtime."
 }
 
-$expectedVersion = "2.2.3"
+$expectedVersion = "2.2.4"
 $boardPackage = Get-Content -Raw -LiteralPath (Join-Path $workspace "apps\board\package.json") |
     ConvertFrom-Json
 $extensionPackage = Get-Content -Raw -LiteralPath (Join-Path $workspace "apps\extension\package.json") |
@@ -139,13 +139,18 @@ foreach ($versionSource in @($pythonProject, $pythonPackage, $pythonApp)) {
 $readme = Get-Content -Raw -LiteralPath (Join-Path $workspace "README.md")
 foreach ($readmeContract in @(
     'Windows 11 和 Google Chrome',
-    'ArchResearch-Windows-x64-Setup-v2\.2\.3\.exe',
+    'ArchResearch-Windows-x64-Setup-v2\.2\.4\.exe',
     '安装包不包含 Chrome 扩展',
     '不需要安装 Python、Node\.js、pnpm 或 PowerShell',
     'API 接口地址和 API Key',
     '从上游模型列表中选择模型',
     '模型 ID 不可手输',
-    '\[下载 Windows 安装版 v2\.2\.3\]',
+    '方案初期',
+    '本地 Playwright 搜索候选',
+    '模型只从本地候选 ID',
+    '默认不调用 Provider 原生 `web_search`',
+    '图纸类型和视觉方向',
+    '\[下载 Windows 安装版 v2\.2\.4\]',
     '### 需要小红书时',
     '\[Chrome 扩展安装说明\]\(docs/chrome-extension\.md\)',
     '\[从源码运行\]\(docs/development\.md\)'

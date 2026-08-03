@@ -120,8 +120,8 @@ class ArtifactKind(StrEnum):
 class Budget(BaseModel):
     max_rounds: int
     max_queries: int
-    completion_recovery_rounds: int = 3
-    completion_recovery_pages_per_subquestion: int = 2
+    completion_recovery_rounds: int = 4
+    completion_recovery_pages_per_subquestion: int = 3
     max_pages: int
     max_seconds: int
 
@@ -138,9 +138,9 @@ class DepthTarget(BaseModel):
 
 
 BUDGETS: dict[BudgetMode, Budget] = {
-    BudgetMode.quick: Budget(max_rounds=2, max_queries=6, max_pages=12, max_seconds=1800),
-    BudgetMode.balanced: Budget(max_rounds=3, max_queries=12, max_pages=30, max_seconds=1800),
-    BudgetMode.deep: Budget(max_rounds=4, max_queries=24, max_pages=60, max_seconds=1800),
+    BudgetMode.quick: Budget(max_rounds=2, max_queries=6, max_pages=16, max_seconds=2400),
+    BudgetMode.balanced: Budget(max_rounds=3, max_queries=12, max_pages=40, max_seconds=3600),
+    BudgetMode.deep: Budget(max_rounds=4, max_queries=24, max_pages=72, max_seconds=5400),
 }
 
 
@@ -150,9 +150,9 @@ DEPTH_TARGETS: dict[BudgetMode, DepthTarget] = {
         research_passes=2,
         assets_per_subquestion=2,
         analysis_requirements=["visible_observation", "design_mechanism"],
-        projects=3,
+        projects=2,
         assets=6,
-        multi_asset_projects=1,
+        multi_asset_projects=0,
         verified_or_partial=4,
     ),
     BudgetMode.balanced: DepthTarget(

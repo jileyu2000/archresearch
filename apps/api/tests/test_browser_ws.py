@@ -31,6 +31,18 @@ class RecordingSocket:
         self.messages.append(message)
 
 
+class SessionCheckingXiaohongshu:
+    name = "session-checking-xiaohongshu"
+
+    def __init__(self, session_status: str) -> None:
+        self.session_status = session_status
+        self.checks = 0
+
+    def check_login(self) -> str:
+        self.checks += 1
+        return self.session_status
+
+
 def test_real_chrome_launcher_adds_a_unique_connection_attempt(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -133,6 +145,39 @@ def test_browser_status_reports_independent_xiaohongshu_search_backend(
         "connected": False,
         "xiaohongshu_search_available": True,
     }
+
+
+@pytest.mark.parametrize("session_status", ["logged_in", "not_logged_in", "unknown"])
+def test_xiaohongshu_session_preflight_checks_the_configured_backend(
+    tmp_path: Path,
+    session_status: str,
+) -> None:
+    settings = Settings(
+        database_url=f"sqlite:///{(tmp_path / 'test.db').as_posix()}",
+        data_dir=tmp_path / "data",
+        provider_mode="mock",
+        run_inline=True,
+    )
+    xiaohongshu = SessionCheckingXiaohongshu(session_status)
+
+    with TestClient(create_app(settings, xiaohongshu_search=xiaohongshu)) as test_client:
+        response = test_client.post("/v1/browser/xiaohongshu-session")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": session_status,
+        "channel": "local_search",
+    }
+    assert xiaohongshu.checks == 1
+
+
+def test_xiaohongshu_session_preflight_fails_closed_without_a_channel(
+    client: TestClient,
+) -> None:
+    response = client.post("/v1/browser/xiaohongshu-session")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "unavailable", "channel": "none"}
 
 
 def test_authenticated_extension_heartbeat_keeps_connection_active(
