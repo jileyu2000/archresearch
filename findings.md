@@ -693,3 +693,11 @@
 - README 原流程图只写“生成有界查询 → Direct Playwright”，不足以解释当前模型辅助本地搜索。新版首页把建筑与 XHS 两条执行支路分开，并明确默认不调用 Provider 原生 `web_search`；Release 测试持续约束这些公开说明。
 - `v2.2.4` 自包含安装版能在源码服务占用默认端口时正确选择动态端口 `8771`，并从安装版路径返回版本正确的 desktop health、API health 和生产 Board。说明安装器包含的新 API/Board 不是只通过静态自检。
 - 安装 smoke 仅复制不含 Key 的 Provider 配置，Key 仍从 Windows Credential Manager 读取；安装包内没有 Chrome manifest，证明扩展保持独立交付。smoke 前本机无安装版数据，结束后程序、快捷方式和本次数据目录均无残留。
+
+## 2026-08-03 v2.2.4 release closeout
+
+- ArchResearch 继续采用 Evidence-Grounded Plan-and-Execute；空间优先和 XHS-only 纯视觉策略属于 Plan/Execute 内部合同变化，不是多 Agent 架构迁移。
+- PR #15 的 Hosted CI 完整通过并 squash 合并为 `d80f715d88781810eda7624d9f1d65b3754228fb`；正式 `v2.2.4` tag 与 Release 均指向该提交。
+- GitHub 远端 README 已实际显示普通 Responses 规划、本地 Playwright 候选搜索/读取、候选 ID 白名单、空间优先、默认禁用原生 `web_search` 和图纸类型/视觉方向边界。
+- GitHub 附件 size/digest 与本地安装 smoke 候选一致；安装器与扩展仍为两个独立发布附件。
+- 本地 `.artifacts/build/`、`.artifacts/qa/`、`.artifacts/releases/` 合计约 1.1 GB，包含可再生构建、验证截图和已发布产物。为同时满足数据保留和干净工作区，采用精确 `.gitignore` 规则，不删除目录，也不扩大到已跟踪的 `.artifacts/portfolio/`。

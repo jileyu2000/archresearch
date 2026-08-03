@@ -31,6 +31,9 @@ test-results/
 .artifacts/api-test-results.xml
 .artifacts/coverage/
 .artifacts/*.log
+.artifacts/build/
+.artifacts/qa/
+.artifacts/releases/
 apps/api/.artifacts/
 .impeccable/
 apps/extension/.impeccable/
