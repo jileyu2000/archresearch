@@ -17,7 +17,12 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
-from .browser import installed_chrome_board_url, open_board_in_chrome
+from .browser import (
+    CHROME_BOARD_URL,
+    installed_chrome_board_url,
+    open_board_in_chrome,
+    open_known_url_in_chrome,
+)
 from .config import Settings
 from .main import create_app
 from .provider_credentials import (
@@ -62,11 +67,15 @@ def create_desktop_app(
     port: int = DESKTOP_PORT,
     chrome_launcher: ChromeLauncher | None = None,
 ) -> FastAPI:
-    resolved_chrome_launcher = chrome_launcher or open_board_in_chrome
+    resolved_chrome_launcher = chrome_launcher or open_known_url_in_chrome
     board_url = desktop_board_url(port)
+
+    def launch_desktop_url(url: str) -> bool:
+        return resolved_chrome_launcher(board_url if url == CHROME_BOARD_URL else url)
+
     app = create_app(
         settings,
-        chrome_launcher=lambda _development_url: resolved_chrome_launcher(board_url),
+        chrome_launcher=launch_desktop_url,
     )
 
     @app.get("/desktop-health")
