@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import archresearch_api.desktop as desktop_module
+from archresearch_api.browser import XIAOHONGSHU_LOGIN_URL
 from archresearch_api.config import Settings
 from archresearch_api.desktop import (
     bundled_resource_root,
@@ -75,7 +76,11 @@ def test_desktop_app_serves_board_and_api_from_one_loopback_origin(
         assert client.get("/health").json()["status"] == "ok"
         assert "ArchResearch installed board" in client.get("/").text
         assert client.post("/v1/browser/open-chrome").json() == {"opened": True}
-        assert opened_urls == [f"http://127.0.0.1:{selected_port}/?connect=chrome"]
+        assert client.post("/v1/browser/open-xiaohongshu-login").json() == {"opened": True}
+        assert opened_urls == [
+            f"http://127.0.0.1:{selected_port}/?connect=chrome",
+            XIAOHONGSHU_LOGIN_URL,
+        ]
 
 
 def test_desktop_selects_a_free_loopback_port_when_the_default_is_occupied() -> None:
