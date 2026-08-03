@@ -100,6 +100,22 @@ describe("extension background controller", () => {
     expect(client.setResearchPermission).toHaveBeenCalledWith(true);
   });
 
+  it("repairs a stale command gate when status confirms web access", async () => {
+    const pairing = {
+      endpoint: "ws://127.0.0.1:8000/v1/browser",
+      token: "saved-token",
+    };
+    const { controller, permissions, client } = makeController(pairing);
+    permissions.hasResearchAccess.mockResolvedValue(true);
+    await controller.restore();
+    client.setResearchPermission.mockClear();
+
+    await controller.handle({ type: "ui.status" });
+
+    expect(client.setResearchPermission).toHaveBeenCalledOnce();
+    expect(client.setResearchPermission).toHaveBeenCalledWith(true);
+  });
+
   it("rejects a permission request before pairing", async () => {
     const { controller, permissions } = makeController();
 

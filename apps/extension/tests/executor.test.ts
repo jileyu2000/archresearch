@@ -142,6 +142,67 @@ describe("browser command executor", () => {
     });
   });
 
+  it("rechecks an unknown Xiaohongshu session on the same managed tab", async () => {
+    const port = makeBrowserPort();
+    port.createTab.mockResolvedValue({
+      id: 42,
+      url: "https://www.xiaohongshu.com/search_result?keyword=architecture",
+    });
+    port.getTab.mockResolvedValue({
+      id: 42,
+      url: "https://www.xiaohongshu.com/search_result?keyword=architecture",
+      windowId: 7,
+    });
+    port.sendContentCommand
+      .mockResolvedValueOnce({ status: "unknown" })
+      .mockResolvedValueOnce({ status: "logged_in" });
+    const delay = vi.fn().mockResolvedValue(undefined);
+    const executor = new BrowserCommandExecutor(port, delay);
+    await executor.execute(
+      command("open_url", {
+        url: "https://www.xiaohongshu.com/search_result?keyword=architecture",
+      }),
+    );
+
+    await expect(
+      executor.execute(
+        command("xiaohongshu_session_status", { tab_id: 42 }),
+      ),
+    ).resolves.toEqual({ status: "logged_in" });
+    expect(delay).toHaveBeenCalledOnce();
+    expect(delay).toHaveBeenCalledWith(1_000);
+    expect(port.sendContentCommand).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps an unresolved Xiaohongshu session bounded and fail closed", async () => {
+    const port = makeBrowserPort();
+    port.createTab.mockResolvedValue({
+      id: 42,
+      url: "https://www.xiaohongshu.com/search_result?keyword=architecture",
+    });
+    port.getTab.mockResolvedValue({
+      id: 42,
+      url: "https://www.xiaohongshu.com/search_result?keyword=architecture",
+      windowId: 7,
+    });
+    port.sendContentCommand.mockResolvedValue({ status: "unknown" });
+    const delay = vi.fn().mockResolvedValue(undefined);
+    const executor = new BrowserCommandExecutor(port, delay);
+    await executor.execute(
+      command("open_url", {
+        url: "https://www.xiaohongshu.com/search_result?keyword=architecture",
+      }),
+    );
+
+    await expect(
+      executor.execute(
+        command("xiaohongshu_session_status", { tab_id: 42 }),
+      ),
+    ).resolves.toEqual({ status: "unknown" });
+    expect(delay).toHaveBeenCalledTimes(5);
+    expect(port.sendContentCommand).toHaveBeenCalledTimes(6);
+  });
+
   it("rejects Xiaohongshu session checks on other public sites", async () => {
     const port = makeBrowserPort();
     const executor = new BrowserCommandExecutor(port);

@@ -45,6 +45,7 @@ function composerProps(
     onReferenceUrlChange: vi.fn(),
     onConnectBrowser: vi.fn(),
     onOpenXiaohongshuLogin: vi.fn(),
+    onOpenVisualUsage: vi.fn(),
     onRefreshBrowserReadiness: vi.fn(),
     onCancel: vi.fn(),
     onRetry: vi.fn(),
@@ -114,12 +115,14 @@ describe('home view components', () => {
     expect(within(environment).getByText('研究环境已就绪')).toBeVisible()
     expect(within(environment).getByText('图纸提取扩展已连接')).toBeVisible()
     expect(screen.queryByRole('group', { name: '研究方式' })).not.toBeInTheDocument()
+    await user.click(within(environment).getByRole('button', { name: '使用方法' }))
     await user.click(within(environment).getByRole('button', { name: '打开小红书登录' }))
 
     await user.click(within(environment).getByRole('button', { name: '连接 Chrome 读取高清图纸' }))
     await user.click(within(environment).getByRole('button', { name: '重新检测' }))
     expect(props.onConnectBrowser).toHaveBeenCalledOnce()
     expect(props.onOpenXiaohongshuLogin).toHaveBeenCalledOnce()
+    expect(props.onOpenVisualUsage).toHaveBeenCalledOnce()
     expect(props.onRefreshBrowserReadiness).toHaveBeenCalledOnce()
   })
 

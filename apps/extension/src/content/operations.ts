@@ -153,7 +153,7 @@ function readXiaohongshuSessionStatus(
 ): { status: "logged_in" | "not_logged_in" | "unknown" } {
   const path = `${view.location.pathname}${view.location.search}`;
   if (
-    /(?:^|\/)login(?:[/?#]|$)|website-login\/error|error_code=(?:300017|300031)/iu.test(
+    /(?:^|\/)login(?:[/?#]|$)|website-login\/(?:error|captcha)|error_code=(?:300017|300031)/iu.test(
       path,
     )
   ) {
@@ -163,16 +163,27 @@ function readXiaohongshuSessionStatus(
     0,
     100_000,
   );
+  const hasLoginControl = Array.from(
+    root.querySelectorAll('button, a, [role="button"], [class*="login"]'),
+  ).some((element) => (element.textContent ?? "").trim() === "登录");
   if (
     root.querySelector('input[type="password"]') ||
-    /(?:登录后查看搜索结果|登录后查看|请先登录)/u.test(pageText)
+    /(?:登录后查看搜索结果|登录后查看|请先登录)/u.test(pageText) ||
+    hasLoginControl
   ) {
     return { status: "not_logged_in" };
   }
   if (
+    root.querySelector(
+      'header [class*="avatar"], nav [class*="avatar"], aside [class*="avatar"], [class*="user-avatar"], a[href*="/user/profile/"]',
+    )
+  ) {
+    return { status: "logged_in" };
+  }
+  if (
     view.location.pathname.startsWith("/search_result") &&
     root.querySelector(
-      'section.note-item a[href*="/search_result/"], section.note-item a[href*="/explore/"], section:has(a[href*="/search_result/"]), section:has(a[href*="/explore/"])',
+      'a[href*="/search_result/"], a[href*="/explore/"]',
     )
   ) {
     return { status: "logged_in" };

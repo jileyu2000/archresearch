@@ -1,6 +1,7 @@
 import type { FormEvent, RefObject } from 'react'
 import {
   ArrowUp,
+  BookOpen,
   Check,
   CircleDashed,
   Eye,
@@ -60,6 +61,7 @@ type ResearchComposerProps = {
   onReferenceUrlChange: (url: string) => void
   onConnectBrowser: () => void | Promise<void>
   onOpenXiaohongshuLogin: () => void | Promise<boolean>
+  onOpenVisualUsage: (trigger: HTMLElement) => void
   onRefreshBrowserReadiness: () => void | Promise<void>
   onCancel: () => void | Promise<void>
   onRetry: () => void | Promise<void>
@@ -100,6 +102,7 @@ export function ResearchComposer({
   onReferenceUrlChange,
   onConnectBrowser,
   onOpenXiaohongshuLogin,
+  onOpenVisualUsage,
   onRefreshBrowserReadiness,
   onCancel,
   onRetry,
@@ -251,6 +254,9 @@ export function ResearchComposer({
                 </div>
               </div>
               <div className="research-preflight-actions">
+                <button type="button" onClick={(event) => onOpenVisualUsage(event.currentTarget)}>
+                  <BookOpen aria-hidden="true" />使用方法
+                </button>
                 {showXiaohongshuLoginAction && (
                   <button
                     className="research-preflight-login"
