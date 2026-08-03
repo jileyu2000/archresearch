@@ -939,3 +939,8 @@
 - 2026-08-03：续接恢复完成；系统 `python` 命令命中 Microsoft Store 占位符后改用 `py -3` 成功运行 planning catchup。README 只读审计确认仍为 Evidence-Grounded Plan-and-Execute，并完整说明普通 Responses 规划、本地 Playwright 候选搜索/读取、候选 ID 白名单、空间优先、XHS-only 纯视觉边界和禁用原生 `web_search`；Release 合同已锁定这些说明。
 - 2026-08-03：发布前范围与敏感模式审计通过：50 个跟踪修改属于本轮及此前未发布范围，新增行未命中常见 Key/token/private-key 模式；`.artifacts/build/`、`.artifacts/qa/`、`.artifacts/releases/` 保持未跟踪。GitHub CLI 已认证，`v2.2.4` Release 尚不存在，当前无打开的同分支 PR。
 - 2026-08-03：抓取远端 `main` 后确认其 HEAD 为 `a7fa84a`；当前分支 `d34b0c3` 与之文件树完全一致，但提交历史因 `v2.2.3` 的不同合并路径而分叉。下一步先以普通 merge 连接等价历史，再显式暂存跟踪修改并统一提交 `v2.2.4`；不 reset、checkout、clean 或触碰真实研究数据。
+- 2026-08-03：以无冲突 merge 连接等价历史后，50 个跟踪修改统一提交为 `08b49bb` 并推送；`.artifacts/build/`、`.artifacts/qa/`、`.artifacts/releases/` 和真实研究数据未暂存。
+- 2026-08-03：PR #15 创建为 Ready，GitHub 确认范围为 50 文件、7904 additions/628 deletions；Hosted CI run `30806486060` 的 `verify` job 在 17 分 16 秒后成功，PR 状态 `CLEAN / MERGEABLE`。
+- 2026-08-03：PR #15 已 squash 合并为远端 `main` 提交 `d80f715d88781810eda7624d9f1d65b3754228fb`。正式 `v2.2.4` Release 已发布，非草稿、非预发布，tag 精确指向该合并提交。
+- 2026-08-03：GitHub 附件复核通过：扩展 ZIP 18,719 bytes、SHA-256 `4349E77FEFDEF8AF0F0C22F59D0F6C79AEFB398F17F2AA911CF45EEF76FAA26B`；Windows 安装器 69,748,597 bytes、SHA-256 `AB2D0D19B4260C89A9F7DE02D277A4EC946707E9AE0D40492E3ABAE27B97A70B`。
+- 2026-08-03：发布后项目管理收口：Phase 15 标记 complete，HANDOFF 仅保留当前合同与已验证基线；`.artifacts/build/`、`.artifacts/qa/`、`.artifacts/releases/` 改为精确忽略并继续保留，不删除约 1.1 GB 的构建、QA 和发布产物。

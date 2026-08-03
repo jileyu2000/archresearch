@@ -356,7 +356,7 @@ Status: **complete**
 
 ## Phase 15: Six-run stability qualification and v2.2.4 release
 
-**Status:** in_progress
+**Status:** complete
 
 **Goal:** 用 3 条全新建筑问题和 3 条全新 XHS-only 图纸问题验证当前研究链路的跨题型稳定性；六条全部通过后，将现有未发布修改统一发布为 `v2.2.4` Windows 本地版。
 
@@ -370,7 +370,7 @@ Status: **complete**
    - 用项目 Playwright 打开六条结果，验证逐题/逐方向内容和图片实际显示；保存 QA 截图，不调用 Codex 内置浏览器。
 5. **`v2.2.4` 发布验证** `completed`
    - 同步版本面，运行完整 Python/TypeScript/Extension 门禁，构建独立扩展 ZIP 和自包含 Windows 安装器，完成真实安装/启动/自检/健康/卸载 smoke，并记录大小与 SHA-256。
-6. **GitHub 发布** `in_progress`
+6. **GitHub 发布** `completed`
    - 明确审计并暂存跟踪修改，不暂存 `.artifacts/` 或真实研究数据；提交、推送、创建 PR、等待 Hosted CI、合并并创建正式 `v2.2.4` Release。
 
 ### Phase 15 errors encountered
@@ -620,5 +620,6 @@ Status: **complete**
 - **完整门禁通过**：API 569/569、Board 181/181、Extension 182/182、packaged E2E 8/8；Ruff 64 文件、strict Mypy 26 源文件、TypeScript lint/typecheck/build 和 Windows 发布合同全绿。
 - **发布产物**：扩展 ZIP 为 18,719 bytes，manifest `2.2.4`，SHA-256 `4349E77FEFDEF8AF0F0C22F59D0F6C79AEFB398F17F2AA911CF45EEF76FAA26B`；安装器为 69,748,597 bytes，文件/产品版本 `2.2.4`，SHA-256 `AB2D0D19B4260C89A9F7DE02D277A4EC946707E9AE0D40492E3ABAE27B97A70B`。
 - **真实安装 smoke**：静默安装、自检、快捷方式、扩展排除、安装版启动、动态端口健康、API/Board 200、静默卸载与无残留全部通过；仓库标准 package smoke 另行通过。
-- **当前唯一下一步**：审计并显式暂存全部跟踪修改，排除 `.artifacts/`、`.archresearch/` 与真实研究数据；提交、推送、PR、CI、合并并发布正式 `v2.2.4`。
-- **发布前历史核对**：远端 `main` 与当前分支 HEAD 文件树一致，但 `v2.2.3` 由不同提交历史形成；发布提交前先以普通 merge 连接 `origin/main` 的等价历史，使新 PR 只显示本轮 `v2.2.4` 差异。不得 reset、checkout、clean 或重写历史。
+- **GitHub 发布完成**：发布提交 `08b49bb` 经 PR #15 的 Hosted CI run `30806486060` 全绿后 squash 合并为 `d80f715`；正式 `v2.2.4` Release 已发布，两个附件的 GitHub size/digest 与本地产物一致。
+- **Phase 15 结果**：建筑 3/3、XHS-only 3/3、Board 六条 QA、完整门禁、独立扩展、Windows 安装器、真实安装 smoke、PR、CI、合并和 Release 全部完成。
+- **当前唯一下一步**：无活动阶段；等待用户提出下一项产品任务。
