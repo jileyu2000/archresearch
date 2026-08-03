@@ -4170,58 +4170,60 @@ h3 {
 }
 
 /* Docks, modals and drawers */
-.extension-install-backdrop {
+.visual-usage-backdrop {
   align-items: center;
-  background: rgb(22 26 24 / 42%);
+  background: var(--color-overlay);
   display: flex;
   inset: 0;
   justify-content: center;
-  padding: 24px;
+  padding: var(--space-5);
   position: fixed;
   z-index: var(--z-modal);
 }
 
-.extension-install-dialog {
+.visual-usage-dialog {
   background: var(--color-surface);
   border: 1px solid var(--color-line-strong);
-  box-shadow: 0 24px 80px rgb(22 26 24 / 22%);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-overlay);
   display: grid;
-  gap: 18px;
-  max-height: calc(100vh - 48px);
-  max-width: 540px;
+  gap: var(--space-4);
+  max-height: calc(100dvh - var(--space-7));
+  max-width: 620px;
   overflow: auto;
-  padding: 30px;
+  padding: var(--space-5);
   width: 100%;
 }
 
-.extension-install-dialog h2,
-.extension-install-dialog p {
+.visual-usage-dialog h2,
+.visual-usage-dialog h3,
+.visual-usage-dialog p {
   margin: 0;
 }
 
-.extension-install-dialog h2 {
-  font-size: clamp(24px, 3vw, 34px);
-  letter-spacing: -0.035em;
-  line-height: 1.08;
-}
-
-.extension-install-eyebrow {
-  color: var(--color-action);
-  font-size: 11px;
-  font-weight: 750;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.extension-install-intro,
-.extension-install-boundary,
-.extension-install-steps p {
+.visual-usage-dialog > header > p {
   color: var(--color-ink-secondary);
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: var(--font-xs);
+  font-weight: var(--weight-semibold);
+  margin-bottom: var(--space-1);
 }
 
-.extension-install-steps {
+.visual-usage-dialog h2 {
+  font-size: var(--font-xl);
+  letter-spacing: -0.02em;
+  line-height: var(--leading-tight);
+  text-wrap: balance;
+}
+
+.visual-usage-intro,
+.visual-usage-boundary,
+.visual-usage-steps p {
+  color: var(--color-ink-secondary);
+  font-size: var(--font-sm);
+  line-height: var(--leading-body);
+}
+
+.visual-usage-steps {
   border-bottom: 1px solid var(--color-line);
   border-top: 1px solid var(--color-line);
   display: grid;
@@ -4230,79 +4232,77 @@ h3 {
   padding: 0;
 }
 
-.extension-install-steps li {
+.visual-usage-steps li {
   align-items: start;
   display: grid;
-  gap: 14px;
-  grid-template-columns: 28px 1fr;
-  padding: 15px 0;
+  gap: var(--space-3);
+  grid-template-columns: 36px minmax(0, 1fr);
+  padding: var(--space-4) 0;
 }
 
-.extension-install-steps li + li {
+.visual-usage-steps li + li {
   border-top: 1px solid var(--color-line);
 }
 
-.extension-install-steps > li > span {
-  color: var(--color-action);
-  font-size: 11px;
-  font-weight: 750;
-  padding-top: 2px;
-}
-
-.extension-install-steps strong {
-  display: block;
-  font-size: 14px;
-  margin-bottom: 3px;
-}
-
-.extension-install-boundary {
-  padding-left: 18px;
-  position: relative;
-}
-
-.extension-install-boundary::before {
-  background: var(--color-verified);
+.visual-usage-steps > li > span {
+  align-items: center;
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-line);
   border-radius: 50%;
-  content: "";
-  height: 8px;
-  left: 0;
-  position: absolute;
-  top: 6px;
-  width: 8px;
+  color: var(--color-ink-secondary);
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  width: 32px;
 }
 
-.extension-install-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+.visual-usage-steps h3 {
+  font-size: var(--font-base);
+  line-height: var(--leading-tight);
+  margin-bottom: var(--space-1);
 }
 
-.extension-install-actions a,
-.extension-install-actions button {
+.visual-usage-steps a {
   align-items: center;
   display: inline-flex;
-  gap: 8px;
-  justify-content: center;
+  font-size: var(--font-sm);
+  font-weight: var(--weight-semibold);
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.visual-usage-steps a svg {
+  height: var(--icon-sm);
+  width: var(--icon-sm);
+}
+
+.visual-usage-boundary {
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+}
+
+.visual-usage-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.visual-usage-dialog footer button {
   min-height: 44px;
-  padding: 10px 14px;
-  text-decoration: none;
 }
 
-.extension-install-actions svg {
-  height: 15px;
-  width: 15px;
-}
-
-.extension-install-primary {
+.visual-usage-dialog .visual-usage-primary {
   background: var(--color-action);
   border: 1px solid var(--color-action);
-  color: #fff;
-  font-weight: 700;
+  color: var(--color-surface);
+  font-weight: var(--weight-semibold);
 }
 
-.extension-install-primary:hover {
+.visual-usage-dialog .visual-usage-primary:hover:not(:disabled) {
   background: var(--color-action-hover);
-  color: #fff;
+  border-color: var(--color-action-hover);
+  color: var(--color-surface);
 }
 
 /* dock-rise carries the dock's translateX(50%) centering in every frame;

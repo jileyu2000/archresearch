@@ -371,6 +371,72 @@ describe("content operations", () => {
     ).toEqual({ status: "not_logged_in" });
   });
 
+  it("reports a Xiaohongshu safety-verification redirect as not ready", () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/website-login/captcha?redirectPath=%2Fsearch_result&verifyType=124",
+    );
+    document.body.innerHTML = `<main><h1>安全验证</h1></main>`;
+
+    expect(
+      executeContentCommand(document, window, {
+        action: "xiaohongshu_session_status",
+      }),
+    ).toEqual({ status: "not_logged_in" });
+  });
+
+  it("reports a visible Xiaohongshu login control before its modal opens", () => {
+    window.history.replaceState({}, "", "/search_result?keyword=architecture");
+    document.body.innerHTML = `<header><button class="login-button">登录</button></header>`;
+
+    expect(
+      executeContentCommand(document, window, {
+        action: "xiaohongshu_session_status",
+      }),
+    ).toEqual({ status: "not_logged_in" });
+  });
+
+  it("reports a visible Xiaohongshu user shell before note cards render", () => {
+    window.history.replaceState({}, "", "/search_result?keyword=architecture");
+    document.body.innerHTML = `
+      <header><a class="user-avatar" href="/user/profile/private-id"><img alt=""></a></header>
+      <main><div class="feeds-container"></div></main>
+    `;
+
+    expect(
+      executeContentCommand(document, window, {
+        action: "xiaohongshu_session_status",
+      }),
+    ).toEqual({ status: "logged_in" });
+  });
+
+  it("reports a Xiaohongshu profile entry without relying on avatar classes", () => {
+    window.history.replaceState({}, "", "/search_result?keyword=architecture");
+    document.body.innerHTML = `<nav><a href="/user/profile/private-id">我</a></nav>`;
+
+    expect(
+      executeContentCommand(document, window, {
+        action: "xiaohongshu_session_status",
+      }),
+    ).toEqual({ status: "logged_in" });
+  });
+
+  it("reports a usable classless Xiaohongshu note link", () => {
+    window.history.replaceState({}, "", "/search_result?keyword=architecture");
+    document.body.innerHTML = `
+      <main class="feeds-container">
+        <div><a href="/explore/note-42?xsec_token=private-token">Private note</a></div>
+      </main>
+    `;
+
+    expect(
+      executeContentCommand(document, window, {
+        action: "xiaohongshu_session_status",
+      }),
+    ).toEqual({ status: "logged_in" });
+  });
+
   it("reports a usable Xiaohongshu search session without returning note data", () => {
     window.history.replaceState({}, "", "/search_result?keyword=architecture");
     document.body.innerHTML = `

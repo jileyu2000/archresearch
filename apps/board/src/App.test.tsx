@@ -674,6 +674,10 @@ async function startLiveResearch(user: ReturnType<typeof userEvent.setup>) {
 async function startVisualResearch(user: ReturnType<typeof userEvent.setup>) {
   await screen.findByText('真实工作区')
   await user.click(screen.getByRole('button', { name: /图纸灵感.*配色、线型、版式与分析图/ }))
+  const usageDialog = screen.queryByRole('dialog', { name: '图纸灵感使用方法' })
+  if (usageDialog) {
+    await user.click(within(usageDialog).getByRole('button', { name: '我知道了' }))
+  }
   await user.type(screen.getByRole('textbox', { name: '研究问题' }), '帮我找几种剖面图风格')
   await user.click(screen.getByRole('button', { name: '查找灵感' }))
 }
@@ -1703,6 +1707,42 @@ describe('research board', () => {
       '/v1/workspaces/workspace-live/runs',
       expect.objectContaining({ method: 'POST' }),
     )
+  })
+
+  it('shows drawing-inspiration usage once and lets the dedicated button reopen it', async () => {
+    const user = userEvent.setup()
+    const fetchMock = createLiveFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    await screen.findByText('真实工作区')
+    expect(screen.queryByRole('button', { name: '使用方法' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /图纸灵感.*配色、线型、版式与分析图/ }))
+
+    const dialog = await screen.findByRole('dialog', { name: '图纸灵感使用方法' })
+    expect(within(dialog).getByRole('heading', { name: '图纸灵感怎么用' })).toBeVisible()
+    expect(within(dialog).getByText('安装 Chrome 扩展')).toBeVisible()
+    expect(within(dialog).getByText('登录小红书')).toBeVisible()
+    expect(within(dialog).getByText('回到 ArchResearch 开始查找')).toBeVisible()
+    expect(within(dialog).getByRole('link', { name: '下载 Chrome 扩展' })).toHaveAttribute(
+      'href',
+      'https://github.com/jileyu2000/archresearch/releases/latest',
+    )
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/v1/workspaces/workspace-live/runs',
+      expect.objectContaining({ method: 'POST' }),
+    )
+
+    await user.click(within(dialog).getByRole('button', { name: '我知道了' }))
+    expect(screen.queryByRole('dialog', { name: '图纸灵感使用方法' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '使用方法' })).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: /建筑设计研究.*项目案例与设计策略/ }))
+    expect(screen.queryByRole('button', { name: '使用方法' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /图纸灵感.*配色、线型、版式与分析图/ }))
+    expect(screen.queryByRole('dialog', { name: '图纸灵感使用方法' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '使用方法' }))
+    expect(await screen.findByRole('dialog', { name: '图纸灵感使用方法' })).toBeVisible()
   })
 
   it('distinguishes the local browser connection from the extension on this page', async () => {

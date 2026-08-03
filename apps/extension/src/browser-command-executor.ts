@@ -25,6 +25,9 @@ type ScreenshotCropper = (
   viewport: ViewportMetrics,
 ) => Promise<string>;
 
+const XIAOHONGSHU_SESSION_RECHECK_ATTEMPTS = 5;
+const XIAOHONGSHU_SESSION_RECHECK_DELAY_MS = 1_000;
+
 export class BrowserCommandExecutor {
   private readonly managedTabIds = new Set<number>();
   private lifecycleGeneration = 0;
@@ -130,9 +133,21 @@ export class BrowserCommandExecutor {
   ): Promise<unknown> {
     this.requireManagedTab(tabId);
     await this.requireXiaohongshuTab(tabId);
-    const result = await this.browser.sendContentCommand(tabId, {
+    let result = await this.browser.sendContentCommand(tabId, {
       action: "xiaohongshu_session_status",
     });
+    for (
+      let attempt = 0;
+      hasUnknownSessionStatus(result) &&
+      attempt < XIAOHONGSHU_SESSION_RECHECK_ATTEMPTS;
+      attempt += 1
+    ) {
+      await this.delay(XIAOHONGSHU_SESSION_RECHECK_DELAY_MS);
+      await this.requireXiaohongshuTab(tabId);
+      result = await this.browser.sendContentCommand(tabId, {
+        action: "xiaohongshu_session_status",
+      });
+    }
     await this.requireXiaohongshuTab(tabId);
     return result;
   }
@@ -204,6 +219,15 @@ function requireSafePublicTab(tab: BrowserTab): void {
   if (!tab.url || !isSafePublicHttpUrl(tab.url)) {
     throw new Error("Managed tab is not at a safe public HTTP URL");
   }
+}
+
+function hasUnknownSessionStatus(value: unknown): boolean {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    "status" in value &&
+    value.status === "unknown"
+  );
 }
 
 function defaultDelay(milliseconds: number): Promise<void> {

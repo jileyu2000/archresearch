@@ -56,6 +56,7 @@ import {
   StylePanel,
 } from './components/StylePanel'
 import { VisualInspirationBoard } from './components/VisualInspirationBoard'
+import { VisualResearchUsageDialog } from './components/VisualResearchUsageDialog'
 import { useBrowserReadiness } from './hooks/useBrowserReadiness'
 import { useRunHydration } from './hooks/useRunHydration'
 import { useRunPolling } from './hooks/useRunPolling'
@@ -197,6 +198,7 @@ export default function App() {
   const [comparisonOpen, setComparisonOpen] = useState(false)
   const [shareSummaryOpen, setShareSummaryOpen] = useState(false)
   const [styleProfileOpen, setStyleProfileOpen] = useState(false)
+  const [visualUsageOpen, setVisualUsageOpen] = useState(false)
   const [styleStatus, setStyleStatus] = useState('')
   const {
     browserConnected,
@@ -328,7 +330,11 @@ export default function App() {
   const overlayTriggerRef = useRef<HTMLElement | null>(null)
   const questionInputRef = useRef<HTMLTextAreaElement | null>(null)
   const selectedResult = results.find((result) => result.id === selectedResultId)
-  const overlayOpen = inspectorOpen || comparisonOpen || shareSummaryOpen || styleProfileOpen
+  const overlayOpen = inspectorOpen
+    || comparisonOpen
+    || shareSummaryOpen
+    || styleProfileOpen
+    || visualUsageOpen
 
   const closeOverlays = useCallback(() => {
     const trigger = overlayTriggerRef.current
@@ -336,8 +342,12 @@ export default function App() {
     setComparisonOpen(false)
     setShareSummaryOpen(false)
     setStyleProfileOpen(false)
+    if (visualUsageOpen) {
+      window.localStorage.setItem('archresearch.visualUsageSeen.v1', 'true')
+    }
+    setVisualUsageOpen(false)
     trigger?.focus()
-  }, [])
+  }, [visualUsageOpen])
 
   const markPreviewFailed = useCallback((resultId: string, previewUrl: string | null) => {
     if (!previewUrl) return
@@ -1016,8 +1026,25 @@ export default function App() {
       setFiles([])
       setResearchOptionsOpen(false)
       setComposerError('')
+      if (
+        nextGoal === 'visual_reference_search'
+        && !demoMode
+        && window.localStorage.getItem('archresearch.visualUsageSeen.v1') !== 'true'
+      ) {
+        overlayTriggerRef.current = document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null
+        setVisualUsageOpen(true)
+      } else {
+        setVisualUsageOpen(false)
+      }
     }
     setGoal(nextGoal)
+  }
+
+  function openVisualUsage(trigger: HTMLElement) {
+    overlayTriggerRef.current = trigger
+    setVisualUsageOpen(true)
   }
 
   function applyProblemStarter(prompt: string, starterGoal: ResearchGoal) {
@@ -1330,6 +1357,7 @@ export default function App() {
             onReferenceUrlChange={setReferenceUrl}
             onConnectBrowser={handleConnectBrowser}
             onOpenXiaohongshuLogin={startXiaohongshuLoginRecovery}
+            onOpenVisualUsage={openVisualUsage}
             onRefreshBrowserReadiness={refreshBrowserReadiness}
             onCancel={handleCancel}
             onRetry={handleRetry}
@@ -1781,6 +1809,12 @@ export default function App() {
             selectedCount={comparisonIds.length}
             shareableCount={shareableCount}
             onConfirm={() => handleExport('share')}
+            onClose={closeOverlays}
+          />
+        )}
+
+        {visualUsageOpen && goal === 'visual_reference_search' && (
+          <VisualResearchUsageDialog
             onClose={closeOverlays}
           />
         )}

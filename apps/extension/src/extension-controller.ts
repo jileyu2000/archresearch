@@ -48,7 +48,7 @@ export class ExtensionController {
     const command = parseUiCommand(value);
     switch (command.type) {
       case "ui.status":
-        return this.status();
+        return this.status(true);
       case "ui.pair":
         return this.pair(command);
       case "ui.disconnect":
@@ -98,11 +98,16 @@ export class ExtensionController {
     void this.client.setResearchPermission(researchPermissionGranted);
   }
 
-  private async status(): Promise<Record<string, unknown>> {
+  private async status(repairCommandGate = false): Promise<Record<string, unknown>> {
+    const connection = this.client?.getStatus() ?? "disconnected";
+    const researchPermission = await this.permissions.hasResearchAccess();
+    if (repairCommandGate && connection === "connected") {
+      await this.client?.setResearchPermission(researchPermission);
+    }
     return {
       paired: this.pairing !== null,
-      connection: this.client?.getStatus() ?? "disconnected",
-      research_permission: await this.permissions.hasResearchAccess(),
+      connection,
+      research_permission: researchPermission,
     };
   }
 }
