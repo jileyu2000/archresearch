@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "minimum_chrome_version": "116",
   "name": "ArchResearch Chrome 扩展",
-  "version": "2.2.4",
+  "version": "2.2.5",
   "description": "Controlled Chrome bridge for evidence-based architecture research.",
   "permissions": ["storage", "tabs", "scripting", "activeTab", "sidePanel", "alarms"],
   "optional_host_permissions": ["<all_urls>"],

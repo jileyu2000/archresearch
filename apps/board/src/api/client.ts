@@ -435,6 +435,12 @@ export function createApiClient(baseUrl = '/v1') {
       })
     },
 
+    openXiaohongshuLogin() {
+      return request<ChromeLaunchResult>(`${baseUrl}/browser/open-xiaohongshu-login`, {
+        method: 'POST',
+      })
+    },
+
     async downloadWorkspaceBackup() {
       const response = await requestResponse(`${baseUrl}/data-backups`, { method: 'POST' })
       const disposition = response.headers.get('content-disposition') ?? ''

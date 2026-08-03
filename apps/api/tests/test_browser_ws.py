@@ -43,6 +43,36 @@ class SessionCheckingXiaohongshu:
         return self.session_status
 
 
+class SessionCheckingBroker(BrowserBroker):
+    def __init__(self, session_status: str) -> None:
+        super().__init__()
+        self.session_status = session_status
+        self.commands: list[tuple[str, dict[str, Any]]] = []
+
+    @property
+    def connected(self) -> bool:
+        return True
+
+    def send_command_sync(
+        self,
+        action: str,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: float = 30,
+    ) -> Any:
+        del timeout_seconds
+        self.commands.append((action, payload))
+        if action == "open_url":
+            return {"tab_id": 73, "url": payload["url"]}
+        if action == "wait":
+            return {"waited_ms": payload["milliseconds"]}
+        if action == "xiaohongshu_session_status":
+            return {"status": self.session_status}
+        if action == "close_tab":
+            return {"closed": True}
+        raise AssertionError(f"Unexpected browser command: {action}")
+
+
 def test_real_chrome_launcher_adds_a_unique_connection_attempt(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -180,6 +210,76 @@ def test_xiaohongshu_session_preflight_fails_closed_without_a_channel(
     assert response.json() == {"status": "unavailable", "channel": "none"}
 
 
+def test_xiaohongshu_session_preflight_uses_logged_in_chrome_when_local_probe_is_unknown(
+    tmp_path: Path,
+) -> None:
+    settings = Settings(
+        database_url=f"sqlite:///{(tmp_path / 'test.db').as_posix()}",
+        data_dir=tmp_path / "data",
+        provider_mode="mock",
+        run_inline=True,
+    )
+    local_search = SessionCheckingXiaohongshu("unknown")
+    browser_broker = SessionCheckingBroker("logged_in")
+
+    with TestClient(
+        create_app(
+            settings,
+            browser_broker=browser_broker,
+            xiaohongshu_search=local_search,
+        )
+    ) as test_client:
+        response = test_client.post("/v1/browser/xiaohongshu-session")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "logged_in",
+        "channel": "chrome_extension",
+    }
+    assert local_search.checks == 0
+    assert [action for action, _payload in browser_broker.commands] == [
+        "open_url",
+        "wait",
+        "xiaohongshu_session_status",
+        "close_tab",
+    ]
+
+
+def test_xiaohongshu_session_preflight_uses_logged_out_chrome_over_local_login(
+    tmp_path: Path,
+) -> None:
+    settings = Settings(
+        database_url=f"sqlite:///{(tmp_path / 'test.db').as_posix()}",
+        data_dir=tmp_path / "data",
+        provider_mode="mock",
+        run_inline=True,
+    )
+    local_search = SessionCheckingXiaohongshu("logged_in")
+    browser_broker = SessionCheckingBroker("not_logged_in")
+
+    with TestClient(
+        create_app(
+            settings,
+            browser_broker=browser_broker,
+            xiaohongshu_search=local_search,
+        )
+    ) as test_client:
+        response = test_client.post("/v1/browser/xiaohongshu-session")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "not_logged_in",
+        "channel": "chrome_extension",
+    }
+    assert local_search.checks == 0
+    assert [action for action, _payload in browser_broker.commands] == [
+        "open_url",
+        "wait",
+        "xiaohongshu_session_status",
+        "close_tab",
+    ]
+
+
 def test_authenticated_extension_heartbeat_keeps_connection_active(
     client: TestClient,
 ) -> None:
@@ -244,6 +344,25 @@ def test_open_chrome_board_uses_only_the_fixed_local_connection_url(tmp_path: Pa
     assert response.status_code == 200
     assert response.json() == {"opened": True}
     assert opened_urls == ["http://127.0.0.1:5173/?connect=chrome"]
+
+
+def test_open_xiaohongshu_login_uses_only_the_fixed_site_url(tmp_path: Path) -> None:
+    opened_urls: list[str] = []
+    settings = Settings(
+        database_url=f"sqlite:///{(tmp_path / 'test.db').as_posix()}",
+        data_dir=tmp_path / "data",
+        provider_mode="mock",
+        run_inline=True,
+    )
+
+    with TestClient(
+        create_app(settings, chrome_launcher=lambda url: opened_urls.append(url) or True)
+    ) as test_client:
+        response = test_client.post("/v1/browser/open-xiaohongshu-login")
+
+    assert response.status_code == 200
+    assert response.json() == {"opened": True}
+    assert opened_urls == ["https://www.xiaohongshu.com/explore"]
 
 
 @pytest.mark.parametrize(

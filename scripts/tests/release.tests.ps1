@@ -28,8 +28,8 @@ $workflowContracts = @(
     @{ Pattern = '\./scripts/test-windows-installer-package\.ps1'; Message = "CI must install-smoke and uninstall the packaged Windows application." }
     @{ Pattern = '\./scripts/build-extension-package\.ps1'; Message = "CI must build the separately distributed Chrome extension package." }
     @{ Pattern = 'actions/upload-artifact@v4'; Message = "CI must upload release artifacts." }
-    @{ Pattern = 'ArchResearch-Windows-x64-Setup-v2\.2\.4\.exe'; Message = "CI must publish the clearly named v2.2.4 Windows installer artifact." }
-    @{ Pattern = 'archresearch-chrome-extension-only-v2\.2\.4\.zip'; Message = "CI must keep the clearly named v2.2.4 Chrome extension package separate." }
+    @{ Pattern = 'ArchResearch-Windows-x64-Setup-v2\.2\.5\.exe'; Message = "CI must publish the clearly named v2.2.5 Windows installer artifact." }
+    @{ Pattern = 'archresearch-chrome-extension-only-v2\.2\.5\.zip'; Message = "CI must keep the clearly named v2.2.5 Chrome extension package separate." }
 )
 foreach ($contract in $workflowContracts) {
     if ($workflow -notmatch $contract.Pattern) {
@@ -107,7 +107,7 @@ if ($verifyScript -match '@archresearch/(web|edge)|verify-web|wrangler') {
     throw "The authoritative local gate must not invoke the retired Web or Edge runtime."
 }
 
-$expectedVersion = "2.2.4"
+$expectedVersion = "2.2.5"
 $boardPackage = Get-Content -Raw -LiteralPath (Join-Path $workspace "apps\board\package.json") |
     ConvertFrom-Json
 $extensionPackage = Get-Content -Raw -LiteralPath (Join-Path $workspace "apps\extension\package.json") |
@@ -138,36 +138,40 @@ foreach ($versionSource in @($pythonProject, $pythonPackage, $pythonApp)) {
 
 $readme = Get-Content -Raw -LiteralPath (Join-Path $workspace "README.md")
 foreach ($readmeContract in @(
-    'Windows 11 和 Google Chrome',
-    'ArchResearch-Windows-x64-Setup-v2\.2\.4\.exe',
-    '安装包不包含 Chrome 扩展',
-    '不需要安装 Python、Node\.js、pnpm 或 PowerShell',
-    'API 接口地址和 API Key',
-    '从上游模型列表中选择模型',
-    '模型 ID 不可手输',
-    '方案初期',
-    '本地 Playwright 搜索候选',
-    '模型只从本地候选 ID',
-    '默认不调用 Provider 原生 `web_search`',
+    'Windows 11 \+ Google Chrome',
+    'ArchResearch-Windows-x64-Setup-v2\.2\.5\.exe',
+    'Windows 安装器不会捆绑扩展',
+    '不需要另外安装 Python 或 Node\.js',
+    'OpenAI-compatible API 地址和 API Key',
+    '模型列表中选择模型',
+    '## 可以用它做什么',
+    '## ArchResearch 怎样完成一次研究',
+    '## 两种研究方式',
+    '## 一次研究会留下什么',
+    '## 使用步骤',
+    '## 本地数据与安全',
+    '真实项目和来源链接',
     '图纸类型和视觉方向',
-    '\[下载 Windows 安装版 v2\.2\.4\]',
-    '### 需要小红书时',
+    '\[下载 Windows 安装版 v2\.2\.5\]',
+    '\[下载 Chrome 扩展 v2\.2\.5\]',
     '\[Chrome 扩展安装说明\]\(docs/chrome-extension\.md\)',
-    '\[从源码运行\]\(docs/development\.md\)'
+    '\[从源码运行与维护\]\(docs/development\.md\)'
 )) {
     if ($readme -notmatch $readmeContract) {
-        throw "README must document the one-click Windows install contract: $readmeContract"
+        throw "README must explain the user-facing product contract: $readmeContract"
     }
 }
 $installHeadingIndex = $readme.IndexOf("## 下载与安装", [StringComparison]::Ordinal)
-$firstScreenshotIndex = $readme.IndexOf("![ArchResearch 首页]", [StringComparison]::Ordinal)
-$positioningHeadingIndex = $readme.IndexOf("## 项目定位", [StringComparison]::Ordinal)
+$capabilitiesHeadingIndex = $readme.IndexOf("## 可以用它做什么", [StringComparison]::Ordinal)
+$workflowHeadingIndex = $readme.IndexOf("## ArchResearch 怎样完成一次研究", [StringComparison]::Ordinal)
 if (
     $installHeadingIndex -lt 0 -or
-    $installHeadingIndex -ge $firstScreenshotIndex -or
-    $installHeadingIndex -ge $positioningHeadingIndex
+    $capabilitiesHeadingIndex -lt 0 -or
+    $workflowHeadingIndex -lt 0 -or
+    $installHeadingIndex -ge $capabilitiesHeadingIndex -or
+    $capabilitiesHeadingIndex -ge $workflowHeadingIndex
 ) {
-    throw "The Windows download path must appear before screenshots and product architecture."
+    throw "README must lead from installation to product capabilities and then explain the workflow."
 }
 foreach ($obsoleteInstallHeading in @(
     "## 快速开始",
@@ -179,8 +183,18 @@ foreach ($obsoleteInstallHeading in @(
         throw "README ordinary-user path must not mix in obsolete section: $obsoleteInstallHeading"
     }
 }
-if ($readme -match 'scripts/setup\.ps1|scripts/configure-autostart\.ps1|scripts/update\.ps1') {
-    throw "Source setup and maintenance commands belong in the development document."
+foreach ($developerSection in @(
+    "## Agent 架构",
+    "## 验证",
+    "## 完成度与边界",
+    "## 设计与计划"
+)) {
+    if ($readme.Contains($developerSection, [StringComparison]::Ordinal)) {
+        throw "README product homepage must not contain developer section: $developerSection"
+    }
+}
+if ($readme -match 'scripts/setup\.ps1|scripts/configure-autostart\.ps1|scripts/update\.ps1|scripts/verify\.ps1|workflow\.py|LangGraph|Firecrawl|Provider 原生 `web_search`') {
+    throw "Implementation choices, retired technologies, and maintenance commands belong in developer documentation."
 }
 
 $chromeExtensionGuidePath = Join-Path $workspace "docs\chrome-extension.md"

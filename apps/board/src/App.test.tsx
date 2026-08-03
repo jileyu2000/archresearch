@@ -84,6 +84,7 @@ interface LiveFetchOptions {
   browserConnected?: boolean
   xiaohongshuSearchAvailable?: boolean
   xiaohongshuSessionStatus?: 'logged_in' | 'not_logged_in' | 'unknown' | 'unavailable'
+  xiaohongshuSessionStatuses?: Array<'logged_in' | 'not_logged_in' | 'unknown' | 'unavailable'>
   browserStatuses?: boolean[]
   pollCoverageReport?: Record<string, unknown>
   pairingCode?: string
@@ -117,6 +118,7 @@ const visualCandidateOverrides = {
 function createLiveFetch(options: LiveFetchOptions = {}) {
   let pollIndex = 0
   let browserStatusIndex = 0
+  let xiaohongshuSessionStatusIndex = 0
   const initialStatus = options.initialStatus ?? 'completed'
   const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input)
@@ -141,8 +143,14 @@ function createLiveFetch(options: LiveFetchOptions = {}) {
     if (path === '/v1/browser/open-chrome' && method === 'POST') {
       return Promise.resolve(jsonResponse({ opened: true }))
     }
+    if (path === '/v1/browser/open-xiaohongshu-login' && method === 'POST') {
+      return Promise.resolve(jsonResponse({ opened: true }))
+    }
     if (path === '/v1/browser/xiaohongshu-session' && method === 'POST') {
-      const status = options.xiaohongshuSessionStatus ?? 'logged_in'
+      const statuses = options.xiaohongshuSessionStatuses
+      const status = statuses && statuses.length > 0
+        ? statuses[Math.min(xiaohongshuSessionStatusIndex++, statuses.length - 1)]
+        : options.xiaohongshuSessionStatus ?? 'logged_in'
       return Promise.resolve(jsonResponse({
         status,
         channel: options.xiaohongshuSearchAvailable ? 'local_search' : 'chrome_extension',
@@ -2378,13 +2386,15 @@ describe('research board', () => {
     vi.stubGlobal('fetch', createLiveFetch({
       browserStatuses: [false, true],
       pairingCode: '731904',
+      xiaohongshuSearchAvailable: true,
+      xiaohongshuSessionStatus: 'logged_in',
     }))
     renderBoard()
 
     await screen.findByText('真实工作区')
     await user.click(screen.getByRole('button', { name: /图纸灵感.*配色、线型、版式与分析图/ }))
-    expect(await screen.findByText('研究环境待连接')).toBeVisible()
-    expect(screen.getByText('连接 Chrome 后可搜索小红书，并读取当前页面高清图')).toBeVisible()
+    expect(await screen.findByText('研究环境已就绪')).toBeVisible()
+    expect(screen.getByText('小红书负责查找灵感 · 连接 Chrome 可读取当前页面高清图')).toBeVisible()
     expect(screen.queryByText('图纸提取未连接')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '连接 Chrome 读取高清图纸' }))
 
@@ -2395,9 +2405,6 @@ describe('research board', () => {
       token: '731904',
     })
     expect(await screen.findByText('图纸提取扩展已连接', {}, { timeout: 2_000 })).toBeVisible()
-    expect(within(await screen.findByRole('region', { name: '研究环境' })).getByText(
-      'Chrome 读取当前页面需授权：点击浏览器工具栏的 ArchResearch，选择“允许网页读取”，再点“刷新”',
-    )).toBeVisible()
     expect(screen.queryByText('731904')).not.toBeInTheDocument()
   })
 
@@ -2572,10 +2579,6 @@ describe('research board', () => {
       expect.objectContaining({ method: 'POST' }),
     )
     expect(screen.getByRole('alert')).toHaveTextContent('请先登录小红书')
-    expect(screen.getByRole('link', { name: '打开小红书登录' })).toHaveAttribute(
-      'href',
-      'https://www.xiaohongshu.com/explore',
-    )
   })
 
   it('fails closed when Xiaohongshu login status cannot be confirmed', async () => {
@@ -2594,6 +2597,94 @@ describe('research board', () => {
       expect.objectContaining({ method: 'POST' }),
     )
     expect(screen.getByRole('alert')).toHaveTextContent('无法确认小红书登录状态')
+  })
+
+  it('opens Xiaohongshu in system Chrome once and automatically detects login', async () => {
+    const user = userEvent.setup()
+    vi.mocked(requestBrowserBridge).mockRejectedValue(
+      new BrowserBridgeError('unavailable', 'bridge unavailable on this surface'),
+    )
+    const fetchMock = createLiveFetch({
+      browserConnected: false,
+      xiaohongshuSearchAvailable: true,
+      xiaohongshuSessionStatuses: ['unknown', 'logged_in'],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    await screen.findByText('真实工作区')
+    await user.click(screen.getByRole('button', { name: /图纸灵感.*配色、线型、版式与分析图/ }))
+
+    expect(await screen.findByText('研究环境已就绪')).toBeVisible()
+    expect(fetchMock).toHaveBeenCalledWith('/v1/browser/open-xiaohongshu-login', {
+      method: 'POST',
+    })
+    expect(fetchMock.mock.calls.filter(([path]) => (
+      path === '/v1/browser/open-xiaohongshu-login'
+    ))).toHaveLength(1)
+  })
+
+  it('keeps checking long enough for a user to finish Xiaohongshu login', async () => {
+    vi.mocked(requestBrowserBridge).mockRejectedValue(
+      new BrowserBridgeError('unavailable', 'bridge unavailable on this surface'),
+    )
+    const fetchMock = createLiveFetch({
+      browserConnected: false,
+      xiaohongshuSearchAvailable: true,
+      xiaohongshuSessionStatuses: [
+        'unknown',
+        'unknown',
+        'unknown',
+        'unknown',
+        'unknown',
+        'unknown',
+        'unknown',
+        'unknown',
+        'unknown',
+        'logged_in',
+      ],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    await screen.findByText('真实工作区')
+    vi.useFakeTimers()
+    fireEvent.click(screen.getByRole('button', { name: /图纸灵感.*配色、线型、版式与分析图/ }))
+    await act(async () => {
+      await Promise.resolve()
+    })
+    for (let attempt = 0; attempt < 9; attempt += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_500)
+      })
+    }
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText('研究环境已就绪')).toBeVisible()
+    expect(fetchMock.mock.calls.filter(([path]) => (
+      path === '/v1/browser/open-xiaohongshu-login'
+    ))).toHaveLength(1)
+  })
+
+  it('keeps an existing Xiaohongshu login without opening another login tab', async () => {
+    const user = userEvent.setup()
+    const fetchMock = createLiveFetch({
+      browserConnected: true,
+      xiaohongshuSearchAvailable: true,
+      xiaohongshuSessionStatus: 'logged_in',
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    await screen.findByText('真实工作区')
+    await user.click(screen.getByRole('button', { name: /图纸灵感.*配色、线型、版式与分析图/ }))
+
+    expect(await screen.findByText('研究环境已就绪')).toBeVisible()
+    expect(fetchMock).not.toHaveBeenCalledWith('/v1/browser/open-xiaohongshu-login', {
+      method: 'POST',
+    })
   })
 
   it('starts Xiaohongshu research through the configured OpenCLI backend without the extension', async () => {
