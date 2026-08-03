@@ -505,7 +505,7 @@ def test_local_browser_search_is_site_bounded_and_filters_untrusted_results() ->
     assert query == "industrial reuse sectional hierarchy section"
     assert "site:" not in query
     assert parser.name == "local_browser"
-    assert parser.worst_case_call_seconds == 20.0
+    assert parser.worst_case_call_seconds == 40.0
     assert parser.worst_case_search_seconds == 40.0
 
 
@@ -940,8 +940,132 @@ def test_known_site_search_falls_back_to_broader_site_query(
         "www.designboom.com",
     ]
     assert parse_qs(urlparse(backend.search_urls[1]).query)["s"] == [
-        "community library daylight section"
+        "new community library daylight section"
     ]
+
+
+@pytest.mark.parametrize(
+    ("building_type", "project_condition", "spatial_focus", "evidence_type"),
+    [
+        ("courthouse", "new-build", "secure public circulation", "floor plan"),
+        ("crematorium", "renovation", "ceremonial sequence daylight", "section"),
+        ("aquarium", "extension", "visitor circulation tank structure", "axonometric"),
+    ],
+)
+def test_structured_site_search_preserves_arbitrary_query_anchors(
+    building_type: str,
+    project_condition: str,
+    spatial_focus: str,
+    evidence_type: str,
+) -> None:
+    result_url = f"https://www.designboom.com/architecture/example-{building_type}"
+
+    class StructuredFallbackBackend(FakeBrowserBackend):
+        def search(self, url: str) -> list[BrowserSearchSnapshot]:
+            self.search_urls.append(url)
+            if len(self.search_urls) == 1:
+                return []
+            return [
+                BrowserSearchSnapshot(
+                    url=result_url,
+                    title=f"New {building_type} / Example Architects",
+                    description=f"The {spatial_focus} is documented in the {evidence_type}.",
+                )
+            ]
+
+    backend = StructuredFallbackBackend()
+    parser = LocalBrowserPageParser(backend=backend)
+    full_query = (
+        f"{project_condition} {building_type} {spatial_focus} {evidence_type} project description"
+    )
+
+    leads = parser.search_structured(
+        full_query,
+        building_type=building_type,
+        project_condition=project_condition,
+        spatial_focus=spatial_focus,
+        evidence_type=evidence_type,
+        project_name="",
+        limit=4,
+        include_domains=["designboom.com"],
+    )
+
+    assert [lead.url for lead in leads] == [result_url]
+    assert parse_qs(urlparse(backend.search_urls[0]).query)["s"] == [full_query]
+    assert parse_qs(urlparse(backend.search_urls[1]).query)["s"] == [
+        f"{spatial_focus} {project_condition} {building_type} {evidence_type}"
+    ]
+
+
+def test_project_context_site_query_puts_spatial_focus_before_soft_context() -> None:
+    backend = FakeBrowserBackend()
+    parser = LocalBrowserPageParser(backend=backend)
+
+    parser.search_structured(
+        "maker and shared work relationships renovation floor plan",
+        building_type="community maker space",
+        project_condition="renovation",
+        spatial_focus="maker and shared work relationships",
+        evidence_type="floor plan",
+        project_name="",
+        search_scope="project_context",
+        limit=4,
+        include_domains=["designboom.com"],
+    )
+
+    assert parse_qs(urlparse(backend.search_urls[1]).query)["s"] == [
+        "maker and shared work relationships renovation community maker space floor plan"
+    ]
+
+
+@pytest.mark.parametrize(
+    "building_type",
+    ["planetarium", "embassy chancery", "memorial hall"],
+)
+def test_structured_site_search_broadens_arbitrary_typology_mismatches(
+    building_type: str,
+) -> None:
+    matching_url = (
+        f"https://www.designboom.com/architecture/example-{building_type.replace(' ', '-')}"
+    )
+
+    class ArbitraryTypologyBackend(FakeBrowserBackend):
+        def search(self, url: str) -> list[BrowserSearchSnapshot]:
+            self.search_urls.append(url)
+            if len(self.search_urls) == 1:
+                return [
+                    BrowserSearchSnapshot(
+                        url="https://www.designboom.com/architecture/unrelated-arts-center",
+                        title="Performing Arts Center / Example Architects",
+                        description=(
+                            "New-build public foyer circulation with a floor plan and section."
+                        ),
+                    )
+                ]
+            return [
+                BrowserSearchSnapshot(
+                    url=matching_url,
+                    title=f"New {building_type} / Example Architects",
+                    description="Public foyer circulation shown in the floor plan.",
+                )
+            ]
+
+    backend = ArbitraryTypologyBackend()
+    parser = LocalBrowserPageParser(backend=backend)
+
+    leads = parser.search_structured(
+        f"new-build {building_type} public foyer circulation floor plan",
+        building_type=building_type,
+        project_condition="new-build",
+        spatial_focus="public foyer circulation",
+        evidence_type="floor plan",
+        project_name="",
+        limit=4,
+        include_domains=["designboom.com"],
+    )
+
+    assert len(backend.search_urls) == 2
+    assert matching_url in {lead.url for lead in leads}
 
 
 def test_named_project_site_fallback_preserves_the_search_contract() -> None:
@@ -1110,6 +1234,55 @@ def test_known_site_search_preserves_engine_order_for_metadata_empty_cards() -> 
     assert [lead.url for lead in leads] == result_urls[:3]
 
 
+def test_structured_space_first_search_uses_spaces_without_target_typology() -> None:
+    backend = FakeBrowserBackend()
+    parser = LocalBrowserPageParser(backend=backend)
+
+    parser.search_structured(
+        "interactive exhibition education spaces atrium relationships floor plan section",
+        building_type="children science museum",
+        project_condition="new-build",
+        spatial_focus="interactive exhibition education spaces atrium relationships",
+        evidence_type="floor plan section",
+        project_name="",
+        search_scope="space_first",
+        limit=4,
+        include_domains=["archdaily.com"],
+    )
+
+    search_url = urlparse(backend.search_urls[0])
+    query = parse_qs(search_url.query)["q"][0]
+    assert query == (
+        "interactive exhibition education spaces atrium relationships floor plan section"
+    )
+    assert "children science museum" not in query
+    assert "new-build" not in query
+
+
+def test_structured_project_context_search_keeps_industrial_reuse_scope() -> None:
+    backend = FakeBrowserBackend()
+    parser = LocalBrowserPageParser(backend=backend)
+
+    parser.search_structured(
+        "adaptive reuse industrial building retained structure floor plan section",
+        building_type="industrial building",
+        project_condition="adaptive reuse",
+        spatial_focus="retained structure",
+        evidence_type="floor plan section",
+        project_name="",
+        search_scope="project_context",
+        limit=4,
+        include_domains=["archdaily.com"],
+    )
+
+    search_url = urlparse(backend.search_urls[0])
+    query = parse_qs(search_url.query)["q"][0]
+    assert "industrial building" in query
+    assert "adaptive reuse" in query
+    assert "retained structure" in query
+    assert "floor plan section" in query
+
+
 def test_local_browser_parser_maps_bounded_text_links_images_and_alts() -> None:
     backend = FakeBrowserBackend(
         page=BrowserPageSnapshot(
@@ -1150,6 +1323,29 @@ def test_local_browser_parser_maps_bounded_text_links_images_and_alts() -> None:
         }
     ]
     assert backend.read_urls == ["https://studio.example/project"]
+
+
+def test_local_browser_parser_retries_one_transient_read_timeout() -> None:
+    page_snapshot = BrowserPageSnapshot(
+        url="https://www.archdaily.com/100001/shared-workspace",
+        title="Shared Workspace / Studio Example",
+        text="The renovation connects a workshop and shared work area.",
+    )
+
+    class TransientReadBackend(FakeBrowserBackend):
+        def read(self, url: str) -> BrowserPageSnapshot:
+            self.read_urls.append(url)
+            if len(self.read_urls) == 1:
+                raise TimeoutError("temporary browser timeout")
+            return page_snapshot
+
+    backend = TransientReadBackend()
+    parser = LocalBrowserPageParser(backend=backend)
+
+    page = parser.parse(page_snapshot.url)
+
+    assert page.title == page_snapshot.title
+    assert backend.read_urls == [page_snapshot.url, page_snapshot.url]
 
 
 @pytest.mark.parametrize(

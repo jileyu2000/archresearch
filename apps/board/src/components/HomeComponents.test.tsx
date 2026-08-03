@@ -29,6 +29,7 @@ function composerProps(
     researchEnvironmentTitle: '研究环境待连接',
     researchEnvironmentDetail: '连接 Chrome 后可搜索小红书，并读取当前页面高清图',
     showBrowserConnectAction: true,
+    showXiaohongshuLoginAction: false,
     browserConnecting: false,
     browserReadinessLoading: false,
     browserReadinessError: '',
@@ -99,17 +100,25 @@ describe('home view components', () => {
       researchEnvironmentTitle: '研究环境已就绪',
       researchEnvironmentDetail: '小红书负责查找灵感 · Chrome 可读取当前页面高清图',
       researchEnvironmentReady: true,
+      showXiaohongshuLoginAction: true,
       browserPairingStatus: '图纸提取扩展已连接',
     })
     render(<ResearchComposer {...props} />)
 
+    expect(screen.getByRole('heading', { name: '找图纸视觉方向' })).toBeVisible()
+    expect(screen.getByText('剖面图、爆炸图等图纸类型，与分割、构图、线型、配色或版式等视觉方向。')).toBeVisible()
+    expect(screen.queryByText(/空间、流线、剖面或表达/)).not.toBeInTheDocument()
     const environment = screen.getByRole('region', { name: '研究环境' })
     expect(within(environment).getByText('研究环境已就绪')).toBeVisible()
     expect(within(environment).getByText('图纸提取扩展已连接')).toBeVisible()
     expect(screen.queryByRole('group', { name: '研究方式' })).not.toBeInTheDocument()
+    expect(within(environment).getByRole('link', { name: '打开小红书登录' })).toHaveAttribute(
+      'href',
+      'https://www.xiaohongshu.com/explore',
+    )
 
     await user.click(within(environment).getByRole('button', { name: '连接 Chrome 读取高清图纸' }))
-    await user.click(within(environment).getByRole('button', { name: '刷新环境状态' }))
+    await user.click(within(environment).getByRole('button', { name: '重新检测' }))
     expect(props.onConnectBrowser).toHaveBeenCalledOnce()
     expect(props.onRefreshBrowserReadiness).toHaveBeenCalledOnce()
   })

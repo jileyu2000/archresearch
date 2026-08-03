@@ -330,6 +330,17 @@ export interface BrowserStatus {
   xiaohongshu_search_available: boolean
 }
 
+export type XiaohongshuSessionStatus =
+  | 'logged_in'
+  | 'not_logged_in'
+  | 'unknown'
+  | 'unavailable'
+
+export interface XiaohongshuSessionResult {
+  status: XiaohongshuSessionStatus
+  channel: 'local_search' | 'chrome_extension' | 'none'
+}
+
 export interface BrowserPairingCode {
   code: string
   expires_in_seconds: number
@@ -404,6 +415,12 @@ export function createApiClient(baseUrl = '/v1') {
   return {
     getBrowserStatus() {
       return request<BrowserStatus>(`${baseUrl}/browser/status`)
+    },
+
+    checkXiaohongshuSession() {
+      return request<XiaohongshuSessionResult>(`${baseUrl}/browser/xiaohongshu-session`, {
+        method: 'POST',
+      })
     },
 
     createBrowserPairingCode() {

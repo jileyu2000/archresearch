@@ -21,8 +21,11 @@ XIAOHONGSHU_INITIAL_WAIT_MILLISECONDS = 3_500
 XIAOHONGSHU_SCROLL_WAIT_MILLISECONDS = 1_000
 XIAOHONGSHU_SCROLL_DISTANCE = 1_200
 XIAOHONGSHU_MAX_RESULTS = 4
+XIAOHONGSHU_MAX_SEARCH_RESULTS = 8
 XIAOHONGSHU_MAX_MEDIA_CANDIDATES = 200
 OPENCLI_TIMEOUT_SECONDS = 30
+OPENCLI_AUTH_TIMEOUT_SECONDS = 8
+OPENCLI_AUTH_PROCESS_TIMEOUT_SECONDS = 12
 OPENCLI_IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".webp"})
 OPENCLI_ENTRY_RELATIVE_PATH = Path("node_modules/@jackwener/opencli/dist/src/main.js")
 
@@ -65,6 +68,30 @@ class _OpenCliSearchItem(BaseModel):
     published_at: str = Field(default="", max_length=100)
 
 
+XiaohongshuSessionStatus = Literal["logged_in", "not_logged_in", "unknown"]
+
+
+class _OpenCliAuthStatusRow(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    site: Literal["xiaohongshu"]
+    status: Literal["logged_in", "not_logged_in", "unknown", "error"]
+    logged_in: bool | Literal[""] = ""
+
+
+class _XiaohongshuSessionRead(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: XiaohongshuSessionStatus
+
+
+@runtime_checkable
+class XiaohongshuSessionChecker(Protocol):
+    name: str
+
+    def check_login(self) -> XiaohongshuSessionStatus: ...
+
+
 class OpenCliXiaohongshuSearch:
     name = "opencli-xiaohongshu"
 
@@ -77,7 +104,7 @@ class OpenCliXiaohongshuSearch:
     ) -> None:
         self._node_executable = node_executable
         self._entry_path = entry_path.resolve()
-        self._run_command = run_command
+        self._run_process = run_command
 
     @classmethod
     def discover(cls, project_root: Path | None = None) -> OpenCliXiaohongshuSearch | None:
@@ -97,7 +124,7 @@ class OpenCliXiaohongshuSearch:
         bounded_query = " ".join(query.split())[:500]
         if not bounded_query:
             raise ValueError("Xiaohongshu search query is required")
-        bounded_limit = max(1, min(limit, XIAOHONGSHU_MAX_RESULTS))
+        bounded_limit = max(1, min(limit, XIAOHONGSHU_MAX_SEARCH_RESULTS))
         stdout = self._run_read_command(
             "search",
             [bounded_query, "--limit", str(bounded_limit)],
@@ -130,6 +157,25 @@ class OpenCliXiaohongshuSearch:
             if len(sources) == bounded_limit:
                 break
         return sources
+
+    def check_login(self) -> XiaohongshuSessionStatus:
+        stdout = self._run_command(
+            [
+                self._node_executable,
+                str(self._entry_path),
+                "auth",
+                "status",
+                "--site",
+                "xiaohongshu",
+                "--timeout",
+                str(OPENCLI_AUTH_TIMEOUT_SECONDS),
+                "-f",
+                "json",
+            ],
+            operation="auth status",
+            timeout_seconds=OPENCLI_AUTH_PROCESS_TIMEOUT_SECONDS,
+        )
+        return _parse_opencli_auth_status(stdout)
 
     def download(
         self,
@@ -178,17 +224,26 @@ class OpenCliXiaohongshuSearch:
             "--window",
             "background",
         ]
+        return self._run_command(command, operation=operation)
+
+    def _run_command(
+        self,
+        command: list[str],
+        *,
+        operation: str,
+        timeout_seconds: int = OPENCLI_TIMEOUT_SECONDS,
+    ) -> str:
         environment = os.environ.copy()
         environment["NODE_NO_WARNINGS"] = "1"
         try:
-            completed = self._run_command(
+            completed = self._run_process(
                 command,
                 shell=False,
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                timeout=OPENCLI_TIMEOUT_SECONDS,
+                timeout=timeout_seconds,
                 env=environment,
                 check=False,
             )
@@ -213,8 +268,29 @@ class XiaohongshuBrowserSearch:
         self._browser = browser
         self._sleep = sleep
 
+    def check_login(self) -> XiaohongshuSessionStatus:
+        search_url = (
+            f"{XIAOHONGSHU_SEARCH_URL}?keyword={quote_plus('建筑图纸')}"
+            "&source=web_search_result_notes"
+        )
+        opened = OpenPageResult.model_validate(
+            self._browser.send_command_sync("open_url", {"url": search_url})
+        )
+        try:
+            self._browser.send_command_sync(
+                "wait", {"milliseconds": XIAOHONGSHU_INITIAL_WAIT_MILLISECONDS}
+            )
+            result = _XiaohongshuSessionRead.model_validate(
+                self._browser.send_command_sync(
+                    "xiaohongshu_session_status", {"tab_id": opened.tab_id}
+                )
+            )
+            return result.status
+        finally:
+            self._browser.send_command_sync("close_tab", {"tab_id": opened.tab_id})
+
     def search(self, query: str, *, limit: int = XIAOHONGSHU_MAX_RESULTS) -> list[ProviderSource]:
-        bounded_limit = max(1, min(limit, XIAOHONGSHU_MAX_RESULTS))
+        bounded_limit = max(1, min(limit, XIAOHONGSHU_MAX_SEARCH_RESULTS))
         search_url = (
             f"{XIAOHONGSHU_SEARCH_URL}?keyword={quote_plus(query[:500])}"
             "&source=web_search_result_notes"
@@ -292,6 +368,26 @@ def _parse_opencli_search_output(value: str) -> list[_OpenCliSearchItem]:
         except ValidationError:
             continue
     return items
+
+
+def _parse_opencli_auth_status(value: str) -> XiaohongshuSessionStatus:
+    try:
+        raw_items = json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        raise OpenCliCommandError("OpenCLI auth status returned invalid JSON") from None
+    if not isinstance(raw_items, list):
+        raise OpenCliCommandError("OpenCLI auth status returned an invalid result shape")
+    for raw_item in raw_items[:10]:
+        try:
+            item = _OpenCliAuthStatusRow.model_validate(raw_item)
+        except ValidationError:
+            continue
+        if item.status == "logged_in" and item.logged_in is True:
+            return "logged_in"
+        if item.status == "not_logged_in" and item.logged_in is False:
+            return "not_logged_in"
+        return "unknown"
+    return "unknown"
 
 
 def _evenly_sampled(paths: list[Path], limit: int) -> list[Path]:

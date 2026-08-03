@@ -35,6 +35,7 @@ BrowserAction = Literal[
     "wait",
     "page_metadata",
     "page_snapshot",
+    "xiaohongshu_session_status",
     "enumerate_media",
     "scroll",
     "safe_click",
@@ -57,6 +58,11 @@ class PairingCodeRead(StrictModel):
 class BrowserStatusRead(StrictModel):
     connected: bool
     xiaohongshu_search_available: bool
+
+
+class XiaohongshuSessionRead(StrictModel):
+    status: Literal["logged_in", "not_logged_in", "unknown", "unavailable"]
+    channel: Literal["local_search", "chrome_extension", "none"]
 
 
 class ChromeLaunchRead(StrictModel):
@@ -147,6 +153,7 @@ PAYLOAD_ADAPTERS: Mapping[BrowserAction, TypeAdapter[Any]] = {
     "wait": TypeAdapter(WaitPayload),
     "page_metadata": TypeAdapter(TabPayload),
     "page_snapshot": TypeAdapter(TabPayload),
+    "xiaohongshu_session_status": TypeAdapter(TabPayload),
     "enumerate_media": TypeAdapter(TabPayload),
     "scroll": TypeAdapter(ScrollPayload),
     "safe_click": TypeAdapter(SafeClickPayload),
@@ -500,6 +507,34 @@ def create_browser_router(
                 getattr(request.app.state, "xiaohongshu_search", None) is not None
             ),
         )
+
+    @router.post(
+        "/browser/xiaohongshu-session",
+        response_model=XiaohongshuSessionRead,
+    )
+    def xiaohongshu_session(request: Request) -> XiaohongshuSessionRead:
+        from .xiaohongshu import XiaohongshuBrowserSearch, XiaohongshuSessionChecker
+
+        search = getattr(request.app.state, "xiaohongshu_search", None)
+        if search is not None:
+            if not isinstance(search, XiaohongshuSessionChecker):
+                return XiaohongshuSessionRead(status="unknown", channel="local_search")
+            try:
+                return XiaohongshuSessionRead(
+                    status=search.check_login(),
+                    channel="local_search",
+                )
+            except Exception:
+                return XiaohongshuSessionRead(status="unknown", channel="local_search")
+        if broker.connected:
+            try:
+                return XiaohongshuSessionRead(
+                    status=XiaohongshuBrowserSearch(broker).check_login(),
+                    channel="chrome_extension",
+                )
+            except Exception:
+                return XiaohongshuSessionRead(status="unknown", channel="chrome_extension")
+        return XiaohongshuSessionRead(status="unavailable", channel="none")
 
     @router.post("/browser/open-chrome", response_model=ChromeLaunchRead)
     def open_chrome() -> ChromeLaunchRead:

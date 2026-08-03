@@ -168,12 +168,19 @@ describe('useBrowserReadiness', () => {
       xiaohongshu_search_available: true,
     })
     vi.mocked(requestBrowserBridge).mockResolvedValue(readyBridge)
+    const session = vi.spyOn(apiClient, 'checkXiaohongshuSession').mockResolvedValue({
+      status: 'logged_in',
+      channel: 'local_search',
+    })
     const { result } = renderReadiness()
     await waitFor(() => expect(result.current.browserReadinessLoading).toBe(false))
 
     await expect(result.current.ensureBrowserResearchAccess(true)).resolves.toBe(true)
     expect(requestBrowserBridge).toHaveBeenCalledOnce()
-    expect(result.current.researchEnvironmentTitle).toBe('研究环境已就绪')
+    expect(session).toHaveBeenCalledOnce()
+    await waitFor(() => {
+      expect(result.current.researchEnvironmentTitle).toBe('研究环境已就绪')
+    })
     expect(result.current.researchEnvironmentDetail).toBe(
       '小红书负责查找灵感 · Chrome 可读取当前页面高清图',
     )

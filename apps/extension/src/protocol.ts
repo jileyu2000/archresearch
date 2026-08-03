@@ -3,6 +3,7 @@ export const APPROVED_BROWSER_ACTIONS = [
   "wait",
   "page_metadata",
   "page_snapshot",
+  "xiaohongshu_session_status",
   "enumerate_media",
   "scroll",
   "safe_click",
@@ -23,6 +24,7 @@ export type BrowserCommand =
   | Command<"wait", { milliseconds: number }>
   | Command<"page_metadata", { tab_id: number }>
   | Command<"page_snapshot", { tab_id: number }>
+  | Command<"xiaohongshu_session_status", { tab_id: number }>
   | Command<"enumerate_media", { tab_id: number }>
   | Command<
       "scroll",
@@ -106,6 +108,12 @@ export function parseBrowserCommand(value: unknown): BrowserCommand {
     case "page_snapshot": {
       requireExactKeys(payload, ["tab_id"]);
       return buildCommand(message, "page_snapshot", {
+        tab_id: requireTabId(payload.tab_id),
+      });
+    }
+    case "xiaohongshu_session_status": {
+      requireExactKeys(payload, TAB_KEYS);
+      return buildCommand(message, "xiaohongshu_session_status", {
         tab_id: requireTabId(payload.tab_id),
       });
     }

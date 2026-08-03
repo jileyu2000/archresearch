@@ -313,3 +313,383 @@
 - PR #12 因复用 PR #11 squash 前分支历史而出现 GitHub 合并冲突；从 `origin/main` 新建分支并按原顺序移植 3 个未发布提交后，最终文件树与本地已验证树 SHA 完全一致，PR #13 可正常合并。
 - Hosted CI run `30718825811` / job `91419013109` 用时 17 分 10 秒并成功完成完整门禁、独立扩展、Windows 安装器、真实安装 smoke 和 artifact 上传。
 - `v2.2.3` tag 与远端 `main` 均为 `fc4e7a72dd7c86b61ffb3ad91c76d3c690e9fe47`；Release 非草稿、非预发布。扩展为 18,260 bytes / `DF1EFDC5381F559BCBE6ADC65D0AE5E79E19B6722237FB229E9FEF761D74E346`，安装器为 69,715,457 bytes / `A1F2658D9540966B5D1F24B90012F5CA1654FE90E863789B58F7B72A8E660D65`，GitHub digest 全部匹配。
+
+## 2026-08-02 Xiaohongshu first-login gap
+
+- Board 目前在没有扩展连接且没有 OpenCLI 时会阻止图纸 Run，但提示把“Chrome 已连接”与“小红书已登录”合并了。
+- `/v1/browser/status` 的 `xiaohongshu_search_available` 只表示 `app.state.xiaohongshu_search` 存在，没有执行登录态验证。
+- Board 在 `xiaohongshu_search_available=true` 时直接跳过 `ensureBrowserResearchAccess(true)`；现有测试也明确要求 OpenCLI 存在时可以无扩展创建 Run。
+- 因此全新未登录用户可能先看到“研究环境已就绪”，后在运行期因无可用笔记返回 `no_usable_assets`；这是需要修复的首次使用合同缺口。
+- OpenCLI 已提供 `auth status` 命名空间，结构化状态包含 `logged_in/not_logged_in/unknown/error`；优先复用它，无需通过搜索结果数量猜测登录。
+- 扩展现有浏览器命令仅允许枚举的 `open_url/page_metadata/page_snapshot/enumerate_media/capture_region/scroll/wait/close_tab`；登录预检必须作为新的受限操作或由后端组合现有元数据，不能加任意 selector/脚本。
+- OpenCLI 的 XHS auth adapter 快速检查只读取 `creator.xiaohongshu.com` 的 `web_session` Cookie 名称是否存在，`auth status --site xiaohongshu -f json` 可在不导航、不输出账号详情到产品日志的情况下返回结构化状态。
+- OpenCLI 还提供 `xiaohongshu login`，但它是最长 300 秒的交互命令，不适合直接阻塞 API 请求。
+- OpenCLI 搜索 adapter 已有受限登录墙判定：`/login`、`website-login/error`、指定错误码和“登录后查看搜索结果”。扩展预检可复用这类布尔信号，但只返回状态，不返回 DOM 或账号数据。
+- 最终 API 合同为 `POST /v1/browser/xiaohongshu-session`，只返回 `status` 和通道类型；OpenCLI 输出在子进程内验证后丢弃，扩展仅在受管且最终域名为 `xiaohongshu.com` 的标签页执行。
+- 扩展三态判定只使用登录路径/错误码、登录墙布尔文本和搜索结果卡片是否存在；返回中不包含笔记、DOM、账号或会话值。
+- Board 进入图纸模式后在通道可用时自动预检，开始研究时再执行提交前确认；同一时刻的重复请求共用一个 in-flight Promise，不并发打开多个预检页。
+- `not_logged_in/unknown/unavailable` 均 fail closed，不调用 Run API；只有 `logged_in` 允许继续。未登录状态显示固定 `https://www.xiaohongshu.com/explore` 登录链接和“重新检测”。
+
+## 2026-08-02 Six-run stability findings
+
+- 第一条新建小学 Run `f32d16e9-39b8-4998-a5a1-d2cca8c7e73f` 终态为 `partial`：1/3、1 个可用资产、1 个项目。它不能计入稳定性验收。
+- 11 次模型查询规划、11 次候选筛选、5 次正文分析和 1 次综合全部是 `provider=openai/status=completed`，Provider fallback/error 为 0；只有一次本地搜索 `skipped/Error`。
+- 11 条查询准确保留 new-build primary/elementary school、庭院/共享学习/流线/采光/结构机制和 plan/section/axonometric/project description，没有模板词污染。
+- 本地搜索多轮虽返回候选摘要，但 reranker 总计只保留 2 个候选，最终只有 2 个去重 SourcePage：深圳南山外国语学校与悉尼学校扩建。前者相关性不足，后者仅覆盖公共流线分支。
+- 当前根因范围是本地站点召回或候选保留，而不是 Provider 可用性、查询规划、正文 EvidenceClaim 或综合。下一步用项目 Playwright 重放代表性查询并核对站点压缩后的真实结果。
+- 生产代码根因已定位：`_compact_new_build_site_query()` 只认识图书馆、工业、文化和社区类型，`primary school/elementary school` 等其他类型会被降为 `public building`；`newly built` 也未被识别为新建条件。
+- 共享修复增加新建同义条件和常见具体类型保留，并允许源类型与目标类型同时存在；学习公区、教室组团等进入 program 机制。首查与站点宽化均复用同一类型提取，不改候选白名单、证据门槛或预算。
+- 小学、医疗中心、公共市场、游客中心、旧仓库改市场及既有合同共 32 个目标测试通过。
+- 项目 Playwright 重放小学查询后，ArchDaily 与 Designboom 已召回 Xianlin School、Skovbakke School、Xiaoquan Elementary School 等真实项目，证明当前补丁能修这一类型，但不能证明未见类型。
+- 用户指出类型词表仍是单体策略；该判断成立。正式模型路径应把建筑类型、项目条件、当前机制和证据类型作为 Pydantic 结构化锚点传到本地搜索，站点查询从锚点重组，不再靠枚举类型猜测。
+- 下一版设计：模型输出原查询及结构化锚点；Pydantic 验证锚点逐项存在于原查询且总长度受限；本地站点首查使用经验证的完整模型查询，宽化只使用全部锚点；任意未见类型也必须原样保留。旧确定性解析仅作为 Provider 失败兜底，正式验收不得依赖它。
+- 结构化实现审计发现，首查虽已使用完整模型查询，但站点宽化仍把 `new-build` 改为 `new`、把 `renovation`/conversion 改成 `adaptive reuse`；这会篡改项目条件，仍不是通用传递合同。
+- 新红测同时覆盖任意建筑类型和不同项目条件；生产修复删除结构化路径的条件重解释。现在宽化查询只由可选项目名、原始项目条件、原始建筑类型、当前机制和证据类型去重重组。
+- workflow 集成测试确认带锚点的未知 `aquarium` 查询只调用 parser 的 `search_structured`，五类字段逐项透传且 Trace 为 `structured_query=true`；无锚点旧 Provider/mock 继续调用 `search(str)` 并记录 `false`。
+- 与正式 OpenAI 合同冲突的 4 个旧 Provider 夹具已补齐结构化 anchors；它们原本验证的扩建同义补查、XHS 词剔除、瞬时重试和多命名项目拆分均保持通过。
+- 相关四文件最终 263/263，全局覆盖拆题、Provider 结构化输出、本地候选、页面读取、补查预算、正文证据和 XHS 隔离；Ruff、55 文件格式、strict Mypy 26 个源文件和 `git diff --check` 全绿。
+- 新类型 Run `792ab5f7-a923-4918-badc-da6ca150df14` 证明结构化入口真实生效：15 条模型查询均保留社区体育中心、新建条件、分支机制和证据类型，15 次本地搜索 Trace 均为 `structured_query=true`，规划/筛选/正文无 Provider fallback。
+- 该 Run 仍为 0/3：15 轮只形成 4 个去重 SourcePage 和 7 次正文分析。Designboom 重放返回 podcast、机场和度假村，reranker 拒绝正确；Tongxiang National Fitness Center 正文只证明体育中心与公园整合及城市客厅，不证明共享大厅，正文未升级也正确。
+- 真正通用缺口是补查失败原因过粗：每轮只收到 coverage/enrichment gap，不知道上一轮属于无候选、候选全拒或正文不支持，因此 5 轮始终复用 `community sports center`，无法适应国际站点的 `recreation/fitness/leisure centre` 等不同专业命名。
+- workflow 新增按子问题的阶段反馈枚举；Provider prompt 只在候选不足时要求模型选择语义等价、国际站点常用的类型名称，并明确禁止泛化为 `public building` 或改成相邻类型。候选筛选同样按语义等价而非字面相等判断。
+- 新红测先覆盖 prompt 与 workflow 反馈失败，再转绿；相关四文件最终 265/265，Ruff、55 文件格式、strict Mypy 26 个源文件与 `git diff --check` 全绿。
+- 游泳馆 Run `f0a4d691-1360-46ef-bba6-efbf88385a0f` 首次查询规划模型输出为：anchor 含 `central public hall and spectator stands...`，query 含相同全部内容词但第一个 `and` 位置不同；旧校验要求整段连续子串，错误降级到 deterministic template。
+- 为避免无资格 Run 继续消耗预算，该 Run 在第二个子问题刚开始时取消。修复不是放宽字段缺失：拉丁 anchor 的规范化内容词必须逐项出现在 query，中文 anchor 允许在连写查询中作为连续子串；缺少 `aquarium` 的反例仍被拒绝。
+- 同一真实游泳馆子问题隔离规划随后成功返回 `public swimming center/new-build/central hall and grandstand/floor plan section` 完整 anchors。相关四文件 266/266 与全部静态门禁通过。
+- 铁路客运站 Run `4670f769-c795-41c4-bdc2-c201fd8c4516` 的 13 条模型查询已经按轮变化并保留类型、条件、机制和证据类型；8 个 SourcePage 仍主要来自固定媒体站，只有图卢姆屋盖分支形成正式证据链。
+- 项目 Playwright 重读确认苏州南正文只说明多层枢纽和线路同处地下，未说明与广场/街道的连续路径；图卢姆正文说明功能叠在站台上方和层间连接，但未证明城市公共空间连续连接或进出站/换乘/后勤分离。`relevance=2/enriched=0` 不应通过降低门槛修成覆盖。
+- 通用架构残留有两处：`select_public_search_domains()` 把全部恢复轮锁在固定媒体站；确定性查询的未知类型末路仍会生成 `public building` / `adaptive reuse precedent`。正文“稳定焦点”还带 `原有/新旧/保留` 等改造预设，会干扰新建题型。
+- 修复方向不增加类型词表：建筑媒体优先后转本地全网候选，由模型仍只从本地候选中筛选；fallback 保留原题英文词而不虚构类型条件；正文焦点改为项目条件中性；Trace 记录 direct match 与逐字证据链状态。
+- 全网恢复的首次真实 Playwright smoke 发现 Bing `format=rss` 在当前地区忽略建筑查询，铁路站和天文馆两条不同查询都返回 NYT/NPR 等固定新闻首页；普通 Bing HTML 页面包含真实搜索结果，但旧 reader 会先收集页面全部导航链接。全网恢复必须改为 HTML URL 并只解析 `#b_results .b_algo h2 a` 结果卡。
+- 后续隔离验证确认 Bing HTML、Google、Brave、Baidu、Yandex、DuckDuckGo、Mojeek 和 Yahoo 在当前本地 Playwright 环境中均不能稳定提供可用建筑结果；已撤回全网搜索方案，不能把验证码、固定新闻或导航链接当候选。
+- 通用替代方案是同项目跨来源补证：可信且具体的项目页即使尚未形成正式候选，只要正文分析确认相关但证据链不完整，就按规范化项目名在最多两个其他可靠建筑站点逐站搜索；候选仍需同项目身份、可信来源、具体项目页和本地正文读取校验。
+- 跨来源补证首次完整回归暴露额外搜索绕过总查询额度。新增统一预算门禁后，主搜索与补证都由同一个本地搜索 Trace 计数，当前 attempt 最多执行 `max_queries + completion_recovery_rounds × 子问题数` 次；额度耗尽后在模型查询规划前停止该公共搜索轮次。
+- 该修复不增加建筑类型词表、Provider 调用额度、页面额度或 EvidenceClaim 门槛。任意类型由 `SearchQueryAnchors` 原样透传；跨来源补证只以模型/页面识别出的具体项目名为键。
+- 新建城市消防站真实 Run `4a6f582b-67c3-49b1-abb9-362fbe316254` 最终 0/3。15 次本地搜索恰好等于 quick 的 `6 + 3×3` 共享上限，其中 4 次为同项目补证，证明预算门禁在真实运行中生效。
+- 11 次查询规划中 8 次结构化成功、3 次 `ValidationError` fallback；fallback 查询丢失消防站类型，正式验收因此必然不合格。隔离重放同一子问题立即成功，说明模型偶发 query/anchors 不自洽，不能靠放宽锚点解决。
+- 查询规划现在保持原严格校验，并在首次结构无效时最多发起一次固定纠正请求，要求每个非空 anchor 的词原样存在于 query；第二次仍失败才进入 deterministic fallback。工作流为该两次最坏调用预留 90 秒。
+- 两个可信消防站页均未形成逐字证据；跨来源搜索分别返回 1、2、2 个结果，但同项目标题的语序/前后缀变化被旧完全相等规则拒绝。新身份规则只接受相等、完整短语包含，或双方较短标题至少 5 词且共享不少于 3 词、覆盖率至少 60%；短名称近邻反例保持拒绝。
+
+## 2026-08-02 Generic stability correction after municipal archive run
+
+- 市政档案馆 Run `17bd42b6-7793-45ea-b8af-973b7a855abb` 终态为 `blocked/research_synthesis_incomplete`、0/3。13 次查询规划全部 Provider 成功且 fallback=0，但 15 次本地搜索、13 次候选筛选仅保留 1 页，3 次正文分析均 `direct_match=false`。
+- 项目 Playwright 重放显示 ArchDaily/Designboom 对长查询与 `archive` / `municipal archive` 短查询都主要返回博物馆、文化中心、办公园区和文章页；候选拒绝和正文不升级是正确行为。
+- 这说明当前稳定性瓶颈是稀有类型的跨站召回，不是查询长度、Provider 可用性或 EvidenceClaim 门槛。不能把 art depot 等相邻类型冒充档案馆。
+- 继续追加档案馆、学校、消防站等代码词表只会修复已知题。正式方向改为模型输出可校验的查询策略（精确类型、专业等价名、命名先例、证据角度），程序只验证锚点、去重、候选白名单、预算和证据绑定。
+- 站点选择应基于本 Run 的召回产出：某站无候选或候选全拒绝后不机械重复；有同类型项目但正文不足时才进入命名项目跨来源补证。这是跨任意建筑类型的调度合同。
+- 新验证标准是：类型名不进入生产分支；用多个任意未见类型做参数化/变形测试；全回归保持不退化；最后用修复后才决定的盲测题验证。
+- 正式结构化路径的两个通用残留已修复：`LocalBrowserPageParser` 的站内类型不匹配判断改为从任意 building-type 锚点提取通用显著词项；workflow 按子问题累计无候选、全拒绝和正文不足站点，在其他支持站点尝试前不重复。
+- 查询计划现在显式输出 `exact_typology | professional_equivalent | named_precedent | evidence_angle`。命名案例策略必须有同查询内 project-name 锚点；候选不足和正文不足分别要求不同恢复策略，重复策略会严格纠正或 fallback。
+- 恢复轮只有在总搜索额度至少剩余两个槽位时才请求最多两条策略；否则自动收紧为 1。每个本地搜索仍由共享 Trace 预算门禁计数，未增加 Run 总查询、页面或 Provider 最坏调用上限。
+- 参数化测试覆盖 planetarium、embassy chancery、memorial hall 等任意未见类型只存在于测试；新增生产差异扫描对这些及所有既有验收类型为 0 命中。
+- 完整 API 509/509、Ruff、64 文件格式检查、strict Mypy 26 个源文件和 diff check 全绿。
+
+## 2026-08-02 Ferry-terminal blind-run diagnosis
+
+- 修改完成后才选定的新建城市渡轮客运码头 Run `34626a55-dbdb-46c6-920d-dc394ecb2651` 自然终止为 `partial/time_budget_exhausted`：1/3 子问题、5 个可用资产、1 个正式项目、1 个多图纸项目；Provider/deterministic fallback 为 0。
+- 横滨国际客运码头形成了真实 URL 与逐字 EvidenceClaim，证明结构化查询、候选筛选、本地正文读取和证据绑定主链路真实运行；失败不能归因于 Provider fallback 或证据门槛。
+- 共享的 15 次本地搜索全部耗尽，其中 8 次为 `project_text_supplement`。多个火车站、机场页面的正文分析已经返回 `direct_match=false`，workflow 仍为这些无关具体项目执行跨来源补证。
+- 这是跨题型的预算调度缺陷：跨来源补证只能服务“项目与题目直接匹配但当前证据链不完整”的页面；正文已判定不直接匹配时必须停止该项目后续消耗。
+- 模型拆出的屋盖子问题还把“新建城市渡轮客运码头”扩大为“交通或滨水公共建筑”。拆题必须继承用户声明的建筑类型与新建/改造/扩建条件，不能用相邻类型放宽候选边界。
+- 下一修复不增加渡轮、火车站或机场词表。先以参数化行为测试约束分析结果门控和计划类型边界，再做最小生产修改。
+- 生产代码已经计算并记录 `direct_match`、`supported_fact_count` 和 `evidence_chain_status`，但 `_try_public_page_analysis()` 只返回 `added: int`；上层因此无法区分 `not_direct_match` 与 `partial/no_verbatim_facts`，并无条件进入补证函数。
+- 现有跨来源测试把主页面返回为 `direct_match=false` 后仍期待补证，这一旧夹具正好固化了错误合同；应改为“直接匹配且只有项目 context 逐字事实”，并另加任意项目的 `direct_match=false` 反例。
+- 修复后调用层只在 `direct_match=true` 且 `evidence_chain_status != complete` 时补证；分析失败、正文明确不匹配和已完整证据链都会停止该项目后续搜索。直接匹配但仅有 context 逐字事实的项目仍按原两站点/两页面上限补证。
+- 建筑规划提示现在要求每个子问题明确、原样保留用户声明的建筑类型和项目条件，并禁止扩大为相邻类型、泛化公共建筑或更宽松条件；该规则不包含任何具体建筑类型。
+- 真实隔离调用用未预设的“新建高山植物种质资源保存库”验证通用规划：3/3 子问题都保留类型和新建条件；SearchQueryPlan 返回 `exact_typology + professional_equivalent` 两种策略，全部结构化 anchors 完整。调用为普通 Responses structured output，没有原生 `web_search`。
+
+## 2026-08-02 Wetland-research-center blind-run audit
+
+- 修改收口后才选定的新建湿地生态研究中心 Run `0452cfd2-8142-4e09-b483-8e86bddf573a` 自然终止为 `partial/time_budget_exhausted`：1/3、4 个资产、1 个页面，不 retry、不计验收；当前活动 Run 为 0。
+- 新补证门控真实生效：15 次 `local_browser_search` 中 `project_text_supplement=0`；同一 NATURA 页面在共享中庭与访客/样本流线分支均为 `direct_match=false`，没有继续跨来源补证。
+- 10 次查询规划中 9 次 Provider 成功；访客/样本流线第 3 轮一次 `ValueError` 后进入确定性 fallback，查询丢失湿地生态研究中心和新建条件，退化成连续环流/无障碍/疏散楼梯旧模板。这违反未知类型 fallback 保留原题范围的通用合同。
+- 成功的恢复计划前三轮只使用 `exact_typology + professional_equivalent`，没有进入 `named_precedent` 或 `evidence_angle`；策略枚举存在，但跨轮升级尚未被约束，模型仍会机械复用前两类策略。
+- 天窗/木结构分支的正文 Provider 返回 `InternalServerError` 后，确定性分析把 NATURA 页的建成年份和“开放空间建筑”两句泛化原文误判为完整机制证据，生成 4 个 partial 资产并造成虚假 1/3 coverage；综合模型随后明确指出这些引文不能证明天窗或木结构网格。
+- 拆题问题本身保留了“新建湿地生态研究中心”，但 rationale 题外加入“小红书登录态下的可见图纸或照片”；建筑规划必须禁止引入用户未要求的来源通道，XHS-only 仍只属于图纸路径。
+- 下一步先写通用红测：恢复轮策略升级、查询 fallback 原题范围保留、确定性正文机制支持门槛、建筑规划不得引入题外来源；全部收口前不创建新 Run。
+- 四项最小实现均不依赖题型：混合语言 fallback 带回原 research question/subquestion；第 3 轮候选短缺至少要求 `named_precedent/evidence_angle`；确定性正文机制句至少命中当前研究意图词；建筑规划提示禁止题外来源平台和登录态。
+- 相关回归证明更严格的确定性正文门槛会把旧“认证失败仍 3/3 completed”夹具降为 1/4 partial；这是防止伪完成的预期行为。未知中文 scope 只在类型解析结果没有具体类型、仅剩项目条件或 `architecture project` 时加入英文站点 fallback，已知工业/图书馆等英文查询保持简洁 ASCII。
+- 真实第 3 轮重放暴露策略校验交叉冲突：模型返回 `exact_typology + evidence_angle` 已脱离前两轮组合，但现有 shortage 校验仍要求 `professional_equivalent/named_precedent`，导致两次结构化调用后抛 `ValueError`。通用规则应按阶段替换而不是累加：前两轮改类型称谓，后续改命名项目或证据角度。
+- 分阶段修复后的同一真实重放返回 `exact_typology + evidence_angle` 并通过全部结构校验；建筑拆题 3/3 保留用户类型/新建条件，rationale 不再引入 XHS 或登录态。该调用只使用普通 Responses structured output。
+
+## 2026-08-02 Children's-science-museum blind-run audit
+
+- 修改后才选定的新建儿童科学馆 Run `5f740202-37ff-4f20-88f6-fe459223803a` 自然终止为 `blocked/research_synthesis_incomplete`、0/3；8 个可用候选资产但 0 个正式项目，保留、不 retry、不计验收，当前活动 Run 为 0。
+- 10 次查询规划、10 次候选筛选和 5 次正文分析全部 Provider 成功，fallback=0；15 次本地搜索没有跨来源补证。严格门控没有再制造虚假覆盖。
+- 第 3 轮三题均使用 `exact_typology + evidence_angle`，但没有任何 `named_precedent`。15 次搜索最终只读取 Moscow Polytechnic Museum、Hainan Science Museum、Perot Museum 三个上位类型页面。
+- 五次正文分析全部 `direct_match=false/not_direct_match`，程序没有把一般科学馆冒充儿童科学馆，也没有生成正式机制 EvidenceClaim；失败是召回仍停留在泛化结果，不是正文阈值过严。
+- 两槽位的晚期候选短缺应同时使用 `named_precedent + evidence_angle`，停止保留重复精确类型；只剩一个槽位时才允许二选一。这是跨类型的阶段调度，不包含儿童馆或具体项目词表。
+- 真实儿童科学馆第 3 轮上下文重放已返回 `named_precedent + evidence_angle`，命名项目 anchor 非空；证明新规则通过普通 Responses 真实生效，不依赖测试夹具。
+
+## 2026-08-02 Natural-history-museum blind-run audit
+
+- Run `383b7203-f330-4afc-8784-9f1bfe59f0f6` 自然终止为 `partial/no_new_assets`：2/3、9 个可用资产、1 个正式项目，不 retry、不计验收；当前活动 Run 为 0。
+- 查询策略真实逐轮升级：精确类型 -> 专业等价名 -> 两槽 `named_precedent + evidence_angle` -> 单槽证据角度 -> 两槽高级策略。全部查询规划、实际候选筛选、正文分析和综合由 Provider 成功完成，fallback=0。
+- Gilder Center 为中庭连接和参观流线建立真实 URL 与逐字 EvidenceClaim；上海、英良石材和深圳自然历史博物馆页面均因不能逐字支持采光顶、大跨屋盖和剖面层次而保持 `direct_match=false`，没有伪完成。
+- 第 3 轮命名先例已尝试 `Shanghai Natural History Museum` 并判不匹配，第 5 轮模型又生成同一项目；候选过滤虽阻止重复页面再次升级，但重复本地搜索已经占用最终查询额度。
+- 通用根因是查询规划只接收排除 URL，没有接收已尝试项目；同时 workflow 仍用旧 `Library/Museum/Centre...` 后缀正则从查询猜项目名，结构化 `project_name` 在未登记项目类型上可能失效。
+- 红测与最小实现已完成：workflow 向后续规划传递已访问、已候选和已命名的项目；Provider 拒绝重复命名先例并在既有两次结构纠正上限内换项目；正式结构化路径直接使用 Pydantic `project_name` 过滤候选，旧字符串解析只保留给无锚点兼容路径。
+
+## 2026-08-02 Public-market blind-run early-stop audit
+
+- Run `8308a18e-1898-4e4b-a352-4014dd612d4d` 在第 2 轮出现一次 `search_query_planning / ValueError / deterministic_template` 后立即取消，以免不合格 Run 继续消耗预算；终态 `cancelled/user_cancelled`、0/3、7 个候选资产，不 retry、不计验收。
+- 建筑主搜索始终没有实际进入 XHS，但模型拆题的两个 rationale 题外加入“登录态小红书核对”，证明只靠提示词不能锁定建筑/XHS 来源隔离。
+- 查询规划的第二次纠正提示只强调锚点和第 3 轮策略，没有明确重申正文不足时的 `named_precedent/evidence_angle`、旧查询排除和项目别名排除，可能让两次结构输出重复同一错误。
+- 通用红测与最小实现已转绿：建筑拆题检测到用户未要求的 XHS、social platform 或登录态后，在同一有界规划阶段纠正；第二次查询纠正明确处理正文不足、旧查询及排除项目的别名、译名、缩写和不同拼写。
+- 真实纯内存重放同一题成功：3 个建筑子问题均无题外来源；第 2 轮返回两条完整结构化查询、策略为 `exact_typology + evidence_angle`，无 `ValueError`，也没有重复 Rotterdam 项目别名。
+
+## 2026-08-03 Concert-hall resume and budget audit
+
+- 新建城市音乐厅 Run `6cac2ab8-0532-407a-9981-9e99c8f25b69` 最终为 `partial/time_budget_exhausted`：1/3、5 个可用资产、1 个正式项目，不计入 3+3 验收。
+- sequence 17 的候选筛选遇到 `APIConnectionError` 后 deterministic fallback 保留 4/4；随后 4 个页面解析分别为 1 个 `Exception` 和 3 个 `AttributeError`，没有产生正文证据。另有一次 Limoges 正文分析 `APITimeoutError` 后 deterministic fallback，正式 fallback 不为 0。
+- sequence 27 开始第 3 子问题后，sequence 28 再次进入 workflow planning；同一 attempt 0 随后重新执行第 1、2 子问题。数据库确认前两条 QueryAttempt 在恢复前已是 `completed`。
+- 根因不是 completed 状态丢失，而是恢复身份包含可变语言：`build_queries()` 的 round 1 固定生成 `zh` key，模型规划后 `_update_query_attempt_text()` 将已完成 QueryAttempt 的语言改为 `en`；恢复时 `(round, zh, subquestion)` 无法匹配 `(round, en, subquestion)`。
+- 每轮每个子问题只有一个 QueryAttempt，模型最多两条查询合并在该 attempt 内，因此不可变执行身份应为 `(round_number, subquestion_id)`；language 只用于描述和 Trace。显式 retry 的 attempt 代际与零覆盖重跑规则继续由 `run_attempt` 和现有分支控制。
+- 多条盲测都精确耗尽当前 quick 的 15 次网页搜索总额度。用户同意在修复重复恢复与无关候选放行后有限增配，但不得通过降低证据门槛或无限重试制造完成。
+- 恢复红测使用 `BaseException` 模拟进程退出：首个空结果 QueryAttempt 已 completed，第二个 started；把首个 language 从 `zh` 改为 `en` 后，同 attempt 恢复的旧实现确实重复 program。改用 `(round_number, subquestion_id)` 后，program/circulation/section 计数为 `1/2/1`，且 5 项旧 retry 合同继续通过。
+- reranker fallback 的通用缺口不是音乐厅词表：正式结构化计划已经有 building-type anchor，降级层却丢弃该字段并退回少数硬编码类型判断。新实现复用本地结构化搜索的任意类型匹配；未登记 planetarium 正例保留，arts campus/library 泛化反例排除。
+- 音乐厅 4 个 Designboom URL 当前项目 Playwright 重读为 2 页成功、2 页 `ERR_HTTP_RESPONSE_CODE_FAILURE`；旧 AttributeError 不稳定复现。`start.ps1` 没有 watcher/自动重启，旧启动日志已被后续启动覆盖，因此不猜测外部重启触发；产品可验证修复聚焦断点恢复幂等。
+- 新预算按深度有限增长：有效搜索 15/24/42 -> 18/28/48，基础页面 12/30/60 -> 16/40/72，时间 30/30/30 -> 40/60/90 分钟；恢复页每题 2 -> 3。严格完成与证据合同不变。
+
+## 2026-08-03 Student-center live-run recovery
+
+- 会话恢复确认三档预算增配已经落地并通过 351 项精准搜索相关测试、519 项完整 API 回归、Ruff、format、strict Mypy 和 `git diff --check`；本轮不重做这些门禁。
+- 唯一活动 Run `4bcbd249-8701-48a6-b0d4-69beb2f83c58` 不是跨夜停滞：API/Board 于本地 01:09 启动，Run 时间戳为 UTC，启动恢复任务仍在执行。
+- 截至 Trace 39，Run 为 `searching`、2/3 子问题覆盖、3 个 usable assets、1 个正式项目和 1 个多图纸项目；`search_query_planning`、`candidate_reranking` 与 `public_page_analysis` 均为 Provider 成功，fallback=0。
+- 唯一缺失分支为 `atrium_program`；当前 gaps 为 `uncovered_subquestions/article_analysis_incomplete`，enrichment 还缺资产数、项目多样性、verified/partial 数和子问题资产数。继续轮询同一 Run，不创建或 retry 其他 Run。
+- Trace 40 随后出现 `public_page_analysis / APITimeoutError / deterministic_fallback`；Run 虽达到 3/3 coverage，但不满足正式 fallback=0 门槛，已立即取消并保留，不计验收、不 retry。
+- 失败页已由本地浏览器读取且 `direct_match=true`；问题集中在正文结构化分析的两次 45 秒 medium 调用均超时。修复应只增加正文分析窗口并降低瞬时错误重试的 reasoning effort，不延长查询规划或候选筛选，也不放宽 EvidenceClaim。
+- 正文分析现在使用独立 75 秒单次窗口；第一次瞬时错误后的第二次调用改为 low reasoning，语义/逐字证据纠正仍保持 medium。最大调用数仍为 2，调度公布的最坏预算从 90 秒同步为 150 秒。
+- 修复加载后的真实隔离验证使用同一 Designboom 大学中心页面：项目 Playwright 读取 10,373 字符正文，Provider 在 35.0 秒返回 `relevance=3/direct_match=true`、4 条事实、完整项目条件/机制和 4 条转译步骤，没有 fallback。
+- 生产和测试代码对 `business school / management school / school of business / 商学院` 扫描为 0 命中；下一条盲测使用新建大学商学院教学中心，不复用学生中心 Run。
+- 用户明确要求案例准入不要过度追求题型严丝合缝，应把重点放在后续可迁移机制、参考方法和适用边界。新的通用边界是：事实与逐字 EvidenceClaim 不放宽；候选层最多加入 1 个同建筑尺度、当前机制高度可迁移的类比案例，弱机制、仅视觉相似或一般相邻类型继续拒绝。
+- 商学院 Run 在旧门槛下推进到 10 个 partial 资产、0 个正式项目后已取消，不计验收、不 retry。Trace 仍为 fallback=0；Isenberg 页面由 Provider 判 `direct_match=false` 且没有支持事实，按新规则也不会自动升级。
+- 综合模型现在明确把证据充分的跨类型案例作为类比参考：保留可借鉴操作和转译步骤，同时依据 limitations 输出失效边界；禁止把类比案例写成同类型直接先例。该规则适用于 quick、balanced、deep 三档。
+- 真实普通 Responses reranker 隔离验证两次成功。商学院精确候选为 relevance/typology/mechanism `4/4/4`；大学学习中心为 `3/2/4` 并保留；跨类型社区文化中心为 `3/0/4` 并保留为强机制类比；普通办公大厅仅 `0/0/1` 或 `1/0/1`，均拒绝。
+- 隔离调用只使用提供的本地候选 ID，没有原生 web_search；新 Pydantic 字段由真实 Provider 正常返回。类比候选仍需后续本地正文读取和完整逐字 EvidenceClaim 才能进入结果。
+- 建筑学院 Run 最终形成 3/3 正文覆盖和成功综合，但只有 Milstein Hall 一个正式项目；综合本身已能给出剖面叠合、模型运输、北向采光和大跨结构的转译操作与失效边界。它不能计验收，因为 quick 丰富目标仍缺项目多样性和多图纸项目。
+- Trace 与查询表联合审计确认 40 分钟没有耗尽；18 次有效本地搜索额度已在第 13 个 QueryAttempt 中耗尽，旧 workflow 把“没有可用搜索通道”统一写成 `time_budget_exhausted`。现已区分为 `query_budget_exhausted`。
+- 原“最多 1 个类比且 relevance>=3”仍可能漏掉只回答一个关键机制的可靠案例。新边界为：总候选最多 4；强机制类比最多 2；relevance>=2、mechanism_transferability>=3、source_trust>=2；是否形成正式结果继续交给本地正文逐字证据分析。
+- Provider 提示明确：类比不必满足题目所有项目条件或同建筑类型，但候选标题/摘要必须指出至少一个当前空间机制，且处于可比较的建筑决策尺度。没有机制的一般相邻类型、视觉相似和普通中庭/楼梯继续拒绝。
+- 真实 `gpt-5.6-sol / responses` 隔离结果符合边界：建筑学院直接候选 `relevance/typology/mechanism=4/4/4`；文化论坛类比为 `3/1/4`；大学学习共享空间类比为 `2/1/3`；普通办公大厅为 `0/0/0`。前三个 retain=true，弱候选 retain=false。
+- 工程创新中心真实 Run 证明候选准入不是唯一入口：后期查询仍出现“中庭 + 教学实验室 + 工坊 + 工作室 + 展示 + 北向采光”等过载机制串，即便 reranker 接受部分机制类比，本地站点也很难召回这类页面。
+- `LocalBrowserPageParser` 对结构化首轮中的跨类型结果不会硬删除；类型不匹配时会保留首轮结果并追加宽化搜索。Run 中 `candidate_count=0` 来自 URL/项目排除集合，不是类型过滤。
+- 新合同把空间机制锚点限制为一个切片：英文最多 12 个词，中文最多 32 个汉字。它不移除建筑类型、项目条件或证据类型锚点，只阻止模型把整道子问题复制进查询；过载返回会在普通 Responses 内纠正一次。
+- 真实重放证实模型会在该合同下拆开机制：中庭分支分别查询“多层协作中庭连接功能”和“北向采光教学核心”；流线分支分别查询“三类流线分离”和“服务/公共/教学路径”；结构分支分别查询“可见框架与可扩展楼板”和“模块楼板与可接近设备”。最长机制锚点 9 词。
+
+## 2026-08-03 Medical-education-center analogy boundary audit
+
+- 唯一 Run `363c9289-eae9-4767-be79-1da6d0918d94` 已自然终止为 `blocked/research_synthesis_incomplete`：0/3、6 个 partial 图纸资产、0 个正式项目，Provider/deterministic fallback=0，不 retry、不计验收。
+- Run 完成了 4 轮结构化查询；后期真实使用 `named_precedent + evidence_angle`。本地搜索与候选筛选均运行，两个同类型医学教育页面进入正文分析。
+- 三次最新正文分析均为 Provider 成功，但返回 `relevance=1/direct_match=false/supported_fact_count=0`；失败点已从候选准入转到正文是否能提取“只覆盖一个机制”的受限参考。
+- 用户边界不允许把案例题型卡死，但仍要求后续分析说明如何参考。下一步不降低逐字证据要求，而是验证正文分析是否仍因长子问题整体匹配而清空局部可迁移机制；红测必须使用任意未见建筑类型，避免为医学教育中心写单体策略。
+- 查询表与 Trace 联合审计进一步定位到更早的召回缺口：11 个 QueryAttempt 全部把目标建筑类型锁在查询中，后期命名先例也仍是同类型；所有候选筛选的 `analogical_retained_count` 均为 0。现有适度类比只在 reranker 准入层生效，没有恢复查询负责召回跨类型强机制案例。
+- 因此不应继续降低 reranker 分数或正文 `direct_match`。通用修复方向是：精确/专业等价/命名同类搜索不足后，在总查询预算内使用一个明确的机制类比恢复策略，让本地浏览器召回可比较建筑决策尺度的案例；后续仍由模型筛选、本地正文和逐字 EvidenceClaim 决定是否可用。
+- 拟定的有界合同：默认及早期恢复仍使用精确类型、专业等价类型、同类命名先例与证据角度；只有这些路径连续不足后的晚期恢复，两个查询槽中的一个才能使用 `mechanism_analogy`，另一个继续保留同类型证据搜索。类比查询由模型选择一个非泛化、建筑决策尺度可比的来源类型，并继续携带项目条件、单一机制切片和证据类型；不新增调用或页面预算。
+- 本地结构化搜索必须按类比来源类型召回，随后 reranker 仍以目标问题打分且最多保留 2 个强机制类比。正文层已有“只需支持一个机制、类型差异写入 limitations”的严格提示；正式持久化仍要求两条核心事实、逐字 excerpt、转译步骤和可比较尺度。
+- 红测先准确失败于 `mechanism_analogy` 不在 Pydantic 枚举。最小实现增加 `target_building_type` 审计字段：类比查询的 `building_type` 是实际要检索的具体来源类型，目标类型只保存为结构化上下文，不塞进执行查询；来源类型与目标相同或为 `public building/architecture project` 等泛化值会校验失败。
+- Provider 调度只允许第 4 轮后且存在候选全拒或正文不足时使用类比。两个槽位必须恰好一个类比和一个目标类型的命名先例/证据角度；一个槽位才单独用类比。第 1-3 轮提前返回类比会在同一两次结构纠正上限内换回专业等价或其他目标类型策略。
+- 工作流集成测试确认模型计划中的类比来源类型原样传给本地 `search_structured`，没有改用 Provider 原生 web_search，也没有把目标类型重新拼回站内搜索。Provider 全集 64/64 通过。
+- 完整回归收口：浏览 workflow 133/133、workflow/schema 68/68、完整 API 526/526；Ruff lint、55 文件格式、strict Mypy 26 个源文件与 diff check 全绿。现有 XHS-only 分流、预算门禁、重复排除和证据持久化均未回退。
+- 服务重启后的真实普通 Responses 规划在 24 秒返回 `evidence_angle + mechanism_analogy`；类比来源类型为 `spacecraft assembly and testing facility`，目标类型为 `marine robotics testing center`，查询没有原生 web_search。
+- 项目 Playwright 用同一结构化查询轮换 4 个生产站点耗时约 98 秒：ArchDaily 返回 Museu Paulista、Pina、Sanxingdui 和 Arena Zagreb，Designboom 返回 podcast，Dezeen 返回产品/桥梁/竞赛，Divisare 为 0；没有一个航天器设施候选。
+- 这不是 reranker 过严，而是类比规划只优化机制相似度，没有优化现有建筑媒体的可发现性。下一合同应要求选择有较多完整建成项目页、通常会发布平剖面和项目正文的常见建筑来源类型，拒绝只因技术名称相似而选取稀有设施。
+- 2026-08-03 产品方向纠正：此前盲测题把概念初期研究误写成了具体方案验证，导致拆题和搜索越来越窄。正确链路是宽泛任务 -> 开放研究维度 -> 空间优先搜索 -> 从证据发现机制 -> 输出参考方式与边界。
+- 2026-08-03 搜索权重纠正：建筑类型不是默认首要检索对象。对于“互动展厅、教育空间与中庭关系”一类议题，查询应优先覆盖这些空间及其关系，并允许其他建筑类型的可信案例进入候选；类型只提供尺度、条件和语境约束。
+- 2026-08-03 冲突审查：此前新增的 Pydantic 查询锚点要求每条 query 包含 `building_type`，Provider 恢复策略以 `exact_typology/professional_equivalent/named_precedent/evidence_angle` 为主，`mechanism_analogy` 只在第 4 轮后出现；这与“空间优先”直接冲突。
+- 2026-08-03 冲突审查：本地 `search_structured` 会把项目条件和建筑类型排在空间机制之前拼接，并在 deterministic reranker fallback 中按结构化 building type 过滤候选。正式 reranker 和正文分析已具备跨类型机制判断，后两者可保留并改成常规空间相关性准入，不必重写证据层。
+- 2026-08-03 设计决定：采用同一预算内的两路检索。空间优先路负责跨类型发现，项目语境路负责同类条件和适用性校验；不新增搜索调用、页面调用或 Provider 调用预算。
+- 2026-08-03 首轮实现验证：概念初期 fallback、Provider 拆题、空间优先 Pydantic 查询、工业改造语境查询、本地 structured search scope、跨类型候选排序和 workflow 参数传递共 10 项已通过。空间候选按机制可迁移性排序，因此更强的跨类型空间案例会排在较弱候选之前。
+- 2026-08-03 fallback 冲突复核：`_public_issue_focus()` 仍按旧 intent 自动扩写动静分区、连续环流、工作坊、柱网和桁架，这是双路检索主体之外最后一个明确的方案预设冲突。
+- 2026-08-03 fallback 最小修复：改为通用显式词汇提取和中性关系维度。用户明确写出的互动展厅、教育空间、中庭、阶梯阅读、流线、采光、结构或改造界面会被保留；未出现的形式、构件和功能不会由模板补入。明确技术问题仍可逐词保留，不需要回退到类型专用分支。
+- 2026-08-03 残留扫描：正式 `SearchQueryStrategy` 只含 `space_first/project_context/named_precedent/evidence_angle`。`mechanism_analogy/exact_typology/professional_equivalent` 仅出现在反向测试和纠正提示的禁用文本中，不可执行。
+- 2026-08-03 定向验证：planning 18/18、相邻 workflow 搜索 fallback 3/3、Ruff 和 diff check 通过。当前无活动 Run，下一步进入 Provider/Public Pages/browser workflow 组合回归。
+- 2026-08-03 回归收口：精准搜索相关组合 366/366、完整 API 534/534、Provider 67/67 全绿；Ruff、64 文件格式、strict Mypy 26 个源文件和 `git diff --check` 通过。唯一相关失败来自旧测试要求题外 `staff circulation` 和固定采光词序，按显式词合同修正后整组通过。
+- 2026-08-03 真实 Provider 纯内存验证：宽泛概念题生成 `program_relations/user_journeys/coastal_response` 三个开放维度，没有预设形式、材料、结构或流线答案。两条查询分别为 `space_first` 和 `project_context`；空间优先路省略类型与新建条件。reranker 将跨类型图书馆和同类文化中心均判为强空间机制候选，拒绝无关办公立面。
+- 2026-08-03 第一条真实概念盲测在计划阶段证明，仅靠 prompt 不能保证开放拆题：模型把宽泛青年文化中心题具体化为展览、工作坊、后勤、中庭、自然采光和剖面层次。Run `3ea1dd1b-08ff-48a8-b7fa-a5f2b1cdbdbf` 已立即取消。
+- 2026-08-03 通用修复不是建筑类型规则，而是“具体方案前提必须已由用户声明”的输出门控。它覆盖空间形式、程序房间、流线模式、环境手段、材料和结构词族；只有检测到新增前提才调用一次纠正，显式技术题继续保留原词。
+- 2026-08-03 修复后相关 367/367、完整 API 535/535 和全部静态门禁通过。真实同题重放只调用一次 Responses，直接得到空间组织、使用体验、城市/气候/公共空间回应三类开放维度，无题外具体前提。
+- 2026-08-03 专用空白 workspace 的 Run `abc168c5-2b31-49c5-a6d5-206b93bf8aea` 在首轮 `user_experience` 查询规划产生 `ValidationError / deterministic_template`，现已取消并保留。其他轮次真实执行了 `space_first + project_context`，跨类型候选可进入正文读取，其中一页形成完整逐字证据链；双路方向有效，失败集中在查询结构校验。
+- 该 Run 的失败 fallback 查询退化为 `architecture project drawings: user experience activity relationships spatial connections...`。QueryAttempt 不保存失败的模型原始结构，这是正确的敏感面控制，但现有第二次纠正提示也没有收到具体校验原因，只能机械重申所有规则。
+- 冲突审计发现 `SearchQueryAnchors.spatial_mechanism` 强制模型在证据读取前给出“机制切片”，真实成功查询也出现 `shared threshold`、`activity overlap` 等预设关系；这和“机制从证据中发现”不一致。查询阶段应表达中性 `spatial_focus`，正文阶段的 `design_mechanism` 证据合同保留。
+- `building_type` 当前必填，无法处理用户只问展厅、教育空间、中庭等空间关系且未给建筑类型的概念题；类型应为可选结构化语境，题目未声明时不得由空间词反推。
+- 英文 `space_first` 查询目前要求全部 anchors 为 ASCII，即使中文 building type/project condition 只作上下文、不进入执行查询；这与“保留用户项目语境”冲突，也是最新真实 `ValidationError` 的高概率通用触发条件。ASCII 与逐词包含校验应只作用于 query-visible anchors。
+- 正式 reranker 仍以 `mechanism_transferability` 为首排序信号，且同类型候选可绕过来源可信度；deterministic reranker 在已有 `space_first` 时仍调用旧 typology matcher。候选层应改为空间相关性、正文/图纸可读潜力和可信来源优先，类型只作补充。
+- 五个通用红测在旧实现上全部准确失败：空 building type 与 `spatial_focus` 被 Pydantic 拒绝；中文 context-only anchors 被英文 ASCII 合同拒绝；第二次纠正没有校验路径；跨类型强空间候选因旧 mechanism 分数被拒；低可信同类型候选反而被放行；空间优先 deterministic fallback 重新按文化中心类型排除了图书馆空间案例。
+- 最小修复后，`SearchQueryAnchors` 只在用户声明时保存 building type，并用 `spatial_focus` 表示中性研究主题。space-first 的类型/条件只作结构化语境，可保留中文；真正进入英文 query 的 focus/evidence/project name 仍必须 ASCII 且逐词存在。
+- 查询规划首轮一槽明确要求唯一 `space_first`；首次 `ValidationError` 的字段路径、类型和消息经 `errors(include_input=False)` 限为最多四项/1000 字符，只发送给第二次普通 Responses 纠正，不写 Trace、数据库或日志。
+- CandidateAssessment 改为 `spatial_relevance`。代码准入要求 `relevance>=2`、`source_trust>=2`，并满足空间相关或可信同类型项目页；排序以空间相关性优先。页面正文仍必须产生两个逐字核心事实、project context、证据支持的 design mechanism 和 transfer strategy。
+- 联合回归唯一旧冲突是共享 mock 把 Designboom 固定打成低可信，但同一测试又期望读取其项目页；夹具现按生产可信建筑媒体集合修正，没有放松正式来源门槛。
+- 2026-08-03：概念初期 Run `2a45daa0-52e9-4d35-860f-17a023292a83` 的搜索和分析链路本身成功：3/3 子问题正文覆盖、3 个正式项目、18 个可用资产、完整综合、四个 Provider Trace 阶段成功、fallback=0。终态 `partial/budget_exhausted` 只由 `insufficient_multi_asset_projects` 引起。
+- 覆盖计数旧实现对 precedent + article analysis 使用 `article_ready` 资产同时计算项目图纸类型；这错误地要求每张同页图纸都复制项目正文分析与 EvidenceClaims。真实蒙特卡洛案例同一项目页已有 section 与 axonometric，但只有 section 承载分析字段，所以被误计为 0。
+- 正确边界是：项目仍必须先有严格的 article-ready 正文证据；丰富度可统计该项目同一已验证来源 URL 下相关且为 verified/partial 的不同图纸类型。项目名相同但来源 URL 不同不能聚合。修复后真实数据重算为 `multi_asset_projects=1`、无 enrichment gaps，正文和 EvidenceClaim 门槛不变。
+- 2026-08-03：新 Run `22fb1bee-201b-4753-85c2-2ce75ffa48bd` 的 14 条模型查询均为空间关系、使用体验或场地环境证据词，没有类型中心锁死；模型读取 13 个正文分支，严格拒绝 7 个证据不足页面，并从 StreetMekka 与 Vilkaviškis 公交站形成 3/3 逐字证据覆盖和完整综合，fallback=0。
+- 该 Run 达到核心答案后仍因 quick 强制 3 个正式项目和 1 个多图纸项目继续耗尽查询。对概念初期 quick，这两个指标属于研究丰富度，不应凌驾于 3/3 正文证据与分析价值；2 个独立项目已经支持跨案例机制和清晰适用边界。
+- quick 现只校准项目数 3→2、多图纸项目 1→0；assets_per_subquestion=2、assets=6、verified_or_partial=4、分析要求、EvidenceClaim 和综合均不变。balanced/deep 的 4/6 项目与 2/3 多图纸项目不变。
+- 2026-08-03：quick 校准后的首条全新题 `cc7eee8a-bc70-4f9c-867a-d975567a1c4b` 在第 3 轮自然完成，而不是跑满 18 个搜索槽。它从 Castor Place 与 Calgary Central Library 两种不同类型提取内部空间编排和街角抵达机制，3/3、10 资产、18 条逐字 EvidenceClaim、fallback=0。
+- 该 Run 的 Trace 含 6 次成功查询规划、6 次成功 reranking、4 次成功正文分析、1 次成功综合、7 次本地浏览器搜索和 3 次本地正文读取；原生 web_search 事件为 0。说明 quick 调整只移除了非核心尾部追逐，没有绕过模型或本地浏览器链路。
+
+## 2026-08-03 Small-building renovation qualification audit
+
+- 建筑验收候选 Run `e665999e-a7a9-4d79-b4e9-c69fbf5ada85` 自然终止为 `blocked/research_synthesis_incomplete`：0/3、0 usable assets、0 正式项目，保留、不 retry、不计验收；当前活动 Run 为 0。
+- 空间关系与使用体验各运行 4 轮，街区联系运行 3 轮；全部模型阶段没有 deterministic fallback，因此不能用 Provider 降级解释失败。
+- 已知失败信号是：One and a Half Co-working Studio 本地正文读取超时；Project Ulsoor Office 与 Vertical Village 的正文分析为 `direct_match=false`；后续多轮站内搜索返回 0 候选。
+- 下一步必须联合审计完整查询、站点调度、候选去重/排除和正文输入，判断是改造条件、空间焦点、查询语言、站点可发现性还是项目排除过早造成通用低召回；不得添加手工工坊、共享办公或旧城改造的题型专用词表。
+- 数据库对齐结果：11 个 QueryAttempt 全部由 Provider 成功规划，共执行 18 次本地搜索，最终只持久化 6 个 SourcePage。第 3-4 轮在 `divisare.com` 与 `archdaily.cn` 的 7 次结构化搜索全部返回 0，查询预算因此耗尽在低产出恢复站点。
+- 第 2 轮使用体验分支从 ArchDaily 的 8 个本地候选中保留 4 个可信候选，但 One and a Half Co-working Studio 正文读取超时，Project Ulsoor Office 正文为 `direct_match=false`；其余两个保留页没有进入正文分析。
+- workflow 在候选筛选后、正文读取前就把本批全部候选 URL 和项目键加入全局排除集合；`parsed_pages[source.url] = None` 还会缓存读取失败。因此瞬时超时页面既不会在后续查询重新出现，也不会在当前 Run 重读。
+- 正文分析预算在首轮每子问题最多 3 页、后续每个 QueryAttempt 最多 1 页。该边界本身控制成本，但与“读取失败仍永久排除”组合后，会把一次浏览器超时放大为整条证据分支丢失。
+- 成功对照 Run `cc7eee8a-bc70-4f9c-867a-d975567a1c4b` 同样存在无候选、超时和 `direct_match=false` 页面，但 Calgary Central Library 与 Castor Place 在前两轮形成可复用完整证据链，故能在 7 次本地搜索后完成。失败 Run 没有任何首个成功页面，恢复轮便只能继续消耗低召回站点。
+- 项目 Playwright 重新读取 One and a Half Co-working Studio 成功，正文只有一段核心项目说明：原摄影代理办公室被改造为联合办公、maker workshop 与咖啡空间，服务东伦敦创意社区。真实 Provider 纯内存分析返回 `relevance=2/direct_match=false`、2 条同源事实；它与目标语境高度相关，但正文没有可核验的空间邻接、边界、动线或体验机制，因此不能单页升级为正式结果。
+- 这证明“读取失败重试”可以避免丢掉相关候选和补证入口，但不能单独保证覆盖；正式 EvidenceClaim 门槛不应降低。
+- 同一 Designboom 项目语境搜索的中英文 A/B 都只返回同一条无关 podcast，说明该站对长结构化查询的低召回不是单纯语言问题。当前 `_structured_site_query()` 仍按“项目条件 -> 建筑类型 -> 空间焦点 -> 证据类型”执行，与已批准的空间优先设计冲突；Provider 只把 `preferred_language` 当建议，也尚未强制国际站点查询语言一致。
+- 项目 Playwright 用简洁诊断查询 `workshop coworking shared space adaptive reuse floor plan` 轮询 ArchDaily、Designboom、Dezeen，三个站点均返回 4 条候选；其中包括 SALT Workspace、Punto Luce、Second Home 与新的 co-working 项目。这证明现有站点有可发现案例，主要召回缺口是结构化项目语境查询过载，而非预算绝对不足或站点无数据。
+- 通用修复边界应同时约束：国际/中文站点语言与 `preferred_language` 一致；building type 与 project condition 只保留简洁项目语境，不复制整段 brief；实际站内项目语境查询以 `spatial_focus` 为首要词；最终执行词数有界。不能为 maker、coworking 或 renovation 增加题型专用生产词表。
+- 另需独立红测：本地正文瞬时读取失败不得把已选候选永久标为已访问/无关；最多一次有界重读，成功或明确不相关后才进入永久排除。该修复不增加搜索调用预算，也不放宽 EvidenceClaim。
+- 五类通用行为测试在旧实现上准确得到 6 个失败：英文/中文过载条件均未拒绝、国际站点语言未纠正、项目语境 fallback 仍以条件/类型开头、正文超时不重试、已选但未读候选无法进入恢复轮。
+- 最小实现后 6/6 转绿：`project_condition` 限为 6 个拉丁词或 12 个汉字；普通 Responses 结果必须匹配当前站点 `preferred_language`，否则在既有一次纠正内重试；项目语境站内 fallback 改为“项目名 -> 空间焦点 -> 条件 -> 类型 -> 证据”；本地正文仅对超时重读一次；被 reranker 拒绝的候选立即排除，已选候选则在实际读取/检查后才排除。
+- 这些修改不增加本地搜索调用、Provider 调用、候选数或页面槽位，不放宽正文两条核心事实、URL、逐字 EvidenceClaim、limitations 或 XHS-only 合同。
+- 恢复路径仍有独立冲突：选中的本地候选会在正文读取前通过 `_persist_sources()` 写入 `SourcePage(access_status="available")`，而新进程初始化把该 Run 的全部 `SourcePage.url/title` 都加入排除集合。因 `SourcePage` 当前没有区分“待读取、已访问、已判无关”，同进程延后排除修复不能覆盖服务中断后的恢复。
+- `SourcePage.access_status` 目前只有写入默认值且没有其他生产读取者，可在不改数据库结构的前提下承载最小状态机：`pending` 不进入恢复排除，`available` 表示已实际读取/检查，`irrelevant` 表示模型已拒绝或明确无关。旧数据保持 `available`，兼容既有恢复行为。
+- `test_structured_site_search_preserves_arbitrary_query_anchors` 仍期望 fallback 顺序为 condition -> type -> focus -> evidence；生产代码与批准合同已经是 focus -> condition -> type -> evidence。该断言应在恢复红测转绿后更新，不应让生产逻辑退回类型中心。
+- 恢复红测准确复现 `pending` URL 完全不进入 parser。状态修复后，恢复排除只读取非 `pending` SourcePage；实际本地 parse/inspection 成功后才持久化为 `available`。解析失败不再把 `None` 放进 `parsed_pages`，因此不会在同一 Run 内永久屏蔽，最多重试次数仍由现有页面预算控制。
+- reranker 明确拒绝的候选现在持久化为 `irrelevant`，服务重启后仍进入排除集合；`available` 和旧数据保持原排除语义。实现复用既有字符串字段，没有 schema migration 或新产品状态面。
+- Provider、public pages、browser workflow、planning、workflow/schema 与 XHS/browser protocol 共 427 项通过；空间优先词序、40 秒最坏本地读取预算、候选白名单与 XHS-only 隔离同时成立。
+- 完整 API 549/549 通过；Ruff lint、55 文件 format check、strict Mypy 26 个源文件和 diff check 全绿。直接调用 `mypy.exe` 在当前 Unicode workspace 空输出退出 1，项目权威 `python -m mypy apps/api/src` 正常通过，不是类型错误。
+- 源码服务重启后，真实普通 Responses + 本地 Playwright 内存验证生成 `space_first + project_context`。空间优先查询为 `informal learning and chance encounters floor plan architecture`，没有项目类型或新建/滨水条件；项目语境查询单独保留新建、河岸、学习与停留语境。
+- ArchDaily 本地搜索返回 4 个候选，reranker 只保留本地 ID `candidate-2` 与 `candidate-3`，分别为图书馆广场与教育中心；联合办公和普通学院候选被拒绝。白名单有效、原生 web_search=0，说明空间优先允许跨类型但不是无差别放行。
+- 修复后的真实 Run `60993e17-a7fc-4af9-9f80-1eda31d1ccca` 证明概念初期问题可稳定完成：模型拆为 `spatial_relations/daily_experience/site_connections` 三个开放维度；7 个 QueryAttempt 均为英文 Provider 计划，查询从空间优先切换到 evidence/project context 且无重复。
+- 正式案例来自木匠之家与 Bentway，分别支持实践学习/社区共享/分时等候关系和步行骑行通道/社区串联/公共聚集关系。综合明确两者都是跨类型机制类比，不冒充同类型新建先例，并逐项写明乡村更新、线性基础设施尺度与缺少评后证据等边界。
+- 该 Run 为 3/3、7 资产、2 项目。7 次 query planning、6 次 Provider reranking、9 次 page analysis、1 次 synthesis 成功；另一次 reranking 因本地零候选正确不调用。10 次本地搜索、8 次正文读取，25/25 EvidenceClaims URL 与逐字 excerpt 有效，fallback/native web_search 均为 0。
+
+## 2026-08-03 概念初期 / 空间优先再审查
+
+- 当前产品判断不变：默认输入是概念初期的开放任务，拆题只能展开研究维度，不能在读取案例前预设具体形式、构件、材料、结构或流线答案。
+- 搜索排序应为：空间对象、活动与关系，使用体验和场地/环境议题，最后才是建筑类型与新建/改造/扩建语境。类型用于尺度和适用性校验，不是默认准入门槛。
+- 已有实现并非从零开始：`space_first + project_context`、可选 `building_type`、`spatial_focus`、`spatial_relevance` 和严格 URL/逐字 EvidenceClaim 均已完成并通过此前完整回归。
+- 本轮必须重点检查残余冲突是否仍存在于恢复查询、Provider 纠正提示、deterministic fallback、候选降级、正文 `direct_match` 语义和综合措辞中；不得用建筑类型专用词补丁提高个别题完成率。
+- 恢复时唯一活动 Run 为 `f429ca55-5377-4dc5-a8fb-87b99d8bccd5`，状态 `inspecting`；在其终态前不得新建或 retry Run，也不得重启服务。
+- 首个确认的生产冲突位于候选准入：Provider 成功路径允许 `spatial_relevance >= 2` **或** `typology_match >= 2`，因此同类型但没有命中当前空间议题的候选仍可占用正文页面预算。空间优先合同应要求空间相关性本身达标，类型匹配只参与排序、语境和适用性说明。
+- 活动 Run 的 Trace 提供真实旁证：第 3 轮 8 个候选保留 4 个，全部计为 typology direct、空间类比计数为 0；后续首个正文页即被判 `relevance=1/direct_match=false`。这不是类型专用召回问题，而是全局候选门控仍残留类型替代空间相关性的语义。
+- 第二处冲突在 Provider 拆题提示：它虽然要求开放研究维度，却仍强制每个子问题把用户建筑类型和项目条件原样写进 `question`。这会让同一类型在三条子问题及后续查询规划输入中重复增权；类型应保留在主问题/项目边界中供适用性判断，子问题正文应优先写空间对象、活动、关系、体验或环境议题。
+- 第三处冲突在 deterministic fallback：`_is_broad_early_inspiration()` 只识别有限的“概念初期/灵感”等词，未命中时 `fallback_plan()` 回到固定 `program/circulation/section/structure/envelope` 分栏，`build_public_search_query()` 又启用类型词表。当前产品将概念初期视为默认，因此 fallback 也应默认开放；用户明确给出的空间或技术机制要保留，但不能据此自动补齐其他方案维度。
+- 现有正文分析合同方向正确：建筑类型不同本身不能判 `direct_match=false`；只要正文逐字支持当前空间问题的一项可迁移机制且尺度可比，就可形成受限分析，并必须写明类型、条件和尺度差异。该层不应因本轮方向调整而放宽 URL、逐字引文或证据链要求。
+- 测试层存在与新产品合同直接冲突的旧断言：`test_openai_precedent_planner_keeps_declared_scope_in_every_subquestion` 要求每个子问题重复类型/条件；reranker 测试与 mock 允许 `typology_match=4`、`spatial_relevance=0` 的候选进入。开发时需要先写替代红测，再只更新这些冲突断言；其余 URL 白名单、来源可信度、正文与 XHS 隔离测试保持不变。
+- 候选准入不宜从“类型可替代空间”骤变成“类型完全无效”。合适的通用边界是：优先保留空间相关候选；在摘要不足但来源可信、类型精确且仍值得探查时，最多允许 1 个类型语境探查候选，不能像当前实现一样最多 4 个类型候选挤占页面预算。类型只用于补充召回和后续适用性校验，不计作空间直接命中。
+- deterministic reranker 的输入 `public_relevance_context` 由整题和旧 fallback 查询生成，而不是由当前 `space_first` 计划的 `spatial_focus` 生成；其相关性评分还对工业/改造和若干旧机制词额外加权。因此 Provider 暂时失败时，空间优先路径可能再次被类型/条件权重覆盖。降级相关性应优先使用当前结构化查询的空间焦点与证据类型，项目语境只作次级排序。
+- 推荐的代码边界是双输入而非一句话重复：`ResearchSubquestion.question` 表达空间研究焦点；主问题/brief 保存 target project context。查询规划和候选 reranker 已同时收到两者，正文分析目前只收到子问题，需评估增加独立、只用于转译和 limitations 的项目语境参数，避免为了边界说明而把类型重新塞回每个子问题。
+- 活动 Run 在 09:58 本地时间推进到 Trace 117、round 6/query 16 of 18：3/3 子问题已有正文覆盖，fallback=0，但仍只有 1 个正式项目，正在追补 quick 的第二项目。Run 正常推进，未并发或重启。
+- 第四处且优先级最高的冲突位于 `_public_page_analysis_question()`：它在本地正文读取后、模型分析前，按粗略 intent 自动追加具体机制模板。`flow` 自动加入公众/员工/后勤/消防与核心筒，`daylight` 自动加入天窗/高侧窗/庭院/挑空，`section` 自动加入夹层/屋盖/竖向交通，`program/interface` 也追加构造做法。这会让正文模型去证明用户没有提出的答案，必须改为原样保留空间研究焦点；用户显式提出的机制已在原问题中，无需程序补写。
+- `test_public_page_analysis_question_stabilizes_program_intent_wording` 等旧测试直接固化了上述模板，属于需替换的冲突测试。正文逐字校验、两条核心事实和 limitations 测试不受影响。
+- 五类新行为测试已先取得 5 个准确红灯；“用户显式技术词原样保留”本来就通过。最小实现后 6/6 全绿：fallback 默认开放拆题、Provider 提示前景化空间、正文问题不再注入模板、type-only 候选最多 1 个、降级筛选使用当前空间焦点与标准化候选摘要。
+- type-only 候选仍只在 `typology_match >= 3`、`source_trust >= 3` 且空间候选未占满 4 个时补 1 个；空间候选按 `spatial_relevance` 优先排序。Trace 新增 `type_context_probe_count`，未更改总候选/页面预算。
+- 首轮相关回归 20 个失败。多数是旧测试/mock 写死 fallback ID `program/circulation/section`，不代表生产退化；不能为通过它们把开放维度改回预设维度。
+- 两个真实通用问题：当前 exploratory fallback 的每个子问题都重复完整 `scope`，确定性公开查询会把同一显式词复制到三题并产生重复；应只让第一条保留原题范围，其余题前景化使用体验、场地/环境等独立维度。其次，Provider 完全不可用时，宽泛问题的 deterministic page analysis 没有中性空间证据词，可能丢弃正文中真实的保留空间/功能植入/路径关系；需要中性的正文证据识别，而不是重新向问题注入模板答案。
+- 对第二点重新校准：不能为了保留 `partial` 给 deterministic 正文分析追加宽泛关键词，否则会放宽事实准入。Provider 完全不可用且正文不能按用户问题证明机制时应诚实 `blocked`；保留页面/图片诊断即可。只修复第一点：第一条 fallback 子问题保留原题范围，后续题只表达独立开放维度。
+- 查询去重修复后，宽泛 fallback、默认开放 fallback、type-only Provider 提示和恢复查询 distinct 四项目标测试全绿。
+- 相关八文件在最新生产实现上剩余 18 个失败：15 个来自默认 fallback 的旧 `program/circulation/section` 内部 ID，两个夹具仍用旧模板问题文本识别首分支，一个部分结果夹具没有在用户问题中明确给出可由正文证明的机制；没有发现新的生产策略回归。
+- 夹具已按当前开放维度 `spatial_options/use_experience/environment_system` 对齐；部分结果测试把可验证的空间关系显式写入问题，不依赖程序预设答案。18 个失败项定向复检全部通过，URL、逐字 EvidenceClaim、候选和完成门槛均未修改。
+- 第三条建筑验收候选 Run `202d658e-25a3-4158-b26b-bf2c3c187308` 自然终止为 `partial/budget_exhausted`：2/3、5 个 usable assets、1 个正式项目，保留、不 retry、不计验收。11 次查询规划、18 次本地搜索、11 次候选筛选和最终综合均走 Provider 正式路径；没有 deterministic fallback 或原生 web_search。
+- Run 的缺失分支 `shared_independent` 实际召回了上海跨代社区与已覆盖另外两题的小学项目页，但两次相关正文输出因 `OpenAI relevant page analysis did not satisfy the evidence contract` 被严格拒绝。相同上海页面随后用项目 Playwright 重读，真实 Responses 一次返回 5 条逐字事实并完整通过，说明候选和正文可用，失败属于结构化输出偶发不自洽。
+- 通用修复保持两次调用上限和全部证据门槛不变：第一次相关输出不完整时，第二次请求接收最多 8 项/500 字符的精确缺项标签，如 `project_context_excerpt_not_verbatim`、`design_mechanism_missing_supported_fact`、`transfer_strategy_missing`；不传网页正文、URL 或其他数据到反馈字段。
+- 精确反馈红测先准确失败后转绿；Provider 76/76、相关八文件 431 项、完整 API 553/553、Ruff、63 文件格式、strict Mypy 26 个源文件和 diff check 全绿。
+
+## 2026-08-03 Concise project-context typology audit
+
+- 服务恢复后普通 `space_first` Responses 探针成功；没有因为先前外部 TLS `UNEXPECTED_EOF` 增加调用次数。
+- 候选 Run `9b7ed8dc-daef-41d1-b86d-0c0035725a1b` 自然终止为 `partial/no_new_assets`：2/3、3 个资产、1 个正式项目，Provider/deterministic fallback=0，保留、不 retry、不计验收；当前活动 Run=0。
+- 正式空间优先查询能够召回游乐公园等跨类型项目，并为 `family_stay` 与 `activity_coexistence` 建立逐字证据；`daily_arrival` 连续六轮没有形成证据，说明空间优先准入本身不是这次失败的主因。
+- 项目语境查询使用了 `children's care and family community venue`；前一个宽泛社区题使用过 `urban community shared learning and daily service facility`。两者都把多个活动和服务拼成自创类别，不是建筑网站常用索引词。
+- 正确的通用边界不是继续扩充类型字典。`space_first` 应继续不携带目标类型；只有辅助 `project_context` 使用简短的 building-type anchor，而且该值必须是一个常见专业类别，不能复制整段 multi-program brief。
+- Pydantic 应限制 building-type anchor 的结构和长度，Provider prompt 应要求选择常见可检索类别；具体中英文类别由模型根据用户语境生成。未知类型不得默认成 `adaptive reuse`、`public building` 或任意旧模板。
+- 低产出站点调度暂不先改。先验证简洁类型能否恢复 project-context 召回；若仍失败，再依据新的真实 Trace 判断站点调度，而不是同时引入第二个变量。
+- 红测确认旧 Pydantic 同时放过英文和中文 multi-program label，Provider 因此不会进入既有结构化纠正。问题位于通用输出合同，不是某个建筑类型映射。
+- 最小修复只校验会进入本地站点查询的 context 类策略：英文 building type 最多 5 个有效词，中文最多 10 个汉字；`space_first` 可继续保存较完整的用户语境，但执行查询仍严格排除类型和条件。
+- “常见专业类别”无法由纯长度校验可靠判断，因此由普通 Responses prompt 明确要求；Pydantic 只负责可验证的单一短类别边界。这样避免引入有限字典，同时确保不再复制长 brief。
+- 目标 4/4 与 Provider 80/80 通过；既有任意建筑类型、显式工业改造、命名案例和恢复策略未被误伤。
+- 真实内存探针将明确的多活动青年中心 brief 规划为 `daily arrival routes floor plan` 的 `space_first` 和使用 `urban youth center` 的 context 查询；类型是 3 个词，活动关系仍在 `spatial_focus`，普通 Responses 无 fallback。
+- Run `3618a879-3ca3-4d45-9cdf-d8238e95d0d5` 的 5 个 QueryAttempt 都是短空间查询。第二轮 context 槽分别使用 `short stays near communal dining` 和 `new build visual connections between gathering spaces`，没有再出现自创复合类别。
+- 该 Run 在 2/3、8 个资产、3 个项目时，Space Model Shenzhen Biennale 正文分析因 `APIConnectionError` 进入 deterministic fallback；监控在下一轮开始前取消。它不能计验收，但已经证明 concise context 修复通过真实 workflow。
+- 不应为这次外部连接错误增加 Provider 调用次数。先用普通 Responses 健康探针确认上游；恢复后换一条全新题，不 retry 该 Run。
+- 上游健康探针随后成功；共享茶室概念题 Run `24b9aade-b7b1-42da-9392-284cd9c1c535` 自然完成 3/3。模型拆题为社交强度、街道界面和时段适应性，均为开放空间研究维度。
+- 最终案例跨越养老社区、零售/艺术中心和静修亭馆；综合明确它们是空间机制类比，不冒充社区茶室同类型先例，并逐项写明尺度、运营、声学、街道使用和活动证据边界。
+- 7 条 QueryAttempt 全部是 6-11 个词左右的空间/证据查询，没有目标类型锁死或长复合类别。Divisare 第 4 轮返回 0，但 workflow 用已有同源项目的跨子问题正文证据补齐最后缺口，没有额外放宽门槛。
+- 交付审计为 3/3、12 资产、3 正式项目、51 条 URL 绑定逐字 EvidenceClaim、7 次查询规划、6 次实际 reranking、8 次正文分析和 1 次综合；fallback/native web_search 均为 0。建筑正式验收达到 3/3。
+- XHS 会话预检当前为 `unknown/local_search`。受限 OpenCLI auth status 没有返回明确未登录，而是在进程预算内超时；扩展 broker 为 `connected=false`，因此没有第二条可验证登录态通道。
+- 现有产品行为正确 fail closed：图纸 Run 未创建，普通网页链路未执行。Board 已提供固定小红书登录入口和重新检测按钮；必须由用户在 Chrome 完成交互式登录。
+
+## 2026-08-03 First XHS qualification audit
+
+- 登录恢复后预检为 `logged_in/local_search`；第一条 XHS-only Run `96237a51-6425-4365-bec0-dd054b02fabe` 自然终止为 `partial/visual_budget_exhausted`，保留、不 retry、不计验收。
+- Run 产生 23 个资产、8 个项目；全部结果 URL 为小红书且 `has_local_content=true`，普通网页搜索/读取事件为 0，Provider/deterministic fallback=0。
+- XHS 专用终态门槛工作正确：`sectional-collage` 与 `diagrammatic-axon` 各从 3 篇 usable 笔记形成结果；`contour-layering` 的 4 个排序帖子只有 2 篇 usable，因此即使通用 coverage report 为 3/3，最终仍诚实返回 partial。
+- 失败不是视觉字节上限：40 次视觉调用共 9,711,135 bytes，没有 byte-limit 标记。固定每方向最多 4 帖、累计 3 篇 usable、每帖最多 4 图、48 图像槽位 / 48 MiB 不应放宽。
+- 模型/确定性方向为 `精细线稿分析图`、`拼贴叙事分析图`、`材质渲染分析图`。实际 `_try_xiaohongshu_search()` 只接收 `subquestion_text[subquestion_id]`，没有携带原问题中的山地场地、到达或内外关系等图纸主题。
+- QueryAttempt 中出现完整原题只是审计文本，不是 OpenCLI 实际查询。通用修复应组合原题中简洁的图纸/场地/空间上下文与当前视觉方向，同时剔除 rationale、Provider 指令、公共网页 evidence 词和登录态说明；不能添加山地游客中心等题型专用词表。
+- 两个跨主题行为测试在旧实现上准确失败：真实 search 参数只有视觉方向，缺失山地/医疗空间主题。最小实现不做中文分词或题型词典，只归一化标点、删除请求话术与执行控制词，并在 96 字符总长内把原题主题放在视觉方向前。
+- QueryAttempt 在 XHS-only 路径同步记录 compact query，因此数据库审计值与传入 OpenCLI/扩展搜索器的参数相同；Trace 仍单独记录实际 backend 和是否发生通道 fallback。
+- XHS/browser 相关四文件 232 项通过，证明固定 4 帖/3 usable/48 图/48 MiB、XHS-only、登录预检和 fail-closed 合同未变化。
+- 修改后首个盲测 Run `e1a8fc51-d2a4-4ddf-bf87-fbd01d82f94d` 的实际查询已正确携带校园共享学习主题与模型视觉方向，但仍保留“概念图纸、表达、不同的剖面图表达”等请求/媒介话术；第一方向 4 个排序帖子仅 1 篇 usable，已在结论确定后取消并保留，不 retry、不计验收。
+- 用同一登录态做一次只读搜索 A/B：将查询缩为主题名词、空间关系和视觉方向后，前四条候选从泛校园/论文内容转向学生活动中心、校园节点和学校空间。说明应进一步压缩通用话术，而不是移除主题上下文或提高 XHS 固定预算。
+- 下一步合同收紧为总长最多 64 字符；从原题上下文删除概念图纸、表现/表达、参考/比较、不同、配色、线型、版式、风格及已由视觉方向携带的图纸类型。空间、活动、场地与关系词原样保留，不做题型词表。
+
+## 2026-08-03 XHS drawing-intent boundary correction
+
+- 最新产品判断推翻了上述 compact-query 方向：XHS 图纸研究的检索对象不是项目案例，而是图纸视觉方向。搜索词只应包含表现方式和图纸类型，例如精细线稿剖面图、拼贴叙事爆炸图。
+- 建筑类型、项目主题、场地条件和空间关系即使出现在原始用户问题中，也不得进入 XHS 实际查询；这些维度属于建筑案例研究链路，不属于纯图纸视觉参考链路。
+- 因此继续压缩“原题主题 + 视觉方向”无法解决问题，正确修复是删除主题拼接。生产 workflow 现在把当前视觉子问题文本原样归一化后同时传给 OpenCLI/扩展搜索器和 `QueryAttempt.query`。
+- 通用行为测试覆盖两个不同项目语境，旧主题拼接实现 2/2 失败；删除 helper 后 2/2 转绿。山地题查询严格为“精细线稿分析图”，医疗题严格为“精细线稿剖面图”，建筑与空间主题均未出现。
+- 后续 XHS 验收题必须是纯视觉请求，不能再用山地游客中心、校园共享学习或医疗空间等项目 brief。固定每方向 4 帖、累计 3 篇 usable、每帖 4 图、48 图像槽位 / 48 MiB 和 XHS-only fail-closed 合同不变。
+- 纯视觉方向修复的相关回归为 232/232，完整 API 为 559/559；Ruff、55 文件 format check、strict Mypy 26 个源文件和 diff check 全绿。删除 compact helper 没有破坏 XHS 登录预检、固定预算、普通网页隔离或运行完成合同。
+- 第一条真实纯视觉 Run 的 Provider 拆题和执行查询完全一致：`fine-linework=精细线稿剖面图`、`collage-narrative=拼贴叙事剖面图`、`atmospheric-rendering=材质渲染剖面图`。三条均由 `local_browser` 完成，没有附加任何项目语境。
+- 三方向分别在第 3 篇笔记达到 3 篇 usable，workflow 没有继续消耗各方向第 4 帖。最终 24 个资产全部为 section、XHS URL 且有本地内容，来源笔记 9 篇；图像槽位 30/48、约 4.33 MiB，普通网页与 fallback 事件均为 0。
+- 爆炸图真实 Run 的三条查询同样保持纯视觉边界，但三个风格都低于每方向 3 篇 usable，说明问题跨风格存在。多条 `xiaohongshu_assets` 事件是图片已下载后 `candidate_count=0`，另有部分 `accepted_type_count=0/type_mismatch>0`。
+- 该失败不是视觉字节上限：42 次调用仅约 7.05 MiB；也不是普通网页或 Provider fallback。下一步应检查爆炸图在本地视觉分类中的通用语义边界，以及搜索返回的真实内容，不应降低 3 篇 usable 或扩大 4 帖上限。
+- 同登录态只读 A/B 证明图纸学科限定有效：`极简图解建筑爆炸图` 返回建筑爆炸图教程/线稿，`材质渲染建筑爆炸图` 返回城市设计/渲染爆炸图，避免原查询中的产品外壳、振膜等拆解图。该限定不是建筑类型或项目主题。
+- 视觉 schema 没有独立 exploded 类型，workflow 将爆炸图映射为 `axonometric`；旧 OpenAI 提示未说明拼贴/渲染爆炸图仍属 axonometric，Mock 也不识别爆炸/分解关键词。三处最小修复后目标 5/5 转绿。
+- 爆炸图修复后的相关全集 320/320、完整 API 561/561 和全部静态门禁通过；没有修改固定 XHS 预算、登录 fail-closed、普通网页隔离或可见 observations/relevance 准入。
+- 真实模型探针没有被提示诱导：标题含“爆炸式拼贴”但图中无明确构件分解关系时，模型仍输出 `analysis_diagram` 并说明缺失爆炸关系。这证明证据门槛仍有效。
+- 第二轮类型前置 A/B 的结果比风格前置稳定：极简、拼贴和材质渲染查询均出现明确建筑爆炸图；实现改为 `建筑爆炸图 + 风格`。相关/完整/静态门禁第二次全绿。
+- 标题明确的真实轴测爆炸图探针验证了分类合同：3 张图片全部为 axonometric/relevance=4，观察中逐张识别楼层、框架、屋面、楼板和场地的分解关系。与前一普通拼贴的正确拒绝共同证明分类不是按标题或提示盲目放行。
+- 第二条爆炸图 Run `a33b0185-fc5d-48ed-a93f-8c3cb7df042f` 的实际 QueryAttempt 为 `建筑爆炸图 黑白线稿`、`建筑爆炸图 红灰配色`、`建筑爆炸图 材质渲染`，不存在住宅、学校、场馆等建筑类型，也没有项目、场地或空间语义。
+- 该 Run 的黑白线稿与材质渲染各用 3 篇笔记达到 3 篇 usable；红灰配色前两篇 usable，后两篇共 8 张图片全部 type mismatch，因此专用 XHS 门槛正确返回 `partial/visual_budget_exhausted`。通用 coverage 3/3 不能替代每方向 3 篇 usable。
+- 用户原题明确写了“红灰配色图解”，模型拆题却生成“红灰配色建筑爆炸图”，执行查询因而丢失“图解”限定。通用修复应要求明确列出的视觉风格逐项原样保留，不应增加红灰专用词表、帖子预算或放宽视觉类型门槛。
+- 最新产品边界进一步明确：图纸搜索的语义维度只有视觉风格与图纸类型。`建筑爆炸图`只用于将爆炸图限定为建筑制图、排除产品拆解噪声，不代表某种建筑类型；不得向用户追问或推断项目类型。
+- 视觉规划语义校验采用可证明且通用的窄边界：仅当用户在冒号后明确枚举出与深度目标数量一致的视觉短语时，逐字检查每个短语是否进入唯一子问题。没有明确枚举时依靠强化后的模型合同，不用脆弱中文分词猜测用户风格。
+- 纠正仍走同一普通 Responses + `ResearchPlan` Pydantic 结构化输出；只在首次计划违反显式短语合同后调用一次。查询执行继续由 `visual_reference_search_query()` 保留完整风格短语并规范图纸类型位置。
+- 真实 Provider 返回 `爆炸图：黑白线稿`、`爆炸图：红灰配色图解`、`爆炸图：材质渲染`，证明显式风格保真合同生效。执行 helper 删除“爆炸图”后没有同步删除相邻冒号，产生 `建筑爆炸图 ：风格`；这是与具体风格无关的查询规范化缺口。
+- 查询归一化只删除图纸类型移除后残留在风格两端的空白、冒号和连接横线；不会删除或改写任何视觉短语。真实三条计划因此规范为 `建筑爆炸图 黑白线稿`、`建筑爆炸图 红灰配色图解`、`建筑爆炸图 材质渲染`。
+- 未见剖面图 Run 的规划和查询合同全部生效，但“纸张纹理拼贴”方向在 4 帖内只有 2 篇 usable。类型前置查询返回两篇直接剖面内容，风格前置查询也没有更好；这是人为验收题过窄造成的稀疏召回，不应驱动生产代码增加该风格专用词或放宽门槛。
+- 稳定性验收题也必须符合产品真实使用场景：用户在概念初期更可能只指定图纸类型并请求视觉方向，而不是预先规定针管笔密度、纸张纹理等细节。下一条应使用宽泛纯视觉请求，仍由 Provider 生成风格方向并由本地 XHS 搜索验证。
+- 宽泛轴测图问题证明真实使用方式可稳定完成：Provider 生成三种常见可见风格，本地查询只含风格和轴测图，三方向均达到 3 篇 usable。第一方向用了 4 帖，另外两方向各 3 帖，固定上限有效且无需新增预算。
+- 该 Run 的 27 个资产全部来自 9 篇 XHS 笔记并有本地文件；没有普通网页搜索、候选 reranking、公共正文分析或研究综合事件。这里的 `openai` 事件只表示每方向已选择 XHS 笔记后跳过普通模型搜索，fallback 均为 0。
+- 宽泛平面图问题未通过并不说明建筑类型污染：三条查询仍仅含风格和平面图。失败来自水彩/高对比拼贴搜索结果偏向插画或非平面图，40 次视觉检查正确拒绝类型不符图片；不能为达到验收数字误升 asset type。
+- 这类来源稀疏属于 XHS 严格 3 usable 合同允许的诚实 partial。既然用户要求的是视觉方向而非保证每个任意混合媒介都有三篇，生产代码不应根据该单题加入水彩或拼贴词表。
+
+## 2026-08-03 XHS visual candidate pool and input boundary
+
+- 宽泛立面图 Run `4bb39b3c-5bc0-46c3-95f7-ab53c9f62937` 的技术线稿、氛围拼贴、水墨晕染分别达到 2/3/3 篇 usable。常见线稿仍可能因为 OpenCLI 前四条中后两条为空内容或错图纸类型而失败，说明继续增加单风格同义词不是通用修复。
+- XHS adapter 现在只为视觉研究扩大“元数据候选池”，最多取 8 条；workflow 按目标图纸类型标题命中和当前风格文本的 CJK bigram 相关性排序后，仍最多打开/下载 4 帖。这样增加的是选择质量，不是页面、图片、Provider 或字节预算。
+- 非视觉 XHS 搜索仍为 4 条；每帖最多 4 图、每方向累计 3 篇 usable、全 Run 48 图像槽位/48 MiB 均不变。Trace `xiaohongshu_candidate_pool` 可审计池大小、保留数和类型命中数。
+- 用户最终输入边界不是“建筑类型 + 图纸”，而是“视觉分割/构图/表现方向 + 图纸类型”。剖面图、爆炸图、轴测图描述的是制图类别；建筑类型、项目主题、场地和空间关系都不应成为图纸研究的输入要求或搜索条件。
+- 现有 Provider 提示已经禁止推断建筑类型，但需要覆盖 UI、fallback 和执行入口的行为测试，避免某个兼容路径重新提出建筑类型问题。只有这个全入口合同转绿后，才可重启并创建第三条 XHS 验收 Run。
+- 全入口审查确认后端无需再加建筑类型词表或语义猜测器：Provider 提示明确禁止建筑类型，deterministic visual plan 只按请求图纸类型生成风格，XHS-only QueryAttempt 与实际搜索参数相同，且公共网页/模型搜索在执行前关闭。
+- 真正的用户可见冲突是共享 Composer 标题没有按 goal 分流。视觉模式仍出现“空间、流线”，会让用户误以为必须描述建筑问题；红测准确复现后，只将视觉模式标题和说明改为图纸类型与分割/构图等视觉方向。
+- 候选池和 UI 修改后的完整 API 567、Board 181、Python/TypeScript 静态门禁与 production build 全部通过。下一次真实 Run 应验证服务重启后 Trace 出现 `xiaohongshu_candidate_pool`，且普通网页事件仍为 0。
+- 效果图候选 Run 的 Provider 规划完全符合最新输入合同，但“电影感纵深构图效果图”在 OpenCLI 8 条结果中大多变成摄影、影视分镜和 AI 生图内容；这证明纯视觉语义正确不等于来源域消歧充分。
+- 8→4 Trace 正常出现，首方向 `source_pool_count=8/retained=4/drawing_type_match=1`。四帖分别为 4 张 render 可用、3 张类型不匹配、1 张 render 可用和 0 候选，最终 2 篇 usable；候选池机制生效但排序信息不足。
+- 仅把效果图前置没有改善；使用“建筑效果图”学科限定后，候选出现建筑渲染和空间设计内容。这里的“建筑”表示制图领域，不是社区中心、学校、住宅等建筑类型，与用户输入边界不冲突。
+- 通用排序不能只看类型字符串，因为“产品效果图”“影视效果图”同样命中。应结合建筑/图纸/空间设计/渲染等制图语境，并对摄影、电影、影视、产品等明显跨行业标题降权；风格 bigram 和原始 rank 继续作为次级信号。
+- 首轮排序实现把建筑语境放在类型命中之前，旧立面测试正确发现“技术制图课程”会挤掉明确立面图。最终改为综合分：明确图纸类型仍是主信号；建筑制图语境加分；没有建筑语境时摄影/影视/产品强降权；风格重合封顶为次级信号。
+- “空间设计电影感渲染”同时命中建筑语境和“电影”噪声词。第二次红测失败促使规则只在缺少建筑语境时施加跨行业惩罚，避免把合法的建筑电影感表现误杀。
+- 相关 328、完整 API 569 和静态门禁全绿，证明消歧逻辑没有破坏立面类型优先、剖面/轴测查询、爆炸图分类或 XHS-only 隔离。
+- 修改后的宽泛效果图 Run `c521e3bd-6067-4453-b574-7c62684624e8` 真实完成，证明通用学科消歧与 8→4 综合候选排序可以处理效果图的摄影、影视和产品噪声，不需要具体建筑类型词表。
+- 三条实际查询严格为“建筑效果图 电影感写实”“建筑效果图 拼贴图形化”“建筑效果图 氛围水彩”；25 个结果全部分类为 `render`，来自 9 篇 XHS 笔记且本地文件存在。普通网页事件与 fallback 均为 0。
+- 图纸搜索合同最终收敛为：用户只提供图纸类型和视觉分割/构图/表现方向；仅在图纸类型跨行业歧义时添加建筑制图学科限定，不询问或推断住宅、学校、场馆等建筑类型。
+- Board 的六条正式 Run 真实展示完整：建筑页面每个子问题都有结论、案例正文、转译步骤和来源；视觉页面每个方向都有 3 篇 XHS 笔记及本地图像。项目 Playwright 共验证 86/86 张界面图片实际加载。
+- Board 会为未手动创建的表达规范请求 `/style-profile` 并收到预期 404，然后使用默认空规范；QA 只豁免这一明确可选资源，其他本地 4xx/5xx、页面错误、缺图和空章节仍会失败。
+- 整页截图人工检查未发现文字、图片、工具区相互遮挡；长页面截图中的固定页头重复是 Playwright full-page 拼接表现，不是实际页面重叠。
+- 架构没有从 plan-and-execute 迁移到多 Agent 或工具调用模型。变化发生在 Plan/Execute 内部合同：Plan 增加空间优先结构化查询与纯视觉方向，Execute 增加本地候选集、候选 ID 白名单筛选、排除集合和按缺口补查；唯一 orchestrator 与七阶段状态机保持不变。
+- README 原流程图只写“生成有界查询 → Direct Playwright”，不足以解释当前模型辅助本地搜索。新版首页把建筑与 XHS 两条执行支路分开，并明确默认不调用 Provider 原生 `web_search`；Release 测试持续约束这些公开说明。
+- `v2.2.4` 自包含安装版能在源码服务占用默认端口时正确选择动态端口 `8771`，并从安装版路径返回版本正确的 desktop health、API health 和生产 Board。说明安装器包含的新 API/Board 不是只通过静态自检。
+- 安装 smoke 仅复制不含 Key 的 Provider 配置，Key 仍从 Windows Credential Manager 读取；安装包内没有 Chrome manifest，证明扩展保持独立交付。smoke 前本机无安装版数据，结束后程序、快捷方式和本次数据目录均无残留。

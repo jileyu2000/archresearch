@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { apiClient } from '../api/client'
+import { apiClient, type XiaohongshuSessionStatus } from '../api/client'
 import {
   BrowserBridgeError,
   requestBrowserBridge,
@@ -27,6 +27,9 @@ export function useBrowserReadiness({
 }: UseBrowserReadinessOptions) {
   const [browserConnected, setBrowserConnected] = useState<boolean | null>(null)
   const [xiaohongshuSearchAvailable, setXiaohongshuSearchAvailable] = useState(false)
+  const [xiaohongshuSessionStatus, setXiaohongshuSessionStatus] =
+    useState<XiaohongshuSessionStatus | 'unchecked'>('unchecked')
+  const [xiaohongshuSessionLoading, setXiaohongshuSessionLoading] = useState(false)
   const [browserReadinessLoading, setBrowserReadinessLoading] = useState(!demoMode)
   const [browserReadinessError, setBrowserReadinessError] = useState('')
   const [preflightBridgeStatus, setPreflightBridgeStatus] =
@@ -34,6 +37,8 @@ export function useBrowserReadiness({
   const [browserPairingStatus, setBrowserPairingStatus] = useState('')
   const [browserConnecting, setBrowserConnecting] = useState(false)
   const readinessRequestRef = useRef(0)
+  const xiaohongshuRequestRef = useRef(0)
+  const xiaohongshuCheckPromiseRef = useRef<Promise<XiaohongshuSessionStatus> | null>(null)
   const chromeConnectAttemptedRef = useRef(false)
   const chromeConnectRequested = useMemo(
     () => new URLSearchParams(window.location.search).get('connect') === 'chrome',
@@ -72,6 +77,38 @@ export function useBrowserReadiness({
     setBrowserReadinessError('')
     await loadBrowserReadiness()
   }, [demoMode, loadBrowserReadiness])
+
+  const checkXiaohongshuSession = useCallback(async (): Promise<XiaohongshuSessionStatus> => {
+    if (demoMode) return 'unavailable'
+    if (xiaohongshuCheckPromiseRef.current) {
+      return xiaohongshuCheckPromiseRef.current
+    }
+    const requestId = xiaohongshuRequestRef.current + 1
+    xiaohongshuRequestRef.current = requestId
+    setXiaohongshuSessionLoading(true)
+    const pending = apiClient.checkXiaohongshuSession()
+      .then((result) => result.status)
+      .catch(() => 'unknown' as const)
+    xiaohongshuCheckPromiseRef.current = pending
+    try {
+      const status = await pending
+      if (xiaohongshuRequestRef.current !== requestId) return 'unknown'
+      setXiaohongshuSessionStatus(status)
+      return status
+    } finally {
+      if (xiaohongshuCheckPromiseRef.current === pending) {
+        xiaohongshuCheckPromiseRef.current = null
+      }
+      if (xiaohongshuRequestRef.current === requestId) {
+        setXiaohongshuSessionLoading(false)
+      }
+    }
+  }, [demoMode])
+
+  const refreshResearchEnvironment = useCallback(async () => {
+    await refreshBrowserReadiness()
+    await checkXiaohongshuSession()
+  }, [checkXiaohongshuSession, refreshBrowserReadiness])
 
   useEffect(() => {
     let active = true
@@ -192,8 +229,12 @@ export function useBrowserReadiness({
 
   const ensureBrowserResearchAccess = useCallback(async (requireConnected = false) => {
     if (requireConnected && xiaohongshuSearchAvailable) {
-      setBrowserPairingStatus('')
-      return true
+      const sessionStatus = await checkXiaohongshuSession()
+      if (sessionStatus === 'logged_in') return true
+      onError(sessionStatus === 'not_logged_in'
+        ? '请先登录小红书，登录后点“重新检测”再开始研究。'
+        : '无法确认小红书登录状态。请打开小红书登录后重新检测。')
+      return false
     }
     if (browserConnected !== true) {
       if (requireConnected) {
@@ -209,8 +250,19 @@ export function useBrowserReadiness({
       if (readinessRequestRef.current !== requestId) return false
       setPreflightBridgeStatus(status)
       if (status.researchPermission) {
-        setBrowserPairingStatus('')
-        return true
+        if (!requireConnected) {
+          setBrowserPairingStatus('')
+          return true
+        }
+        const sessionStatus = await checkXiaohongshuSession()
+        if (sessionStatus === 'logged_in') {
+          setBrowserPairingStatus('')
+          return true
+        }
+        onError(sessionStatus === 'not_logged_in'
+          ? '请先登录小红书，登录后点“重新检测”再开始研究。'
+          : '无法确认小红书登录状态。请打开小红书登录后重新检测。')
+        return false
       }
     } catch (error) {
       if (readinessRequestRef.current !== requestId) return false
@@ -229,7 +281,7 @@ export function useBrowserReadiness({
     }
     onError('Chrome 首次使用需要你确认网页读取权限。连接会自动完成，无需输入任何代码；请点击浏览器工具栏的 ArchResearch，选择“允许网页读取”，再回来开始研究。授权后不会每次重复询问。')
     return false
-  }, [browserConnected, onError, xiaohongshuSearchAvailable])
+  }, [browserConnected, checkXiaohongshuSession, onError, xiaohongshuSearchAvailable])
 
   const browserBridgeAvailable = preflightBridgeStatus?.connection === 'connected'
     || (preflightBridgeStatus?.paired === true && preflightBridgeStatus.connection === 'connecting')
@@ -246,23 +298,28 @@ export function useBrowserReadiness({
             : preflightBridgeStatus.researchPermission
               ? 'ready'
               : 'permission'
-  const researchEnvironmentReady = xiaohongshuSearchAvailable || browserReadinessState === 'ready'
-  const researchEnvironmentTitle = browserReadinessState === 'loading'
-    ? '正在检查研究环境'
-    : researchEnvironmentReady
-      ? '研究环境已就绪'
+  const xiaohongshuSessionCheckAvailable = (
+    xiaohongshuSearchAvailable || browserReadinessState === 'ready'
+  )
+  const researchEnvironmentReady = (
+    xiaohongshuSessionCheckAvailable && xiaohongshuSessionStatus === 'logged_in'
+  )
+  const researchEnvironmentTitle = !xiaohongshuSessionCheckAvailable
+    ? browserReadinessState === 'loading'
+      ? '正在检查研究环境'
       : browserReadinessState === 'unknown'
         ? '研究环境状态未知'
         : '研究环境待连接'
-  const researchEnvironmentDetail = xiaohongshuSearchAvailable
-    ? browserReadinessState === 'ready'
-      ? '小红书负责查找灵感 · Chrome 可读取当前页面高清图'
-      : browserReadinessState === 'permission'
-        ? '小红书负责查找灵感 · Chrome 读取当前页面需授权'
-        : browserReadinessState === 'loading'
-          ? '小红书负责查找灵感 · 正在检查 Chrome 页面读取'
-          : '小红书负责查找灵感 · 连接 Chrome 可读取当前页面高清图'
-    : {
+    : xiaohongshuSessionLoading
+      ? '正在检查小红书登录'
+      : {
+        logged_in: '研究环境已就绪',
+        not_logged_in: '请先登录小红书',
+        unknown: '登录状态未确认',
+        unavailable: '研究环境待连接',
+        unchecked: '小红书登录待确认',
+      }[xiaohongshuSessionStatus]
+  const unavailableEnvironmentDetail = {
     loading: '正在检查 Chrome 与网页权限',
     unknown: '连接状态未读取，请稍后刷新',
     disconnected: '连接 Chrome 后可搜索小红书，并读取当前页面高清图',
@@ -271,6 +328,22 @@ export function useBrowserReadiness({
     permission: 'Chrome 读取当前页面需授权：点击浏览器工具栏的 ArchResearch，选择“允许网页读取”，再点“刷新”',
     ready: 'Chrome 可读取当前页面高清图 · 登录小红书后可搜索笔记',
   }[browserReadinessState]
+  const readyEnvironmentDetail = xiaohongshuSearchAvailable
+    ? browserReadinessState === 'ready'
+      ? '小红书负责查找灵感 · Chrome 可读取当前页面高清图'
+      : '小红书负责查找灵感 · 连接 Chrome 可读取当前页面高清图'
+    : 'Chrome 可读取当前页面高清图 · 小红书登录已确认'
+  const researchEnvironmentDetail = !xiaohongshuSessionCheckAvailable
+    ? unavailableEnvironmentDetail
+    : xiaohongshuSessionLoading
+      ? '正在验证当前 Chrome 中的小红书会话'
+      : {
+        logged_in: readyEnvironmentDetail,
+        not_logged_in: '请在 Chrome 完成登录后重新检测',
+        unknown: '检查未完成，请确认网络和登录页后重新检测',
+        unavailable: unavailableEnvironmentDetail,
+        unchecked: '开始前会确认当前小红书登录状态',
+      }[xiaohongshuSessionStatus]
   const showBrowserConnectAction = !browserReadinessLoading
     && (browserConnected !== true || !browserBridgeAvailable)
 
@@ -279,17 +352,22 @@ export function useBrowserReadiness({
     browserConnecting,
     browserPairingStatus,
     browserReadinessError,
-    browserReadinessLoading,
+    browserReadinessLoading: browserReadinessLoading || xiaohongshuSessionLoading,
     browserReadinessState,
     ensureBrowserResearchAccess,
+    checkXiaohongshuSession,
     handleConnectBrowser,
     loadBrowserReadiness,
     refreshBrowserConnection,
-    refreshBrowserReadiness,
+    refreshBrowserReadiness: refreshResearchEnvironment,
     researchEnvironmentDetail,
     researchEnvironmentReady,
     researchEnvironmentTitle,
     showBrowserConnectAction,
+    showXiaohongshuLoginAction: xiaohongshuSessionStatus === 'not_logged_in',
+    xiaohongshuSessionCheckAvailable,
+    xiaohongshuSessionLoading,
+    xiaohongshuSessionStatus,
     xiaohongshuSearchAvailable,
   }
 }

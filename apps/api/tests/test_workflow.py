@@ -4,10 +4,12 @@ from types import SimpleNamespace
 from typing import Any
 
 import fitz
+import pytest
 from sqlalchemy import func, select
 
 import archresearch_api.workflow as workflow_module
 from archresearch_api.agent.planning import build_public_search_query, build_queries
+from archresearch_api.agent.verification import calculate_coverage
 from archresearch_api.database import Database
 from archresearch_api.inspection import InspectedVisual
 from archresearch_api.models import (
@@ -470,26 +472,31 @@ def test_public_page_analysis_text_keeps_a_mechanism_after_six_thousand_characte
     assert mechanism in _public_page_analysis_text(page)
 
 
-def test_public_page_analysis_question_stabilizes_program_intent_wording() -> None:
+def test_public_page_analysis_question_does_not_add_solution_mechanisms() -> None:
     broad = "新功能如何在图纸中表达可辨识的新旧关系？"
     narrow = "盒中盒、夹层或独立结构如何植入？"
 
     broad_prompt = workflow_module._public_page_analysis_question(broad)
     narrow_prompt = workflow_module._public_page_analysis_question(narrow)
 
-    stable_focus = "新功能通过空间、结构或构造介入"
-    assert broad_prompt.startswith(broad)
-    assert narrow_prompt.startswith(narrow)
-    assert stable_focus in broad_prompt
-    assert stable_focus in narrow_prompt
+    assert broad_prompt == broad
+    assert narrow_prompt == narrow
 
     interface = (
         "新植入功能与保留柱网、楼板和桁架如何通过开洞、退让、跨接形成界面，"
         "并支持公共空间和后勤设施同时运行？"
     )
     interface_prompt = workflow_module._public_page_analysis_question(interface)
-    assert "保留柱网、楼板、桁架、围护和设备遗存" in interface_prompt
-    assert "公众、员工、后勤、设备与消防流线" not in interface_prompt
+    assert interface_prompt == interface
+
+
+def test_public_page_analysis_question_preserves_only_explicit_technical_terms() -> None:
+    question = "新建铁路客运站如何通过多层站厅和竖向交通连接站台与城市广场？"
+    prompt = workflow_module._public_page_analysis_question(question)
+
+    assert prompt == question
+    for invented_term in ("夹层", "挑空", "地下空间", "屋盖", "核心筒", "消防流线"):
+        assert invented_term not in prompt
 
 
 def test_public_search_query_keeps_workspace_typology_for_a_generic_question() -> None:
@@ -520,7 +527,11 @@ def test_public_search_query_prioritizes_program_insertion_over_drawing_media_wo
     )
 
     assert "program insertion" in query
-    assert "exhibition workshop public activity" in query
+    assert "inserted volume" in query
+    assert "retained structure" in query
+    assert "spatial relationships" in query
+    assert "exhibition" not in query
+    assert "workshop" not in query
     assert "old new structure daylight void section" not in query
 
 
@@ -528,22 +539,22 @@ def test_public_search_query_routes_overlapping_words_by_primary_design_intent()
     cases = [
         (
             "新功能通过插入盒体植入旧结构，剖面图如何表达新旧关系？",
-            ("program insertion", "inserted volume"),
-            ("box-in-box", "sectional hierarchy", "skylight clerestory"),
+            ("program insertion", "inserted volume", "retained structure"),
+            ("box-in-box", "workshop", "skylight clerestory"),
         ),
         (
             "原有大跨空间如何通过挑空、夹层、下沉和屋顶加建形成剖面层次？",
-            ("sectional hierarchy", "double-height", "vertical circulation"),
-            ("program insertion", "skylight clerestory"),
+            ("sectional hierarchy", "double-height", "mezzanine", "sunken space"),
+            ("program insertion", "vertical circulation", "skylight clerestory"),
         ),
         (
             "如何插入天窗和高侧窗，让庭院组织稳定的采光策略与剖面？",
-            ("skylight", "clerestory", "courtyard daylight"),
+            ("skylight", "clerestory", "courtyard", "daylight"),
             ("program insertion", "sectional hierarchy"),
         ),
         (
             "加建区域如何通过独立入口、服务廊道和核心筒分离访客与后勤流线？",
-            ("visitor circulation", "back-of-house", "service entrance"),
+            ("visitor circulation", "back-of-house", "independent entrance", "service corridor"),
             ("loading dock", "program insertion", "sectional hierarchy"),
         ),
         (
@@ -553,13 +564,13 @@ def test_public_search_query_routes_overlapping_words_by_primary_design_intent()
         ),
         (
             "How does the section organize the vertical relationship between public levels?",
-            ("sectional hierarchy", "vertical circulation"),
-            ("program insertion", "skylight clerestory"),
+            ("section", "vertical relationships"),
+            ("vertical circulation", "program insertion", "skylight clerestory"),
         ),
         (
             "How do retained columns, slabs and trusses meet new openings, setbacks and "
             "bridges while supporting public and back-of-house uses?",
-            ("old new structural interface", "retained frame", "connection detail"),
+            ("retained columns", "slabs", "trusses", "openings", "setbacks", "bridges"),
             ("visitor circulation", "program insertion"),
         ),
     ]
@@ -694,7 +705,100 @@ def test_quick_run_returns_partial_when_depth_enrichment_stays_incomplete(
         assert run.coverage_report["gaps"] == []
         assert "insufficient_usable_assets" in run.coverage_report["enrichment_gaps"]
         assert "insufficient_subquestion_assets" in run.coverage_report["enrichment_gaps"]
-    assert len(provider.queries) == 15
+    assert (
+        len(provider.queries)
+        == (
+            BUDGETS[BudgetMode.quick].max_rounds
+            + BUDGETS[BudgetMode.quick].completion_recovery_rounds
+        )
+        * DEPTH_TARGETS[BudgetMode.quick].subquestions
+    )
+
+
+def test_article_ready_project_counts_distinct_drawings_from_its_verified_source(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
+    subquestion_id = "spatial_relations"
+
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assert run is not None
+        run.subquestions = [
+            {
+                "id": subquestion_id,
+                "question": "不同案例呈现了哪些可迁移的空间关系？",
+                "rationale": "比较空间组织与实际使用之间的联系。",
+            }
+        ]
+
+        def add_project_assets(
+            project_name: str,
+            evidence_url: str,
+            supporting_url: str,
+        ) -> None:
+            context = f"{project_name} 的项目条件。"
+            mechanism = f"{project_name} 的空间机制。"
+            article_asset = AssetCandidate(
+                run_id=run_id,
+                project_name=project_name,
+                asset_type=ArchitectureAssetType.section.value,
+                source_url=evidence_url,
+                image_url=f"{evidence_url}/section.jpg",
+                result_tier=ResultTier.partial.value,
+                relevance=3,
+                subquestion_ids=[subquestion_id],
+                project_context=context,
+                design_mechanism=mechanism,
+                transfer_strategy=["核验条件后转译空间机制。"],
+                subquestion_analysis={
+                    subquestion_id: {
+                        "project_context": context,
+                        "design_mechanism": mechanism,
+                        "transfer_strategy": ["核验条件后转译空间机制。"],
+                    }
+                },
+            )
+            supporting_asset = AssetCandidate(
+                run_id=run_id,
+                project_name=project_name,
+                asset_type=ArchitectureAssetType.axonometric.value,
+                source_url=supporting_url,
+                image_url=f"{supporting_url}/axonometric.jpg",
+                result_tier=ResultTier.partial.value,
+                relevance=3,
+            )
+            session.add_all([article_asset, supporting_asset])
+            session.flush()
+            session.add_all(
+                [
+                    EvidenceClaim(
+                        asset_candidate_id=article_asset.id,
+                        claim_type="fact",
+                        statement=statement,
+                        source_url=evidence_url,
+                        text_excerpt=excerpt,
+                    )
+                    for statement, excerpt in (
+                        (context, "Verified project context."),
+                        (mechanism, "Verified spatial mechanism."),
+                    )
+                ]
+            )
+
+        same_source = "https://studio.example/verified-project"
+        add_project_assets("Verified project", same_source, same_source)
+        add_project_assets(
+            "Name collision project",
+            "https://studio.example/name-collision",
+            "https://unrelated.example/name-collision",
+        )
+        session.commit()
+
+    coverage = calculate_coverage(database, run_id, require_article_analysis=True)
+
+    assert coverage["project_count"] == 2
+    assert coverage["multi_asset_projects"] == 1
 
 
 def test_partial_asset_without_a_source_claim_does_not_complete_its_subquestion(
@@ -911,14 +1015,26 @@ def test_repeated_asset_stops_enrichment_without_creating_duplicates(tmp_path: P
         assert asset_count == 1
         assert run.coverage_report["gaps"] == []
         assert run.coverage_report["enrichment_gaps"]
-    assert len(provider.queries) == 24
+    assert (
+        len(provider.queries)
+        == (
+            BUDGETS[BudgetMode.balanced].max_rounds
+            + BUDGETS[BudgetMode.balanced].completion_recovery_rounds
+        )
+        * DEPTH_TARGETS[BudgetMode.balanced].subquestions
+    )
 
 
-def test_empty_quick_research_exhausts_three_completion_recovery_passes_for_every_subquestion(
+def test_empty_quick_research_exhausts_all_completion_recovery_passes_for_every_subquestion(
     tmp_path: Path,
 ) -> None:
     database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
-    provider = SequencedProvider([_batch()] * 15)
+    expected_passes = (
+        BUDGETS[BudgetMode.quick].max_rounds + BUDGETS[BudgetMode.quick].completion_recovery_rounds
+    )
+    provider = SequencedProvider(
+        [_batch()] * expected_passes * DEPTH_TARGETS[BudgetMode.quick].subquestions
+    )
 
     execute_research_run(database, run_id, provider)
 
@@ -934,26 +1050,14 @@ def test_empty_quick_research_exhausts_three_completion_recovery_passes_for_ever
 
     assert run is not None
     assert [attempt.subquestion_id for attempt in attempts] == [
-        "program",
-        "circulation",
-        "section",
-        "program",
-        "circulation",
-        "section",
-        "program",
-        "circulation",
-        "section",
-        "program",
-        "circulation",
-        "section",
-        "program",
-        "circulation",
-        "section",
-    ]
+        "spatial_options",
+        "use_experience",
+        "environment_system",
+    ] * expected_passes
     assert run.coverage_report["subquestion_passes"] == {
-        "program": 5,
-        "circulation": 5,
-        "section": 5,
+        "spatial_options": expected_passes,
+        "use_experience": expected_passes,
+        "environment_system": expected_passes,
     }
     assert run.status == RunStatus.blocked.value
 
@@ -986,20 +1090,23 @@ def test_quick_completion_recovery_can_fill_branches_missed_by_normal_depth(
     assert run.coverage_report["covered_subquestions"] == 3
     assert run.coverage_report["gaps"] == []
     assert run.coverage_report["enrichment_gaps"]
-    assert len(provider.queries) == 12
+    assert len(provider.queries) == 15
     assert [attempt.subquestion_id for attempt in attempts] == [
-        "program",
-        "circulation",
-        "section",
-        "circulation",
-        "section",
-        "circulation",
-        "section",
-        "circulation",
-        "section",
-        "program",
-        "circulation",
-        "section",
+        "spatial_options",
+        "use_experience",
+        "environment_system",
+        "use_experience",
+        "environment_system",
+        "use_experience",
+        "environment_system",
+        "use_experience",
+        "environment_system",
+        "spatial_options",
+        "use_experience",
+        "environment_system",
+        "spatial_options",
+        "use_experience",
+        "environment_system",
     ]
 
 
@@ -1527,12 +1634,19 @@ def test_retry_continues_only_uncovered_queries_after_a_resumed_run_stays_partia
 
     assert sum("新功能怎样植入" in query for query in provider.queries) == 1
     assert sum("公共与后勤怎样分开" in query for query in provider.queries) == 1
-    assert sum("剖面怎样形成层次" in query for query in provider.queries) == 11
+    assert sum("剖面怎样形成层次" in query for query in provider.queries) == 13
 
 
 def test_retry_resume_uses_only_the_immediately_previous_failed_execution(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    quick_target = workflow_module.DEPTH_TARGETS[BudgetMode.quick]
+    monkeypatch.setitem(
+        workflow_module.DEPTH_TARGETS,
+        BudgetMode.quick,
+        quick_target.model_copy(update={"projects": 3, "multi_asset_projects": 1}),
+    )
     database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
 
     class CrashesOnSecondSectionQuery:
@@ -1577,7 +1691,7 @@ def test_retry_resume_uses_only_the_immediately_previous_failed_execution(
     _advance_retry_attempt(database, run_id)
     execute_research_run(database, run_id, provider)
 
-    assert provider.counts == {"program": 10, "circulation": 10, "section": 11}
+    assert provider.counts == {"program": 12, "circulation": 12, "section": 13}
 
 
 def test_service_resume_keeps_completed_keys_inherited_by_the_current_retry(
@@ -1631,6 +1745,85 @@ def test_service_resume_keeps_completed_keys_inherited_by_the_current_retry(
     execute_research_run(database, run_id, provider)
 
     assert provider.counts == {"program": 2, "circulation": 2, "section": 4}
+
+
+def test_service_resume_skips_completed_query_after_model_updates_its_language(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assert run is not None
+        run.budget = {
+            **run.budget,
+            "max_rounds": 1,
+            "max_queries": 3,
+            "completion_recovery_rounds": 0,
+        }
+        session.commit()
+
+    class SimulatedProcessExit(BaseException):
+        pass
+
+    class InterruptsOnSecondQuery:
+        name = "language-changing-resume"
+
+        def __init__(self) -> None:
+            self.interrupt = True
+            self.counts = {"program": 0, "circulation": 0, "section": 0}
+
+        def plan(
+            self,
+            question: str,
+            goal: ResearchGoal,
+            budget_mode: BudgetMode,
+            research_context: str,
+        ) -> ResearchPlan:
+            del question, goal, budget_mode, research_context
+            return _quick_research_plan()
+
+        def search(
+            self,
+            query: str,
+            goal: ResearchGoal,
+            allowed_domains: list[str] | None = None,
+        ) -> ProviderSearchResult:
+            del goal, allowed_domains
+            if "新功能怎样植入" in query:
+                key = "program"
+            elif "公共与后勤怎样分开" in query:
+                key = "circulation"
+            else:
+                key = "section"
+            self.counts[key] += 1
+            if key == "circulation" and self.interrupt:
+                self.interrupt = False
+                raise SimulatedProcessExit
+            return _batch()
+
+    provider = InterruptsOnSecondQuery()
+    try:
+        execute_research_run(database, run_id, provider)
+    except SimulatedProcessExit:
+        pass
+    else:
+        raise AssertionError("the first execution should simulate a process exit")
+
+    with database.session_factory() as session:
+        completed = session.scalar(
+            select(QueryAttempt).where(
+                QueryAttempt.run_id == run_id,
+                QueryAttempt.subquestion_id == "program",
+                QueryAttempt.status == "completed",
+            )
+        )
+        assert completed is not None
+        completed.language = "en"
+        session.commit()
+
+    execute_research_run(database, run_id, provider)
+
+    assert provider.counts == {"program": 1, "circulation": 2, "section": 1}
 
 
 def test_duplicate_asset_keeps_analysis_for_each_supported_subquestion(tmp_path: Path) -> None:
@@ -1731,7 +1924,7 @@ def test_workflow_discards_project_context_without_an_exact_supporting_fact(
         candidate = session.scalar(select(AssetCandidate).where(AssetCandidate.run_id == run_id))
     assert candidate is not None
     assert candidate.project_context == ""
-    assert candidate.subquestion_analysis["program"]["project_context"] == ""
+    assert candidate.subquestion_analysis["spatial_options"]["project_context"] == ""
 
 
 def test_perceptual_duplicate_preserves_both_sources_and_prefers_primary_page(

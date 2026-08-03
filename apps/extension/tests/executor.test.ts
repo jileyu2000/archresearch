@@ -117,6 +117,42 @@ describe("browser command executor", () => {
     });
   });
 
+  it("checks Xiaohongshu session status only inside a managed Xiaohongshu tab", async () => {
+    const port = makeBrowserPort();
+    port.createTab.mockResolvedValue({
+      id: 42,
+      url: "https://www.xiaohongshu.com/search_result?keyword=architecture",
+    });
+    port.getTab.mockResolvedValue({
+      id: 42,
+      url: "https://www.xiaohongshu.com/search_result?keyword=architecture",
+      windowId: 7,
+    });
+    port.sendContentCommand.mockResolvedValue({ status: "logged_in" });
+    const executor = new BrowserCommandExecutor(port);
+    await executor.execute(command("open_url", {
+      url: "https://www.xiaohongshu.com/search_result?keyword=architecture",
+    }));
+
+    await expect(executor.execute(command("xiaohongshu_session_status", {
+      tab_id: 42,
+    }))).resolves.toEqual({ status: "logged_in" });
+    expect(port.sendContentCommand).toHaveBeenCalledWith(42, {
+      action: "xiaohongshu_session_status",
+    });
+  });
+
+  it("rejects Xiaohongshu session checks on other public sites", async () => {
+    const port = makeBrowserPort();
+    const executor = new BrowserCommandExecutor(port);
+    await executor.execute(command("open_url", { url: "https://example.com/project" }));
+
+    await expect(executor.execute(command("xiaohongshu_session_status", {
+      tab_id: 42,
+    }))).rejects.toThrow(/xiaohongshu/i);
+    expect(port.sendContentCommand).not.toHaveBeenCalled();
+  });
+
   it("rejects a managed tab that redirects to a private network URL", async () => {
     const port = makeBrowserPort();
     const executor = new BrowserCommandExecutor(port);

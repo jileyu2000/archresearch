@@ -104,10 +104,23 @@ def calculate_coverage(
         else usable
     )
     projects = {asset.project_name for asset in coverage_assets}
+    verified_source_urls_by_project: dict[str, set[str]] = {}
+    if is_precedent and require_article_analysis:
+        for asset in article_ready:
+            verified_source_urls_by_project.setdefault(asset.project_name, set()).add(
+                asset.source_url
+            )
+        project_enrichment_assets = [
+            asset
+            for asset in verified_or_partial
+            if asset.source_url in verified_source_urls_by_project.get(asset.project_name, set())
+        ]
+    else:
+        project_enrichment_assets = coverage_assets
     project_asset_ids: dict[str, set[str]] = {}
     project_asset_types: dict[str, set[str]] = {}
     subquestion_asset_ids: dict[str, set[str]] = {}
-    for asset in coverage_assets:
+    for asset in project_enrichment_assets:
         project_asset_ids.setdefault(asset.project_name, set()).add(asset.id)
         project_asset_types.setdefault(asset.project_name, set()).add(asset.asset_type)
     subquestions = list(run.subquestions or [])

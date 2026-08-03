@@ -12,6 +12,7 @@ describe("packaged content-script protocol", () => {
   it.each([
     { action: "page_metadata" },
     { action: "page_snapshot" },
+    { action: "xiaohongshu_session_status" },
     { action: "enumerate_media" },
     { action: "viewport_metrics" },
     { action: "scroll", direction: "down", distance: 600 },
@@ -26,6 +27,7 @@ describe("packaged content-script protocol", () => {
     { action: "safe_click", target: "like" },
     { action: "type_search_query", query: "test", submit: true },
     { action: "execute_script", code: "document.cookie" },
+    { action: "xiaohongshu_session_status", selector: "body" },
   ])("rejects content command escape hatches", (command) => {
     expect(() => parseContentMessage(message(command))).toThrow();
   });
