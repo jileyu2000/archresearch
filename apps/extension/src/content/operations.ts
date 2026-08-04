@@ -150,10 +150,15 @@ export function executeContentCommand(
 function readXiaohongshuSessionStatus(
   root: Document,
   view: Window & typeof globalThis,
-): { status: "logged_in" | "not_logged_in" | "unknown" } {
+): {
+  status: "logged_in" | "not_logged_in" | "verification_required" | "unknown";
+} {
   const path = `${view.location.pathname}${view.location.search}`;
+  if (/website-login\/captcha(?:[/?#]|$)/iu.test(path)) {
+    return { status: "verification_required" };
+  }
   if (
-    /(?:^|\/)login(?:[/?#]|$)|website-login\/(?:error|captcha)|error_code=(?:300017|300031)/iu.test(
+    /(?:^|\/)login(?:[/?#]|$)|website-login\/error|error_code=(?:300017|300031)/iu.test(
       path,
     )
   ) {

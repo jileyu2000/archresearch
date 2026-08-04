@@ -14,7 +14,12 @@ type UseBrowserReadinessOptions = {
   onError: (message: string) => void
 }
 
-type XiaohongshuLoginFlow = 'idle' | 'opening' | 'waiting' | 'timed_out'
+type XiaohongshuLoginFlow =
+  | 'idle'
+  | 'opening'
+  | 'waiting'
+  | 'verification_required'
+  | 'timed_out'
 
 const XIAOHONGSHU_LOGIN_POLL_ATTEMPTS = 20
 const XIAOHONGSHU_LOGIN_POLL_INTERVAL_MILLISECONDS = 1_500
@@ -106,6 +111,9 @@ export function useBrowserReadiness({
       if (xiaohongshuRequestRef.current !== requestId) return 'unknown'
       setXiaohongshuSessionStatus(status)
       if (status === 'logged_in') setXiaohongshuLoginFlow('idle')
+      if (status === 'verification_required') {
+        setXiaohongshuLoginFlow('verification_required')
+      }
       return status
     } finally {
       if (xiaohongshuCheckPromiseRef.current === pending) {
@@ -240,6 +248,11 @@ export function useBrowserReadiness({
             onAnnouncement('已检测到小红书登录')
             return true
           }
+          if (status === 'verification_required') {
+            setXiaohongshuLoginFlow('verification_required')
+            onAnnouncement('请先完成小红书安全验证')
+            return false
+          }
           if (attempt < XIAOHONGSHU_LOGIN_POLL_ATTEMPTS - 1) {
             await new Promise<void>((resolve) => {
               xiaohongshuLoginPollResolveRef.current = resolve
@@ -317,7 +330,9 @@ export function useBrowserReadiness({
       if (sessionStatus === 'logged_in') return true
       onError(sessionStatus === 'not_logged_in'
         ? '请先登录小红书，登录后点“重新检测”再开始研究。'
-        : '无法确认小红书登录状态。请打开小红书登录后重新检测。')
+        : sessionStatus === 'verification_required'
+          ? '请先在 Chrome 完成小红书安全验证，再点“重新检测”。'
+          : '无法确认小红书登录状态。请打开小红书登录后重新检测。')
       return false
     }
     if (browserConnected !== true) {
@@ -345,7 +360,9 @@ export function useBrowserReadiness({
         }
         onError(sessionStatus === 'not_logged_in'
           ? '请先登录小红书，登录后点“重新检测”再开始研究。'
-          : '无法确认小红书登录状态。请打开小红书登录后重新检测。')
+          : sessionStatus === 'verification_required'
+            ? '请先在 Chrome 完成小红书安全验证，再点“重新检测”。'
+            : '无法确认小红书登录状态。请打开小红书登录后重新检测。')
         return false
       }
     } catch (error) {
@@ -406,6 +423,7 @@ export function useBrowserReadiness({
       : {
         logged_in: '研究环境已就绪',
         not_logged_in: '请先登录小红书',
+        verification_required: '需要完成小红书安全验证',
         unknown: '登录状态未确认',
         unavailable: '研究环境待连接',
         unchecked: '小红书登录待确认',
@@ -430,6 +448,8 @@ export function useBrowserReadiness({
       : '请在新打开的 Chrome 完成登录，本页会自动检测'
     : xiaohongshuLoginFlow === 'timed_out'
       ? '暂未检测到登录；登录完成后可重新检测，或再次打开登录页'
+      : xiaohongshuLoginFlow === 'verification_required'
+        ? '请在已打开的安全验证页完成验证，完成后点“重新检测”'
       : !xiaohongshuSessionCheckAvailable
     ? unavailableEnvironmentDetail
     : xiaohongshuSessionLoading
@@ -437,6 +457,7 @@ export function useBrowserReadiness({
       : {
         logged_in: readyEnvironmentDetail,
         not_logged_in: '请在 Chrome 完成登录后重新检测',
+        verification_required: '请在已打开的安全验证页完成验证，完成后点“重新检测”',
         unknown: '检查未完成，请确认网络和登录页后重新检测',
         unavailable: unavailableEnvironmentDetail,
         unchecked: '开始前会确认当前小红书登录状态',
@@ -461,7 +482,10 @@ export function useBrowserReadiness({
     researchEnvironmentReady,
     researchEnvironmentTitle,
     showBrowserConnectAction,
-    showXiaohongshuLoginAction: xiaohongshuSessionStatus !== 'logged_in',
+    showXiaohongshuLoginAction: (
+      xiaohongshuSessionStatus !== 'logged_in'
+      && xiaohongshuSessionStatus !== 'verification_required'
+    ),
     startXiaohongshuLoginRecovery,
     xiaohongshuLoginFlow,
     xiaohongshuLoginRecoveryActive,

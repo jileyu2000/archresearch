@@ -46,7 +46,12 @@ type ResearchComposerProps = {
   researchEnvironmentDetail: string
   showBrowserConnectAction: boolean
   showXiaohongshuLoginAction: boolean
-  xiaohongshuLoginFlow: 'idle' | 'opening' | 'waiting' | 'timed_out'
+  xiaohongshuLoginFlow:
+    | 'idle'
+    | 'opening'
+    | 'waiting'
+    | 'verification_required'
+    | 'timed_out'
   browserConnecting: boolean
   browserReadinessLoading: boolean
   browserReadinessError: string

@@ -122,7 +122,7 @@ flowchart TB
 
 CI 在 `windows-latest` 上执行 fresh setup、Python/TypeScript 完整门禁、packaged Extension E2E、PyInstaller/Inno 构建和真实安装 smoke。发布产物分开：
 
-- `ArchResearch-Windows-x64-Setup-v2.2.7.exe`
-- `archresearch-chrome-extension-only-v2.2.7.zip`
+- `ArchResearch-Windows-x64-Setup-v2.2.8.exe`
+- `archresearch-chrome-extension-only-v2.2.8.zip`
 
 安装 smoke 必须覆盖 `--self-test`、`/desktop-health`、`/health`、快捷方式、扩展排除、卸载和用户数据保留。默认门禁不得需要 live Provider Key。

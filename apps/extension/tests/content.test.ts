@@ -371,7 +371,7 @@ describe("content operations", () => {
     ).toEqual({ status: "not_logged_in" });
   });
 
-  it("reports a Xiaohongshu safety-verification redirect as not ready", () => {
+  it("reports a Xiaohongshu safety-verification redirect separately", () => {
     window.history.replaceState(
       {},
       "",
@@ -383,7 +383,7 @@ describe("content operations", () => {
       executeContentCommand(document, window, {
         action: "xiaohongshu_session_status",
       }),
-    ).toEqual({ status: "not_logged_in" });
+    ).toEqual({ status: "verification_required" });
   });
 
   it("reports a visible Xiaohongshu login control before its modal opens", () => {
