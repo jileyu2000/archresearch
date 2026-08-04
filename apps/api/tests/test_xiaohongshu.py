@@ -79,8 +79,9 @@ class RecordingBrowser:
 class SessionBrowser:
     connected = True
 
-    def __init__(self, status: str) -> None:
-        self.status = status
+    def __init__(self, status: str | list[str]) -> None:
+        self.statuses = status if isinstance(status, list) else [status]
+        self.status_index = 0
         self.calls: list[tuple[str, dict[str, Any]]] = []
 
     def send_command_sync(
@@ -97,7 +98,9 @@ class SessionBrowser:
         if action == "wait":
             return {"waited_ms": payload["milliseconds"]}
         if action == "xiaohongshu_session_status":
-            return {"status": self.status}
+            status = self.statuses[min(self.status_index, len(self.statuses) - 1)]
+            self.status_index += 1
+            return {"status": status}
         if action == "close_tab":
             return {"closed": True}
         raise AssertionError(f"unexpected browser action: {action}")
@@ -143,6 +146,32 @@ def test_browser_xiaohongshu_login_preflight_returns_only_bounded_status(status:
         "https://www.xiaohongshu.com/search_result?keyword="
     )
     assert sleeps == []
+
+
+def test_browser_xiaohongshu_login_reuses_a_retained_safety_verification_tab() -> None:
+    browser = SessionBrowser(["verification_required", "verification_required", "logged_in"])
+    search = XiaohongshuBrowserSearch(browser)
+
+    assert search.check_login() == "verification_required"
+    assert [action for action, _ in browser.calls] == [
+        "open_url",
+        "wait",
+        "xiaohongshu_session_status",
+    ]
+
+    assert search.check_login() == "verification_required"
+    assert [action for action, _ in browser.calls].count("open_url") == 1
+    assert [action for action, _ in browser.calls].count("close_tab") == 0
+
+    assert search.check_login() == "logged_in"
+    assert [action for action, _ in browser.calls] == [
+        "open_url",
+        "wait",
+        "xiaohongshu_session_status",
+        "xiaohongshu_session_status",
+        "xiaohongshu_session_status",
+        "close_tab",
+    ]
 
 
 class RecordingRunner:

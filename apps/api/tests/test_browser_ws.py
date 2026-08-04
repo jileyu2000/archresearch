@@ -44,9 +44,12 @@ class SessionCheckingXiaohongshu:
 
 
 class SessionCheckingBroker(BrowserBroker):
-    def __init__(self, session_status: str) -> None:
+    def __init__(self, session_status: str | list[str]) -> None:
         super().__init__()
-        self.session_status = session_status
+        self.session_statuses = (
+            session_status if isinstance(session_status, list) else [session_status]
+        )
+        self.session_status_index = 0
         self.commands: list[tuple[str, dict[str, Any]]] = []
 
     @property
@@ -67,7 +70,11 @@ class SessionCheckingBroker(BrowserBroker):
         if action == "wait":
             return {"waited_ms": payload["milliseconds"]}
         if action == "xiaohongshu_session_status":
-            return {"status": self.session_status}
+            session_status = self.session_statuses[
+                min(self.session_status_index, len(self.session_statuses) - 1)
+            ]
+            self.session_status_index += 1
+            return {"status": session_status}
         if action == "close_tab":
             return {"closed": True}
         raise AssertionError(f"Unexpected browser command: {action}")
@@ -275,6 +282,40 @@ def test_xiaohongshu_session_preflight_uses_logged_out_chrome_over_local_login(
     assert [action for action, _payload in browser_broker.commands] == [
         "open_url",
         "wait",
+        "xiaohongshu_session_status",
+        "close_tab",
+    ]
+
+
+def test_xiaohongshu_session_preflight_reuses_one_safety_verification_tab(
+    tmp_path: Path,
+) -> None:
+    settings = Settings(
+        database_url=f"sqlite:///{(tmp_path / 'test.db').as_posix()}",
+        data_dir=tmp_path / "data",
+        provider_mode="mock",
+        run_inline=True,
+    )
+    browser_broker = SessionCheckingBroker(["verification_required", "logged_in"])
+
+    with TestClient(create_app(settings, browser_broker=browser_broker)) as test_client:
+        first = test_client.post("/v1/browser/xiaohongshu-session")
+        second = test_client.post("/v1/browser/xiaohongshu-session")
+
+    assert first.status_code == 200
+    assert first.json() == {
+        "status": "verification_required",
+        "channel": "chrome_extension",
+    }
+    assert second.status_code == 200
+    assert second.json() == {
+        "status": "logged_in",
+        "channel": "chrome_extension",
+    }
+    assert [action for action, _payload in browser_broker.commands] == [
+        "open_url",
+        "wait",
+        "xiaohongshu_session_status",
         "xiaohongshu_session_status",
         "close_tab",
     ]

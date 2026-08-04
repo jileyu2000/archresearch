@@ -333,6 +333,7 @@ export interface BrowserStatus {
 export type XiaohongshuSessionStatus =
   | 'logged_in'
   | 'not_logged_in'
+  | 'verification_required'
   | 'unknown'
   | 'unavailable'
 

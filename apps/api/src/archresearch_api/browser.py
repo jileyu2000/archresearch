@@ -62,7 +62,13 @@ class BrowserStatusRead(StrictModel):
 
 
 class XiaohongshuSessionRead(StrictModel):
-    status: Literal["logged_in", "not_logged_in", "unknown", "unavailable"]
+    status: Literal[
+        "logged_in",
+        "not_logged_in",
+        "verification_required",
+        "unknown",
+        "unavailable",
+    ]
     channel: Literal["local_search", "chrome_extension", "none"]
 
 
@@ -504,8 +510,11 @@ def create_browser_router(
     broker: BrowserBroker,
     chrome_launcher: Callable[[str], bool] | None = None,
 ) -> APIRouter:
+    from .xiaohongshu import XiaohongshuBrowserSearch
+
     router = APIRouter(prefix="/v1")
     resolved_chrome_launcher = chrome_launcher or open_known_url_in_chrome
+    extension_session_checker = XiaohongshuBrowserSearch(broker)
 
     @router.post(
         "/browser/pairing-code",
@@ -529,12 +538,14 @@ def create_browser_router(
         response_model=XiaohongshuSessionRead,
     )
     def xiaohongshu_session(request: Request) -> XiaohongshuSessionRead:
-        from .xiaohongshu import XiaohongshuBrowserSearch, XiaohongshuSessionChecker
+        from .xiaohongshu import XiaohongshuSessionChecker
 
-        extension_status: Literal["logged_in", "not_logged_in", "unknown"] | None = None
+        extension_status: (
+            Literal["logged_in", "not_logged_in", "verification_required", "unknown"] | None
+        ) = None
         if broker.connected:
             try:
-                extension_status = XiaohongshuBrowserSearch(broker).check_login()
+                extension_status = extension_session_checker.check_login()
             except Exception:
                 extension_status = "unknown"
             if extension_status != "unknown":

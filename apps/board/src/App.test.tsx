@@ -83,8 +83,8 @@ interface LiveFetchOptions {
   eventTool?: string
   browserConnected?: boolean
   xiaohongshuSearchAvailable?: boolean
-  xiaohongshuSessionStatus?: 'logged_in' | 'not_logged_in' | 'unknown' | 'unavailable'
-  xiaohongshuSessionStatuses?: Array<'logged_in' | 'not_logged_in' | 'unknown' | 'unavailable'>
+  xiaohongshuSessionStatus?: 'logged_in' | 'not_logged_in' | 'verification_required' | 'unknown' | 'unavailable'
+  xiaohongshuSessionStatuses?: Array<'logged_in' | 'not_logged_in' | 'verification_required' | 'unknown' | 'unavailable'>
   browserStatuses?: boolean[]
   pollCoverageReport?: Record<string, unknown>
   pairingCode?: string
@@ -2706,6 +2706,40 @@ describe('research board', () => {
     expect(fetchMock.mock.calls.filter(([path]) => (
       path === '/v1/browser/open-xiaohongshu-login'
     ))).toHaveLength(1)
+  })
+
+  it('keeps one Xiaohongshu safety-verification page and pauses automatic checks', async () => {
+    const fetchMock = createLiveFetch({
+      browserConnected: true,
+      xiaohongshuSessionStatuses: ['verification_required', 'logged_in'],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderBoard()
+
+    await screen.findByText('真实工作区')
+    vi.useFakeTimers()
+    fireEvent.click(screen.getByRole('button', { name: /图纸灵感.*配色、线型、版式与分析图/ }))
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText('需要完成小红书安全验证')).toBeVisible()
+    expect(screen.getByText(/已打开的安全验证页/)).toBeVisible()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000)
+    })
+    expect(fetchMock.mock.calls.filter(([path]) => (
+      path === '/v1/browser/xiaohongshu-session'
+    ))).toHaveLength(1)
+    expect(fetchMock.mock.calls.filter(([path]) => (
+      path === '/v1/browser/open-xiaohongshu-login'
+    ))).toHaveLength(0)
+
+    fireEvent.click(screen.getByRole('button', { name: '重新检测' }))
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(screen.getByText('研究环境已就绪')).toBeVisible()
   })
 
   it('keeps an existing Xiaohongshu login without opening another login tab', async () => {

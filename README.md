@@ -1,7 +1,7 @@
 # ArchResearch 建筑研究工作台
 
 [![verify](https://github.com/jileyu2000/archresearch/actions/workflows/verify.yml/badge.svg)](https://github.com/jileyu2000/archresearch/actions/workflows/verify.yml)
-![version](https://img.shields.io/badge/version-2.2.7-2F5BFF)
+![version](https://img.shields.io/badge/version-2.2.8-2F5BFF)
 ![platform](https://img.shields.io/badge/platform-Windows%2011-171A18)
 
 > 从一个还没想清楚的设计问题出发，找到真实案例、核对原始来源，整理成能继续用于方案的研究板。
@@ -16,19 +16,19 @@ ArchResearch 面向建筑学生和青年设计师，处理方案前期最费时�
 
 ArchResearch 当前支持 **Windows 11 + Google Chrome**。
 
-[下载 Windows 安装版 v2.2.7](https://github.com/jileyu2000/archresearch/releases/download/v2.2.7/ArchResearch-Windows-x64-Setup-v2.2.7.exe)
+[下载 Windows 安装版 v2.2.8](https://github.com/jileyu2000/archresearch/releases/download/v2.2.8/ArchResearch-Windows-x64-Setup-v2.2.8.exe)
 
-1. 下载并运行 `ArchResearch-Windows-x64-Setup-v2.2.7.exe`。
+1. 下载并运行 `ArchResearch-Windows-x64-Setup-v2.2.8.exe`。
 2. 首次启动时填写自己的 OpenAI-compatible API 地址和 API Key，再从接口返回的模型列表中选择模型。
 3. 以后从桌面或开始菜单打开 ArchResearch，研究工作台会自动显示在 Chrome 中。
 
-安装器已经包含本地服务、工作界面、数据库和运行环境，不需要另外安装 Python 或 Node.js。安装程序暂未签名，Windows 可能显示 SmartScreen 或“未知发布者”，可以在 [v2.2.7 Release](https://github.com/jileyu2000/archresearch/releases/tag/v2.2.7) 核对附件和 SHA-256。
+安装器已经包含本地服务、工作界面、数据库和运行环境，不需要另外安装 Python 或 Node.js。安装程序暂未签名，Windows 可能显示 SmartScreen 或“未知发布者”，可以在 [v2.2.8 Release](https://github.com/jileyu2000/archresearch/releases/tag/v2.2.8) 核对附件和 SHA-256。
 
 ### 使用图纸灵感
 
 “图纸灵感”需要单独安装 Chrome 扩展。Windows 安装器不会捆绑扩展。
 
-[下载 Chrome 扩展 v2.2.7](https://github.com/jileyu2000/archresearch/releases/download/v2.2.7/archresearch-chrome-extension-only-v2.2.7.zip) · [查看安装说明](docs/chrome-extension.md)
+[下载 Chrome 扩展 v2.2.8](https://github.com/jileyu2000/archresearch/releases/download/v2.2.8/archresearch-chrome-extension-only-v2.2.8.zip) · [查看安装说明](docs/chrome-extension.md)
 
 扩展装好后，从 ArchResearch 进入“图纸灵感”即可。若尚未登录小红书，工作台会打开登录页并等待；登录完成后会自动继续检测。
 

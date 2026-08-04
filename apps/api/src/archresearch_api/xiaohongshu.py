@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -68,7 +69,12 @@ class _OpenCliSearchItem(BaseModel):
     published_at: str = Field(default="", max_length=100)
 
 
-XiaohongshuSessionStatus = Literal["logged_in", "not_logged_in", "unknown"]
+XiaohongshuSessionStatus = Literal[
+    "logged_in",
+    "not_logged_in",
+    "verification_required",
+    "unknown",
+]
 
 
 class _OpenCliAuthStatusRow(BaseModel):
@@ -267,27 +273,47 @@ class XiaohongshuBrowserSearch:
     ) -> None:
         self._browser = browser
         self._sleep = sleep
+        self._session_check_lock = threading.Lock()
+        self._verification_tab_id: int | None = None
 
     def check_login(self) -> XiaohongshuSessionStatus:
+        with self._session_check_lock:
+            return self._check_login_locked()
+
+    def _check_login_locked(self) -> XiaohongshuSessionStatus:
         search_url = (
             f"{XIAOHONGSHU_SEARCH_URL}?keyword={quote_plus('建筑图纸')}"
             "&source=web_search_result_notes"
         )
-        opened = OpenPageResult.model_validate(
-            self._browser.send_command_sync("open_url", {"url": search_url})
-        )
+        opened_new_tab = self._verification_tab_id is None
+        if opened_new_tab:
+            opened = OpenPageResult.model_validate(
+                self._browser.send_command_sync("open_url", {"url": search_url})
+            )
+            self._verification_tab_id = opened.tab_id
+        tab_id = self._verification_tab_id
+        if tab_id is None:
+            raise RuntimeError("Xiaohongshu session tab was not opened")
         try:
-            self._browser.send_command_sync(
-                "wait", {"milliseconds": XIAOHONGSHU_INITIAL_WAIT_MILLISECONDS}
-            )
-            result = _XiaohongshuSessionRead.model_validate(
+            if opened_new_tab:
                 self._browser.send_command_sync(
-                    "xiaohongshu_session_status", {"tab_id": opened.tab_id}
+                    "wait", {"milliseconds": XIAOHONGSHU_INITIAL_WAIT_MILLISECONDS}
                 )
+            result = _XiaohongshuSessionRead.model_validate(
+                self._browser.send_command_sync("xiaohongshu_session_status", {"tab_id": tab_id})
             )
+        except Exception:
+            self._verification_tab_id = None
+            try:
+                self._browser.send_command_sync("close_tab", {"tab_id": tab_id})
+            except Exception:
+                pass
+            raise
+        if result.status == "verification_required":
             return result.status
-        finally:
-            self._browser.send_command_sync("close_tab", {"tab_id": opened.tab_id})
+        self._verification_tab_id = None
+        self._browser.send_command_sync("close_tab", {"tab_id": tab_id})
+        return result.status
 
     def search(self, query: str, *, limit: int = XIAOHONGSHU_MAX_RESULTS) -> list[ProviderSource]:
         bounded_limit = max(1, min(limit, XIAOHONGSHU_MAX_SEARCH_RESULTS))
