@@ -227,6 +227,10 @@ export function useBrowserReadiness({
 
   const startXiaohongshuLoginRecovery = useCallback((): Promise<boolean> => {
     if (demoMode) return Promise.resolve(false)
+    if (browserConnected !== true && !xiaohongshuSearchAvailable) {
+      onError('请先安装并连接 Chrome 扩展，再打开小红书登录。')
+      return Promise.resolve(false)
+    }
     if (xiaohongshuLoginRecoveryPromiseRef.current) {
       return xiaohongshuLoginRecoveryPromiseRef.current
     }
@@ -235,7 +239,6 @@ export function useBrowserReadiness({
     const pending = (async () => {
       setXiaohongshuLoginFlow('opening')
       try {
-        if (browserConnected !== true) await handleConnectBrowser()
         if (xiaohongshuLoginRecoveryRef.current !== recoveryId) return false
         await apiClient.openXiaohongshuLogin()
         if (xiaohongshuLoginRecoveryRef.current !== recoveryId) return false
@@ -287,9 +290,9 @@ export function useBrowserReadiness({
     browserConnected,
     checkXiaohongshuSession,
     demoMode,
-    handleConnectBrowser,
     onAnnouncement,
     onError,
+    xiaohongshuSearchAvailable,
   ])
 
   useEffect(() => () => {
@@ -483,6 +486,8 @@ export function useBrowserReadiness({
     researchEnvironmentTitle,
     showBrowserConnectAction,
     showXiaohongshuLoginAction: (
+      (browserConnected === true || xiaohongshuSearchAvailable)
+      &&
       xiaohongshuSessionStatus !== 'logged_in'
       && xiaohongshuSessionStatus !== 'verification_required'
     ),

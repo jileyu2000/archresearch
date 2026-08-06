@@ -220,7 +220,6 @@ export default function App() {
     startXiaohongshuLoginRecovery,
     xiaohongshuSessionCheckAvailable,
     xiaohongshuLoginFlow,
-    xiaohongshuLoginRecoveryActive,
     xiaohongshuSessionLoading,
     xiaohongshuSessionStatus,
   } = useBrowserReadiness({
@@ -228,7 +227,6 @@ export default function App() {
     onAnnouncement: setAnnouncement,
     onError: setActionError,
   })
-  const xiaohongshuAutoLoginAttemptedRef = useRef(false)
   useEffect(() => {
     if (
       demoMode
@@ -244,39 +242,6 @@ export default function App() {
     goal,
     xiaohongshuSessionCheckAvailable,
     xiaohongshuSessionLoading,
-    xiaohongshuSessionStatus,
-  ])
-  useEffect(() => {
-    if (
-      demoMode
-      || goal !== 'visual_reference_search'
-      || browserReadinessLoading
-      || browserConnecting
-      || researchEnvironmentReady
-      || xiaohongshuLoginRecoveryActive
-      || xiaohongshuAutoLoginAttemptedRef.current
-    ) return
-    const needsLoginRecovery = (
-      xiaohongshuSessionStatus === 'not_logged_in'
-      || xiaohongshuSessionStatus === 'unknown'
-      || xiaohongshuSessionStatus === 'unavailable'
-      || (
-        xiaohongshuSessionStatus === 'unchecked'
-        && !xiaohongshuSessionCheckAvailable
-      )
-    )
-    if (!needsLoginRecovery) return
-    xiaohongshuAutoLoginAttemptedRef.current = true
-    void startXiaohongshuLoginRecovery()
-  }, [
-    browserReadinessLoading,
-    browserConnecting,
-    demoMode,
-    goal,
-    researchEnvironmentReady,
-    startXiaohongshuLoginRecovery,
-    xiaohongshuLoginRecoveryActive,
-    xiaohongshuSessionCheckAvailable,
     xiaohongshuSessionStatus,
   ])
   const initialRunPayload = useMemo(() => ({

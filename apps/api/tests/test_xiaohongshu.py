@@ -76,6 +76,59 @@ class RecordingBrowser:
         raise AssertionError(f"unexpected browser action: {action}")
 
 
+class DelayedSearchResultsBrowser(RecordingBrowser):
+    def send_command_sync(
+        self,
+        action: str,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: float = 30,
+    ) -> Any:
+        if action != "enumerate_media":
+            return super().send_command_sync(
+                action,
+                payload,
+                timeout_seconds=timeout_seconds,
+            )
+        self.calls.append((action, payload))
+        self.enumerations += 1
+        if self.enumerations <= 2:
+            return {"media": []}
+        return {
+            "media": [
+                {
+                    "media_type": "image",
+                    "url": "https://sns-img.example/delayed.jpg",
+                    "link_url": "https://www.xiaohongshu.com/search_result/note-delayed",
+                    "alt": "延迟渲染的剖面图",
+                    "adjacent_text": "精细线稿剖面",
+                    "intrinsic_width": 1200,
+                    "intrinsic_height": 900,
+                    "region": {"x": 0, "y": 0, "width": 600, "height": 450},
+                }
+            ]
+        }
+
+
+class EmptySearchResultsBrowser(RecordingBrowser):
+    def send_command_sync(
+        self,
+        action: str,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: float = 30,
+    ) -> Any:
+        if action != "enumerate_media":
+            return super().send_command_sync(
+                action,
+                payload,
+                timeout_seconds=timeout_seconds,
+            )
+        self.calls.append((action, payload))
+        self.enumerations += 1
+        return {"media": []}
+
+
 class SessionBrowser:
     connected = True
 
@@ -127,6 +180,32 @@ def test_visible_xiaohongshu_search_returns_bounded_note_sources() -> None:
     assert [action for action, _ in browser.calls].count("enumerate_media") == 2
     assert [action for action, _ in browser.calls].count("wait") == 0
     assert sleeps == [3.5, 1.0]
+
+
+def test_visible_xiaohongshu_search_waits_for_delayed_note_cards() -> None:
+    browser = DelayedSearchResultsBrowser()
+    sleeps: list[float] = []
+    search = XiaohongshuBrowserSearch(browser, sleep=sleeps.append)
+
+    sources = search.search("剖面图 精细线稿", limit=4)
+
+    assert [source.url for source in sources] == [
+        "https://www.xiaohongshu.com/search_result/note-delayed"
+    ]
+    assert browser.enumerations == 4
+    assert sleeps == [3.5, 1.0, 1.0, 1.0]
+    assert browser.calls[-1] == ("close_tab", {"tab_id": 17})
+
+
+def test_visible_xiaohongshu_search_stops_polling_when_results_stay_empty() -> None:
+    browser = EmptySearchResultsBrowser()
+    sleeps: list[float] = []
+    search = XiaohongshuBrowserSearch(browser, sleep=sleeps.append)
+
+    assert search.search("剖面图 精细线稿", limit=4) == []
+    assert browser.enumerations == 6
+    assert sleeps == [3.5, 1.0, 1.0, 1.0, 1.0, 1.0]
+    assert browser.calls[-1] == ("close_tab", {"tab_id": 17})
 
 
 @pytest.mark.parametrize("status", ["logged_in", "not_logged_in", "unknown"])

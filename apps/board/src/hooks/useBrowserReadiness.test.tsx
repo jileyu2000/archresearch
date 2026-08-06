@@ -2,7 +2,11 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { apiClient, type BrowserStatus } from '../api/client'
-import { requestBrowserBridge, type BrowserBridgeStatus } from '../browserBridge'
+import {
+  BrowserBridgeError,
+  requestBrowserBridge,
+  type BrowserBridgeStatus,
+} from '../browserBridge'
 import { useBrowserReadiness } from './useBrowserReadiness'
 
 vi.mock('../browserBridge', async (importOriginal) => ({
@@ -201,6 +205,24 @@ describe('useBrowserReadiness', () => {
 
     await expect(result.current.ensureBrowserResearchAccess(false)).resolves.toBe(true)
     expect(requestBrowserBridge).toHaveBeenCalledOnce()
+  })
+
+  it('does not expose Xiaohongshu login before the extension is connected', async () => {
+    vi.spyOn(apiClient, 'getBrowserStatus').mockResolvedValue({
+      connected: false,
+      xiaohongshu_search_available: false,
+    })
+    vi.mocked(requestBrowserBridge).mockRejectedValue(
+      new BrowserBridgeError('unavailable', 'bridge unavailable'),
+    )
+    const { result } = renderHook(() => useBrowserReadiness({
+      demoMode: false,
+      onAnnouncement: vi.fn(),
+      onError: vi.fn(),
+    }))
+
+    await waitFor(() => expect(result.current.browserReadinessLoading).toBe(false))
+    expect(result.current.showXiaohongshuLoginAction).toBe(false)
   })
 
   it('blocks Xiaohongshu research until the current page grants research permission', async () => {
