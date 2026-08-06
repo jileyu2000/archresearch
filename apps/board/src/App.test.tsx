@@ -1762,6 +1762,29 @@ describe('research board', () => {
     expect(within(preflight).queryByText('Chrome 图纸提取')).not.toBeInTheDocument()
   })
 
+  it('does not launch Chrome or Xiaohongshu when entering drawing inspiration', async () => {
+    const user = userEvent.setup()
+    const fetchMock = createLiveFetch({
+      browserConnected: false,
+      xiaohongshuSessionStatus: 'unavailable',
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    vi.mocked(requestBrowserBridge).mockRejectedValue(
+      new BrowserBridgeError('unavailable', 'bridge unavailable on this surface'),
+    )
+    renderBoard()
+
+    await screen.findByText('真实工作区')
+    await user.click(screen.getByRole('button', { name: /图纸灵感.*配色、线型、版式与分析图/ }))
+    const usageDialog = await screen.findByRole('dialog', { name: '图纸灵感使用方法' })
+    await user.click(within(usageDialog).getByRole('button', { name: '我知道了' }))
+    await screen.findByRole('region', { name: '研究环境' })
+    await new Promise((resolve) => window.setTimeout(resolve, 30))
+
+    expect(fetchMock.mock.calls.some(([path]) => path === '/v1/browser/open-chrome')).toBe(false)
+    expect(fetchMock.mock.calls.some(([path]) => path === '/v1/browser/open-xiaohongshu-login')).toBe(false)
+  })
+
   it('does not report a disconnected bridge as authorized', async () => {
     const user = userEvent.setup()
     vi.mocked(requestBrowserBridge).mockResolvedValue({
@@ -2639,7 +2662,7 @@ describe('research board', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('无法确认小红书登录状态')
   })
 
-  it('opens Xiaohongshu in system Chrome once and automatically detects login', async () => {
+  it('opens Xiaohongshu in system Chrome after the user starts login', async () => {
     const user = userEvent.setup()
     vi.mocked(requestBrowserBridge).mockRejectedValue(
       new BrowserBridgeError('unavailable', 'bridge unavailable on this surface'),
@@ -2655,6 +2678,7 @@ describe('research board', () => {
     await screen.findByText('真实工作区')
     await user.click(screen.getByRole('button', { name: /图纸灵感.*配色、线型、版式与分析图/ }))
 
+    await user.click(await screen.findByRole('button', { name: '打开小红书登录' }))
     expect(await screen.findByText('研究环境已就绪')).toBeVisible()
     expect(fetchMock).toHaveBeenCalledWith('/v1/browser/open-xiaohongshu-login', {
       method: 'POST',
@@ -2693,6 +2717,7 @@ describe('research board', () => {
     await act(async () => {
       await Promise.resolve()
     })
+    fireEvent.click(screen.getByRole('button', { name: '打开小红书登录' }))
     for (let attempt = 0; attempt < 9; attempt += 1) {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(1_500)

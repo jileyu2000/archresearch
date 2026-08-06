@@ -179,7 +179,7 @@ def create_app(
 
     app = FastAPI(
         title="ArchResearch API",
-        version="2.2.8",
+        version="2.2.9",
         lifespan=lifespan,
     )
     app.state.settings = resolved_settings

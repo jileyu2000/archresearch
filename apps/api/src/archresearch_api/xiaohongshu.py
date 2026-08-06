@@ -19,6 +19,8 @@ from .schemas import PublicationTier
 
 XIAOHONGSHU_SEARCH_URL = "https://www.xiaohongshu.com/search_result"
 XIAOHONGSHU_INITIAL_WAIT_MILLISECONDS = 3_500
+XIAOHONGSHU_RESULT_POLL_ATTEMPTS = 5
+XIAOHONGSHU_RESULT_POLL_INTERVAL_MILLISECONDS = 1_000
 XIAOHONGSHU_SCROLL_WAIT_MILLISECONDS = 1_000
 XIAOHONGSHU_SCROLL_DISTANCE = 1_200
 XIAOHONGSHU_MAX_RESULTS = 4
@@ -327,9 +329,18 @@ class XiaohongshuBrowserSearch:
         media = []
         try:
             self._sleep(XIAOHONGSHU_INITIAL_WAIT_MILLISECONDS / 1_000)
-            first = _validated_media(
-                self._browser.send_command_sync("enumerate_media", {"tab_id": opened.tab_id})
-            )
+            first: list[PageMedia] = []
+            for attempt in range(XIAOHONGSHU_RESULT_POLL_ATTEMPTS):
+                first = _validated_media(
+                    self._browser.send_command_sync("enumerate_media", {"tab_id": opened.tab_id})
+                )
+                if any(
+                    item.link_url is not None and _is_xiaohongshu_note_url(item.link_url)
+                    for item in first
+                ):
+                    break
+                if attempt < XIAOHONGSHU_RESULT_POLL_ATTEMPTS - 1:
+                    self._sleep(XIAOHONGSHU_RESULT_POLL_INTERVAL_MILLISECONDS / 1_000)
             media.extend(first)
             self._browser.send_command_sync(
                 "scroll",
