@@ -183,6 +183,37 @@ describe("content operations", () => {
     );
   });
 
+  it("clicks only the exact Xiaohongshu note link from a search result page", () => {
+    window.history.replaceState({}, "", "/search_result?keyword=architecture");
+    document.body.innerHTML = `
+      <section class="note-item">
+        <a href="https://www.xiaohongshu.com/explore/note-41">另一个笔记</a>
+        <a id="target" href="https://www.xiaohongshu.com/explore/note-42?xsec_token=visible">
+          精细线稿剖面图
+        </a>
+      </section>
+    `;
+    const target = document.querySelector<HTMLAnchorElement>("#target")!;
+    const click = vi.fn((event: Event) => event.preventDefault());
+    target.addEventListener("click", click);
+
+    expect(
+      executeContentCommand(document, window, {
+        action: "open_xiaohongshu_note",
+        note_url:
+          "https://www.xiaohongshu.com/explore/note-42?xsec_token=visible",
+      }),
+    ).toEqual({ opened: true });
+    expect(click).toHaveBeenCalledOnce();
+
+    expect(
+      executeContentCommand(document, window, {
+        action: "open_xiaohongshu_note",
+        note_url: "https://www.xiaohongshu.com/explore/note-99",
+      }),
+    ).toEqual({ opened: false });
+  });
+
   it("associates deeply nested media with the bounded semantic card link", () => {
     document.body.innerHTML = `
       <section class="note-item">
@@ -207,6 +238,41 @@ describe("content operations", () => {
         link_url:
           "http://localhost:3000/explore/note-126?xsec_token=visible",
         adjacent_text: "旧厂房剖面叙事与线型层级",
+      }),
+    );
+  });
+
+  it("keeps a note link when a card has more than eight auxiliary links", () => {
+    document.body.innerHTML = `
+      <section class="note-item">
+        <div class="cover"><img src="https://images.example/section.jpg" alt="剖面图"></div>
+      </section>
+    `;
+    const card = document.querySelector("section.note-item")!;
+    for (let index = 0; index < 8; index += 1) {
+      const auxiliary = document.createElement("a");
+      auxiliary.href = `/user/profile/author-${index}`;
+      auxiliary.textContent = `作者 ${index}`;
+      card.appendChild(auxiliary);
+    }
+    const note = document.createElement("a");
+    note.href = "/explore/note-210?xsec_token=visible";
+    note.textContent = "精细线稿剖面图";
+    card.appendChild(note);
+
+    const image = document.querySelector("img")!;
+    makeVisible(image);
+    Object.defineProperties(image, {
+      naturalWidth: { value: 1600 },
+      naturalHeight: { value: 900 },
+      currentSrc: { value: "https://images.example/section.jpg" },
+    });
+
+    expect(collectMedia(document)[0]).toEqual(
+      expect.objectContaining({
+        link_url:
+          "http://localhost:3000/explore/note-210?xsec_token=visible",
+        adjacent_text: "精细线稿剖面图",
       }),
     );
   });
@@ -302,6 +368,77 @@ describe("content operations", () => {
     });
 
     expect(collectMedia(document)).toEqual([]);
+  });
+
+  it("keeps only unobscured image media on an open Xiaohongshu note", () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/search_result/note-42?xsec_token=visible",
+    );
+    document.body.innerHTML = `
+      <main class="feeds-container">
+        <img id="background" src="https://sns-webpic-qc.xhscdn.com/background.webp" alt="Background feed image">
+      </main>
+      <svg id="page-shell" viewBox="0 0 1200 800" aria-label="Page shell"></svg>
+      <div id="note-overlay" role="dialog" aria-modal="true">
+        <img id="note-media" src="https://sns-webpic-qc.xhscdn.com/note.webp" alt="Current note section drawing">
+      </div>
+    `;
+    const background = document.querySelector<HTMLImageElement>("#background")!;
+    const noteMedia = document.querySelector<HTMLImageElement>("#note-media")!;
+    const pageShell = document.querySelector<SVGElement>("#page-shell")!;
+    const overlay = document.querySelector<HTMLElement>("#note-overlay")!;
+    makeVisible(background, 640, 480);
+    makeVisible(pageShell, 1_200, 800);
+    Object.defineProperty(noteMedia, "getBoundingClientRect", {
+      value: () => ({
+        x: 500,
+        y: 20,
+        top: 20,
+        left: 500,
+        right: 1_100,
+        bottom: 780,
+        width: 600,
+        height: 760,
+        toJSON: () => ({}),
+      }),
+    });
+    for (const image of [background, noteMedia]) {
+      Object.defineProperties(image, {
+        naturalWidth: { value: 1_600 },
+        naturalHeight: { value: 1_200 },
+        currentSrc: { value: image.getAttribute("src") },
+      });
+    }
+    const originalElementFromPoint = Object.getOwnPropertyDescriptor(
+      document,
+      "elementFromPoint",
+    );
+    Object.defineProperty(document, "elementFromPoint", {
+      configurable: true,
+      value: (x: number) => (x >= 500 ? noteMedia : overlay),
+    });
+
+    try {
+      expect(collectMedia(document)).toEqual([
+        expect.objectContaining({
+          media_type: "image",
+          url: "https://sns-webpic-qc.xhscdn.com/note.webp",
+          alt: "Current note section drawing",
+        }),
+      ]);
+    } finally {
+      if (originalElementFromPoint) {
+        Object.defineProperty(
+          document,
+          "elementFromPoint",
+          originalElementFromPoint,
+        );
+      } else {
+        Reflect.deleteProperty(document, "elementFromPoint");
+      }
+    }
   });
 
   it("types only into an explicit search field without submitting the form", () => {

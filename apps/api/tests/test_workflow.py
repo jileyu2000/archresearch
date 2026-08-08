@@ -682,7 +682,7 @@ def test_balanced_run_stops_after_multiple_batches_satisfy_coverage(tmp_path: Pa
     assert len(set(provider.queries)) == 4
 
 
-def test_quick_run_returns_partial_when_depth_enrichment_stays_incomplete(
+def test_quick_run_completes_when_coverage_is_complete_but_enrichment_stays_incomplete(
     tmp_path: Path,
 ) -> None:
     database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
@@ -698,8 +698,8 @@ def test_quick_run_returns_partial_when_depth_enrichment_stays_incomplete(
             select(func.count()).select_from(AssetCandidate).where(AssetCandidate.run_id == run_id)
         )
         assert run is not None
-        assert run.status == RunStatus.partial.value
-        assert run.stop_reason == "no_new_assets"
+        assert run.status == RunStatus.completed.value
+        assert run.stop_reason == "coverage_satisfied"
         assert asset_count == 4
         assert run.coverage_report["covered_subquestions"] == 3
         assert run.coverage_report["gaps"] == []
@@ -912,8 +912,8 @@ def test_quick_openai_run_reserves_time_for_one_worst_case_call(tmp_path: Path) 
             select(func.count()).select_from(QueryAttempt).where(QueryAttempt.run_id == run_id)
         )
         assert run is not None
-        assert run.status == RunStatus.partial.value
-        assert run.stop_reason == "time_budget_exhausted"
+        assert run.status == RunStatus.completed.value
+        assert run.stop_reason == "coverage_satisfied"
         assert query_count == 6
     assert responses.calls == 7
     assert clock.observed == [0.0, 0.0, 31.0, 62.0, 93.0, 124.0, 155.0, 186.0]
@@ -1010,8 +1010,8 @@ def test_repeated_asset_stops_enrichment_without_creating_duplicates(tmp_path: P
             select(func.count()).select_from(AssetCandidate).where(AssetCandidate.run_id == run_id)
         )
         assert run is not None
-        assert run.status == RunStatus.partial.value
-        assert run.stop_reason == "no_new_assets"
+        assert run.status == RunStatus.completed.value
+        assert run.stop_reason == "coverage_satisfied"
         assert asset_count == 1
         assert run.coverage_report["gaps"] == []
         assert run.coverage_report["enrichment_gaps"]
@@ -1086,11 +1086,12 @@ def test_quick_completion_recovery_can_fill_branches_missed_by_normal_depth(
         attempts = list(session.scalars(select(QueryAttempt).where(QueryAttempt.run_id == run_id)))
 
     assert run is not None
-    assert run.status == RunStatus.partial.value
+    assert run.status == RunStatus.completed.value
+    assert run.stop_reason == "coverage_satisfied"
     assert run.coverage_report["covered_subquestions"] == 3
     assert run.coverage_report["gaps"] == []
     assert run.coverage_report["enrichment_gaps"]
-    assert len(provider.queries) == 15
+    assert len(provider.queries) == 18
     assert [attempt.subquestion_id for attempt in attempts] == [
         "spatial_options",
         "use_experience",
@@ -1099,6 +1100,9 @@ def test_quick_completion_recovery_can_fill_branches_missed_by_normal_depth(
         "environment_system",
         "use_experience",
         "environment_system",
+        "use_experience",
+        "environment_system",
+        "spatial_options",
         "use_experience",
         "environment_system",
         "spatial_options",
@@ -1162,7 +1166,8 @@ def test_incomplete_retry_only_researches_branches_that_still_lack_evidence(
     with database.session_factory() as session:
         run = session.get(ResearchRun, run_id)
     assert run is not None
-    assert run.status == RunStatus.partial.value
+    assert run.status == RunStatus.completed.value
+    assert run.stop_reason == "coverage_satisfied"
     assert run.coverage_report["covered_subquestions"] == 3
     assert run.coverage_report["enrichment_gaps"]
 
@@ -1234,17 +1239,19 @@ def test_removed_pinterest_provider_result_is_not_persisted(
     assert page is None
 
 
-def test_selected_xiaohongshu_source_continues_after_model_search_times_out(
+def test_visual_xiaohongshu_browser_fallback_does_not_call_model_search(
     tmp_path: Path,
 ) -> None:
     database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
     with database.session_factory() as session:
         run = session.get(ResearchRun, run_id)
         assert run is not None
+        run.question = "帮我找几种建筑分析图视觉风格"
+        run.goal = ResearchGoal.visual_reference_search.value
         run.research_sources = ["xiaohongshu"]
         session.commit()
 
-    class TimeoutProvider(SequencedProvider):
+    class UnexpectedProvider(SequencedProvider):
         def plan(
             self,
             question: str,
@@ -1263,7 +1270,7 @@ def test_selected_xiaohongshu_source_continues_after_model_search_times_out(
         ) -> ProviderSearchResult:
             del goal, allowed_domains
             self.queries.append(query)
-            raise TimeoutError("model web search timed out")
+            raise AssertionError("visual XHS-only path must not call model search")
 
     class XiaohongshuBrowser:
         connected = True
@@ -1312,7 +1319,7 @@ def test_selected_xiaohongshu_source_continues_after_model_search_times_out(
                 return {"closed": True}
             raise AssertionError(f"unexpected browser action: {action}")
 
-    provider = TimeoutProvider([])
+    provider = UnexpectedProvider([])
     browser = XiaohongshuBrowser()
 
     class FailingOpenCliSearch:
@@ -1341,8 +1348,9 @@ def test_selected_xiaohongshu_source_continues_after_model_search_times_out(
         for action, payload in browser.calls
         if action == "open_url" and "/search_result?" in payload["url"]
     ]
-    assert len(search_opens) == 3
+    assert len(search_opens) == 6
     assert opencli.calls == 1
+    assert provider.queries == []
     with database.session_factory() as session:
         xiaohongshu_pages = list(
             session.scalars(
@@ -1353,12 +1361,12 @@ def test_selected_xiaohongshu_source_continues_after_model_search_times_out(
             )
         )
         run = session.get(ResearchRun, run_id)
-    assert len(xiaohongshu_pages) == 3
+    assert len(xiaohongshu_pages) == 6
     assert all(
         page.publication_tier == PublicationTier.aggregator.value for page in xiaohongshu_pages
     )
     assert run is not None
-    assert run.browser_pages_attempted == 3
+    assert run.browser_pages_attempted == 6
 
 
 def test_empty_opencli_result_falls_back_to_connected_browser_search(tmp_path: Path) -> None:
@@ -1401,7 +1409,7 @@ def test_empty_opencli_result_falls_back_to_connected_browser_search(tmp_path: P
     assert [source.title for source in sources] == ["建筑分析图参考"]
 
 
-def test_precedent_research_completion_is_not_blocked_by_optional_xiaohongshu_failure(
+def test_precedent_research_ignores_legacy_xiaohongshu_source_flag(
     tmp_path: Path,
 ) -> None:
     database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
@@ -1411,18 +1419,18 @@ def test_precedent_research_completion_is_not_blocked_by_optional_xiaohongshu_fa
         run.research_sources = ["xiaohongshu"]
         session.commit()
 
-    class FailingXiaohongshuBrowser:
-        connected = True
+    class UnexpectedXiaohongshuSearch:
+        name = "unexpected-xiaohongshu"
 
-        def send_command_sync(
-            self,
-            action: str,
-            payload: dict[str, Any],
-            *,
-            timeout_seconds: float = 30,
-        ) -> Any:
-            del action, payload, timeout_seconds
-            raise TimeoutError("optional visual source unavailable")
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def search(self, query: str, *, limit: int = 4) -> list[ProviderSource]:
+            del query, limit
+            self.calls += 1
+            return []
+
+    xiaohongshu = UnexpectedXiaohongshuSearch()
 
     execute_research_run(
         database,
@@ -1434,16 +1442,44 @@ def test_precedent_research_completion_is_not_blocked_by_optional_xiaohongshu_fa
                 _batch(_asset("dock", 3)),
             ]
         ),
-        browser_client=FailingXiaohongshuBrowser(),
+        xiaohongshu_search=xiaohongshu,
     )
 
     with database.session_factory() as session:
         run = session.get(ResearchRun, run_id)
     assert run is not None
-    assert run.status == RunStatus.partial.value
+    assert run.status == RunStatus.completed.value
+    assert run.stop_reason == "coverage_satisfied"
+    assert xiaohongshu.calls == 0
     assert run.coverage_report["covered_subquestions"] == 3
     assert run.coverage_report["enrichment_gaps"]
     assert "browser_inspection_incomplete" not in run.coverage_report["gaps"]
+
+
+def test_precedent_research_drops_visual_platform_provider_results(tmp_path: Path) -> None:
+    database, run_id = _database_with_run(tmp_path, BudgetMode.quick)
+    batches: list[ProviderSearchResult] = []
+    for index, project in enumerate(("factory", "station", "dock"), start=1):
+        public_asset = _asset(project, index)
+        visual_platform_asset = _asset(f"{project}-social", index).model_copy(
+            update={
+                "source_url": f"https://www.xiaohongshu.com/explore/{project}-{index}",
+            }
+        )
+        batches.append(_batch(public_asset, visual_platform_asset))
+
+    execute_research_run(database, run_id, SequencedProvider(batches))
+
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assets = list(
+            session.scalars(select(AssetCandidate).where(AssetCandidate.run_id == run_id))
+        )
+
+    assert run is not None
+    assert run.status == RunStatus.completed.value
+    assert len(assets) == 3
+    assert all("xiaohongshu.com" not in asset.source_url for asset in assets)
 
 
 def test_provider_failure_preserves_assets_from_completed_batches(tmp_path: Path) -> None:
@@ -1516,8 +1552,8 @@ def test_retry_skips_completed_queries_and_resumes_the_failed_subquestion(tmp_pa
         )
 
     assert run is not None
-    assert run.status == RunStatus.partial.value
-    assert run.stop_reason == "budget_exhausted"
+    assert run.status == RunStatus.completed.value
+    assert run.stop_reason == "coverage_satisfied"
     assert run.coverage_report["enrichment_gaps"]
     assert sum("新功能怎样植入" in query for query in provider.queries) == 1
     assert sum("公共与后勤怎样分开" in query for query in provider.queries) == 1
@@ -1634,7 +1670,7 @@ def test_retry_continues_only_uncovered_queries_after_a_resumed_run_stays_partia
 
     assert sum("新功能怎样植入" in query for query in provider.queries) == 1
     assert sum("公共与后勤怎样分开" in query for query in provider.queries) == 1
-    assert sum("剖面怎样形成层次" in query for query in provider.queries) == 13
+    assert sum("剖面怎样形成层次" in query for query in provider.queries) == 15
 
 
 def test_retry_resume_uses_only_the_immediately_previous_failed_execution(
@@ -1691,7 +1727,7 @@ def test_retry_resume_uses_only_the_immediately_previous_failed_execution(
     _advance_retry_attempt(database, run_id)
     execute_research_run(database, run_id, provider)
 
-    assert provider.counts == {"program": 12, "circulation": 12, "section": 13}
+    assert provider.counts == {"program": 14, "circulation": 14, "section": 15}
 
 
 def test_service_resume_keeps_completed_keys_inherited_by_the_current_retry(
@@ -2338,7 +2374,8 @@ def test_precedent_coverage_does_not_require_a_displayable_image_for_every_subqu
         run = session.get(ResearchRun, run_id)
 
     assert run is not None
-    assert run.status == RunStatus.partial.value
+    assert run.status == RunStatus.completed.value
+    assert run.stop_reason == "coverage_satisfied"
     assert run.coverage_report["usable_assets"] == 4
     assert run.coverage_report["verified_or_partial"] == 6
     assert run.coverage_report["covered_subquestions"] == 3

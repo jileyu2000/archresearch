@@ -138,9 +138,30 @@ class DepthTarget(BaseModel):
 
 
 BUDGETS: dict[BudgetMode, Budget] = {
-    BudgetMode.quick: Budget(max_rounds=2, max_queries=6, max_pages=16, max_seconds=2400),
-    BudgetMode.balanced: Budget(max_rounds=3, max_queries=12, max_pages=40, max_seconds=3600),
-    BudgetMode.deep: Budget(max_rounds=4, max_queries=24, max_pages=72, max_seconds=5400),
+    BudgetMode.quick: Budget(
+        max_rounds=2,
+        max_queries=8,
+        completion_recovery_rounds=5,
+        completion_recovery_pages_per_subquestion=4,
+        max_pages=20,
+        max_seconds=2880,
+    ),
+    BudgetMode.balanced: Budget(
+        max_rounds=3,
+        max_queries=15,
+        completion_recovery_rounds=5,
+        completion_recovery_pages_per_subquestion=4,
+        max_pages=48,
+        max_seconds=4320,
+    ),
+    BudgetMode.deep: Budget(
+        max_rounds=4,
+        max_queries=30,
+        completion_recovery_rounds=5,
+        completion_recovery_pages_per_subquestion=4,
+        max_pages=90,
+        max_seconds=6480,
+    ),
 }
 
 
@@ -215,7 +236,7 @@ class ResearchSpec(BaseModel):
     budget_mode: BudgetMode = BudgetMode.balanced
     allowed_domains: list[str] = Field(default_factory=list, max_length=20)
     research_sources: list[ResearchSource] = Field(
-        default_factory=lambda: [ResearchSource.xiaohongshu],
+        default_factory=list,
         max_length=5,
     )
     subquestions: list[ResearchSubquestion] | None = Field(
@@ -223,6 +244,12 @@ class ResearchSpec(BaseModel):
         min_length=3,
         max_length=6,
     )
+
+    @model_validator(mode="after")
+    def require_goal_specific_research_sources(self) -> ResearchSpec:
+        if self.goal is ResearchGoal.precedent_research and self.research_sources:
+            raise ValueError("Precedent research does not accept visual platform sources")
+        return self
 
     @model_validator(mode="after")
     def require_complete_confirmed_question_directory(self) -> ResearchSpec:

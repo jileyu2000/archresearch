@@ -556,6 +556,11 @@ def create_browser_router(
 
         search = getattr(request.app.state, "xiaohongshu_search", None)
         if search is not None:
+            if extension_status is not None and isinstance(search, XiaohongshuBrowserSearch):
+                return XiaohongshuSessionRead(
+                    status=extension_status,
+                    channel="chrome_extension",
+                )
             if not isinstance(search, XiaohongshuSessionChecker):
                 if extension_status is not None:
                     return XiaohongshuSessionRead(

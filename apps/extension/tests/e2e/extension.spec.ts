@@ -294,7 +294,7 @@ test.describe.serial("packaged MV3 browser bridge", () => {
       await coordinator.command("page_metadata", { tab_id: tabId }),
     ).toMatchObject({
       ok: false,
-      error: { code: "execution_failed" },
+      error: { code: "content_operation_rejected" },
     });
 
     const typed = await coordinator.command("type_search_query", {

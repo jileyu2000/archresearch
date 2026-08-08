@@ -25,7 +25,12 @@ from archresearch_api.agent.synthesis import (
 from archresearch_api.browser import BrowserBroker
 from archresearch_api.config import Settings
 from archresearch_api.database import Database
-from archresearch_api.inspection import InspectionBudget, inspect_local_images, inspect_source_page
+from archresearch_api.inspection import (
+    InspectionBudget,
+    OpenPageResult,
+    inspect_local_images,
+    inspect_source_page,
+)
 from archresearch_api.main import create_app
 from archresearch_api.models import (
     AssetCandidate,
@@ -94,6 +99,20 @@ class SingleBatchProvider:
     ) -> ProviderSearchResult:
         del query, goal, allowed_domains
         return self.result
+
+
+def test_visual_research_budgets_allow_more_enrichment() -> None:
+    mebibyte = 1024 * 1024
+
+    assert workflow_module.VISUAL_INSPECTION_LIMITS == {
+        BudgetMode.quick: (15, 30 * mebibyte),
+        BudgetMode.balanced: (45, 90 * mebibyte),
+        BudgetMode.deep: (90, 180 * mebibyte),
+    }
+    assert workflow_module.VISUAL_REFERENCE_INSPECTION_LIMIT == (60, 60 * mebibyte)
+    assert workflow_module.XIAOHONGSHU_VISUAL_NOTE_LIMIT == 5
+    assert workflow_module.XIAOHONGSHU_VISUAL_NOTE_TARGET == 3
+    assert workflow_module.XIAOHONGSHU_VISUAL_SOURCE_POOL_LIMIT == 10
 
 
 class AnalyzingPageProvider(SingleBatchProvider):
@@ -422,7 +441,7 @@ def test_local_carousel_images_use_one_bounded_visual_batch(tmp_path: Path) -> N
     image_paths: list[Path] = []
     for index in range(6):
         path = tmp_path / f"download-{index + 1}.png"
-        path.write_bytes(_crop_png(index))
+        path.write_bytes(_distinct_crop_png(index + 1))
         image_paths.append(path)
     classifier = RecordingRemoteClassifier()
     budget = InspectionBudget(max_calls=12, max_bytes=24 * 1024 * 1024)
@@ -460,6 +479,8 @@ def test_workflow_uses_opencli_xiaohongshu_multi_image_path_without_extension(
     with database.session_factory() as session:
         run = session.get(ResearchRun, run_id)
         assert run is not None
+        run.question = "工业遗址改造剖面图的视觉表达灵感"
+        run.goal = ResearchGoal.visual_reference_search.value
         run.research_sources = ["xiaohongshu"]
         session.commit()
 
@@ -472,7 +493,7 @@ def test_workflow_uses_opencli_xiaohongshu_multi_image_path_without_extension(
 
         def search(self, query: str, *, limit: int = 4) -> list[ProviderSource]:
             self.searches.append(query)
-            assert limit == 4
+            assert limit == workflow_module.XIAOHONGSHU_VISUAL_SOURCE_POOL_LIMIT
             return [
                 ProviderSource(
                     url="https://www.xiaohongshu.com/search_result/note-42?xsec_token=test",
@@ -488,7 +509,7 @@ def test_workflow_uses_opencli_xiaohongshu_multi_image_path_without_extension(
             paths: list[Path] = []
             for index in range(6):
                 path = output_dir / f"note-{index + 1}.png"
-                path.write_bytes(_crop_png(index))
+                path.write_bytes(_distinct_crop_png(index + 1))
                 paths.append(path)
             return [paths[0], paths[2], paths[3], paths[5]][:limit]
 
@@ -587,7 +608,7 @@ def test_xiaohongshu_search_uses_only_visual_direction_and_drawing_type(
     )
 
     assert len(xiaohongshu.searches) == 1
-    assert xiaohongshu.limits == [8]
+    assert xiaohongshu.limits == [10]
     actual_query = xiaohongshu.searches[0]
     with database.session_factory() as session:
         attempt = session.scalar(select(QueryAttempt).where(QueryAttempt.run_id == run_id))
@@ -672,7 +693,7 @@ def test_xiaohongshu_visual_pool_prefers_architecture_drawing_context() -> None:
     assert {source.title for source in ranked} == set(titles[4:])
 
 
-def test_visual_reference_search_does_not_complete_from_one_usable_note_per_branch(
+def test_visual_reference_completes_when_all_directions_are_covered_below_note_target(
     tmp_path: Path,
 ) -> None:
     branch_count = 3
@@ -705,7 +726,7 @@ def test_visual_reference_search_does_not_complete_from_one_usable_note_per_bran
 
         def search(self, query: str, *, limit: int = 4) -> list[ProviderSource]:
             self.searches.append(query)
-            assert limit == 8
+            assert limit >= 8
             note_index = len(self.searches)
             return [
                 ProviderSource(
@@ -796,8 +817,8 @@ def test_visual_reference_search_does_not_complete_from_one_usable_note_per_bran
         traces = list(session.scalars(select(TraceEvent).where(TraceEvent.run_id == run_id)))
 
     assert run is not None
-    assert run.status == RunStatus.partial.value, (run.stop_reason, run.coverage_report)
-    assert run.stop_reason == "visual_budget_exhausted"
+    assert run.status == RunStatus.completed.value, (run.stop_reason, run.coverage_report)
+    assert run.stop_reason == "coverage_satisfied"
     assert run.coverage_report["covered_subquestions"] == branch_count
     assert run.coverage_report["gaps"] == []
     assert run.coverage_report["enrichment_gaps"] == []
@@ -811,6 +832,160 @@ def test_visual_reference_search_does_not_complete_from_one_usable_note_per_bran
     assert {asset.publication_tier for asset in assets} == {PublicationTier.aggregator.value}
     assert {asset.rights_status for asset in assets} == {RightsStatus.unknown.value}
     assert sum(trace.tool == "xiaohongshu_assets" for trace in traces) == branch_count * 2
+
+
+def test_xiaohongshu_only_visual_retries_an_uncovered_direction_in_a_later_round(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, max_pages=3)
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assert run is not None
+        run.question = "比较轴测图的精细线稿和拼贴叙事"
+        run.goal = ResearchGoal.visual_reference_search.value
+        run.research_sources = ["xiaohongshu"]
+        run.budget = {
+            "max_rounds": 2,
+            "max_queries": 6,
+            "max_pages": 4,
+            "max_seconds": 240,
+        }
+        session.commit()
+
+    plan = ResearchPlan(
+        subquestions=[
+            ResearchSubquestion(
+                id="linework",
+                question="精细线稿轴测图",
+                rationale="比较线宽与留白。",
+            ),
+            ResearchSubquestion(
+                id="collage",
+                question="拼贴叙事轴测图",
+                rationale="比较色块与材质。",
+            ),
+            ResearchSubquestion(
+                id="rendered",
+                question="材质渲染轴测图",
+                rationale="比较光影与纹理。",
+            ),
+        ]
+    )
+
+    class VisualOnlyProvider(SingleBatchProvider):
+        def __init__(self) -> None:
+            super().__init__(ProviderSearchResult(assets=[], sources=[]))
+            self.searches: list[str] = []
+
+        def plan(
+            self,
+            question: str,
+            goal: ResearchGoal,
+            budget_mode: BudgetMode,
+            workspace_context: str,
+        ) -> ResearchPlan:
+            del question, goal, budget_mode, workspace_context
+            return plan
+
+        def search(
+            self,
+            query: str,
+            goal: ResearchGoal,
+            allowed_domains: list[str] | None = None,
+        ) -> ProviderSearchResult:
+            del goal, allowed_domains
+            self.searches.append(query)
+            return ProviderSearchResult(assets=[], sources=[])
+
+    class RecoveringXiaohongshu:
+        name = "recovering-opencli-xiaohongshu"
+
+        def __init__(self) -> None:
+            self.directions: list[str] = []
+            self.queries: list[str] = []
+            self.attempts = {"linework": 0, "collage": 0, "rendered": 0}
+
+        def search(self, query: str, *, limit: int = 4) -> list[ProviderSource]:
+            assert limit == 10
+            self.queries.append(query)
+            direction = (
+                "collage" if "拼贴" in query else "rendered" if "渲染" in query else "linework"
+            )
+            self.directions.append(direction)
+            self.attempts[direction] += 1
+            if direction == "collage" and self.attempts[direction] == 1:
+                return []
+            return [
+                ProviderSource(
+                    url=(
+                        "https://www.xiaohongshu.com/explore/"
+                        f"{direction}-{self.attempts[direction]}"
+                    ),
+                    publisher="小红书 · 图纸补查",
+                    title={
+                        "linework": "精细线稿轴测图",
+                        "collage": "拼贴叙事轴测图",
+                        "rendered": "材质渲染轴测图",
+                    }[direction],
+                    publication_tier=PublicationTier.aggregator,
+                )
+            ]
+
+        def download(self, note_url: str, output_dir: Path, *, limit: int = 4) -> list[Path]:
+            del note_url
+            assert limit == 4
+            output_dir.mkdir(parents=True, exist_ok=True)
+            path = output_dir / "axis.png"
+            path.write_bytes(_distinct_crop_png(len(self.directions)))
+            return [path]
+
+    class AxonometricClassifier(RecordingRemoteClassifier):
+        def classify_remote_batch(
+            self,
+            candidates: list[RemoteVisualCandidate],
+            *,
+            question: str,
+            project_text: str,
+        ) -> RemoteVisualClassificationBatch:
+            del question, project_text
+            self.remote_calls.append(candidates)
+            return RemoteVisualClassificationBatch(
+                classifications=[
+                    RemoteVisualClassification(
+                        candidate_id=candidate.candidate_id,
+                        asset_type=ArchitectureAssetType.axonometric,
+                        relevance=4,
+                        observations=["可见明确的轴测图线型、色块与构图。"],
+                    )
+                    for candidate in candidates
+                ]
+            )
+
+    provider = VisualOnlyProvider()
+    xiaohongshu = RecoveringXiaohongshu()
+    classifier = AxonometricClassifier()
+
+    execute_research_run(
+        database,
+        run_id,
+        provider,
+        visual_classifier=classifier,
+        candidate_root=tmp_path / "visual-retry-candidates",
+        xiaohongshu_search=xiaohongshu,
+    )
+
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+
+    assert run is not None
+    assert provider.searches == []
+    assert xiaohongshu.directions == ["linework", "collage", "rendered", "collage"]
+    assert xiaohongshu.queries[1] != xiaohongshu.queries[3]
+    assert xiaohongshu.queries[3].endswith("作品集")
+    assert run.coverage_report["covered_subquestions"] == 3
+    assert run.coverage_report["gaps"] == []
+    assert run.status == RunStatus.completed.value
+    assert run.stop_reason == "coverage_satisfied"
 
 
 def test_visual_run_completes_with_local_visual_fallback_when_provider_auth_fails(
@@ -1192,7 +1367,7 @@ def test_visual_reference_search_only_persists_the_requested_drawing_type(
 
         def search(self, query: str, *, limit: int = 4) -> list[ProviderSource]:
             self.searches.append(query)
-            assert limit == 8
+            assert limit == 10
             index = len(self.searches)
             return [
                 ProviderSource(
@@ -1296,7 +1471,7 @@ def test_xiaohongshu_accumulates_three_usable_ranked_notes_before_extension_fall
 
         def search(self, query: str, *, limit: int = 4) -> list[ProviderSource]:
             del query
-            assert limit == 8
+            assert limit == 10
             return [
                 ProviderSource(
                     url=note_url,
@@ -1400,7 +1575,7 @@ def test_visual_reference_budget_reaches_third_direction_after_four_notes_each(
 
         def search(self, query: str, *, limit: int = 4) -> list[ProviderSource]:
             self.searches.append(query)
-            assert limit == 8
+            assert limit == 10
             branch = len(self.searches)
             return [
                 ProviderSource(
@@ -1487,7 +1662,7 @@ def test_visual_reference_budget_reaches_third_direction_after_four_notes_each(
     }
 
 
-def test_xiaohongshu_only_requires_three_usable_notes_per_direction(
+def test_visual_reference_completes_when_one_direction_misses_enrichment_target(
     tmp_path: Path,
 ) -> None:
     database, run_id = _database_with_run(tmp_path, max_pages=12)
@@ -1544,7 +1719,7 @@ def test_xiaohongshu_only_requires_three_usable_notes_per_direction(
 
         def search(self, query: str, *, limit: int = 4) -> list[ProviderSource]:
             del query
-            assert limit == 8
+            assert limit >= 8
             self.searches += 1
             return [
                 ProviderSource(
@@ -1610,8 +1785,8 @@ def test_xiaohongshu_only_requires_three_usable_notes_per_direction(
     assert run.visual_calls_used == 20
     assert xiaohongshu.searches == 3
     assert len(classifier.remote_calls) == 10
-    assert run.status == RunStatus.partial.value
-    assert run.stop_reason == "visual_budget_exhausted"
+    assert run.status == RunStatus.completed.value
+    assert run.stop_reason == "coverage_satisfied"
 
 
 def test_visual_reference_exhausted_slots_use_visual_budget_stop_reason(tmp_path: Path) -> None:
@@ -1622,7 +1797,7 @@ def test_visual_reference_exhausted_slots_use_visual_budget_stop_reason(tmp_path
         run.question = "我想出一张轴测图，帮我找风格"
         run.goal = ResearchGoal.visual_reference_search.value
         run.research_sources = ["xiaohongshu"]
-        run.visual_calls_used = 48
+        run.visual_calls_used = workflow_module.VISUAL_REFERENCE_INSPECTION_LIMIT[0]
         run.budget = {
             "max_rounds": 2,
             "max_queries": 2,
@@ -1685,12 +1860,13 @@ def test_visual_reference_exhausted_slots_use_visual_budget_stop_reason(tmp_path
         run = session.get(ResearchRun, run_id)
 
     assert run is not None
+    assert run.status == RunStatus.blocked.value
     assert run.stop_reason == "visual_budget_exhausted"
-    assert run.visual_calls_used == 48
+    assert run.visual_calls_used == workflow_module.VISUAL_REFERENCE_INSPECTION_LIMIT[0]
     assert xiaohongshu.searches == 0
 
 
-def test_xiaohongshu_extension_inspection_accumulates_until_fixed_visual_budget(
+def test_xiaohongshu_extension_inspection_reaches_note_targets_with_raised_visual_budget(
     tmp_path: Path,
 ) -> None:
     database, run_id = _database_with_run(tmp_path, max_pages=12)
@@ -1715,7 +1891,7 @@ def test_xiaohongshu_extension_inspection_accumulates_until_fixed_visual_budget(
 
         def search(self, query: str, *, limit: int = 4) -> list[ProviderSource]:
             self.searches.append(query)
-            assert limit == 8
+            assert limit == 10
             branch = len(self.searches)
             return [
                 ProviderSource(
@@ -1815,16 +1991,102 @@ def test_xiaohongshu_extension_inspection_accumulates_until_fixed_visual_budget(
         "https://www.xiaohongshu.com/explore/branch-2-3",
         "https://www.xiaohongshu.com/explore/branch-3-1",
         "https://www.xiaohongshu.com/explore/branch-3-2",
+        "https://www.xiaohongshu.com/explore/branch-3-3",
     ]
-    assert run.status == RunStatus.partial.value, (
+    assert run.status == RunStatus.completed.value, (
         run.stop_reason,
         run.coverage_report,
     )
-    assert run.stop_reason == "visual_budget_exhausted"
-    assert run.visual_calls_used == 48
+    assert run.stop_reason == "coverage_satisfied"
+    assert run.visual_calls_used == 54
     assert assets
     assert {asset.publication_tier for asset in assets} == {PublicationTier.aggregator.value}
     assert {asset.result_tier for asset in assets} == {ResultTier.visual_lead.value}
+
+
+def test_xiaohongshu_extension_visual_search_rejects_browser_type_mismatches(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, max_pages=12)
+    with database.session_factory() as session:
+        run = session.get(ResearchRun, run_id)
+        assert run is not None
+        run.question = "我想出一张剖面图，帮我找风格"
+        run.goal = ResearchGoal.visual_reference_search.value
+        run.research_sources = ["xiaohongshu"]
+        run.budget = {
+            "max_rounds": 1,
+            "max_queries": 1,
+            "max_pages": 12,
+            "max_seconds": 240,
+        }
+        session.commit()
+
+    class SearchOnlyXiaohongshu:
+        name = "search-only-xiaohongshu"
+
+        def __init__(self) -> None:
+            self.searches: list[str] = []
+
+        def search(self, query: str, *, limit: int = 4) -> list[ProviderSource]:
+            self.searches.append(query)
+            assert limit == 10
+            return [
+                ProviderSource(
+                    url="https://www.xiaohongshu.com/explore/type-mismatch-note",
+                    publisher="小红书 · 剖面参考",
+                    title="剖面图参考",
+                    publication_tier=PublicationTier.aggregator,
+                )
+            ]
+
+    class PhotographClassifier(RecordingClassifier):
+        def classify(
+            self,
+            image_data_url: str,
+            *,
+            question: str,
+            caption: str,
+            project_text: str,
+        ) -> VisualClassification:
+            super().classify(
+                image_data_url,
+                question=question,
+                caption=caption,
+                project_text=project_text,
+            )
+            return VisualClassification(
+                asset_type=ArchitectureAssetType.photograph,
+                relevance=4,
+                observations=["可见完整室内效果图，但不是剖面图。"],
+            )
+
+    candidate_root = tmp_path / "extension-type-mismatch-candidates"
+    browser = RecordingBrowser()
+    classifier = PhotographClassifier()
+    xiaohongshu = SearchOnlyXiaohongshu()
+    execute_research_run(
+        database,
+        run_id,
+        SingleBatchProvider(_provider_result("https://studio.example/must-not-run")),
+        browser_client=browser,
+        visual_classifier=classifier,
+        candidate_root=candidate_root,
+        xiaohongshu_search=xiaohongshu,
+    )
+
+    with database.session_factory() as session:
+        assets = list(
+            session.scalars(select(AssetCandidate).where(AssetCandidate.run_id == run_id))
+        )
+        traces = list(session.scalars(select(TraceEvent).where(TraceEvent.run_id == run_id)))
+
+    assert xiaohongshu.searches
+    assert "剖面" in xiaohongshu.searches[0]
+    assert browser.calls, json.dumps([trace.summary for trace in traces], ensure_ascii=False)
+    assert classifier.calls, ([trace.summary for trace in traces], browser.calls)
+    assert assets == []
+    assert list(candidate_root.rglob("*.png")) == []
 
 
 @pytest.mark.parametrize("search_surface", ["local", "model"])
@@ -2100,6 +2362,31 @@ def test_inspection_scrolls_a_bounded_number_of_times_and_captures_lazy_media(
     assert actions.count("enumerate_media") == 3
     assert actions.count("capture_region") == 2
     assert len(classifier.calls) == 2
+
+
+def test_inspection_uses_a_specialized_note_opener_when_provided(tmp_path: Path) -> None:
+    browser = RecordingBrowser()
+    classifier = RecordingClassifier()
+    opened_urls: list[str] = []
+
+    def open_note(note_url: str) -> OpenPageResult:
+        opened_urls.append(note_url)
+        return OpenPageResult(tab_id=41, url=note_url)
+
+    inspected = inspect_source_page(
+        browser,
+        classifier,
+        run_id="xiaohongshu-note-run",
+        source_url="https://www.xiaohongshu.com/explore/note-42",
+        question="比较剖面图的线型层级。",
+        candidate_root=tmp_path,
+        open_page=open_note,
+    )
+
+    assert len(inspected) == 6
+    assert opened_urls == ["https://www.xiaohongshu.com/explore/note-42"]
+    assert not any(action == "open_url" for action, _ in browser.calls)
+    assert browser.calls[-1] == ("close_tab", {"tab_id": 41})
 
 
 def test_browser_failure_closes_the_tab_and_preserves_web_results(tmp_path: Path) -> None:
@@ -5013,7 +5300,7 @@ def test_deep_four_of_six_with_cited_synthesis_finishes_partial(
     assert run.coverage_report["synthesis"]["answer"]["statement"].startswith("已有四个分支")
 
 
-def test_synthesis_fallback_stays_partial_when_enrichment_is_incomplete(
+def test_synthesis_fallback_completes_when_coverage_is_complete_but_enrichment_is_incomplete(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -5155,8 +5442,8 @@ def test_synthesis_fallback_stays_partial_when_enrichment_is_incomplete(
             )
         )
     assert run is not None
-    assert run.status == RunStatus.partial.value
-    assert run.stop_reason == "time_budget_exhausted"
+    assert run.status == RunStatus.completed.value
+    assert run.stop_reason == "coverage_satisfied"
     assert run.coverage_report["covered_subquestions"] == 6
     assert run.coverage_report["gaps"] == []
     assert provider.calls == 0
@@ -8892,15 +9179,10 @@ def test_local_browser_expansion_is_skipped_without_parser_deadline_reserve(
     assert parser.urls == [parent_url]
 
 
-def test_local_browser_remote_visual_batch_classifies_untyped_images_once_per_run(
+def test_precedent_remote_visual_batch_classifies_untyped_images_once_per_run(
     tmp_path: Path,
 ) -> None:
     database, run_id = _database_with_run(tmp_path)
-    with database.session_factory() as session:
-        run = session.get(ResearchRun, run_id)
-        assert run is not None
-        run.goal = ResearchGoal.visual_reference_search.value
-        session.commit()
     parser = RecordingPublicPageParser(
         [
             ParsedPageImage(url=f"https://cdn.example/asset-{index}.jpg", alt="")
@@ -8909,7 +9191,7 @@ def test_local_browser_remote_visual_batch_classifies_untyped_images_once_per_ru
     )
     classifier = RecordingRemoteClassifier()
     provider_result = _provider_result("https://studio.example/project")
-    provider_result.sources[0].publication_tier = PublicationTier.unknown
+    provider_result.sources[0].publication_tier = PublicationTier.trusted_secondary
     provider = SingleBatchProvider(provider_result)
 
     execute_research_run(
@@ -8921,11 +9203,11 @@ def test_local_browser_remote_visual_batch_classifies_untyped_images_once_per_ru
     )
 
     with database.session_factory() as session:
-        leads = list(
+        remote_assets = list(
             session.scalars(
                 select(AssetCandidate).where(
                     AssetCandidate.run_id == run_id,
-                    AssetCandidate.result_tier == ResultTier.visual_lead.value,
+                    AssetCandidate.image_url.like("https://cdn.example/%"),
                 )
             )
         )
@@ -8948,17 +9230,20 @@ def test_local_browser_remote_visual_batch_classifies_untyped_images_once_per_ru
 
     assert len(classifier.remote_calls) == 1
     assert len(classifier.remote_calls[0]) == 4
-    assert [lead.image_url for lead in leads] == ["https://cdn.example/asset-1.jpg"]
-    lead = leads[0]
-    assert lead.asset_type == ArchitectureAssetType.section.value
-    assert lead.relevance == 4
-    assert lead.observations == ["可见错层楼板、贯通楼梯和挑空空间。"]
-    assert lead.facts == []
-    assert lead.inferences == []
-    assert lead.project_identity == AssociationStatus.unknown.value
-    assert lead.asset_association == AssociationStatus.unknown.value
-    assert lead.primary_source == PrimarySourceStatus.unknown.value
-    assert lead.rights_status == RightsStatus.unknown.value
+    assert [asset.image_url for asset in remote_assets] == ["https://cdn.example/asset-1.jpg"]
+    asset = remote_assets[0]
+    assert asset.asset_type == ArchitectureAssetType.section.value
+    assert asset.result_tier == ResultTier.partial.value
+    assert asset.publication_tier == PublicationTier.trusted_secondary.value
+    assert asset.relevance == 4
+    assert asset.observations == ["可见错层楼板、贯通楼梯和挑空空间。"]
+    assert len(asset.facts) == 1
+    assert "项目页直接列出了这张剖面图" in asset.facts[0]
+    assert asset.inferences == []
+    assert asset.project_identity == AssociationStatus.probable.value
+    assert asset.asset_association == AssociationStatus.confirmed.value
+    assert asset.primary_source == PrimarySourceStatus.unknown.value
+    assert asset.rights_status == RightsStatus.unknown.value
     assert sum(event.tool == "remote_visual_batch" for event in events) == 2
 
 
@@ -9425,6 +9710,109 @@ def test_undecodable_browser_crops_are_not_sent_to_the_visual_classifier(tmp_pat
     assert list((tmp_path / "candidates").rglob("*.png")) == []
 
 
+def test_xiaohongshu_inspection_saves_approved_cdn_media_instead_of_page_crop(
+    tmp_path: Path,
+) -> None:
+    class XiaohongshuMediaBrowser(RecordingBrowser):
+        def send_command_sync(
+            self,
+            action: str,
+            payload: dict[str, Any],
+            *,
+            timeout_seconds: float = 30,
+        ) -> Any:
+            if action == "enumerate_media":
+                self.calls.append((action, payload))
+                return {
+                    "media": [
+                        {
+                            "media_type": "image",
+                            "url": "https://sns-webpic-qc.xhscdn.com/current-note.webp",
+                            "link_url": None,
+                            "alt": "Current note section drawing",
+                            "adjacent_text": "",
+                            "intrinsic_width": 1_600,
+                            "intrinsic_height": 1_200,
+                            "region": {
+                                "x": 0,
+                                "y": 0,
+                                "width": 900,
+                                "height": 700,
+                            },
+                        }
+                    ]
+                }
+            return super().send_command_sync(
+                action,
+                payload,
+                timeout_seconds=timeout_seconds,
+            )
+
+    downloaded = _crop_png(3)
+    fetched_urls: list[str] = []
+
+    def fetch_image(url: str) -> bytes:
+        fetched_urls.append(url)
+        return downloaded
+
+    browser = XiaohongshuMediaBrowser()
+    inspected = inspect_source_page(
+        browser,
+        RecordingClassifier(),
+        run_id="xiaohongshu-original-media-run",
+        source_url="https://www.xiaohongshu.com/search_result/note-42?xsec_token=visible",
+        question="分析剖面线稿。",
+        candidate_root=tmp_path,
+        image_fetcher=fetch_image,
+    )
+
+    assert len(inspected) == 1
+    assert fetched_urls == ["https://sns-webpic-qc.xhscdn.com/current-note.webp"]
+    assert [action for action, _ in browser.calls].count("capture_region") == 0
+    assert inspected[0].storage_path is not None
+    stored_bytes = inspected[0].storage_path.read_bytes()
+    with Image.open(BytesIO(stored_bytes)) as stored, Image.open(BytesIO(downloaded)) as source:
+        assert stored.format == "PNG"
+        assert stored.convert("RGB").tobytes() == source.convert("RGB").tobytes()
+
+
+def test_xiaohongshu_inspection_keeps_region_capture_for_unapproved_media_hosts(
+    tmp_path: Path,
+) -> None:
+    class NonCdnMediaBrowser(RecordingBrowser):
+        def send_command_sync(
+            self,
+            action: str,
+            payload: dict[str, Any],
+            *,
+            timeout_seconds: float = 30,
+        ) -> Any:
+            response = super().send_command_sync(
+                action,
+                payload,
+                timeout_seconds=timeout_seconds,
+            )
+            if action == "enumerate_media":
+                response["media"] = response["media"][:1]
+            return response
+
+    fetched_urls: list[str] = []
+    browser = NonCdnMediaBrowser()
+    inspected = inspect_source_page(
+        browser,
+        RecordingClassifier(),
+        run_id="xiaohongshu-unapproved-media-run",
+        source_url="https://www.xiaohongshu.com/search_result/note-42?xsec_token=visible",
+        question="分析剖面线稿。",
+        candidate_root=tmp_path,
+        image_fetcher=lambda url: fetched_urls.append(url) or _crop_png(4),
+    )
+
+    assert len(inspected) == 1
+    assert fetched_urls == []
+    assert [action for action, _ in browser.calls].count("capture_region") == 1
+
+
 def test_shared_inspection_budget_deduplicates_before_classification_across_pages(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -9816,8 +10204,8 @@ def test_workflow_shares_a_quick_run_inspection_budget_across_pages(
 
     assert len(observed_budgets) == 2
     assert observed_budgets[0] is observed_budgets[1]
-    assert observed_budgets[0].max_calls == 12
-    assert observed_budgets[0].max_bytes == 24 * 1024 * 1024
+    assert observed_budgets[0].max_calls == 15
+    assert observed_budgets[0].max_bytes == 30 * 1024 * 1024
 
 
 def test_workflow_restores_and_persists_the_run_wide_inspection_budget(
@@ -9827,7 +10215,7 @@ def test_workflow_restores_and_persists_the_run_wide_inspection_budget(
     with database.session_factory() as session:
         run = session.get(ResearchRun, run_id)
         assert run is not None
-        run.visual_calls_used = 11
+        run.visual_calls_used = workflow_module.VISUAL_INSPECTION_LIMITS[BudgetMode.quick][0] - 1
         session.commit()
     browser = RecordingBrowser()
 
@@ -9844,7 +10232,7 @@ def test_workflow_restores_and_persists_the_run_wide_inspection_budget(
         run = session.get(ResearchRun, run_id)
     assert run is not None
     assert [action for action, _ in browser.calls].count("capture_region") == 1
-    assert run.visual_calls_used == 12
+    assert run.visual_calls_used == workflow_module.VISUAL_INSPECTION_LIMITS[BudgetMode.quick][0]
     assert run.visual_bytes_used > 0
 
 

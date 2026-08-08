@@ -74,6 +74,111 @@ describe("browser command executor", () => {
     expect(port.injectContentScript).not.toHaveBeenCalled();
   });
 
+  it("opens a Xiaohongshu research search tab in the foreground", async () => {
+    const port = makeBrowserPort();
+    const searchUrl =
+      "https://www.xiaohongshu.com/search_result?keyword=architecture";
+    port.createTab.mockResolvedValue({ id: 42, url: searchUrl });
+    port.getTab.mockResolvedValue({ id: 42, url: searchUrl, windowId: 7 });
+    const executor = new BrowserCommandExecutor(port);
+
+    await executor.execute(command("open_url", { url: searchUrl }));
+
+    expect(port.createTab).toHaveBeenCalledWith(searchUrl, true);
+  });
+
+  it("keeps the Xiaohongshu login entry in the background", async () => {
+    const port = makeBrowserPort();
+    const loginUrl = "https://www.xiaohongshu.com/explore";
+    port.createTab.mockResolvedValue({ id: 42, url: loginUrl });
+    port.getTab.mockResolvedValue({ id: 42, url: loginUrl, windowId: 7 });
+    const executor = new BrowserCommandExecutor(port);
+
+    await executor.execute(command("open_url", { url: loginUrl }));
+
+    expect(port.createTab).toHaveBeenCalledWith(loginUrl, false);
+  });
+
+  it("opens a Xiaohongshu note by clicking its exact search result link", async () => {
+    const port = makeBrowserPort();
+    const searchUrl =
+      "https://www.xiaohongshu.com/search_result?keyword=architecture";
+    const noteUrl = "https://www.xiaohongshu.com/explore/note-42";
+    port.createTab.mockResolvedValue({ id: 42, url: searchUrl });
+    port.getTab
+      .mockResolvedValueOnce({ id: 42, url: searchUrl })
+      .mockResolvedValueOnce({ id: 42, url: noteUrl });
+    port.sendContentCommand.mockResolvedValue({ opened: true });
+    const executor = new BrowserCommandExecutor(port);
+
+    await expect(
+      executor.execute(
+        command("open_xiaohongshu_note", {
+          search_url: searchUrl,
+          note_url: noteUrl,
+        }),
+      ),
+    ).resolves.toEqual({ tab_id: 42, url: noteUrl });
+    expect(port.createTab).toHaveBeenCalledWith(searchUrl, true);
+    expect(port.sendContentCommand).toHaveBeenCalledWith(42, {
+      action: "open_xiaohongshu_note",
+      note_url: noteUrl,
+    });
+  });
+
+  it("waits for a late-rendered Xiaohongshu note link before failing", async () => {
+    const port = makeBrowserPort();
+    const searchUrl =
+      "https://www.xiaohongshu.com/search_result?keyword=architecture";
+    const noteUrl = "https://www.xiaohongshu.com/explore/note-42";
+    let opened = false;
+    port.createTab.mockResolvedValue({ id: 42, url: searchUrl });
+    port.getTab.mockImplementation(async () => ({
+      id: 42,
+      url: opened ? noteUrl : searchUrl,
+    }));
+    port.sendContentCommand
+      .mockResolvedValueOnce({ opened: false })
+      .mockImplementationOnce(async () => {
+        opened = true;
+        return { opened: true };
+      });
+    const delay = vi.fn().mockResolvedValue(undefined);
+    const executor = new BrowserCommandExecutor(port, delay);
+
+    await expect(
+      executor.execute(
+        command("open_xiaohongshu_note", {
+          search_url: searchUrl,
+          note_url: noteUrl,
+        }),
+      ),
+    ).resolves.toEqual({ tab_id: 42, url: noteUrl });
+    expect(delay).toHaveBeenCalledWith(1_000);
+    expect(port.sendContentCommand).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails closed and removes the tab when the exact note link is absent", async () => {
+    const port = makeBrowserPort();
+    const searchUrl =
+      "https://www.xiaohongshu.com/search_result?keyword=architecture";
+    const noteUrl = "https://www.xiaohongshu.com/explore/note-42";
+    port.createTab.mockResolvedValue({ id: 42, url: searchUrl });
+    port.getTab.mockResolvedValue({ id: 42, url: searchUrl });
+    port.sendContentCommand.mockResolvedValue({ opened: false });
+    const executor = new BrowserCommandExecutor(port);
+
+    await expect(
+      executor.execute(
+        command("open_xiaohongshu_note", {
+          search_url: searchUrl,
+          note_url: noteUrl,
+        }),
+      ),
+    ).rejects.toThrow(/not found/i);
+    expect(port.removeTab).toHaveBeenCalledWith(42);
+  });
+
   it("uses the content listener prepared during managed tab creation", async () => {
     const port = makeBrowserPort();
     const executor = new BrowserCommandExecutor(port);
@@ -142,36 +247,117 @@ describe("browser command executor", () => {
     });
   });
 
-  it("rechecks an unknown Xiaohongshu session on the same managed tab", async () => {
+  it.each(["unknown", "not_logged_in"] as const)(
+    "rechecks a %s Xiaohongshu session on the same managed tab",
+    async (status) => {
+      const port = makeBrowserPort();
+      port.createTab.mockResolvedValue({
+        id: 42,
+        url: "https://www.xiaohongshu.com/search_result?keyword=architecture",
+      });
+      port.getTab.mockResolvedValue({
+        id: 42,
+        url: "https://www.xiaohongshu.com/search_result?keyword=architecture",
+        windowId: 7,
+      });
+      port.sendContentCommand
+        .mockResolvedValueOnce({ status })
+        .mockResolvedValueOnce({ status: "logged_in" });
+      const delay = vi.fn().mockResolvedValue(undefined);
+      const executor = new BrowserCommandExecutor(port, delay);
+      await executor.execute(
+        command("open_url", {
+          url: "https://www.xiaohongshu.com/search_result?keyword=architecture",
+        }),
+      );
+
+      await expect(
+        executor.execute(
+          command("xiaohongshu_session_status", { tab_id: 42 }),
+        ),
+      ).resolves.toEqual({ status: "logged_in" });
+      expect(delay).toHaveBeenCalledOnce();
+      expect(delay).toHaveBeenCalledWith(1_000);
+      expect(port.sendContentCommand).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("rechecks the same Xiaohongshu tab after a transient session command failure", async () => {
     const port = makeBrowserPort();
-    port.createTab.mockResolvedValue({
-      id: 42,
-      url: "https://www.xiaohongshu.com/search_result?keyword=architecture",
-    });
-    port.getTab.mockResolvedValue({
-      id: 42,
-      url: "https://www.xiaohongshu.com/search_result?keyword=architecture",
-      windowId: 7,
-    });
+    const searchUrl = "https://www.xiaohongshu.com/search_result?keyword=architecture";
+    port.createTab.mockResolvedValue({ id: 42, url: searchUrl });
+    port.getTab.mockResolvedValue({ id: 42, url: searchUrl, windowId: 7 });
     port.sendContentCommand
-      .mockResolvedValueOnce({ status: "unknown" })
+      .mockRejectedValueOnce(new Error("Command could not run"))
       .mockResolvedValueOnce({ status: "logged_in" });
     const delay = vi.fn().mockResolvedValue(undefined);
     const executor = new BrowserCommandExecutor(port, delay);
-    await executor.execute(
-      command("open_url", {
-        url: "https://www.xiaohongshu.com/search_result?keyword=architecture",
-      }),
-    );
+    await executor.execute(command("open_url", { url: searchUrl }));
 
     await expect(
-      executor.execute(
-        command("xiaohongshu_session_status", { tab_id: 42 }),
-      ),
+      executor.execute(command("xiaohongshu_session_status", { tab_id: 42 })),
     ).resolves.toEqual({ status: "logged_in" });
     expect(delay).toHaveBeenCalledOnce();
     expect(delay).toHaveBeenCalledWith(1_000);
     expect(port.sendContentCommand).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves a captcha reached after a transient session command failure", async () => {
+    const port = makeBrowserPort();
+    const searchUrl = "https://www.xiaohongshu.com/search_result?keyword=architecture";
+    const captchaUrl = "https://www.xiaohongshu.com/website-login/captcha?verifyType=124";
+    port.createTab.mockResolvedValue({ id: 42, url: searchUrl });
+    port.getTab
+      .mockResolvedValueOnce({ id: 42, url: searchUrl, windowId: 7 })
+      .mockResolvedValueOnce({ id: 42, url: searchUrl, windowId: 7 })
+      .mockResolvedValueOnce({ id: 42, url: captchaUrl, windowId: 7 });
+    port.sendContentCommand.mockRejectedValueOnce(
+      new Error("Command could not run"),
+    );
+    const delay = vi.fn().mockResolvedValue(undefined);
+    const executor = new BrowserCommandExecutor(port, delay);
+    await executor.execute(command("open_url", { url: searchUrl }));
+
+    await expect(
+      executor.execute(command("xiaohongshu_session_status", { tab_id: 42 })),
+    ).resolves.toEqual({ status: "verification_required" });
+    expect(delay).toHaveBeenCalledOnce();
+    expect(port.sendContentCommand).toHaveBeenCalledOnce();
+  });
+
+  it("returns verification_required from the current Xiaohongshu captcha URL", async () => {
+    const port = makeBrowserPort();
+    const captchaUrl = "https://www.xiaohongshu.com/website-login/captcha?verifyType=124";
+    port.createTab.mockResolvedValue({ id: 42, url: captchaUrl });
+    port.getTab.mockResolvedValue({ id: 42, url: captchaUrl, windowId: 7 });
+    const executor = new BrowserCommandExecutor(port);
+    await executor.execute(command("open_url", { url: captchaUrl }));
+
+    await expect(
+      executor.execute(command("xiaohongshu_session_status", { tab_id: 42 })),
+    ).resolves.toEqual({ status: "verification_required" });
+    expect(port.sendContentCommand).not.toHaveBeenCalled();
+  });
+
+  it("stops the session recheck when the managed tab reaches a captcha URL", async () => {
+    const port = makeBrowserPort();
+    const searchUrl = "https://www.xiaohongshu.com/search_result?keyword=architecture";
+    const captchaUrl = "https://www.xiaohongshu.com/website-login/captcha?verifyType=124";
+    port.createTab.mockResolvedValue({ id: 42, url: searchUrl });
+    port.getTab
+      .mockResolvedValueOnce({ id: 42, url: searchUrl, windowId: 7 })
+      .mockResolvedValueOnce({ id: 42, url: searchUrl, windowId: 7 })
+      .mockResolvedValueOnce({ id: 42, url: captchaUrl, windowId: 7 });
+    port.sendContentCommand.mockResolvedValue({ status: "unknown" });
+    const delay = vi.fn().mockResolvedValue(undefined);
+    const executor = new BrowserCommandExecutor(port, delay);
+    await executor.execute(command("open_url", { url: searchUrl }));
+
+    await expect(
+      executor.execute(command("xiaohongshu_session_status", { tab_id: 42 })),
+    ).resolves.toEqual({ status: "verification_required" });
+    expect(delay).toHaveBeenCalledOnce();
+    expect(port.sendContentCommand).toHaveBeenCalledOnce();
   });
 
   it("keeps an unresolved Xiaohongshu session bounded and fail closed", async () => {
@@ -199,8 +385,8 @@ describe("browser command executor", () => {
         command("xiaohongshu_session_status", { tab_id: 42 }),
       ),
     ).resolves.toEqual({ status: "unknown" });
-    expect(delay).toHaveBeenCalledTimes(5);
-    expect(port.sendContentCommand).toHaveBeenCalledTimes(6);
+    expect(delay).toHaveBeenCalledTimes(20);
+    expect(port.sendContentCommand).toHaveBeenCalledTimes(21);
   });
 
   it("rejects Xiaohongshu session checks on other public sites", async () => {

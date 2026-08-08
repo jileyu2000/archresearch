@@ -31,6 +31,15 @@ function makeChromeApi() {
         remove: vi.fn().mockResolvedValue(undefined),
       },
     },
+    windows: {
+      get: vi.fn().mockResolvedValue({ id: 3, state: "normal" }),
+      update: vi.fn().mockImplementation(
+        async (
+          windowId: number,
+          updateInfo: { focused?: boolean; state?: chrome.windows.WindowState },
+        ) => ({ id: windowId, ...updateInfo }),
+      ),
+    },
     tabs: {
       create: vi.fn().mockResolvedValue({
         id: 12,
@@ -103,6 +112,38 @@ function makeChromeApi() {
 }
 
 describe("Chrome browser adapter", () => {
+  it("restores and focuses the Chrome window before navigating an active research tab", async () => {
+    const api = makeChromeApi();
+    api.windows.get.mockResolvedValue({ id: 3, state: "minimized" });
+    const port = new ChromeBrowserPort(api);
+
+    await port.createTab(
+      "https://www.xiaohongshu.com/search_result?keyword=architecture",
+      true,
+    );
+
+    expect(api.windows.get).toHaveBeenCalledWith(3);
+    expect(api.windows.update).toHaveBeenNthCalledWith(1, 3, {
+      state: "normal",
+    });
+    expect(api.windows.update).toHaveBeenNthCalledWith(2, 3, {
+      focused: true,
+    });
+    expect(api.windows.update.mock.invocationCallOrder[1]).toBeLessThan(
+      api.tabs.update.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("does not change the Chrome window for a background tab", async () => {
+    const api = makeChromeApi();
+    const port = new ChromeBrowserPort(api);
+
+    await port.createTab("https://example.com/project", false);
+
+    expect(api.windows.get).not.toHaveBeenCalled();
+    expect(api.windows.update).not.toHaveBeenCalled();
+  });
+
   it("uses Chrome's pending URL while a new tab is still navigating", async () => {
     const api = makeChromeApi();
     api.tabs.create.mockResolvedValue({
@@ -125,6 +166,26 @@ describe("Chrome browser adapter", () => {
     await expect(port.getTab(12)).resolves.toMatchObject({
       url: "https://example.com/pending-project",
     });
+  });
+
+  it("reinjects the content listener when a Xiaohongshu session read starts too early", async () => {
+    const api = makeChromeApi();
+    const port = new ChromeBrowserPort(api);
+    await port.createTab(
+      "https://www.xiaohongshu.com/search_result?keyword=architecture",
+      false,
+    );
+    api.scripting.executeScript.mockReset().mockResolvedValue([]);
+    api.tabs.sendMessage
+      .mockReset()
+      .mockRejectedValueOnce(new Error("Receiving end does not exist"))
+      .mockResolvedValueOnce({ ok: true, result: { status: "logged_in" } });
+
+    await expect(
+      port.sendContentCommand(12, { action: "xiaohongshu_session_status" }),
+    ).resolves.toEqual({ status: "logged_in" });
+    expect(api.scripting.executeScript).toHaveBeenCalledOnce();
+    expect(api.tabs.sendMessage).toHaveBeenCalledTimes(2);
   });
 
   it("installs the packaged listener on the managed tab's first loading event", async () => {
@@ -638,6 +699,32 @@ describe("Chrome browser adapter", () => {
     ).resolves.toEqual({ media: [] });
     expect(api.scripting.executeScript).toHaveBeenCalledOnce();
     expect(api.tabs.sendMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it("classifies a missing receiver after the single listener recovery", async () => {
+    const api = makeChromeApi();
+    api.tabs.sendMessage.mockRejectedValue(new Error("No receiving end"));
+    const port = new ChromeBrowserPort(api);
+
+    await expect(
+      port.sendContentCommand(12, { action: "xiaohongshu_session_status" }),
+    ).rejects.toMatchObject({ name: "ContentMessageUnavailableError" });
+    expect(api.scripting.executeScript).toHaveBeenCalledOnce();
+    expect(api.tabs.sendMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it("classifies a packaged content operation rejection", async () => {
+    const api = makeChromeApi();
+    api.tabs.sendMessage.mockResolvedValue({
+      ok: false,
+      error: { code: "invalid_content_command" },
+    });
+    const port = new ChromeBrowserPort(api);
+
+    await expect(
+      port.sendContentCommand(12, { action: "xiaohongshu_session_status" }),
+    ).rejects.toMatchObject({ name: "ContentOperationRejectedError" });
+    expect(api.scripting.executeScript).not.toHaveBeenCalled();
   });
 
   it("does not replay a state-changing page command after its response times out", async () => {

@@ -1,4 +1,5 @@
 import type { SafeClickTarget } from "../protocol";
+import { isSafeXiaohongshuNoteUrl } from "./url-policy";
 
 export type MediaCandidate = {
   media_type: "image" | "canvas" | "svg";
@@ -15,6 +16,7 @@ export type ContentCommand =
   | { action: "page_metadata" }
   | { action: "page_snapshot" }
   | { action: "xiaohongshu_session_status" }
+  | { action: "open_xiaohongshu_note"; note_url: string }
   | { action: "enumerate_media" }
   | { action: "viewport_metrics" }
   | { action: "scroll"; direction: "up" | "down"; distance: number }
@@ -33,6 +35,7 @@ export function collectMedia(root: Document): MediaCandidate[] {
   if (isSensitivePage(root)) {
     return [];
   }
+  const xiaohongshuNotePage = isXiaohongshuNotePage(root);
   const candidates: MediaCandidate[] = [];
   const startedAt = mediaClock(root);
   let scannedNodes = 0;
@@ -45,12 +48,21 @@ export function collectMedia(root: Document): MediaCandidate[] {
       break;
     }
     scannedNodes += 1;
+    if (
+      xiaohongshuNotePage &&
+      !(element instanceof root.defaultView!.HTMLImageElement)
+    ) {
+      continue;
+    }
     if (isSensitive(element)) {
       continue;
     }
 
     const rect = element.getBoundingClientRect();
-    if (!isVisible(element, rect)) {
+    if (
+      !isVisible(element, rect) ||
+      (xiaohongshuNotePage && !isUnobscuredMedia(element, rect, root))
+    ) {
       continue;
     }
     const dimensions = getIntrinsicDimensions(element, rect);
@@ -98,6 +110,46 @@ export function collectMedia(root: Document): MediaCandidate[] {
   return candidates;
 }
 
+function isXiaohongshuNotePage(root: Document): boolean {
+  try {
+    return /^\/(?:explore|discovery\/item|search_result)\/[^/]+/u.test(
+      new URL(root.location.href).pathname,
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isUnobscuredMedia(
+  element: Element,
+  rect: DOMRect,
+  root: Document,
+): boolean {
+  if (typeof root.elementFromPoint !== "function") {
+    return true;
+  }
+  const view = root.defaultView;
+  if (!view) return false;
+  const left = Math.max(0, rect.left);
+  const top = Math.max(0, rect.top);
+  const right = Math.min(view.innerWidth, rect.right);
+  const bottom = Math.min(view.innerHeight, rect.bottom);
+  if (right <= left || bottom <= top) return false;
+  const points = [0.25, 0.5, 0.75].flatMap((xRatio) =>
+    [0.25, 0.5, 0.75].map((yRatio) => ({
+      x: left + (right - left) * xRatio,
+      y: top + (bottom - top) * yRatio,
+    })),
+  );
+  return points.some(({ x, y }) => {
+    const topmost = root.elementFromPoint(x, y);
+    return (
+      topmost !== null &&
+      (topmost === element || element.contains(topmost) || topmost.contains(element))
+    );
+  });
+}
+
 function* boundedMediaElements(root: Document): Generator<Element> {
   let yielded = 0;
   for (const tagName of ["img", "canvas", "svg"] as const) {
@@ -130,6 +182,8 @@ export function executeContentCommand(
       return readPageSnapshot(root);
     case "xiaohongshu_session_status":
       return readXiaohongshuSessionStatus(root, view);
+    case "open_xiaohongshu_note":
+      return openXiaohongshuNote(root, view, command.note_url);
     case "enumerate_media":
       return { media: collectMedia(root) };
     case "viewport_metrics":
@@ -145,6 +199,39 @@ export function executeContentCommand(
     case "type_search_query":
       return typeSearchQuery(root, view, command.query);
   }
+}
+
+function openXiaohongshuNote(
+  root: Document,
+  view: Window & typeof globalThis,
+  noteUrl: string,
+): { opened: boolean } {
+  if (
+    !/^\/search_result\/?$/u.test(view.location.pathname) ||
+    !isSafeXiaohongshuNoteUrl(noteUrl)
+  ) {
+    return { opened: false };
+  }
+  let target: URL;
+  try {
+    target = new URL(noteUrl);
+  } catch {
+    return { opened: false };
+  }
+  const links = root.querySelectorAll<HTMLAnchorElement>("a[href]");
+  for (let index = 0; index < Math.min(links.length, 500); index += 1) {
+    const link = links.item(index);
+    if (!link) continue;
+    try {
+      const candidate = new URL(link.href, view.location.href);
+      if (candidate.href !== target.href) continue;
+      link.click();
+      return { opened: true };
+    } catch {
+      continue;
+    }
+  }
+  return { opened: false };
 }
 
 function readXiaohongshuSessionStatus(
@@ -423,13 +510,26 @@ function boundedSemanticCardLinks(
     return [];
   }
   const links = card.getElementsByTagName("a");
-  if (links.length > 8) return [];
+  if (links.length > 8) {
+    return Array.from(links)
+      .filter((link) => isLikelyNoteLink(link, root))
+      .slice(0, 8);
+  }
   const bounded: HTMLAnchorElement[] = [];
   for (let index = 0; index < links.length; index += 1) {
     const link = links.item(index);
     if (link?.hasAttribute("href")) bounded.push(link);
   }
   return bounded;
+}
+
+function isLikelyNoteLink(link: HTMLAnchorElement, root: Document): boolean {
+  try {
+    const source = new URL(link.href, root.location.href);
+    return /\/(?:explore|discovery\/item|search_result)\//iu.test(source.pathname);
+  } catch {
+    return false;
+  }
 }
 
 function samePageLink(

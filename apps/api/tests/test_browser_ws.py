@@ -21,6 +21,7 @@ from archresearch_api.config import Settings
 from archresearch_api.main import create_app
 from archresearch_api.models import ResearchRun
 from archresearch_api.schemas import BUDGETS, BudgetMode, ResearchGoal, RunStatus
+from archresearch_api.xiaohongshu import XiaohongshuBrowserSearch
 
 
 class RecordingSocket:
@@ -279,6 +280,40 @@ def test_xiaohongshu_session_preflight_uses_logged_out_chrome_over_local_login(
         "channel": "chrome_extension",
     }
     assert local_search.checks == 0
+    assert [action for action, _payload in browser_broker.commands] == [
+        "open_url",
+        "wait",
+        "xiaohongshu_session_status",
+        "close_tab",
+    ]
+
+
+def test_xiaohongshu_session_preflight_does_not_run_a_second_browser_checker(
+    tmp_path: Path,
+) -> None:
+    settings = Settings(
+        database_url=f"sqlite:///{(tmp_path / 'test.db').as_posix()}",
+        data_dir=tmp_path / "data",
+        provider_mode="mock",
+        run_inline=True,
+    )
+    browser_broker = SessionCheckingBroker("unknown")
+    browser_search = XiaohongshuBrowserSearch(browser_broker)
+
+    with TestClient(
+        create_app(
+            settings,
+            browser_broker=browser_broker,
+            xiaohongshu_search=browser_search,
+        )
+    ) as test_client:
+        response = test_client.post("/v1/browser/xiaohongshu-session")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "unknown",
+        "channel": "chrome_extension",
+    }
     assert [action for action, _payload in browser_broker.commands] == [
         "open_url",
         "wait",

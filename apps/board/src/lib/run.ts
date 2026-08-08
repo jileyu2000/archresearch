@@ -135,9 +135,11 @@ export function retryActionLabel(run: ResearchRun) {
 }
 
 export function partialReasonTitle(stopReason?: string | null) {
-  if (stopReason === 'budget_exhausted') return '本轮自动检索次数已用完，先交付当前可用结果'
+  if (stopReason === 'budget_exhausted' || stopReason === 'query_budget_exhausted') {
+    return '本轮检索预算已用完，已保留当前结果'
+  }
   if (stopReason === 'time_budget_exhausted') return '本轮研究达到时间上限'
-  if (stopReason === 'visual_budget_exhausted') return '本轮可检查的图纸数量已达上限'
+  if (stopReason === 'visual_budget_exhausted') return '本轮图纸检查预算已用完，已保留当前结果'
   if (stopReason === 'no_new_assets') return '这轮没有找到更多可用案例'
   if (stopReason === 'unverified_visual_leads') return '已找到图片，但还不能用它确认项目事实'
   if (stopReason === 'browser_inspection_incomplete') return 'Chrome 图纸检查未完成'

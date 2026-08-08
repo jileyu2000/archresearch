@@ -21,9 +21,6 @@ type XiaohongshuLoginFlow =
   | 'verification_required'
   | 'timed_out'
 
-const XIAOHONGSHU_LOGIN_POLL_ATTEMPTS = 20
-const XIAOHONGSHU_LOGIN_POLL_INTERVAL_MILLISECONDS = 1_500
-
 function apiMessage(error: unknown) {
   return error instanceof Error
     ? error.message
@@ -53,8 +50,6 @@ export function useBrowserReadiness({
   const xiaohongshuCheckPromiseRef = useRef<Promise<XiaohongshuSessionStatus> | null>(null)
   const xiaohongshuLoginRecoveryRef = useRef(0)
   const xiaohongshuLoginRecoveryPromiseRef = useRef<Promise<boolean> | null>(null)
-  const xiaohongshuLoginPollTimerRef = useRef<number | null>(null)
-  const xiaohongshuLoginPollResolveRef = useRef<(() => void) | null>(null)
   const chromeConnectAttemptedRef = useRef(false)
   const chromeConnectRequested = useMemo(
     () => new URLSearchParams(window.location.search).get('connect') === 'chrome',
@@ -243,29 +238,17 @@ export function useBrowserReadiness({
         await apiClient.openXiaohongshuLogin()
         if (xiaohongshuLoginRecoveryRef.current !== recoveryId) return false
         setXiaohongshuLoginFlow('waiting')
-        for (let attempt = 0; attempt < XIAOHONGSHU_LOGIN_POLL_ATTEMPTS; attempt += 1) {
-          const status = await checkXiaohongshuSession()
-          if (xiaohongshuLoginRecoveryRef.current !== recoveryId) return false
-          if (status === 'logged_in') {
-            setXiaohongshuLoginFlow('idle')
-            onAnnouncement('已检测到小红书登录')
-            return true
-          }
-          if (status === 'verification_required') {
-            setXiaohongshuLoginFlow('verification_required')
-            onAnnouncement('请先完成小红书安全验证')
-            return false
-          }
-          if (attempt < XIAOHONGSHU_LOGIN_POLL_ATTEMPTS - 1) {
-            await new Promise<void>((resolve) => {
-              xiaohongshuLoginPollResolveRef.current = resolve
-              xiaohongshuLoginPollTimerRef.current = window.setTimeout(() => {
-                xiaohongshuLoginPollTimerRef.current = null
-                xiaohongshuLoginPollResolveRef.current = null
-                resolve()
-              }, XIAOHONGSHU_LOGIN_POLL_INTERVAL_MILLISECONDS)
-            })
-          }
+        const status = await checkXiaohongshuSession()
+        if (xiaohongshuLoginRecoveryRef.current !== recoveryId) return false
+        if (status === 'logged_in') {
+          setXiaohongshuLoginFlow('idle')
+          onAnnouncement('已检测到小红书登录')
+          return true
+        }
+        if (status === 'verification_required') {
+          setXiaohongshuLoginFlow('verification_required')
+          onAnnouncement('请先完成小红书安全验证')
+          return false
         }
         if (xiaohongshuLoginRecoveryRef.current === recoveryId) {
           setXiaohongshuLoginFlow('timed_out')
@@ -297,12 +280,6 @@ export function useBrowserReadiness({
 
   useEffect(() => () => {
     xiaohongshuLoginRecoveryRef.current += 1
-    if (xiaohongshuLoginPollTimerRef.current !== null) {
-      window.clearTimeout(xiaohongshuLoginPollTimerRef.current)
-      xiaohongshuLoginPollTimerRef.current = null
-    }
-    xiaohongshuLoginPollResolveRef.current?.()
-    xiaohongshuLoginPollResolveRef.current = null
   }, [])
 
   useEffect(() => {

@@ -1,4 +1,5 @@
 import type { ContentCommand } from "./operations";
+import { isSafeXiaohongshuNoteUrl } from "./url-policy";
 
 const SAFE_CLICK_TARGETS = [
   "expand",
@@ -28,6 +29,15 @@ export function parseContentMessage(value: unknown): ContentCommand {
     case "viewport_metrics":
       requireExactKeys(command, ["action"]);
       return { action: command.action };
+    case "open_xiaohongshu_note":
+      requireExactKeys(command, ["action", "note_url"]);
+      if (
+        typeof command.note_url !== "string" ||
+        !isSafeXiaohongshuNoteUrl(command.note_url)
+      ) {
+        throw new Error("Invalid Xiaohongshu note URL");
+      }
+      return { action: "open_xiaohongshu_note", note_url: command.note_url };
     case "scroll":
       requireExactKeys(command, ["action", "direction", "distance"]);
       if (command.direction !== "up" && command.direction !== "down") {

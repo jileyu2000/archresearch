@@ -18,6 +18,11 @@ describe("browser command protocol", () => {
   it("accepts every approved action with its exact payload", () => {
     const messages = [
       command("open_url", { url: "https://example.com/project" }),
+      command("open_xiaohongshu_note", {
+        search_url:
+          "https://www.xiaohongshu.com/search_result?keyword=architecture",
+        note_url: "https://www.xiaohongshu.com/explore/note-42",
+      }),
       command("wait", { milliseconds: 250 }),
       command("page_metadata", { tab_id: 1 }),
       command("page_snapshot", { tab_id: 1 }),
@@ -87,5 +92,19 @@ describe("browser command protocol", () => {
         command("safe_click", { tab_id: 1, target: "comment" }),
       ),
     ).toThrow(/safe click target/i);
+  });
+
+  it.each([
+    command("open_xiaohongshu_note", {
+      search_url: "https://www.xiaohongshu.com/explore/note-42",
+      note_url: "https://www.xiaohongshu.com/explore/note-42",
+    }),
+    command("open_xiaohongshu_note", {
+      search_url:
+        "https://www.xiaohongshu.com/search_result?keyword=architecture",
+      note_url: "https://tracking.example/note-42",
+    }),
+  ])("rejects unsafe Xiaohongshu note navigation %#", (message) => {
+    expect(() => parseBrowserCommand(message)).toThrow(ProtocolError);
   });
 });

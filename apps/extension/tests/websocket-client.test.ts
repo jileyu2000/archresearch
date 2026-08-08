@@ -173,6 +173,38 @@ describe("local browser WebSocket client", () => {
     });
   });
 
+  it("returns a bounded content-message error code without exposing the underlying error", async () => {
+    const socket = new FakeSocket();
+    const executor = makeExecutor();
+    const error = new Error("Receiving end contains private browser details");
+    error.name = "ContentMessageUnavailableError";
+    executor.execute.mockRejectedValue(error);
+    const client = new BrowserSocketClient(
+      { endpoint: "ws://127.0.0.1:8000/v1/browser", token: "pairing-token" },
+      vi.fn(() => socket),
+      executor,
+    );
+    client.connect();
+    socket.open();
+    client.setResearchPermission(true);
+
+    socket.receive(validCommand);
+    await vi.waitFor(() => expect(executor.execute).toHaveBeenCalledOnce());
+
+    const response = JSON.parse(socket.send.mock.calls.at(-1)![0]);
+    expect(response).toEqual({
+      type: "browser.result",
+      protocol_version: 1,
+      id: "cmd-7",
+      ok: false,
+      error: {
+        code: "content_message_unavailable",
+        message: "Command could not run",
+      },
+    });
+    expect(JSON.stringify(response)).not.toContain("private browser details");
+  });
+
   it("replaces a one-time pairing code with the server-issued local token", async () => {
     const socket = new FakeSocket();
     const saveRotatedToken = vi.fn().mockResolvedValue(undefined);

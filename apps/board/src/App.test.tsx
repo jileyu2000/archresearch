@@ -1808,7 +1808,7 @@ describe('research board', () => {
     renderBoard()
 
     const recentRun = await screen.findByRole('button', { name: `打开研究：${liveQuestion}` })
-    expect(within(recentRun).getByText('部分结果 · 本轮自动检索次数已用完，先交付当前可用结果')).toBeVisible()
+    expect(within(recentRun).getByText('部分结果 · 本轮检索预算已用完，已保留当前结果')).toBeVisible()
     expect(screen.queryByText('budget_exhausted')).not.toBeInTheDocument()
     expect(screen.queryByText('insufficient_usable_assets')).not.toBeInTheDocument()
   })
@@ -1831,7 +1831,7 @@ describe('research board', () => {
     renderBoard()
 
     const recentRun = await screen.findByRole('button', { name: `打开研究：${liveQuestion}` })
-    expect(within(recentRun).getByText('部分结果 · 本轮可检查的图纸数量已达上限')).toBeVisible()
+    expect(within(recentRun).getByText('部分结果 · 本轮图纸检查预算已用完，已保留当前结果')).toBeVisible()
     expect(within(recentRun).queryByText('本轮研究达到时间上限')).not.toBeInTheDocument()
     expect(screen.queryByText('visual_budget_exhausted')).not.toBeInTheDocument()
   })
@@ -2688,25 +2688,14 @@ describe('research board', () => {
     ))).toHaveLength(1)
   })
 
-  it('keeps checking long enough for a user to finish Xiaohongshu login', async () => {
+  it('pauses login recovery after an uncertain session without opening repeated tabs', async () => {
     vi.mocked(requestBrowserBridge).mockRejectedValue(
       new BrowserBridgeError('unavailable', 'bridge unavailable on this surface'),
     )
     const fetchMock = createLiveFetch({
       browserConnected: false,
       xiaohongshuSearchAvailable: true,
-      xiaohongshuSessionStatuses: [
-        'unknown',
-        'unknown',
-        'unknown',
-        'unknown',
-        'unknown',
-        'unknown',
-        'unknown',
-        'unknown',
-        'unknown',
-        'logged_in',
-      ],
+      xiaohongshuSessionStatuses: ['unknown'],
     })
     vi.stubGlobal('fetch', fetchMock)
     renderBoard()
@@ -2718,16 +2707,20 @@ describe('research board', () => {
       await Promise.resolve()
     })
     fireEvent.click(screen.getByRole('button', { name: '打开小红书登录' }))
-    for (let attempt = 0; attempt < 9; attempt += 1) {
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(1_500)
-      })
-    }
     await act(async () => {
       await Promise.resolve()
     })
 
-    expect(screen.getByText('研究环境已就绪')).toBeVisible()
+    expect(screen.getByText(/暂未检测到登录/)).toBeVisible()
+    expect(fetchMock.mock.calls.filter(([path]) => (
+      path === '/v1/browser/xiaohongshu-session'
+    ))).toHaveLength(2)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000)
+    })
+    expect(fetchMock.mock.calls.filter(([path]) => (
+      path === '/v1/browser/xiaohongshu-session'
+    ))).toHaveLength(2)
     expect(fetchMock.mock.calls.filter(([path]) => (
       path === '/v1/browser/open-xiaohongshu-login'
     ))).toHaveLength(1)
@@ -3321,7 +3314,7 @@ describe('research board', () => {
     await startLiveResearch(user)
 
     expect(await screen.findByText('已交付部分结果')).toBeVisible()
-    expect(screen.getByRole('heading', { name: '本轮自动检索次数已用完，先交付当前可用结果' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: '本轮检索预算已用完，已保留当前结果' })).toBeVisible()
     expect(screen.getByText('已保留 1 条可用案例内容，覆盖 1 个项目，其中 1 条已经确认出处。')).toBeVisible()
     expect(screen.getByText('“形成方案依据”需要更多可用项目案例')).toBeVisible()
     expect(screen.getByText('可以继续查看现有结果；重试会开启新一轮研究，补找项目案例与出处。')).toBeVisible()

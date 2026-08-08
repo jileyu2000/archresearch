@@ -44,6 +44,7 @@ describe('useBrowserReadiness', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
   })
 
@@ -189,6 +190,42 @@ describe('useBrowserReadiness', () => {
       '小红书负责查找灵感 · Chrome 可读取当前页面高清图',
     )
   })
+
+  it.each(['unknown', 'not_logged_in'] as const)(
+    'pauses login recovery after a %s session instead of polling again',
+    async (status) => {
+      vi.useFakeTimers()
+      vi.spyOn(apiClient, 'getBrowserStatus').mockResolvedValue({
+        connected: true,
+        xiaohongshu_search_available: true,
+      })
+      vi.mocked(requestBrowserBridge).mockResolvedValue(readyBridge)
+      const openLogin = vi.spyOn(apiClient, 'openXiaohongshuLogin').mockResolvedValue({
+        opened: true,
+      })
+      const session = vi.spyOn(apiClient, 'checkXiaohongshuSession').mockResolvedValue({
+        status,
+        channel: 'chrome_extension',
+      })
+      const { result } = renderReadiness()
+
+      await act(async () => {
+        await vi.runOnlyPendingTimersAsync()
+      })
+      const recovery = result.current.startXiaohongshuLoginRecovery()
+      await act(async () => {
+        await Promise.resolve()
+      })
+
+      expect(openLogin).toHaveBeenCalledOnce()
+      expect(session).toHaveBeenCalledOnce()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000)
+      })
+      expect(session).toHaveBeenCalledOnce()
+      await expect(recovery).resolves.toBe(false)
+    },
+  )
 
   it('allows public-page research when optional Chrome access is disconnected', async () => {
     vi.spyOn(apiClient, 'getBrowserStatus').mockResolvedValue({

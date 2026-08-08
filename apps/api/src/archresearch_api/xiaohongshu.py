@@ -13,6 +13,7 @@ from urllib.parse import quote_plus, urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from .browser import XIAOHONGSHU_LOGIN_URL
 from .inspection import BrowserCommandClient, OpenPageResult, PageMedia
 from .providers import ProviderSource
 from .schemas import PublicationTier
@@ -277,20 +278,17 @@ class XiaohongshuBrowserSearch:
         self._sleep = sleep
         self._session_check_lock = threading.Lock()
         self._verification_tab_id: int | None = None
+        self._search_url_by_note_url: dict[str, str] = {}
 
     def check_login(self) -> XiaohongshuSessionStatus:
         with self._session_check_lock:
             return self._check_login_locked()
 
     def _check_login_locked(self) -> XiaohongshuSessionStatus:
-        search_url = (
-            f"{XIAOHONGSHU_SEARCH_URL}?keyword={quote_plus('建筑图纸')}"
-            "&source=web_search_result_notes"
-        )
         opened_new_tab = self._verification_tab_id is None
         if opened_new_tab:
             opened = OpenPageResult.model_validate(
-                self._browser.send_command_sync("open_url", {"url": search_url})
+                self._browser.send_command_sync("open_url", {"url": XIAOHONGSHU_LOGIN_URL})
             )
             self._verification_tab_id = opened.tab_id
         tab_id = self._verification_tab_id
@@ -329,18 +327,7 @@ class XiaohongshuBrowserSearch:
         media = []
         try:
             self._sleep(XIAOHONGSHU_INITIAL_WAIT_MILLISECONDS / 1_000)
-            first: list[PageMedia] = []
-            for attempt in range(XIAOHONGSHU_RESULT_POLL_ATTEMPTS):
-                first = _validated_media(
-                    self._browser.send_command_sync("enumerate_media", {"tab_id": opened.tab_id})
-                )
-                if any(
-                    item.link_url is not None and _is_xiaohongshu_note_url(item.link_url)
-                    for item in first
-                ):
-                    break
-                if attempt < XIAOHONGSHU_RESULT_POLL_ATTEMPTS - 1:
-                    self._sleep(XIAOHONGSHU_RESULT_POLL_INTERVAL_MILLISECONDS / 1_000)
+            first = self._poll_result_media(opened.tab_id)
             media.extend(first)
             self._browser.send_command_sync(
                 "scroll",
@@ -351,9 +338,7 @@ class XiaohongshuBrowserSearch:
                 },
             )
             self._sleep(XIAOHONGSHU_SCROLL_WAIT_MILLISECONDS / 1_000)
-            second = _validated_media(
-                self._browser.send_command_sync("enumerate_media", {"tab_id": opened.tab_id})
-            )
+            second = self._poll_result_media(opened.tab_id)
             media.extend(second)
         finally:
             self._browser.send_command_sync("close_tab", {"tab_id": opened.tab_id})
@@ -374,9 +359,39 @@ class XiaohongshuBrowserSearch:
                     publication_tier=PublicationTier.aggregator,
                 )
             )
+            self._search_url_by_note_url[item.link_url] = search_url
             if len(sources) == bounded_limit:
                 break
         return sources
+
+    def can_open_note(self, note_url: str) -> bool:
+        return note_url in self._search_url_by_note_url
+
+    def open_note(self, note_url: str) -> OpenPageResult:
+        search_url = self._search_url_by_note_url.get(note_url)
+        if search_url is None:
+            raise ValueError("Xiaohongshu note was not found in a visible search result")
+        return OpenPageResult.model_validate(
+            self._browser.send_command_sync(
+                "open_xiaohongshu_note",
+                {"search_url": search_url, "note_url": note_url},
+            )
+        )
+
+    def _poll_result_media(self, tab_id: int) -> list[PageMedia]:
+        media: list[PageMedia] = []
+        for attempt in range(XIAOHONGSHU_RESULT_POLL_ATTEMPTS):
+            media = _validated_media(
+                self._browser.send_command_sync("enumerate_media", {"tab_id": tab_id})
+            )
+            if any(
+                item.link_url is not None and _is_xiaohongshu_note_url(item.link_url)
+                for item in media
+            ):
+                break
+            if attempt < XIAOHONGSHU_RESULT_POLL_ATTEMPTS - 1:
+                self._sleep(XIAOHONGSHU_RESULT_POLL_INTERVAL_MILLISECONDS / 1_000)
+        return media
 
 
 def _is_xiaohongshu_note_url(value: str) -> bool:
