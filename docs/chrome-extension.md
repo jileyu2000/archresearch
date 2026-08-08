@@ -4,7 +4,7 @@
 
 Chrome Web Store 尚未上架，当前需要手动加载一次：
 
-1. 从 [v2.2.4 Release](https://github.com/jileyu2000/archresearch/releases/tag/v2.2.4) 下载名称含 `chrome-extension-only` 的 ZIP。
+1. 从 [v2.2.10 Release](https://github.com/jileyu2000/archresearch/releases/tag/v2.2.10) 下载名称含 `chrome-extension-only` 的 ZIP。
 2. 解压 ZIP。需要选择的文件夹根目录应当直接包含 `manifest.json`。
 3. 打开 `chrome://extensions`，开启“开发者模式”，点击“加载已解压的扩展程序”，选择上一步的文件夹。
 4. 启动 ArchResearch，回到 ArchResearch 本地页面，打开“图纸灵感”并点击“连接 Chrome 读取高清图纸”。

@@ -25,6 +25,10 @@ function makeChromeApi() {
       create: vi.fn(),
       onAlarm: { addListener: vi.fn() },
     },
+    windows: {
+      get: vi.fn(),
+      update: vi.fn(),
+    },
     tabs: {
       create: vi.fn(),
       remove: vi.fn(),

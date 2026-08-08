@@ -30,6 +30,13 @@ type ChromeApiPort = {
       remove(key: string): Promise<void>;
     };
   };
+  windows: {
+    get(windowId: number): Promise<chrome.windows.Window>;
+    update(
+      windowId: number,
+      updateInfo: { focused?: boolean; state?: chrome.windows.WindowState },
+    ): Promise<chrome.windows.Window>;
+  };
   tabs: {
     create(properties: { url: string; active: boolean }): Promise<chrome.tabs.Tab>;
     remove(tabId: number): Promise<void>;
@@ -74,6 +81,9 @@ export class ChromeBrowserPort implements BrowserPort {
     const tabId = requireTabId(blankTab);
     this.managedTabIds.add(tabId);
     try {
+      if (active) {
+        await this.restoreAndFocusWindow(requireWindowId(blankTab));
+      }
       await this.persistManagedTabs();
       const contentReady = this.installLoadingListener(tabId, url);
       const navigation = Promise.resolve().then(() =>
@@ -164,18 +174,30 @@ export class ChromeBrowserPort implements BrowserPort {
       response = await this.sendContentMessage(tabId, command, documentId);
     } catch (error) {
       if (!isReadOnlyContentCommand(command) || isContentTimeout(error)) {
-        throw error;
+        throw classifyContentMessageError(error);
       }
-      const recoveredDocumentId = await withTimeout(
-        this.injectContentScript(tabId),
-        CONTENT_READY_TIMEOUT_MILLISECONDS,
-        new Error("Managed page content listener was not ready in time"),
-      );
-      response = await this.sendContentMessage(
-        tabId,
-        command,
-        recoveredDocumentId,
-      );
+      let recoveredDocumentId: string | undefined;
+      try {
+        recoveredDocumentId = await withTimeout(
+          this.injectContentScript(tabId),
+          CONTENT_READY_TIMEOUT_MILLISECONDS,
+          new ContentCommandTimeoutError(
+            "Managed page content listener was not ready in time",
+          ),
+        );
+      } catch (injectionError) {
+        if (isContentTimeout(injectionError)) throw injectionError;
+        throw new ContentScriptInjectionError();
+      }
+      try {
+        response = await this.sendContentMessage(
+          tabId,
+          command,
+          recoveredDocumentId,
+        );
+      } catch (recoveredError) {
+        throw classifyContentMessageError(recoveredError);
+      }
     }
     if (
       response === null ||
@@ -184,7 +206,7 @@ export class ChromeBrowserPort implements BrowserPort {
       response.ok !== true ||
       !("result" in response)
     ) {
-      throw new Error("Packaged content operation failed");
+      throw new ContentOperationRejectedError();
     }
     return response.result;
   }
@@ -238,6 +260,16 @@ export class ChromeBrowserPort implements BrowserPort {
 
   async getTab(tabId: number): Promise<BrowserTab> {
     return mapTab(await this.api.tabs.get(tabId));
+  }
+
+  private async restoreAndFocusWindow(windowId: number): Promise<void> {
+    const browserWindow = await this.api.windows.get(windowId);
+    if (browserWindow.state === "minimized") {
+      await this.api.windows.update(windowId, {
+        state: "normal" as chrome.windows.WindowState,
+      });
+    }
+    await this.api.windows.update(windowId, { focused: true });
   }
 
   private installLoadingListener(tabId: number, targetUrl: string): Promise<void> {
@@ -422,9 +454,41 @@ export class ChromeBrowserPort implements BrowserPort {
   }
 }
 
-class ContentCommandTimeoutError extends Error {}
+class ContentScriptInjectionError extends Error {
+  constructor() {
+    super("Packaged content listener could not be installed");
+    this.name = "ContentScriptInjectionError";
+  }
+}
 
-function isContentTimeout(error: unknown): boolean {
+class ContentMessageUnavailableError extends Error {
+  constructor() {
+    super("Packaged content listener did not receive the command");
+    this.name = "ContentMessageUnavailableError";
+  }
+}
+
+class ContentOperationRejectedError extends Error {
+  constructor() {
+    super("Packaged content operation was rejected");
+    this.name = "ContentOperationRejectedError";
+  }
+}
+
+class ContentCommandTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ContentCommandTimeoutError";
+  }
+}
+
+function classifyContentMessageError(error: unknown): Error {
+  return isContentTimeout(error)
+    ? error
+    : new ContentMessageUnavailableError();
+}
+
+function isContentTimeout(error: unknown): error is ContentCommandTimeoutError {
   return error instanceof ContentCommandTimeoutError;
 }
 
@@ -432,6 +496,7 @@ function isReadOnlyContentCommand(command: ContentCommand): boolean {
   return [
     "page_metadata",
     "page_snapshot",
+    "xiaohongshu_session_status",
     "enumerate_media",
     "viewport_metrics",
   ].includes(command.action);
@@ -471,4 +536,11 @@ function requireTabId(tab: chrome.tabs.Tab): number {
     throw new Error("Chrome did not assign a tab id");
   }
   return tab.id;
+}
+
+function requireWindowId(tab: chrome.tabs.Tab): number {
+  if (tab.windowId === undefined) {
+    throw new Error("Chrome did not assign a browser window");
+  }
+  return tab.windowId;
 }

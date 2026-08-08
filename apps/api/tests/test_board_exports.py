@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from archresearch_api.models import AssetCandidate
+from archresearch_api.models import AssetCandidate, ResearchRun
 
 
 def _run_with_results(
@@ -14,15 +14,22 @@ def _run_with_results(
     *,
     goal: str = "visual_reference_search",
 ) -> tuple[str, list[dict[str, object]]]:
+    execution_goal = "precedent_research" if goal == "visual_reference_search" else goal
     run = client.post(
         f"/v1/workspaces/{workspace_id}/runs",
         json={
             "question": "寻找人车分流分析图与清晰平面",
-            "goal": goal,
+            "goal": execution_goal,
             "budget_mode": "balanced",
             "research_sources": [],
         },
     ).json()
+    if execution_goal != goal:
+        with client.app.state.database.session_factory() as session:
+            stored_run = session.get(ResearchRun, str(run["id"]))
+            assert stored_run is not None
+            stored_run.goal = goal
+            session.commit()
     results = client.get(f"/v1/runs/{run['id']}/results").json()
     return str(run["id"]), list(results)
 

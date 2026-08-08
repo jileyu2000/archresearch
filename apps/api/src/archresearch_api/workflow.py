@@ -81,7 +81,6 @@ from .providers import (
     explicit_project_names,
     is_recoverable_public_page_analysis_error,
     requested_visual_drawing_type,
-    visual_reference_search_query,
 )
 from .public_pages import (
     ParsedPageImage,
@@ -97,6 +96,8 @@ from .public_pages import (
     search_lead_matches_building_type,
     select_project_page_links,
 )
+from .research_paths import policy_for_goal
+from .research_paths.types import ResearchPathPolicy
 from .schemas import (
     DEPTH_TARGETS,
     AssociationStatus,
@@ -135,29 +136,17 @@ ACTIVE_STAGES = (
 )
 
 VISUAL_INSPECTION_LIMITS: dict[BudgetMode, tuple[int, int]] = {
-    BudgetMode.quick: (12, 24 * 1024 * 1024),
-    BudgetMode.balanced: (36, 72 * 1024 * 1024),
-    BudgetMode.deep: (72, 144 * 1024 * 1024),
+    BudgetMode.quick: (15, 30 * 1024 * 1024),
+    BudgetMode.balanced: (45, 90 * 1024 * 1024),
+    BudgetMode.deep: (90, 180 * 1024 * 1024),
 }
-VISUAL_REFERENCE_INSPECTION_LIMIT = (48, 48 * 1024 * 1024)
-
-_VISUAL_ASSET_TYPE_BY_DRAWING_LABEL = {
-    "总平面图": ArchitectureAssetType.site_plan,
-    "平面图": ArchitectureAssetType.plan,
-    "剖面图": ArchitectureAssetType.section,
-    "爆炸图": ArchitectureAssetType.axonometric,
-    "轴测图": ArchitectureAssetType.axonometric,
-    "分析图": ArchitectureAssetType.analysis_diagram,
-    "立面图": ArchitectureAssetType.elevation,
-    "流线图": ArchitectureAssetType.circulation,
-    "效果图": ArchitectureAssetType.render,
-}
+VISUAL_REFERENCE_INSPECTION_LIMIT = (60, 60 * 1024 * 1024)
 
 REMOTE_VISUAL_BATCH_LIMIT = 4
 REMOTE_VISUAL_MIN_RELEVANCE = 2
-XIAOHONGSHU_VISUAL_NOTE_LIMIT = 4
+XIAOHONGSHU_VISUAL_NOTE_LIMIT = 5
 XIAOHONGSHU_VISUAL_NOTE_TARGET = 3
-XIAOHONGSHU_VISUAL_SOURCE_POOL_LIMIT = 8
+XIAOHONGSHU_VISUAL_SOURCE_POOL_LIMIT = 10
 XIAOHONGSHU_ARCHITECTURE_DRAWING_TITLE_TERMS = (
     "建筑",
     "图纸",
@@ -186,6 +175,7 @@ XIAOHONGSHU_NON_ARCHITECTURE_VISUAL_TITLE_TERMS = (
 UNCOVERED_BRANCH_PAGE_ANALYSIS_LIMIT = 3
 UNCOVERED_BRANCH_FOLLOWUP_PAGE_ANALYSIS_LIMIT = 1
 PROJECT_TEXT_SUPPLEMENT_PAGE_LIMIT = 2
+
 
 TRUSTED_ARCHITECTURE_PUBLICATION_DOMAINS = (
     "archdaily.com",
@@ -223,6 +213,56 @@ def execute_research_run(
     xiaohongshu_search: XiaohongshuSearch | None = None,
     clock: Callable[[], float] = monotonic,
 ) -> None:
+    """Dispatch once to the goal-specific execution runner."""
+    with db.session_factory() as session:
+        goal = ResearchGoal(get_run(session, run_id).goal)
+    if goal is ResearchGoal.precedent_research:
+        from .research_paths.precedent_runner import execute_precedent_run
+
+        execute_precedent_run(
+            db,
+            run_id,
+            provider,
+            on_terminal,
+            browser_client=browser_client,
+            visual_classifier=visual_classifier,
+            candidate_root=candidate_root,
+            public_page_parser=public_page_parser,
+            clock=clock,
+        )
+        return
+    if goal is ResearchGoal.visual_reference_search:
+        from .research_paths.drawing_runner import execute_drawing_run
+
+        execute_drawing_run(
+            db,
+            run_id,
+            provider,
+            on_terminal,
+            browser_client=browser_client,
+            visual_classifier=visual_classifier,
+            candidate_root=candidate_root,
+            xiaohongshu_search=xiaohongshu_search,
+            clock=clock,
+        )
+        return
+    raise ValueError(f"Unsupported research goal: {goal}")
+
+
+def _execute_run_with_policy(
+    db: Database,
+    run_id: str,
+    provider: ResearchProvider,
+    on_terminal: Callable[[str], None] | None = None,
+    *,
+    path: ResearchPathPolicy,
+    browser_client: BrowserCommandClient | None = None,
+    visual_classifier: VisualClassifier | None = None,
+    candidate_root: Path | None = None,
+    public_page_parser: PublicPageParser | None = None,
+    xiaohongshu_search: XiaohongshuSearch | None = None,
+    clock: Callable[[], float] = monotonic,
+) -> None:
     terminal_state: str | None = None
     try:
         started_at = clock()
@@ -234,7 +274,10 @@ def execute_research_run(
             budget_mode = BudgetMode(run.budget_mode)
             workspace_id = run.workspace_id
             allowed_domains = run.allowed_domains
-            research_sources = {ResearchSource(value) for value in (run.research_sources or [])}
+            stored_research_sources = {
+                ResearchSource(value) for value in (run.research_sources or [])
+            }
+            research_sources = path.normalize_research_sources(stored_research_sources)
             budget = run.budget
             max_pages = budget["max_pages"]
             deadline = started_at + budget["max_seconds"]
@@ -272,7 +315,7 @@ def execute_research_run(
         subquestion_domain_slots = {
             item.id: index for index, item in enumerate(plan.subquestions, start=1)
         }
-        if goal is ResearchGoal.visual_reference_search and visual_classifier is not None:
+        if path.uses_visual_platform and visual_classifier is not None:
             visual_classifier = DeterministicFallbackVisualClassifier(
                 visual_classifier,
                 on_fallback=lambda error_type: checkpoint(
@@ -288,11 +331,7 @@ def execute_research_run(
                 ),
             )
         normal_rounds = int(budget["max_rounds"])
-        recovery_rounds = (
-            int(budget.get("completion_recovery_rounds", 1))
-            if goal is ResearchGoal.precedent_research
-            else 0
-        )
+        recovery_rounds = path.recovery_rounds(budget)
         recovery_pages_per_subquestion = int(
             budget.get("completion_recovery_pages_per_subquestion", 2)
         )
@@ -309,12 +348,12 @@ def execute_research_run(
         for query_round, _, query_subquestion_id, _ in queries:
             last_query_round_by_subquestion[query_subquestion_id] = query_round
         require_article_analysis = (
-            goal is ResearchGoal.precedent_research
+            path.uses_precedent_sources
             and public_page_parser is not None
             and isinstance(provider, PublicPageAnalysisProvider)
         )
         require_research_synthesis = (
-            goal is ResearchGoal.precedent_research
+            path.uses_precedent_sources
             and public_page_parser is not None
             and isinstance(provider, ResearchSynthesisProvider)
         )
@@ -330,7 +369,7 @@ def execute_research_run(
             set() if retrying_without_coverage else completed_query_keys_for_resume(db, run_id)
         )
         completion_continuation = (
-            goal is ResearchGoal.precedent_research
+            path.uses_precedent_sources
             and run_attempt > 0
             and not completion_satisfied(initial_coverage)
         )
@@ -401,7 +440,7 @@ def execute_research_run(
         browser_recovery_page_attempts: dict[str, int] = {}
         visual_call_limit, visual_byte_limit = (
             VISUAL_REFERENCE_INSPECTION_LIMIT
-            if goal is ResearchGoal.visual_reference_search
+            if path.uses_visual_platform
             else VISUAL_INSPECTION_LIMITS[budget_mode]
         )
         inspection_budget = InspectionBudget(
@@ -437,14 +476,12 @@ def execute_research_run(
         )
         search_query_planner = (
             provider
-            if goal is ResearchGoal.precedent_research
-            and isinstance(provider, SearchQueryPlanningProvider)
+            if path.uses_precedent_sources and isinstance(provider, SearchQueryPlanningProvider)
             else None
         )
         candidate_reranker = (
             provider
-            if goal is ResearchGoal.precedent_research
-            and isinstance(provider, CandidateRerankingProvider)
+            if path.uses_precedent_sources and isinstance(provider, CandidateRerankingProvider)
             else None
         )
         public_search_reserve = (
@@ -453,18 +490,21 @@ def execute_research_run(
             else 0.0
         )
         xiaohongshu_searchers: list[XiaohongshuSearch] = []
+        xiaohongshu_browser_search: XiaohongshuBrowserSearch | None = (
+            xiaohongshu_search if isinstance(xiaohongshu_search, XiaohongshuBrowserSearch) else None
+        )
         if ResearchSource.xiaohongshu in research_sources:
             if xiaohongshu_search is not None:
                 xiaohongshu_searchers.append(xiaohongshu_search)
             if browser_client is not None and bool(getattr(browser_client, "connected", True)):
-                xiaohongshu_searchers.append(XiaohongshuBrowserSearch(browser_client))
-        xiaohongshu_searched_subquestions: set[str] = set()
+                xiaohongshu_browser_search = XiaohongshuBrowserSearch(browser_client)
+                xiaohongshu_searchers.append(xiaohongshu_browser_search)
         xiaohongshu_note_attempts: dict[str, int] = {}
         xiaohongshu_usable_notes: dict[str, int] = {}
         stop_reason = "budget_exhausted"
         model_search_timed_out = False
         model_timeout_recovery_attempted = False
-        xiaohongshu_required = goal is ResearchGoal.visual_reference_search
+        xiaohongshu_required = path.uses_visual_platform
         xiaohongshu_only_visual = xiaohongshu_required and research_sources == {
             ResearchSource.xiaohongshu
         }
@@ -485,20 +525,20 @@ def execute_research_run(
         for query_index, (round_number, language, subquestion_id, query) in enumerate(
             queries, start=1
         ):
-            coverage_incomplete = False
-            if goal is ResearchGoal.precedent_research:
-                current_coverage = calculate_coverage(
-                    db,
-                    run_id,
-                    require_article_analysis=require_article_analysis,
-                )
-                coverage_incomplete = (
-                    current_coverage["covered_subquestions"] < current_coverage["subquestion_count"]
-                )
-                if subquestion_id in current_coverage["covered_subquestion_ids"] and (
-                    coverage_incomplete or completion_continuation
-                ):
-                    continue
+            current_coverage = calculate_coverage(
+                db,
+                run_id,
+                require_article_analysis=require_article_analysis,
+            )
+            coverage_incomplete = (
+                current_coverage["covered_subquestions"] < current_coverage["subquestion_count"]
+            )
+            if path.should_skip_subquestion(
+                covered=subquestion_id in current_coverage["covered_subquestion_ids"],
+                coverage_incomplete=coverage_incomplete,
+                completion_continuation=completion_continuation,
+            ):
+                continue
             query_key = (round_number, subquestion_id)
             if query_key in completed_query_keys:
                 continue
@@ -539,47 +579,53 @@ def execute_research_run(
                 public_search_provider is None
                 and (not model_search_timed_out or is_model_timeout_recovery)
             ) and remaining_seconds >= provider_call_reserve
-            if xiaohongshu_only_visual:
-                can_search_publicly = False
-                can_search_with_model = False
-            can_search_xiaohongshu = (
-                bool(xiaohongshu_searchers)
-                and subquestion_id not in xiaohongshu_searched_subquestions
-                and page_budget_available(
-                    round_number=round_number,
-                    normal_rounds=normal_rounds,
-                    normal_attempts=browser_page_attempts,
-                    normal_limit=max_pages,
-                    subquestion_id=subquestion_id,
-                    recovery_attempts=browser_recovery_page_attempts,
-                    recovery_limit=recovery_pages_per_subquestion,
-                )
+            visual_platform_available = bool(xiaohongshu_searchers) and page_budget_available(
+                round_number=round_number,
+                normal_rounds=normal_rounds,
+                normal_attempts=browser_page_attempts,
+                normal_limit=max_pages,
+                subquestion_id=subquestion_id,
+                recovery_attempts=browser_recovery_page_attempts,
+                recovery_limit=recovery_pages_per_subquestion,
             )
+            search_availability = path.search_availability(
+                public_available=(
+                    public_search_provider is not None
+                    and remaining_seconds >= public_search_reserve
+                    and public_search_budget_available
+                ),
+                provider_available=(
+                    public_search_provider is None
+                    and (not model_search_timed_out or is_model_timeout_recovery)
+                    and remaining_seconds >= provider_call_reserve
+                ),
+                visual_platform_available=visual_platform_available,
+            )
+            can_search_publicly = search_availability.public
+            can_search_with_model = search_availability.provider
+            can_search_xiaohongshu = search_availability.visual_platform
             if remaining_seconds <= 0:
                 stop_reason = "time_budget_exhausted"
                 break
-            if goal is ResearchGoal.visual_reference_search and inspection_budget.exhausted:
+            if path.uses_visual_platform and inspection_budget.exhausted:
                 stop_reason = "visual_budget_exhausted"
                 break
             if not (can_search_publicly or can_search_with_model or can_search_xiaohongshu):
-                stop_reason = (
-                    "query_budget_exhausted"
-                    if goal is ResearchGoal.precedent_research
-                    and public_search_provider is not None
-                    and remaining_seconds >= public_search_reserve
-                    and not public_search_budget_available
-                    else "time_budget_exhausted"
+                stop_reason = path.unavailable_stop_reason(
+                    public_search_configured=public_search_provider is not None,
+                    public_time_available=remaining_seconds >= public_search_reserve,
+                    public_budget_available=public_search_budget_available,
                 )
                 break
             xiaohongshu_query = (
-                visual_reference_search_query(subquestion_text[subquestion_id])
+                path.visual_platform_query(
+                    subquestion_text[subquestion_id],
+                    round_number,
+                )
                 if can_search_xiaohongshu
                 else None
             )
-            provider_query = _query_with_source_preferences(
-                query,
-                goal=goal,
-            )
+            provider_query = path.provider_query(query)
             query_attempt_id = record_query(
                 db,
                 run_id,
@@ -624,7 +670,6 @@ def execute_research_run(
                 research_context=research_context,
             )
             if can_search_xiaohongshu:
-                xiaohongshu_searched_subquestions.add(subquestion_id)
                 browser_page_attempts += 1
                 if round_number > normal_rounds:
                     browser_recovery_page_attempts[subquestion_id] = (
@@ -666,9 +711,6 @@ def execute_research_run(
                     browser_inspection_failed = browser_inspection_failed or search_failed
                 public_sources.extend(xiaohongshu_sources)
                 selected_xiaohongshu_source = bool(xiaohongshu_sources)
-                if goal is ResearchGoal.visual_reference_search and selected_xiaohongshu_source:
-                    can_search_publicly = False
-                    can_search_with_model = False
             if can_search_publicly and public_search_provider is not None:
                 public_search_domains = select_public_search_domains(
                     goal,
@@ -696,7 +738,7 @@ def execute_research_run(
                     research_context=research_context,
                     trusted_domain=(
                         public_search_domains[0]
-                        if goal is ResearchGoal.precedent_research
+                        if path.uses_precedent_sources
                         and not allowed_domains
                         and len(public_search_domains) == 1
                         else None
@@ -815,6 +857,12 @@ def execute_research_run(
                         public_search_domains,
                         structured_query=planned_query,
                     )
+                    if path.uses_precedent_sources:
+                        query_sources = [
+                            source
+                            for source in query_sources
+                            if not _is_sparse_visual_platform_url(source.url)
+                        ]
                     local_public_sources = _merge_source_lists(
                         local_public_sources,
                         _filter_named_project_query_sources(
@@ -887,7 +935,7 @@ def execute_research_run(
                         access_status="pending",
                     )
                 trusted_public_recovery = (
-                    goal is ResearchGoal.precedent_research
+                    path.uses_precedent_sources
                     and round_number > normal_rounds
                     and any(
                         source.publication_tier
@@ -951,7 +999,7 @@ def execute_research_run(
                     )
                 else:
                     provider_result = _merge_public_sources(provider_result, public_sources)
-            provider_result = _constrain_sparse_visual_platform_result(provider_result)
+            provider_result = path.constrain_provider_result(provider_result)
             raise_if_cancelled(db, run_id)
             _persist_sources(db, run_id, provider_result)
             added_usable_assets = _persist_assets(
@@ -1011,16 +1059,8 @@ def execute_research_run(
             )
             for source in inspection_sources:
                 if _is_xiaohongshu_url(source.url):
-                    note_limit = (
-                        XIAOHONGSHU_VISUAL_NOTE_LIMIT
-                        if goal is ResearchGoal.visual_reference_search
-                        else 1
-                    )
-                    note_target = (
-                        XIAOHONGSHU_VISUAL_NOTE_TARGET
-                        if goal is ResearchGoal.visual_reference_search
-                        else 1
-                    )
+                    note_limit = XIAOHONGSHU_VISUAL_NOTE_LIMIT if path.uses_visual_platform else 1
+                    note_target = XIAOHONGSHU_VISUAL_NOTE_TARGET if path.uses_visual_platform else 1
                     if (
                         xiaohongshu_usable_notes.get(subquestion_id, 0) >= note_target
                         or xiaohongshu_note_attempts.get(subquestion_id, 0) >= note_limit
@@ -1055,26 +1095,15 @@ def execute_research_run(
                                 candidate_root=candidate_root,
                                 budget=inspection_budget,
                             )
-                            requested_drawing_label = (
-                                requested_visual_drawing_type(subquestion_text[subquestion_id])
-                                if goal is ResearchGoal.visual_reference_search
-                                else None
+                            (
+                                accepted_inspected,
+                                type_mismatch_count,
+                                quality_rejected_count,
+                            ) = path.filter_inspected_visuals(
+                                inspected,
+                                question=subquestion_text[subquestion_id],
+                                caption=source.title,
                             )
-                            requested_asset_type = _VISUAL_ASSET_TYPE_BY_DRAWING_LABEL.get(
-                                requested_drawing_label or ""
-                            )
-                            type_mismatches = [
-                                item
-                                for item in inspected
-                                if requested_asset_type is not None
-                                and item.asset_type is not requested_asset_type
-                            ]
-                            for item in type_mismatches:
-                                if item.storage_path is not None:
-                                    item.storage_path.unlink(missing_ok=True)
-                            accepted_inspected = [
-                                item for item in inspected if item not in type_mismatches
-                            ]
                             added = _persist_inspected_assets(
                                 db,
                                 run_id,
@@ -1098,7 +1127,8 @@ def execute_research_run(
                                 "downloaded_count": len(image_paths),
                                 "candidate_count": len(inspected),
                                 "accepted_type_count": len(accepted_inspected),
-                                "type_mismatch_count": len(type_mismatches),
+                                "type_mismatch_count": type_mismatch_count,
+                                "quality_rejected_count": quality_rejected_count,
                                 "added": added,
                                 "note_attempt": xiaohongshu_note_attempts[subquestion_id],
                                 "usable_note_count": xiaohongshu_usable_notes.get(
@@ -1211,6 +1241,12 @@ def execute_research_run(
                         )
                     persist_browser_page_attempts(db, run_id, browser_page_attempts)
                     try:
+                        note_opener = (
+                            xiaohongshu_browser_search.open_note
+                            if xiaohongshu_browser_search is not None
+                            and xiaohongshu_browser_search.can_open_note(source.url)
+                            else None
+                        )
                         inspected = inspect_source_page(
                             browser_client,
                             visual_classifier,
@@ -1220,12 +1256,20 @@ def execute_research_run(
                             candidate_root=candidate_root,
                             budget=inspection_budget,
                             public_page_text=_public_page_context(parsed_page),
+                            open_page=note_opener,
+                        )
+                        accepted_inspected, _, quality_rejected_count = (
+                            path.filter_inspected_visuals(
+                                inspected,
+                                question=subquestion_text[subquestion_id],
+                                caption=source.title,
+                            )
                         )
                         added = _persist_inspected_assets(
                             db,
                             run_id,
                             source,
-                            inspected,
+                            accepted_inspected,
                             subquestion_id=subquestion_id,
                         )
                         browser_added += added
@@ -1242,6 +1286,7 @@ def execute_research_run(
                                 "status": "completed",
                                 "candidate_count": len(inspected),
                                 "added": added,
+                                "quality_rejected_count": quality_rejected_count,
                                 "note_attempt": (
                                     xiaohongshu_note_attempts[subquestion_id]
                                     if xiaohongshu_browser_source
@@ -1579,16 +1624,14 @@ def execute_research_run(
                             tool=f"{public_page_parser.name}_expand",
                         )
             defer_remote_batch = (
-                goal is ResearchGoal.precedent_research
-                and require_article_analysis
-                and recovery_rounds > 0
+                path.uses_precedent_sources and require_article_analysis and recovery_rounds > 0
             )
             remote_batch_due = (
                 not defer_remote_batch
                 or round_number == last_query_round_by_subquestion[subquestion_id]
             )
             text_coverage_complete = True
-            if goal is ResearchGoal.precedent_research and require_article_analysis:
+            if path.uses_precedent_sources and require_article_analysis:
                 text_coverage = calculate_coverage(
                     db,
                     run_id,
@@ -1821,12 +1864,11 @@ def execute_research_run(
             run_id,
             require_article_analysis=require_article_analysis,
         )
-        visual_note_target_satisfied = not xiaohongshu_only_visual or all(
-            xiaohongshu_usable_notes.get(item.id, 0) >= XIAOHONGSHU_VISUAL_NOTE_TARGET
-            for item in plan.subquestions
-        )
-        visual_completion_allowed = visual_note_target_satisfied
-        if not visual_completion_allowed:
+        if (
+            path.uses_visual_platform
+            and inspection_budget.exhausted
+            and not completion_satisfied(coverage)
+        ):
             stop_reason = "visual_budget_exhausted"
         if require_research_synthesis:
             assert isinstance(provider, ResearchSynthesisProvider)
@@ -1862,30 +1904,16 @@ def execute_research_run(
                 .where(AssetCandidate.run_id == run_id)
             )
             run.coverage_report = dict(coverage)
-            if enrichment_satisfied(coverage) and visual_completion_allowed:
-                run.status = RunStatus.completed.value
-                run.stop_reason = "coverage_satisfied"
-            elif (
-                goal is ResearchGoal.precedent_research
-                and coverage["covered_subquestions"] > 0
-                and "browser_inspection_incomplete" not in coverage["gaps"]
-            ):
-                run.status = RunStatus.partial.value
-                run.stop_reason = stop_reason
-            elif goal is ResearchGoal.precedent_research:
-                run.status = RunStatus.blocked.value
-                run.stop_reason = stop_reason
-            elif coverage["usable_assets"]:
-                run.status = RunStatus.partial.value
-                run.stop_reason = stop_reason
-            elif preserved_asset_count:
-                run.status = RunStatus.partial.value
-                run.stop_reason = "unverified_visual_leads"
-            else:
-                run.status = RunStatus.blocked.value
-                run.stop_reason = (
-                    stop_reason if stop_reason == "visual_budget_exhausted" else "no_usable_assets"
-                )
+            terminal_status, terminal_stop_reason = path.terminal_outcome(
+                complete=completion_satisfied(coverage),
+                covered_subquestions=int(coverage["covered_subquestions"]),
+                browser_inspection_incomplete=("browser_inspection_incomplete" in coverage["gaps"]),
+                usable_assets=int(coverage["usable_assets"]),
+                preserved_assets=int(preserved_asset_count or 0),
+                stop_reason=stop_reason,
+            )
+            run.status = terminal_status.value
+            run.stop_reason = terminal_stop_reason
             run.finished_at = datetime.now(UTC)
             session.commit()
             terminal_state = run.status
@@ -2550,21 +2578,6 @@ def _rank_xiaohongshu_visual_sources(
 
     ranked = sorted(enumerate(deduplicated), key=source_score, reverse=True)
     return [source for _, source in ranked[: max(0, limit)]]
-
-
-def _query_with_source_preferences(
-    query: str,
-    *,
-    goal: ResearchGoal,
-) -> str:
-    preferences: list[str] = []
-    if goal is ResearchGoal.precedent_research:
-        preferences.append("优先项目官网、ArchDaily 等完整建筑项目页；视觉平台只能作为灵感线索。")
-    elif goal is ResearchGoal.visual_reference_search:
-        preferences.append("优先图纸风格、建筑形体推演与分析图表达的可见特征。")
-    if not preferences:
-        return query
-    return f"{query} 来源分工：{' '.join(preferences)}"[:8_000]
 
 
 def _merge_source_lists(
@@ -4541,14 +4554,13 @@ def _inspection_source_sort_key(
     goal: ResearchGoal,
     relevance_context: str = "",
 ) -> tuple[int, int, int, int, int]:
+    path = policy_for_goal(goal)
     is_visual_platform = _is_sparse_visual_platform_url(source.url)
     discovery_priority = (
-        _architecture_discovery_priority(source) if goal is ResearchGoal.precedent_research else 0
+        _architecture_discovery_priority(source) if path.uses_precedent_sources else 0
     )
     purpose_priority = (
-        int(is_visual_platform)
-        if goal is ResearchGoal.visual_reference_search
-        else int(not is_visual_platform)
+        int(is_visual_platform) if path.uses_visual_platform else int(not is_visual_platform)
     )
     return (
         purpose_priority,
@@ -5281,7 +5293,7 @@ def _preserve_failure(db: Database, run_id: str, exc: Exception) -> str:
             select(func.count()).select_from(AssetCandidate).where(AssetCandidate.run_id == run_id)
         )
         if run.status != RunStatus.cancelled.value:
-            if ResearchGoal(run.goal) is ResearchGoal.precedent_research and asset_count:
+            if policy_for_goal(ResearchGoal(run.goal)).uses_precedent_sources and asset_count:
                 run.status = RunStatus.blocked.value
             else:
                 run.status = RunStatus.partial.value if asset_count else RunStatus.failed.value

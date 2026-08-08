@@ -59,27 +59,27 @@ def test_research_record_title_handles_future_question_shapes(question: str, exp
 def test_research_modes_bound_fair_per_subquestion_passes() -> None:
     assert BUDGETS[BudgetMode.quick].model_dump() == {
         "max_rounds": 2,
-        "max_queries": 6,
-        "completion_recovery_rounds": 4,
-        "completion_recovery_pages_per_subquestion": 3,
-        "max_pages": 16,
-        "max_seconds": 2400,
+        "max_queries": 8,
+        "completion_recovery_rounds": 5,
+        "completion_recovery_pages_per_subquestion": 4,
+        "max_pages": 20,
+        "max_seconds": 2880,
     }
     assert BUDGETS[BudgetMode.balanced].model_dump() == {
         "max_rounds": 3,
-        "max_queries": 12,
-        "completion_recovery_rounds": 4,
-        "completion_recovery_pages_per_subquestion": 3,
-        "max_pages": 40,
-        "max_seconds": 3600,
+        "max_queries": 15,
+        "completion_recovery_rounds": 5,
+        "completion_recovery_pages_per_subquestion": 4,
+        "max_pages": 48,
+        "max_seconds": 4320,
     }
     assert BUDGETS[BudgetMode.deep].model_dump() == {
         "max_rounds": 4,
-        "max_queries": 24,
-        "completion_recovery_rounds": 4,
-        "completion_recovery_pages_per_subquestion": 3,
-        "max_pages": 72,
-        "max_seconds": 5400,
+        "max_queries": 30,
+        "completion_recovery_rounds": 5,
+        "completion_recovery_pages_per_subquestion": 4,
+        "max_pages": 90,
+        "max_seconds": 6480,
     }
 
 
@@ -204,11 +204,12 @@ def test_research_spec_accepts_only_a_complete_confirmed_question_directory() ->
 
 def test_research_spec_accepts_only_explicit_supported_research_sources() -> None:
     default_spec = ResearchSpec(question="旧建筑改造如何组织新功能？")
-    assert default_spec.research_sources == [ResearchSource.xiaohongshu]
+    assert default_spec.research_sources == []
     assert [source.value for source in ResearchSource] == ["xiaohongshu"]
 
     spec = ResearchSpec(
         question="从小红书寻找旧建筑改造的剖面表达灵感",
+        goal=ResearchGoal.visual_reference_search,
         research_sources=[ResearchSource.xiaohongshu],
     )
 
@@ -219,6 +220,13 @@ def test_research_spec_accepts_only_explicit_supported_research_sources() -> Non
         research_sources=[],
     )
     assert disabled.research_sources == []
+
+    with pytest.raises(ValidationError, match="Precedent research"):
+        ResearchSpec(
+            question="建筑案例研究不应进入视觉平台",
+            goal=ResearchGoal.precedent_research,
+            research_sources=[ResearchSource.xiaohongshu],
+        )
 
     with pytest.raises(ValidationError):
         ResearchSpec(

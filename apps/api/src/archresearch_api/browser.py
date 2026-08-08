@@ -20,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError,
 PROTOCOL_VERSION: Literal[1] = 1
 PAIRING_CODE_TTL_SECONDS = 300
 CHROME_BOARD_URL = "http://127.0.0.1:5173/?connect=chrome"
+XIAOHONGSHU_LOGIN_URL = "https://www.xiaohongshu.com/explore"
 
 
 def installed_chrome_board_url(port: int) -> str:
@@ -61,7 +62,13 @@ class BrowserStatusRead(StrictModel):
 
 
 class XiaohongshuSessionRead(StrictModel):
-    status: Literal["logged_in", "not_logged_in", "unknown", "unavailable"]
+    status: Literal[
+        "logged_in",
+        "not_logged_in",
+        "verification_required",
+        "unknown",
+        "unavailable",
+    ]
     channel: Literal["local_search", "chrome_extension", "none"]
 
 
@@ -465,9 +472,7 @@ def is_allowed_chrome_board_url(url: str) -> bool:
     )
 
 
-def open_board_in_chrome(url: str) -> bool:
-    if os.name != "nt" or not is_allowed_chrome_board_url(url):
-        return False
+def _open_chrome_tab(url: str) -> bool:
     local_app_data = os.environ.get("LOCALAPPDATA")
     candidates = [
         Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
@@ -478,9 +483,26 @@ def open_board_in_chrome(url: str) -> bool:
     chrome = next((candidate for candidate in candidates if candidate.is_file()), None)
     if chrome is None:
         return False
-    launch_url = f"{url}&attempt={uuid4().hex}"
-    subprocess.Popen([str(chrome), "--new-tab", launch_url], close_fds=True)
+    subprocess.Popen([str(chrome), "--new-tab", url], close_fds=True)
     return True
+
+
+def open_board_in_chrome(url: str) -> bool:
+    if os.name != "nt" or not is_allowed_chrome_board_url(url):
+        return False
+    return _open_chrome_tab(f"{url}&attempt={uuid4().hex}")
+
+
+def open_xiaohongshu_in_chrome(url: str) -> bool:
+    if os.name != "nt" or url != XIAOHONGSHU_LOGIN_URL:
+        return False
+    return _open_chrome_tab(url)
+
+
+def open_known_url_in_chrome(url: str) -> bool:
+    if url == XIAOHONGSHU_LOGIN_URL:
+        return open_xiaohongshu_in_chrome(url)
+    return open_board_in_chrome(url)
 
 
 def create_browser_router(
@@ -488,8 +510,11 @@ def create_browser_router(
     broker: BrowserBroker,
     chrome_launcher: Callable[[str], bool] | None = None,
 ) -> APIRouter:
+    from .xiaohongshu import XiaohongshuBrowserSearch
+
     router = APIRouter(prefix="/v1")
-    resolved_chrome_launcher = chrome_launcher or open_board_in_chrome
+    resolved_chrome_launcher = chrome_launcher or open_known_url_in_chrome
+    extension_session_checker = XiaohongshuBrowserSearch(broker)
 
     @router.post(
         "/browser/pairing-code",
@@ -513,33 +538,55 @@ def create_browser_router(
         response_model=XiaohongshuSessionRead,
     )
     def xiaohongshu_session(request: Request) -> XiaohongshuSessionRead:
-        from .xiaohongshu import XiaohongshuBrowserSearch, XiaohongshuSessionChecker
+        from .xiaohongshu import XiaohongshuSessionChecker
+
+        extension_status: (
+            Literal["logged_in", "not_logged_in", "verification_required", "unknown"] | None
+        ) = None
+        if broker.connected:
+            try:
+                extension_status = extension_session_checker.check_login()
+            except Exception:
+                extension_status = "unknown"
+            if extension_status != "unknown":
+                return XiaohongshuSessionRead(
+                    status=extension_status,
+                    channel="chrome_extension",
+                )
 
         search = getattr(request.app.state, "xiaohongshu_search", None)
         if search is not None:
-            if not isinstance(search, XiaohongshuSessionChecker):
-                return XiaohongshuSessionRead(status="unknown", channel="local_search")
-            try:
+            if extension_status is not None and isinstance(search, XiaohongshuBrowserSearch):
                 return XiaohongshuSessionRead(
-                    status=search.check_login(),
-                    channel="local_search",
-                )
-            except Exception:
-                return XiaohongshuSessionRead(status="unknown", channel="local_search")
-        if broker.connected:
-            try:
-                return XiaohongshuSessionRead(
-                    status=XiaohongshuBrowserSearch(broker).check_login(),
+                    status=extension_status,
                     channel="chrome_extension",
                 )
+            if not isinstance(search, XiaohongshuSessionChecker):
+                if extension_status is not None:
+                    return XiaohongshuSessionRead(
+                        status=extension_status,
+                        channel="chrome_extension",
+                    )
+                return XiaohongshuSessionRead(status="unknown", channel="local_search")
+            try:
+                local_status = search.check_login()
             except Exception:
-                return XiaohongshuSessionRead(status="unknown", channel="chrome_extension")
+                local_status = "unknown"
+            if local_status != "unknown" or extension_status is None:
+                return XiaohongshuSessionRead(
+                    status=local_status,
+                    channel="local_search",
+                )
+        if extension_status is not None:
+            return XiaohongshuSessionRead(
+                status=extension_status,
+                channel="chrome_extension",
+            )
         return XiaohongshuSessionRead(status="unavailable", channel="none")
 
-    @router.post("/browser/open-chrome", response_model=ChromeLaunchRead)
-    def open_chrome() -> ChromeLaunchRead:
+    def launch_chrome(url: str) -> ChromeLaunchRead:
         try:
-            opened = resolved_chrome_launcher(CHROME_BOARD_URL)
+            opened = resolved_chrome_launcher(url)
         except OSError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -551,6 +598,17 @@ def create_browser_router(
                 detail="Google Chrome is not installed",
             )
         return ChromeLaunchRead(opened=True)
+
+    @router.post("/browser/open-chrome", response_model=ChromeLaunchRead)
+    def open_chrome() -> ChromeLaunchRead:
+        return launch_chrome(CHROME_BOARD_URL)
+
+    @router.post(
+        "/browser/open-xiaohongshu-login",
+        response_model=ChromeLaunchRead,
+    )
+    def open_xiaohongshu_login() -> ChromeLaunchRead:
+        return launch_chrome(XIAOHONGSHU_LOGIN_URL)
 
     @router.websocket("/browser")
     async def browser_socket(websocket: WebSocket) -> None:

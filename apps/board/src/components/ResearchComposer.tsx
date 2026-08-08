@@ -1,6 +1,7 @@
 import type { FormEvent, RefObject } from 'react'
 import {
   ArrowUp,
+  BookOpen,
   Check,
   CircleDashed,
   Eye,
@@ -45,6 +46,12 @@ type ResearchComposerProps = {
   researchEnvironmentDetail: string
   showBrowserConnectAction: boolean
   showXiaohongshuLoginAction: boolean
+  xiaohongshuLoginFlow:
+    | 'idle'
+    | 'opening'
+    | 'waiting'
+    | 'verification_required'
+    | 'timed_out'
   browserConnecting: boolean
   browserReadinessLoading: boolean
   browserReadinessError: string
@@ -58,6 +65,8 @@ type ResearchComposerProps = {
   onFilesChange: (files: File[]) => void
   onReferenceUrlChange: (url: string) => void
   onConnectBrowser: () => void | Promise<void>
+  onOpenXiaohongshuLogin: () => void | Promise<boolean>
+  onOpenVisualUsage: (trigger: HTMLElement) => void
   onRefreshBrowserReadiness: () => void | Promise<void>
   onCancel: () => void | Promise<void>
   onRetry: () => void | Promise<void>
@@ -83,6 +92,7 @@ export function ResearchComposer({
   researchEnvironmentDetail,
   showBrowserConnectAction,
   showXiaohongshuLoginAction,
+  xiaohongshuLoginFlow,
   browserConnecting,
   browserReadinessLoading,
   browserReadinessError,
@@ -96,6 +106,8 @@ export function ResearchComposer({
   onFilesChange,
   onReferenceUrlChange,
   onConnectBrowser,
+  onOpenXiaohongshuLogin,
+  onOpenVisualUsage,
   onRefreshBrowserReadiness,
   onCancel,
   onRetry,
@@ -247,15 +259,26 @@ export function ResearchComposer({
                 </div>
               </div>
               <div className="research-preflight-actions">
+                <button type="button" onClick={(event) => onOpenVisualUsage(event.currentTarget)}>
+                  <BookOpen aria-hidden="true" />使用方法
+                </button>
                 {showXiaohongshuLoginAction && (
-                  <a
+                  <button
                     className="research-preflight-login"
-                    href="https://www.xiaohongshu.com/explore"
-                    target="_blank"
-                    rel="noreferrer"
+                    type="button"
+                    disabled={xiaohongshuLoginFlow === 'opening' || xiaohongshuLoginFlow === 'waiting'}
+                    onClick={() => void onOpenXiaohongshuLogin()}
                   >
-                    <ExternalLink aria-hidden="true" />打开小红书登录
-                  </a>
+                    <ExternalLink aria-hidden="true" />{
+                      xiaohongshuLoginFlow === 'opening'
+                        ? '正在打开登录…'
+                        : xiaohongshuLoginFlow === 'waiting'
+                          ? '等待登录…'
+                          : xiaohongshuLoginFlow === 'timed_out'
+                            ? '再次打开小红书登录'
+                            : '打开小红书登录'
+                    }
+                  </button>
                 )}
                 {showBrowserConnectAction && (
                   <button type="button" disabled={browserConnecting} onClick={() => void onConnectBrowser()}>

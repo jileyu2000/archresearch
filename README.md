@@ -1,155 +1,119 @@
-# ArchResearch 本地优先研究工作台
+# ArchResearch 建筑研究工作台
 
 [![verify](https://github.com/jileyu2000/archresearch/actions/workflows/verify.yml/badge.svg)](https://github.com/jileyu2000/archresearch/actions/workflows/verify.yml)
-![version](https://img.shields.io/badge/version-2.2.4-2F5BFF)
+![version](https://img.shields.io/badge/version-2.2.10-2F5BFF)
 ![platform](https://img.shields.io/badge/platform-Windows%2011-171A18)
 
-> 把建筑设计问题变成有出处、能比较、可继续使用的案例答案与图纸灵感板。
+> 从一个还没想清楚的设计问题出发，找到真实案例、核对原始来源，整理成能继续用于方案的研究板。
 
-ArchResearch 是面向建筑学生和青年设计师的本地优先研究工作台。你可以从一个尚未定型的方案初期问题开始，附上任务书 PDF 或指定案例页；系统会把问题拆成开放的研究维度，生成精准搜索词，再用本地浏览器寻找、筛选并读完真实项目，最后整理成可以直接阅读、收藏、对照和导出的研究材料。
+ArchResearch 面向建筑学生和青年设计师，处理方案前期最费时间的一段工作：拆问题、找案例、读项目、核对证据，再把结论带回设计。你可以研究空间组织和设计策略，也可以从小红书寻找剖面图、轴测图、爆炸图、效果图等视觉方向。
 
-它不是案例搜索结果墙，也不预先建设平台案例库。建筑研究把空间关系、使用体验和环境联系放在首位，建筑类型只作必要的软语境；模型只从本地候选 ID 中筛选，不编造 URL，正式结论必须绑定真实来源和逐字原文。图纸灵感则只接收图纸类型和视觉方向，保持登录态小红书 XHS-only，不询问住宅、学校等建筑类型，也不把视觉线索当成建筑事实。数据库、收藏、备份和 Provider 配置都保存在用户自己的电脑上。
-
-## 下载与安装
-
-**需要 Windows 11 和 Google Chrome。**
-
-[下载 Windows 安装版 v2.2.4](https://github.com/jileyu2000/archresearch/releases/download/v2.2.4/ArchResearch-Windows-x64-Setup-v2.2.4.exe)
-
-1. 下载并双击 `ArchResearch-Windows-x64-Setup-v2.2.4.exe`。
-2. 首次启动填写 API 接口地址和 API Key。地址可以是服务根地址或完整 API 路径；程序会在同一服务地址上自动尝试常见路径，从上游模型列表中选择模型。模型 ID 不可手输；选定模型通过连接测试后才保存，Key 只写入 Windows 凭据管理器。
-3. 以后从桌面或开始菜单打开 ArchResearch，它会自动在 Chrome 中显示本地页面。
-
-本地服务、生产界面、SQLite 数据库和运行环境都会自动安装。不需要安装 Python、Node.js、pnpm 或 PowerShell。
-
-> 安装程序暂未签名，Windows 可能显示 SmartScreen 或“未知发布者”。可以在 [v2.2.4 Release](https://github.com/jileyu2000/archresearch/releases/tag/v2.2.4) 核对附件与 SHA-256。
-
-### 需要小红书时
-
-Windows 安装包不包含 Chrome 扩展。需要“图纸灵感”时，另外下载并加载 ArchResearch Chrome 扩展，再从本地页面完成连接。扩展只执行受限的只读研究动作，不上传 Cookie、账号或密码。
-
-[Chrome 扩展安装说明](docs/chrome-extension.md) · [从源码运行](docs/development.md)
+它会保存研究过程、来源、图片、收藏和未完成结果。所有数据留在自己的电脑上，之后可以继续研究、比较案例或备份迁移。
 
 ![ArchResearch 首页](.artifacts/portfolio/current-2026-07-28/home-desktop.png)
 
-## 项目定位
+## 下载与安装
 
-ArchResearch 聚焦建筑设计前期最耗时的一段工作：把一个模糊问题拆成可研究的问题，找到真实项目，核对来源，再把可用结论带回方案。它适用于课程设计、建筑竞赛、毕业设计和青年设计师的早期方案研究。
+ArchResearch 当前支持 **Windows 11 + Google Chrome**。
 
-| 项目维度 | ArchResearch 如何回应 |
-| --- | --- |
-| 目标用户 | 建筑学生，以及工作 0-3 年、需要快速形成方案依据的青年设计师。 |
-| 真实痛点 | 普通搜索把事实、图片和二手转述混在一起；灵感收藏与原设计问题脱节；使用者很难判断“案例为什么适用”。 |
-| 使用场景 | 方案前期拆题与案例研究；任务书约束下的定向研究；轴测图、分析图、效果图等表达方向探索。 |
-| 实际价值 | 把搜索、网页阅读、证据核对、跨案例比较、收藏与导出串成一条可恢复流程，同时明确证据缺口和图片权利边界。 |
+[下载 Windows 安装版 v2.2.10](https://github.com/jileyu2000/archresearch/releases/download/v2.2.10/ArchResearch-Windows-x64-Setup-v2.2.10.exe)
 
-它不是只生成文本的聊天机器人。用户决定研究问题、深度、资料、Provider 与浏览器权限；Agent 负责有界执行；确定性代码负责证据准入、完成判定、权限和导出门禁。
+1. 下载并运行 `ArchResearch-Windows-x64-Setup-v2.2.10.exe`。
+2. 首次启动时填写自己的 OpenAI-compatible API 地址和 API Key，再从接口返回的模型列表中选择模型。
+3. 以后从桌面或开始菜单打开 ArchResearch，研究工作台会自动显示在 Chrome 中。
+
+安装器已经包含本地服务、工作界面、数据库和运行环境，不需要另外安装 Python 或 Node.js。安装程序暂未签名，Windows 可能显示 SmartScreen 或“未知发布者”，可以在 [v2.2.10 Release](https://github.com/jileyu2000/archresearch/releases/tag/v2.2.10) 核对附件和 SHA-256。
+
+### 使用图纸灵感
+
+“图纸灵感”需要单独安装 Chrome 扩展。Windows 安装器不会捆绑扩展。
+
+[下载 Chrome 扩展 v2.2.10](https://github.com/jileyu2000/archresearch/releases/download/v2.2.10/archresearch-chrome-extension-only-v2.2.10.zip) · [查看安装说明](docs/chrome-extension.md)
+
+扩展装好后，从 ArchResearch 进入“图纸灵感”即可。若尚未登录小红书，工作台会打开登录页并等待；登录完成后会自动继续检测。
+
+## 可以用它做什么
+
+| 功能 | 适合的问题 | 得到的结果 |
+| --- | --- | --- |
+| 建筑设计研究 | 空间怎样组织、流线如何分开、剖面如何建立层次、旧建筑怎样植入新功能 | 按子问题整理的案例结论、原文证据、图纸和可转译做法 |
+| 图纸灵感 | 想找轴测图、剖面图、爆炸图、效果图的构图、配色、线型或版式方向 | 按视觉方向分组的小红书图纸参考与来源链接 |
+| 研究资料管理 | 想保存灵感、比较案例、整理表达规范或迁移研究资料 | 个人收藏、案例对照、表达规范、导出与 ZIP 备份 |
 
 | 任务书约束的案例研究 | 跨案例论证 | 图纸灵感方向 |
 | --- | --- | --- |
 | ![任务书驱动研究](.artifacts/portfolio/current-2026-07-28/brief-ff16988d-desktop.png) | ![深度案例研究](.artifacts/portfolio/current-2026-07-28/deep-76f52c79-desktop.png) | ![图纸灵感研究](.artifacts/portfolio/current-2026-07-28/visual-f5be3f17-desktop.png) |
 
-## 可以用它做什么
-
-| 场景 | ArchResearch 的工作 |
-| --- | --- |
-| 建筑设计研究 | 把总问题拆成可检索的子问题，寻找真实落地项目，并用逐字证据说明案例如何回应当前设计任务。 |
-| 图纸灵感 | 围绕轴测图、剖面图、爆炸图、效果图等图纸类型扩展不同视觉方向，只从登录态小红书读取并组织视觉参考。 |
-| 研究资料管理 | 保存个人收藏、对照案例策略、生成表达规范、按图片权利边界导出，并通过 ZIP 备份或恢复全部本地数据。 |
-
-研究提供“快速找方向 / 形成方案依据 / 做跨案例论证”三种深度。无论选择哪一种，系统都会保留已有结果并如实标记缺口，不把未完成的研究包装成完整答案。
-
-## Agent 架构
-
-ArchResearch 仍然使用 **Evidence-Grounded Plan-and-Execute Agent**。Plan 负责开放式拆题与结构化查询规划；Execute 负责本地搜索、候选筛选、页面读取、分析、验证和覆盖补查。模型只处理适合语言推理的环节，阶段编排、预算、工具权限、排除集合、证据准入和终态判断由可测试的确定性代码控制。
+## ArchResearch 怎样完成一次研究
 
 ```mermaid
-flowchart TB
-    U["用户问题 / 任务书 / 研究深度"] --> P["Plan<br/>开放式拆题、普通 Responses 生成结构化搜索词"]
-    P --> E["Execute<br/>七阶段状态机、预算、排除集合、checkpoint"]
-
-    E --> W["建筑研究<br/>本地 Playwright 搜索候选"]
-    W --> C["候选集<br/>URL、标题、摘要、去重与排除"]
-    C --> CR["模型筛选<br/>只选择候选 ID"]
-    CR --> L["本地 Playwright<br/>读取正文与图纸"]
-
-    E --> X["图纸灵感<br/>XHS-only 登录态搜索、逐帖逐图读取"]
-    L --> A["模型分析<br/>空间机制、事实与转译"]
-    X --> A
-    A --> V["Verify<br/>程序绑定 URL + 逐字引文、coverage + enrichment"]
-    V -->|"覆盖不足且预算允许"| P
-    V -->|"双门槛通过或预算结束"| S["Synthesize<br/>证据绑定综合与确定性 fallback"]
-    S --> O["案例答案 / 对照 / 收藏 / 图纸灵感板"]
-    E --> D["SQLite<br/>Run、AssetCandidate、EvidenceClaim、Trace"]
-    V --> D
+flowchart LR
+    A["输入设计问题<br/>可附任务书或案例页"] --> B["选择研究类型与深度"]
+    B --> C["拆成可研究的子问题"]
+    C --> D["建筑研究<br/>寻找并阅读真实项目"]
+    C --> E["图纸灵感<br/>在已登录的小红书寻找视觉方向"]
+    D --> F["核对正文、图纸与原始来源"]
+    E --> F
+    F --> G["判断案例如何回应当前问题"]
+    G --> H["生成研究板或图纸灵感板"]
+    H --> I["收藏、对照、导出与备份"]
 ```
 
-主要组件：
+研究从用户的问题开始。ArchResearch 会结合任务书和研究深度拆出若干子问题，为每个子问题寻找材料。建筑研究读取真实项目正文和图纸；图纸灵感则按图纸类型与视觉方向整理小红书参考。
 
-- `apps/api`：FastAPI、Pydantic v2、SQLAlchemy 2、Alembic 与 SQLite，是唯一研究执行引擎。
-- `apps/board`：React、Vite、TypeScript 与 TanStack Query，作为本地生产界面。
-- `apps/extension`：Chrome Manifest V3，只执行随包发布的枚举动作。
-- `packaging` 与 `scripts/build-windows-installer.ps1`：PyInstaller onedir 与 Inno Setup 的 Windows 发布链。
+找到材料后，系统会区分来源事实、图纸观察和设计推断。正式结论保留来源链接和原文证据，方便回到原页面复核。资料不足时，系统会继续补查；达到时间或数量上限时，也会保存已有内容并明确标出缺口。
 
-唯一 orchestrator 位于 [`workflow.py`](apps/api/src/archresearch_api/workflow.py)，保持 `planning -> searching -> inspecting -> analyzing -> verifying -> gap_check -> composing` 的阶段顺序。项目不使用 LangGraph 或多 Agent runtime。
+## 两种研究方式
 
-默认不调用 Provider 原生 `web_search`，也不要求兼容 API 支持工具调用。查询规划、候选筛选、页面分析和综合都使用普通 Responses 结构化输出；网页搜索和正文读取由本地 Playwright 完成。小红书图纸研究独立走 XHS-only 路径，不进入普通网页搜索。
+### 建筑设计研究
 
-## 模型与密钥
+适合课程设计、竞赛、毕业设计和实际项目前期。你不必先想好搜索词，只需要说明卡住的问题，例如：
 
-首次配置接受带协议和主机的 HTTP(S) API 地址，不按供应商域名限制；请填写服务实际提供的 OpenAI-compatible base URL，常见形式以 `/v1` 结尾。系统读取上游 `/models`，把可用模型显示为只读选择列表；用户选择后只探测该模型，并依次协商 OpenAI-compatible Responses 与 Chat Completions。验证失败不会覆盖原有配置或凭据。`gpt-5.6-sol` 仅用于读取缺少模型字段的旧配置，不会成为新配置的隐含模型。
+- 旧建筑主体结构不动，新的公共功能怎样植入？
+- 人车在入口冲突，落客、步行和后勤流线怎样重组？
+- 层高已经确定，剖面还能怎样建立连续的空间层次？
 
-API 地址、模型和协议保存在本机配置文件；API Key 只保存在 Windows 凭据管理器，不进入仓库、日志、默认测试或导出包。图片分析要求最终选中的模型支持视觉输入。
+研究可以选择“快速找方向”“形成方案依据”或“做跨案例论证”。结果会按子问题组织，每个案例都说明项目条件、采用的空间机制、可借鉴的步骤和仍需核对的限制。
 
-## 研究行为
+### 图纸灵感
 
-- `precedent_research`：模型为每个开放子问题规划独立的空间优先搜索词，本地 Playwright 搜索候选，模型只从本地候选 ID 中按空间相关性、图纸可用性和来源可信度筛选；随后本地读取正文和图纸。已访问 URL、重复项目和无关页面进入排除集合，覆盖不足时根据真实缺口生成不同的补查词。只有逐字引文支持的项目条件与空间机制进入正式案例。
-- `visual_reference_search`：用户只需说明剖面图、轴测图、爆炸图、效果图等图纸类型和视觉方向；模型生成互不重复的风格维度，本地小红书搜索先从最多 8 条元数据中排序，再打开最多 4 帖逐图检查。每方向累计 3 篇 usable，全任务共享 48 个图像槽位与 48 MiB。跨行业歧义词只添加建筑制图学科限定，不推断具体建筑类型。
-- 图纸灵感可用路径全部失败时诚实终止，不恢复 Firecrawl，也不降级为通用网页素材。
-- coverage 与 enrichment 同时通过才标记 `completed`；预算耗尽或局部分支失败时保留部分结果与 checkpoint。
+只需要说清图纸类型和视觉方向，例如“想比较剖面图的精细线稿、低饱和色块和拼贴叙事”。ArchResearch 会把不同方向分开搜索和整理，不要求填写住宅、学校、场馆等建筑类型。
 
-## 安全边界
+图纸灵感只使用用户自己的小红书登录态。首次未登录时，工作台会直接打开小红书；登录后自动检测，已登录过的 Chrome 则可以直接进入研究。
 
-- API 只监听动态选择的回环端口，浏览器页面、健康检查和扩展 endpoint 使用同一端口。
-- 扩展只接受枚举 JSON 动作，不接收任意 JavaScript、选择器、凭据、社交动作或通用表单提交。
-- `<all_urls>` 只用于用户明确授权后的可见网页读取，可随时撤销；Cookie、LocalStorage、密码框、私信和账号页面禁止读取。
-- 截图前后验证目标标签；竞态时丢弃图像。API 与扩展共同拦截私网、保留地址和不安全 URL。
-- 分享导出由确定性代码执行版权门禁；未知或受限图片只输出来源卡和链接。
+## 一次研究会留下什么
 
-## 验证
+- 按子问题整理的结论，不是一串搜索结果。
+- 真实项目和来源链接，可回到原页面继续阅读。
+- 支撑结论的原文证据，以及与证据对应的图纸或图片。
+- 从案例做法转回当前设计问题的具体步骤。
+- 对证据缺口、适用边界和图片权利状态的说明。
+- 可继续编辑的收藏、案例对照和图纸表达规范。
 
-```powershell
-pnpm test:coverage
-pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1
-```
+研究在后台分阶段进行。关闭页面或某个来源暂时失败时，已经取得的结果仍会保留；回到工作台后可以继续查看进度。
 
-第一条命令执行 Board 与 Extension 覆盖率门槛；第二条运行发布合同、Windows 安装器合同、PowerShell 安全与进程生命周期测试、Python 单元/集成测试、Ruff、Mypy、两个 TypeScript 应用的 lint/typecheck/test/build，以及打包后 Chrome 扩展 E2E。默认测试只使用 mock 和本地 fixture，不需要真实 Provider Key。
+## 使用步骤
 
-## 完成度与边界
+1. 新建一个项目，写下当前最需要解决的设计问题。
+2. 选择“建筑设计研究”或“图纸灵感”，再决定研究深度。
+3. 需要时附上任务书 PDF、草图、图纸或指定案例页。
+4. 启动研究，在“最近研究”中查看进度；一次只运行一个研究任务。
+5. 阅读研究板，把有用案例加入收藏、做对照或导出，并定期备份本地数据。
 
-当前版本是可安装、可持久化、可备份恢复的 V2.2.4 本地系统。Windows 安装器交付自包含 FastAPI 服务与生产 Board；Chrome 扩展保持独立下载。当前支持 Windows 11 + Google Chrome，一次只运行一个研究任务。
+## 本地数据与安全
 
-安装版的本地回放入口不需要 Key，也不会创建 Workspace 或 ResearchRun：
+- Workspace、Research Run、图片、收藏和备份都保存在本机。
+- API 地址、模型和协议保存在本地配置中；API Key 只写入 Windows 凭据管理器。
+- Chrome 扩展只执行预先定义的只读研究动作，不接收任意脚本或通用表单操作。
+- 登录检测不会把 Cookie、账号或密码交给 ArchResearch，也不会把这些内容写入数据库、日志或备份。
+- 导出时会根据图片权利状态决定是否包含图片；来源不明确的图片只保留来源卡和链接。
 
-- `http://127.0.0.1:<当前端口>/?demo=quick`
-- `http://127.0.0.1:<当前端口>/?demo=balanced`
-- `http://127.0.0.1:<当前端口>/?demo=deep`
+实时研究需要用户自己的 OpenAI-compatible Provider。涉及图片分析时，所选模型还需要支持视觉输入。
 
-实时研究需要用户自己的 OpenAI-compatible Provider。小红书视觉研究还需要用户自己的登录态和独立 Chrome 扩展。
+## 文档
 
-## 交付文档
-
-- [系统架构与数据流](docs/architecture.md)
 - [Chrome 扩展安装说明](docs/chrome-extension.md)
-- [从源码运行与维护](docs/development.md)
-- [失败案例与恢复策略](docs/failure-cases.md)
 - [两条完整演示流程](docs/demo-flows.md)
-- [25 条版本化研究任务](fixtures/queries/README.md)
-- [九类图纸分类评测集](fixtures/evaluation/README.md)
-
-## 设计与计划
-
-- [V2.1 设计规格](docs/superpowers/specs/2026-07-11-arch-research-v2-design.md)
-- [实施计划](task_plan.md)
-- [关键发现](findings.md)
-- [阶段进展](progress.md)
+- [系统架构与数据流](docs/architecture.md)
+- [失败情况与恢复方式](docs/failure-cases.md)
+- [从源码运行与维护](docs/development.md)

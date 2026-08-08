@@ -1,5 +1,6 @@
 export const APPROVED_BROWSER_ACTIONS = [
   "open_url",
+  "open_xiaohongshu_note",
   "wait",
   "page_metadata",
   "page_snapshot",
@@ -21,6 +22,10 @@ export type SafeClickTarget =
 
 export type BrowserCommand =
   | Command<"open_url", { url: string }>
+  | Command<
+      "open_xiaohongshu_note",
+      { search_url: string; note_url: string }
+    >
   | Command<"wait", { milliseconds: number }>
   | Command<"page_metadata", { tab_id: number }>
   | Command<"page_snapshot", { tab_id: number }>
@@ -89,6 +94,23 @@ export function parseBrowserCommand(value: unknown): BrowserCommand {
         throw new ProtocolError("Navigation requires a safe public HTTP URL");
       }
       return buildCommand(message, "open_url", { url: payload.url });
+    }
+    case "open_xiaohongshu_note": {
+      requireExactKeys(payload, ["search_url", "note_url"]);
+      if (
+        typeof payload.search_url !== "string" ||
+        !isSafeXiaohongshuSearchUrl(payload.search_url) ||
+        typeof payload.note_url !== "string" ||
+        !isSafeXiaohongshuNoteUrl(payload.note_url)
+      ) {
+        throw new ProtocolError(
+          "Xiaohongshu note navigation requires a safe search and note URL",
+        );
+      }
+      return buildCommand(message, "open_xiaohongshu_note", {
+        search_url: payload.search_url,
+        note_url: payload.note_url,
+      });
     }
     case "wait": {
       requireExactKeys(payload, ["milliseconds"]);
@@ -293,6 +315,41 @@ export function isSafePublicHttpUrl(rawUrl: string): boolean {
   } catch {
     return false;
   }
+}
+
+export function isSafeXiaohongshuSearchUrl(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl);
+    return (
+      url.protocol === "https:" &&
+      url.username === "" &&
+      url.password === "" &&
+      isXiaohongshuHostname(url.hostname) &&
+      /^\/search_result\/?$/u.test(url.pathname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function isSafeXiaohongshuNoteUrl(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl);
+    return (
+      url.protocol === "https:" &&
+      url.username === "" &&
+      url.password === "" &&
+      isXiaohongshuHostname(url.hostname) &&
+      /^\/(?:explore|discovery\/item|search_result)\/[^/]+/u.test(url.pathname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isXiaohongshuHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase().replace(/\.$/u, "");
+  return normalized === "xiaohongshu.com" || normalized.endsWith(".xiaohongshu.com");
 }
 
 function isPrivateHostname(rawHostname: string): boolean {

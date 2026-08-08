@@ -32,6 +32,7 @@ def test_mock_run_persists_stage_checkpoints_and_results(
     run = _create_run(client, workspace_id)
     assert run["status"] == "completed"
     assert run["stop_reason"] == "coverage_satisfied"
+    assert run["research_sources"] == []
     assert len(run["subquestions"]) == 4
     assert run["coverage_report"]["usable_assets"] >= 12
     assert run["coverage_report"]["project_count"] >= 4
@@ -284,6 +285,23 @@ def test_run_rejects_removed_pinterest_source(
             "goal": "visual_reference_search",
             "budget_mode": "quick",
             "research_sources": ["pinterest"],
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_precedent_run_rejects_visual_platform_sources(
+    client: TestClient,
+    workspace_id: str,
+) -> None:
+    response = client.post(
+        f"/v1/workspaces/{workspace_id}/runs",
+        json={
+            "question": "建筑案例研究不应进入小红书检索",
+            "goal": "precedent_research",
+            "budget_mode": "balanced",
+            "research_sources": ["xiaohongshu"],
         },
     )
 

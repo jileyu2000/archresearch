@@ -76,11 +76,127 @@ class RecordingBrowser:
         raise AssertionError(f"unexpected browser action: {action}")
 
 
+class DelayedSearchResultsBrowser(RecordingBrowser):
+    def send_command_sync(
+        self,
+        action: str,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: float = 30,
+    ) -> Any:
+        if action != "enumerate_media":
+            return super().send_command_sync(
+                action,
+                payload,
+                timeout_seconds=timeout_seconds,
+            )
+        self.calls.append((action, payload))
+        self.enumerations += 1
+        if self.enumerations <= 2:
+            return {"media": []}
+        return {
+            "media": [
+                {
+                    "media_type": "image",
+                    "url": "https://sns-img.example/delayed.jpg",
+                    "link_url": "https://www.xiaohongshu.com/search_result/note-delayed",
+                    "alt": "延迟渲染的剖面图",
+                    "adjacent_text": "精细线稿剖面",
+                    "intrinsic_width": 1200,
+                    "intrinsic_height": 900,
+                    "region": {"x": 0, "y": 0, "width": 600, "height": 450},
+                }
+            ]
+        }
+
+
+class EmptySearchResultsBrowser(RecordingBrowser):
+    def send_command_sync(
+        self,
+        action: str,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: float = 30,
+    ) -> Any:
+        if action != "enumerate_media":
+            return super().send_command_sync(
+                action,
+                payload,
+                timeout_seconds=timeout_seconds,
+            )
+        self.calls.append((action, payload))
+        self.enumerations += 1
+        return {"media": []}
+
+
+class ResultsAppearAfterScrollBrowser(RecordingBrowser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.scrolled = False
+        self.post_scroll_enumerations = 0
+
+    def send_command_sync(
+        self,
+        action: str,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: float = 30,
+    ) -> Any:
+        if action == "scroll":
+            self.scrolled = True
+        if action != "enumerate_media":
+            return super().send_command_sync(
+                action,
+                payload,
+                timeout_seconds=timeout_seconds,
+            )
+        self.calls.append((action, payload))
+        self.enumerations += 1
+        if not self.scrolled:
+            return {"media": []}
+        self.post_scroll_enumerations += 1
+        if self.post_scroll_enumerations == 1:
+            return {"media": []}
+        return {
+            "media": [
+                {
+                    "media_type": "image",
+                    "url": "https://sns-img.example/after-scroll.jpg",
+                    "link_url": "https://www.xiaohongshu.com/search_result/note-after-scroll",
+                    "alt": "滚动后出现的剖面图",
+                    "adjacent_text": "滚动后加载的线稿剖面",
+                    "intrinsic_width": 1200,
+                    "intrinsic_height": 900,
+                    "region": {"x": 0, "y": 0, "width": 600, "height": 450},
+                }
+            ]
+        }
+
+
+class NoteOpeningBrowser(RecordingBrowser):
+    def send_command_sync(
+        self,
+        action: str,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: float = 30,
+    ) -> Any:
+        if action == "open_xiaohongshu_note":
+            self.calls.append((action, payload))
+            return {"tab_id": 29, "url": payload["note_url"]}
+        return super().send_command_sync(
+            action,
+            payload,
+            timeout_seconds=timeout_seconds,
+        )
+
+
 class SessionBrowser:
     connected = True
 
-    def __init__(self, status: str) -> None:
-        self.status = status
+    def __init__(self, status: str | list[str]) -> None:
+        self.statuses = status if isinstance(status, list) else [status]
+        self.status_index = 0
         self.calls: list[tuple[str, dict[str, Any]]] = []
 
     def send_command_sync(
@@ -97,7 +213,9 @@ class SessionBrowser:
         if action == "wait":
             return {"waited_ms": payload["milliseconds"]}
         if action == "xiaohongshu_session_status":
-            return {"status": self.status}
+            status = self.statuses[min(self.status_index, len(self.statuses) - 1)]
+            self.status_index += 1
+            return {"status": status}
         if action == "close_tab":
             return {"closed": True}
         raise AssertionError(f"unexpected browser action: {action}")
@@ -126,6 +244,73 @@ def test_visible_xiaohongshu_search_returns_bounded_note_sources() -> None:
     assert sleeps == [3.5, 1.0]
 
 
+def test_browser_xiaohongshu_note_reopens_search_result_before_reading() -> None:
+    browser = NoteOpeningBrowser()
+    search = XiaohongshuBrowserSearch(browser, sleep=lambda _seconds: None)
+
+    sources = search.search("旧厂房 剖面 空间层次", limit=1)
+    browser.calls.clear()
+
+    opened = search.open_note(sources[0].url)
+
+    assert opened.tab_id == 29
+    assert opened.url == sources[0].url
+    assert browser.calls == [
+        (
+            "open_xiaohongshu_note",
+            {
+                "search_url": (
+                    "https://www.xiaohongshu.com/search_result?keyword="
+                    "%E6%97%A7%E5%8E%82%E6%88%BF+%E5%89%96%E9%9D%A2+%E7%A9%BA%E9%97%B4%E5%B1%82%E6%AC%A1"
+                    "&source=web_search_result_notes"
+                ),
+                "note_url": sources[0].url,
+            },
+        )
+    ]
+
+
+def test_visible_xiaohongshu_search_waits_for_delayed_note_cards() -> None:
+    browser = DelayedSearchResultsBrowser()
+    sleeps: list[float] = []
+    search = XiaohongshuBrowserSearch(browser, sleep=sleeps.append)
+
+    sources = search.search("剖面图 精细线稿", limit=4)
+
+    assert [source.url for source in sources] == [
+        "https://www.xiaohongshu.com/search_result/note-delayed"
+    ]
+    assert browser.enumerations == 4
+    assert sleeps == [3.5, 1.0, 1.0, 1.0]
+    assert browser.calls[-1] == ("close_tab", {"tab_id": 17})
+
+
+def test_visible_xiaohongshu_search_stops_polling_when_results_stay_empty() -> None:
+    browser = EmptySearchResultsBrowser()
+    sleeps: list[float] = []
+    search = XiaohongshuBrowserSearch(browser, sleep=sleeps.append)
+
+    assert search.search("剖面图 精细线稿", limit=4) == []
+    assert browser.enumerations == 10
+    assert sleeps == [3.5, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    assert browser.calls[-1] == ("close_tab", {"tab_id": 17})
+
+
+def test_visible_xiaohongshu_search_waits_after_scroll_for_lazy_note_cards() -> None:
+    browser = ResultsAppearAfterScrollBrowser()
+    sleeps: list[float] = []
+    search = XiaohongshuBrowserSearch(browser, sleep=sleeps.append)
+
+    sources = search.search("剖面图 滚动后线稿", limit=4)
+
+    assert [source.url for source in sources] == [
+        "https://www.xiaohongshu.com/search_result/note-after-scroll"
+    ]
+    assert browser.enumerations == 7
+    assert browser.post_scroll_enumerations == 2
+    assert sleeps == [3.5, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+
+
 @pytest.mark.parametrize("status", ["logged_in", "not_logged_in", "unknown"])
 def test_browser_xiaohongshu_login_preflight_returns_only_bounded_status(status: str) -> None:
     browser = SessionBrowser(status)
@@ -139,10 +324,34 @@ def test_browser_xiaohongshu_login_preflight_returns_only_bounded_status(status:
         "xiaohongshu_session_status",
         "close_tab",
     ]
-    assert browser.calls[0][1]["url"].startswith(
-        "https://www.xiaohongshu.com/search_result?keyword="
-    )
+    assert browser.calls[0][1]["url"] == "https://www.xiaohongshu.com/explore"
     assert sleeps == []
+
+
+def test_browser_xiaohongshu_login_reuses_a_retained_safety_verification_tab() -> None:
+    browser = SessionBrowser(["verification_required", "verification_required", "logged_in"])
+    search = XiaohongshuBrowserSearch(browser)
+
+    assert search.check_login() == "verification_required"
+    assert [action for action, _ in browser.calls] == [
+        "open_url",
+        "wait",
+        "xiaohongshu_session_status",
+    ]
+
+    assert search.check_login() == "verification_required"
+    assert [action for action, _ in browser.calls].count("open_url") == 1
+    assert [action for action, _ in browser.calls].count("close_tab") == 0
+
+    assert search.check_login() == "logged_in"
+    assert [action for action, _ in browser.calls] == [
+        "open_url",
+        "wait",
+        "xiaohongshu_session_status",
+        "xiaohongshu_session_status",
+        "xiaohongshu_session_status",
+        "close_tab",
+    ]
 
 
 class RecordingRunner:

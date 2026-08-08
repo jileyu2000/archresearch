@@ -133,6 +133,9 @@ def test_openai_visual_classifier_sends_only_bounded_text_and_the_crop() -> None
     assert "P" * 1_200 in prompt
     assert "P" * 1_201 not in prompt
     assert crop not in prompt
+    assert "巨型宣传标题" in prompt
+    assert "图纸主体占比不足" in prompt
+    assert "相关性设为 0" in prompt
 
 
 def test_openai_visual_classifier_requires_a_structured_result() -> None:
@@ -222,6 +225,9 @@ def test_openai_remote_visual_batch_is_bounded_low_detail_and_structured() -> No
     assert "exploded axonometric" in prompt
     assert "归为 axonometric" in prompt
     assert "拼贴或渲染风格不改变图纸类型" in prompt
+    assert "巨型宣传标题" in prompt
+    assert "图纸主体占比不足" in prompt
+    assert "相关性设为 0" in prompt
 
 
 def test_openai_remote_visual_batch_retries_two_images_when_relay_rejects_four() -> None:

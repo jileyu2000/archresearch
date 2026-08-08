@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Literal, Protocol
+from urllib.parse import urlparse
 
+import httpx
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -97,6 +100,10 @@ class BrowserCommandClient(Protocol):
     ) -> Any: ...
 
 
+SourcePageOpener = Callable[[str], OpenPageResult]
+ImageFetcher = Callable[[str], bytes]
+
+
 @dataclass(frozen=True)
 class InspectedVisual:
     source_url: str
@@ -166,12 +173,18 @@ def inspect_source_page(
     candidate_root: Path,
     budget: InspectionBudget | None = None,
     public_page_text: str = "",
+    open_page: SourcePageOpener | None = None,
+    image_fetcher: ImageFetcher | None = None,
 ) -> list[InspectedVisual]:
     tab_id: int | None = None
     active_budget = budget if budget is not None else InspectionBudget()
     try:
-        opened = OpenPageResult.model_validate(
-            browser.send_command_sync("open_url", {"url": source_url})
+        opened = (
+            open_page(source_url)
+            if open_page is not None
+            else OpenPageResult.model_validate(
+                browser.send_command_sync("open_url", {"url": source_url})
+            )
         )
         tab_id = opened.tab_id
         browser.send_command_sync("wait", {"milliseconds": 500})
@@ -199,6 +212,7 @@ def inspect_source_page(
                     public_page_text=public_page_text,
                     media=_unseen_media(enumeration.media, seen_media),
                     budget=active_budget,
+                    image_fetcher=image_fetcher or _download_xiaohongshu_media,
                 )
             )
             if (
@@ -392,6 +406,7 @@ def _capture_candidates(
     public_page_text: str,
     media: list[PageMedia],
     budget: InspectionBudget,
+    image_fetcher: ImageFetcher,
 ) -> list[InspectedVisual]:
     results: list[InspectedVisual] = []
     snapshot_text = " ".join(block.text for block in snapshot.blocks)
@@ -414,13 +429,16 @@ def _capture_candidates(
         if not budget.reserve_capture():
             break
         try:
-            captured = CaptureResult.model_validate(
-                browser.send_command_sync(
-                    "capture_region",
-                    {"tab_id": tab_id, "region": item.region.model_dump(mode="json")},
+            if _is_xiaohongshu_original_media(source_url, item):
+                image_bytes = _normalized_png(image_fetcher(item.url or ""))
+            else:
+                captured = CaptureResult.model_validate(
+                    browser.send_command_sync(
+                        "capture_region",
+                        {"tab_id": tab_id, "region": item.region.model_dump(mode="json")},
+                    )
                 )
-            )
-            image_bytes = _decode_crop(captured.image_data_url)
+                image_bytes = _decode_crop(captured.image_data_url)
             perceptual_hash = difference_hash(image_bytes)
             budget.seen_perceptual_hashes.add(perceptual_hash)
             classification_key = (perceptual_hash, bounded_question)
@@ -475,6 +493,76 @@ def _capture_candidates(
         except Exception:
             continue
     return results
+
+
+def _is_xiaohongshu_original_media(source_url: str, item: PageMedia) -> bool:
+    if item.media_type != "image" or not item.url:
+        return False
+    source = urlparse(source_url)
+    source_host = (source.hostname or "").rstrip(".").lower()
+    if (
+        source.scheme != "https"
+        or not _is_xiaohongshu_host(source_host)
+        or not re.fullmatch(
+            r"/(?:explore|discovery/item|search_result)/[^/]+/?",
+            source.path,
+        )
+    ):
+        return False
+    media = urlparse(item.url)
+    media_host = (media.hostname or "").rstrip(".").lower()
+    return (
+        media.scheme == "https"
+        and not media.username
+        and not media.password
+        and media.port in {None, 443}
+        and (media_host == "xhscdn.com" or media_host.endswith(".xhscdn.com"))
+    )
+
+
+def _is_xiaohongshu_host(hostname: str) -> bool:
+    return hostname == "xiaohongshu.com" or hostname.endswith(".xiaohongshu.com")
+
+
+def _download_xiaohongshu_media(url: str) -> bytes:
+    parsed = urlparse(url)
+    hostname = (parsed.hostname or "").rstrip(".").lower()
+    if (
+        parsed.scheme != "https"
+        or parsed.username
+        or parsed.password
+        or parsed.port not in {None, 443}
+        or not (hostname == "xhscdn.com" or hostname.endswith(".xhscdn.com"))
+    ):
+        raise ValueError("Xiaohongshu media URL is not approved")
+    headers = {
+        "Accept": "image/avif,image/webp,image/png,image/jpeg,*/*;q=0.5",
+        "Referer": "https://www.xiaohongshu.com/",
+        "User-Agent": "Mozilla/5.0 ArchResearch/2.2",
+    }
+    with httpx.Client(
+        follow_redirects=False,
+        headers=headers,
+        timeout=10.0,
+    ) as client:
+        with client.stream("GET", url) as response:
+            response.raise_for_status()
+            if response.is_redirect:
+                raise ValueError("Xiaohongshu media redirects are not allowed")
+            content_type = response.headers.get("content-type", "").split(";", 1)[0]
+            if not content_type.startswith("image/"):
+                raise ValueError("Xiaohongshu media response is not an image")
+            chunks: list[bytes] = []
+            size = 0
+            for chunk in response.iter_bytes():
+                size += len(chunk)
+                if size > MAX_CROP_BYTES:
+                    raise ValueError("Xiaohongshu media exceeds the allowed size")
+                chunks.append(chunk)
+    image_bytes = b"".join(chunks)
+    if not image_bytes:
+        raise ValueError("Xiaohongshu media response was empty")
+    return image_bytes
 
 
 def _unseen_media(

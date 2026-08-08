@@ -193,13 +193,16 @@ export class BrowserSocketClient {
         ok: true,
         result,
       });
-    } catch {
+    } catch (error) {
       this.sendToConnection(generation, socket, {
         type: "browser.result",
         protocol_version: 1,
         id: command.id,
         ok: false,
-        error: { code: "execution_failed", message: "Command could not run" },
+        error: {
+          code: browserExecutionErrorCode(error),
+          message: "Command could not run",
+        },
       });
     }
   }
@@ -266,6 +269,22 @@ export class BrowserSocketClient {
   private setStatus(status: ConnectionStatus): void {
     this.status = status;
     this.onStatus(status);
+  }
+}
+
+function browserExecutionErrorCode(error: unknown): string {
+  if (!(error instanceof Error)) return "execution_failed";
+  switch (error.name) {
+    case "ContentScriptInjectionError":
+      return "content_script_injection_failed";
+    case "ContentMessageUnavailableError":
+      return "content_message_unavailable";
+    case "ContentOperationRejectedError":
+      return "content_operation_rejected";
+    case "ContentCommandTimeoutError":
+      return "content_command_timeout";
+    default:
+      return "execution_failed";
   }
 }
 

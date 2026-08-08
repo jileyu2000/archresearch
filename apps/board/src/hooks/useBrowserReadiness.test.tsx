@@ -2,7 +2,11 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { apiClient, type BrowserStatus } from '../api/client'
-import { requestBrowserBridge, type BrowserBridgeStatus } from '../browserBridge'
+import {
+  BrowserBridgeError,
+  requestBrowserBridge,
+  type BrowserBridgeStatus,
+} from '../browserBridge'
 import { useBrowserReadiness } from './useBrowserReadiness'
 
 vi.mock('../browserBridge', async (importOriginal) => ({
@@ -40,6 +44,7 @@ describe('useBrowserReadiness', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
   })
 
@@ -186,6 +191,42 @@ describe('useBrowserReadiness', () => {
     )
   })
 
+  it.each(['unknown', 'not_logged_in'] as const)(
+    'pauses login recovery after a %s session instead of polling again',
+    async (status) => {
+      vi.useFakeTimers()
+      vi.spyOn(apiClient, 'getBrowserStatus').mockResolvedValue({
+        connected: true,
+        xiaohongshu_search_available: true,
+      })
+      vi.mocked(requestBrowserBridge).mockResolvedValue(readyBridge)
+      const openLogin = vi.spyOn(apiClient, 'openXiaohongshuLogin').mockResolvedValue({
+        opened: true,
+      })
+      const session = vi.spyOn(apiClient, 'checkXiaohongshuSession').mockResolvedValue({
+        status,
+        channel: 'chrome_extension',
+      })
+      const { result } = renderReadiness()
+
+      await act(async () => {
+        await vi.runOnlyPendingTimersAsync()
+      })
+      const recovery = result.current.startXiaohongshuLoginRecovery()
+      await act(async () => {
+        await Promise.resolve()
+      })
+
+      expect(openLogin).toHaveBeenCalledOnce()
+      expect(session).toHaveBeenCalledOnce()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000)
+      })
+      expect(session).toHaveBeenCalledOnce()
+      await expect(recovery).resolves.toBe(false)
+    },
+  )
+
   it('allows public-page research when optional Chrome access is disconnected', async () => {
     vi.spyOn(apiClient, 'getBrowserStatus').mockResolvedValue({
       connected: false,
@@ -201,6 +242,24 @@ describe('useBrowserReadiness', () => {
 
     await expect(result.current.ensureBrowserResearchAccess(false)).resolves.toBe(true)
     expect(requestBrowserBridge).toHaveBeenCalledOnce()
+  })
+
+  it('does not expose Xiaohongshu login before the extension is connected', async () => {
+    vi.spyOn(apiClient, 'getBrowserStatus').mockResolvedValue({
+      connected: false,
+      xiaohongshu_search_available: false,
+    })
+    vi.mocked(requestBrowserBridge).mockRejectedValue(
+      new BrowserBridgeError('unavailable', 'bridge unavailable'),
+    )
+    const { result } = renderHook(() => useBrowserReadiness({
+      demoMode: false,
+      onAnnouncement: vi.fn(),
+      onError: vi.fn(),
+    }))
+
+    await waitFor(() => expect(result.current.browserReadinessLoading).toBe(false))
+    expect(result.current.showXiaohongshuLoginAction).toBe(false)
   })
 
   it('blocks Xiaohongshu research until the current page grants research permission', async () => {

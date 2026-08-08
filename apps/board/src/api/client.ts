@@ -333,6 +333,7 @@ export interface BrowserStatus {
 export type XiaohongshuSessionStatus =
   | 'logged_in'
   | 'not_logged_in'
+  | 'verification_required'
   | 'unknown'
   | 'unavailable'
 
@@ -431,6 +432,12 @@ export function createApiClient(baseUrl = '/v1') {
 
     openChromeBoard() {
       return request<ChromeLaunchResult>(`${baseUrl}/browser/open-chrome`, {
+        method: 'POST',
+      })
+    },
+
+    openXiaohongshuLogin() {
+      return request<ChromeLaunchResult>(`${baseUrl}/browser/open-xiaohongshu-login`, {
         method: 'POST',
       })
     },

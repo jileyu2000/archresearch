@@ -84,6 +84,8 @@ describe('App pure module contracts', () => {
     expect(runAnnouncement(completedRun)).toBe('研究已完成')
     expect(needsCompletionContinuation(incompleteRun)).toBe(true)
     expect(partialReasonTitle('no_new_assets')).toBe('这轮没有找到更多可用案例')
+    expect(partialReasonTitle('query_budget_exhausted')).toBe('本轮检索预算已用完，已保留当前结果')
+    expect(partialReasonTitle('visual_budget_exhausted')).toBe('本轮图纸检查预算已用完，已保留当前结果')
 
     expect(runAnnouncement({
       ...completedRun,
