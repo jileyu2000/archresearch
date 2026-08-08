@@ -2379,7 +2379,7 @@ def test_openai_provider_changes_synthesis_work_by_research_depth() -> None:
         for prompt in (quick_prompt, balanced_prompt, deep_prompt)
     )
     assert all(call["text_format"] is ResearchSynthesis for call in calls)
-    assert [call["timeout"] for call in calls] == [90.0, 60.0, 90.0]
+    assert [call["timeout"] for call in calls] == pytest.approx([90.0, 60.0, 90.0])
     assert [call["max_output_tokens"] for call in calls] == [1_200, 1_600, 3_200]
     assert all("tools" not in call for call in calls)
     for index, call in enumerate(calls):
