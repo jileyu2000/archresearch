@@ -25,6 +25,7 @@ class CoverageData(TypedDict):
     covered_subquestion_ids: list[str]
     multi_asset_projects: int
     subquestion_passes: dict[str, int]
+    projects_per_subquestion: NotRequired[dict[str, int]]
     gaps: list[str]
     enrichment_gaps: list[str]
     synthesis: NotRequired[dict[str, object]]
@@ -120,6 +121,7 @@ def calculate_coverage(
     project_asset_ids: dict[str, set[str]] = {}
     project_asset_types: dict[str, set[str]] = {}
     subquestion_asset_ids: dict[str, set[str]] = {}
+    subquestion_project_names: dict[str, set[str]] = {}
     for asset in project_enrichment_assets:
         project_asset_ids.setdefault(asset.project_name, set()).add(asset.id)
         project_asset_types.setdefault(asset.project_name, set()).add(asset.asset_type)
@@ -146,11 +148,15 @@ def calculate_coverage(
                     <= article_evidence_statements.get(asset.id, set())
                 ):
                     subquestion_asset_ids.setdefault(subquestion_id, set()).add(asset.id)
+                    subquestion_project_names.setdefault(subquestion_id, set()).add(
+                        asset.project_name
+                    )
     else:
         relationship_assets = coverage_assets if is_visual_reference else evidence_backed
         for asset in relationship_assets:
             for subquestion_id in asset.subquestion_ids or []:
                 subquestion_asset_ids.setdefault(subquestion_id, set()).add(asset.id)
+                subquestion_project_names.setdefault(subquestion_id, set()).add(asset.project_name)
     depth_target = DEPTH_TARGETS[BudgetMode(run.budget_mode)] if is_precedent else None
     minimum_assets_per_subquestion = (
         depth_target.assets_per_subquestion if depth_target is not None else 1
@@ -209,7 +215,7 @@ def calculate_coverage(
         enrichment_gaps.append("insufficient_subquestion_assets")
     if multi_asset_projects < target_multi_asset_projects:
         enrichment_gaps.append("insufficient_multi_asset_projects")
-    return {
+    coverage: CoverageData = {
         "usable_assets": len(usable),
         "project_count": len(projects),
         "verified_or_partial": len(verified_or_partial),
@@ -225,6 +231,12 @@ def calculate_coverage(
         "gaps": gaps,
         "enrichment_gaps": enrichment_gaps,
     }
+    if is_precedent:
+        coverage["projects_per_subquestion"] = {
+            subquestion_id: len(subquestion_project_names.get(subquestion_id, set()))
+            for subquestion_id in sorted(planned_subquestion_ids)
+        }
+    return coverage
 
 
 def completion_satisfied(coverage: CoverageData) -> bool:

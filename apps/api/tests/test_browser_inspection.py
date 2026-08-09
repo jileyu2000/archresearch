@@ -3109,6 +3109,134 @@ def test_candidate_reranking_limits_type_only_context_probes(tmp_path: Path) -> 
     ]
 
 
+def test_candidate_reranking_allows_one_architectural_scale_mechanism_probe(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path)
+    candidates = [
+        LocalSearchCandidate(
+            candidate_id="spatial_case",
+            url="https://www.archdaily.com/100/transit-arrival-hall",
+            title="Transit Arrival Hall / Studio One",
+            description="A public concourse separates pedestrian arrival and service access.",
+            publication_tier=PublicationTier.trusted_secondary,
+        ),
+        LocalSearchCandidate(
+            candidate_id="vehicle_probe",
+            url="https://www.archdaily.com/101/vehicle-inspection-station",
+            title="Vehicle Inspection Station / Studio Two",
+            description="A complete building project with plans and a short summary.",
+            publication_tier=PublicationTier.trusted_secondary,
+        ),
+        LocalSearchCandidate(
+            candidate_id="casino_probe",
+            url="https://www.designboom.com/architecture/city-casino-renovation",
+            title="City Casino Renovation / Studio Three",
+            description="A complete building project with plans and a short summary.",
+            publication_tier=PublicationTier.trusted_secondary,
+        ),
+        LocalSearchCandidate(
+            candidate_id="interior_noise",
+            url="https://www.dezeen.com/interiors/office-lobby-furniture",
+            title="Office Lobby Furniture Collection",
+            description="An interior product roundup with entrance benches.",
+            publication_tier=PublicationTier.trusted_secondary,
+        ),
+    ]
+    candidate_sources = {
+        item.candidate_id: ProviderSource(
+            url=item.url,
+            title=item.title,
+            publication_tier=item.publication_tier,
+            _search_description=item.description,
+        )
+        for item in candidates
+    }
+
+    class MechanismProbeProvider:
+        name = "openai"
+
+        def rerank_search_candidates(self, **kwargs: object) -> CandidateReranking:
+            del kwargs
+            return CandidateReranking(
+                assessments=[
+                    CandidateAssessment(
+                        candidate_id="spatial_case",
+                        relevance=4,
+                        typology_match=0,
+                        spatial_relevance=4,
+                        drawing_availability=3,
+                        source_trust=4,
+                        retain=True,
+                        architectural_scale=True,
+                    ),
+                    CandidateAssessment(
+                        candidate_id="vehicle_probe",
+                        relevance=3,
+                        typology_match=0,
+                        spatial_relevance=1,
+                        drawing_availability=3,
+                        source_trust=4,
+                        retain=True,
+                        architectural_scale=True,
+                    ),
+                    CandidateAssessment(
+                        candidate_id="casino_probe",
+                        relevance=2,
+                        typology_match=0,
+                        spatial_relevance=1,
+                        drawing_availability=2,
+                        source_trust=4,
+                        retain=True,
+                        architectural_scale=True,
+                    ),
+                    CandidateAssessment(
+                        candidate_id="interior_noise",
+                        relevance=3,
+                        typology_match=0,
+                        spatial_relevance=1,
+                        drawing_availability=4,
+                        source_trust=4,
+                        retain=True,
+                        architectural_scale=False,
+                    ),
+                ]
+            )
+
+    selected = workflow_module._try_candidate_reranking(
+        database,
+        run_id,
+        MechanismProbeProvider(),
+        provider_call_enabled=True,
+        question="入口人车冲突时，落客、步行和后勤流线怎样重组？",
+        subquestion=ResearchSubquestion(
+            id="time_sharing",
+            question="入口空间如何容纳不同时段的公共与后勤流线？",
+            rationale="先读建筑项目正文，再核对空间机制和运营边界。",
+        ),
+        planned_queries=[],
+        candidates=candidates,
+        candidate_sources=candidate_sources,
+        relevance_context="drop-off pedestrian service entrance operating periods",
+        unavailable_error_type="NotAvailable",
+    )
+
+    assert [source.url for source in selected] == [
+        candidates[0].url,
+        candidates[1].url,
+    ]
+    with database.session_factory() as session:
+        event = session.scalar(
+            select(TraceEvent).where(
+                TraceEvent.run_id == run_id,
+                TraceEvent.tool == "candidate_reranking",
+            )
+        )
+    assert event is not None
+    assert event.summary["mechanism_context_probe_count"] == 1
+    assert event.summary["type_context_probe_count"] == 0
+
+
 def test_space_first_candidate_fallback_does_not_restore_a_typology_gate(tmp_path: Path) -> None:
     database, run_id = _database_with_run(tmp_path)
     candidate = LocalSearchCandidate(
@@ -3773,6 +3901,7 @@ def test_model_assisted_search_falls_back_and_recovery_queries_stay_bounded_and_
     assert 1 < len(parser.queries) <= total_query_budget
     assert len(parser.queries) == len(set(parser.queries))
     assert all(1 <= call["query_limit"] <= 2 for call in provider.query_plan_calls)
+    assert provider.query_plan_calls[0]["query_limit"] == 2
     assert any(call["query_limit"] == 2 for call in provider.query_plan_calls[1:])
     assert len(provider.query_plan_calls) <= total_query_budget
     assert any(call["previous_queries"] for call in provider.query_plan_calls[1:])
@@ -3793,6 +3922,39 @@ def test_model_assisted_search_falls_back_and_recovery_queries_stay_bounded_and_
         and event.summary.get("mode") == "deterministic_candidate_ranking"
         for event in events
     )
+
+
+def test_initial_deterministic_query_fallback_preserves_the_discovery_lane_and_budget(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path)
+
+    plan = workflow_module._try_search_query_plan(
+        database,
+        run_id,
+        provider=None,
+        question="How should a civic building connect shared activities?",
+        subquestion=ResearchSubquestion(
+            id="shared-activities",
+            question="How do shared activities relate spatially?",
+            rationale="Compare plans and article evidence.",
+        ),
+        round_number=1,
+        preferred_language="en",
+        research_context="",
+        previous_queries=[],
+        excluded_sources=[],
+        excluded_projects=[],
+        failure_reasons=[],
+        fallback_query="shared activities spatial relationships floor plan",
+        query_limit=2,
+        unavailable_error_type="ProviderUnavailable",
+    )
+
+    assert [item.strategy for item in plan.queries] == ["space_first"]
+    assert [item.query for item in plan.queries] == [
+        "shared activities spatial relationships floor plan"
+    ]
 
 
 def test_candidate_reranking_fallback_uses_structured_typology_for_unknown_types(
@@ -3868,6 +4030,69 @@ def test_candidate_reranking_fallback_uses_structured_typology_for_unknown_types
     )
 
     assert [source.url for source in selected] == ["https://example.com/coastal-planetarium"]
+
+
+def test_candidate_reranking_fallback_keeps_four_relevant_space_first_leads(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path, max_pages=4)
+    planned_query = SearchQuery(
+        query="shared entrance spatial relationships floor plan",
+        language="en",
+        strategy="space_first",
+        anchors=SearchQueryAnchors(
+            building_type="",
+            project_condition="",
+            spatial_focus="shared entrance spatial relationships",
+            evidence_type="floor plan",
+        ),
+    )
+    candidates = [
+        LocalSearchCandidate(
+            candidate_id=f"candidate-{index}",
+            url=f"https://www.archdaily.com/{index}/shared-entrance-project",
+            title=f"Shared Entrance Project {index}",
+            description="A public building with shared entrance relationships and floor plans.",
+            publication_tier=PublicationTier.trusted_secondary,
+        )
+        for index in range(1, 5)
+    ]
+    candidate_sources = {
+        candidate.candidate_id: ProviderSource(
+            url=candidate.url,
+            title=candidate.title,
+            publication_tier=candidate.publication_tier,
+            _search_description=candidate.description,
+        )
+        for candidate in candidates
+    }
+
+    class UnavailableReranker:
+        name = "unavailable-reranker"
+
+        def rerank_search_candidates(self, **kwargs: object) -> CandidateReranking:
+            del kwargs
+            raise RuntimeError("temporary provider failure")
+
+    selected = workflow_module._try_candidate_reranking(
+        database,
+        run_id,
+        provider=UnavailableReranker(),
+        provider_call_enabled=True,
+        question="How should a public building organize a shared entrance?",
+        subquestion=ResearchSubquestion(
+            id="entrance",
+            question="How should a public building organize a shared entrance?",
+            rationale="Compare spatial relationships across project pages.",
+        ),
+        planned_queries=[planned_query],
+        candidates=candidates,
+        candidate_sources=candidate_sources,
+        relevance_context="shared entrance spatial relationships floor plan",
+        unavailable_error_type="ProviderUnavailable",
+    )
+
+    assert [source.url for source in selected] == [candidate.url for candidate in candidates]
 
 
 def test_public_search_and_project_supplements_share_the_run_query_budget(
@@ -4605,10 +4830,31 @@ def test_local_browser_search_continues_when_model_call_no_longer_fits_deadline(
 
 
 @pytest.mark.parametrize(
-    ("branch_c_calls_required", "enrichment_branch", "expected_searches"),
+    (
+        "branch_c_calls_required",
+        "enrichment_branch",
+        "projects_per_subquestion",
+        "expected_searches",
+    ),
     [
-        (2, None, ["branch-a", "branch-b", "branch-c", "branch-c"]),
-        (1, "branch-a", ["branch-a", "branch-b", "branch-c", "branch-a"]),
+        (
+            2,
+            None,
+            {"branch-a": 1, "branch-b": 1, "branch-c": 1},
+            ["branch-a", "branch-b", "branch-c", "branch-c"],
+        ),
+        (
+            1,
+            "branch-c",
+            {"branch-a": 3, "branch-b": 2, "branch-c": 1},
+            ["branch-a", "branch-b", "branch-c", "branch-c"],
+        ),
+        (
+            1,
+            "branch-a",
+            {"branch-a": 1, "branch-b": 1, "branch-c": 1},
+            ["branch-a", "branch-b", "branch-c", "branch-a"],
+        ),
     ],
 )
 def test_precedent_normal_rounds_prioritize_coverage_before_enrichment(
@@ -4616,6 +4862,7 @@ def test_precedent_normal_rounds_prioritize_coverage_before_enrichment(
     monkeypatch: pytest.MonkeyPatch,
     branch_c_calls_required: int,
     enrichment_branch: str | None,
+    projects_per_subquestion: dict[str, int],
     expected_searches: list[str],
 ) -> None:
     database, run_id = _database_with_run(tmp_path)
@@ -4689,6 +4936,7 @@ def test_precedent_normal_rounds_prioritize_coverage_before_enrichment(
             "covered_subquestion_ids": covered,
             "multi_asset_projects": 0,
             "subquestion_passes": {item: 1 for item in covered},
+            "projects_per_subquestion": projects_per_subquestion,
             "gaps": [] if complete else ["uncovered_subquestions"],
             "enrichment_gaps": ([] if enrichment_complete else ["insufficient_subquestion_assets"]),
         }
@@ -5729,6 +5977,204 @@ def test_local_browser_adds_typed_public_image_leads_without_a_browser_connectio
     assert lead.asset_type == ArchitectureAssetType.plan.value
     assert lead.result_tier == ResultTier.visual_lead.value
     assert lead.storage_path is None
+
+
+def test_verified_browser_visual_leads_adopt_distinct_page_project_names(tmp_path: Path) -> None:
+    database, run_id = _database_with_run(tmp_path)
+    cases = [
+        (
+            "https://magazine.example/projects/courtyard-archive",
+            "Courtyard Archive / Studio Example",
+            "https://cdn.example/courtyard-section.png",
+            "The archive preserves the existing courtyard.",
+        ),
+        (
+            "https://magazine.example/projects/harbor-workshop",
+            "Harbor Workshop | Design Office",
+            "https://cdn.example/harbor-section.png",
+            "The workshop separates public and service circulation.",
+        ),
+    ]
+
+    with database.session_factory() as session:
+        for index, (source_url, title, image_url, _) in enumerate(cases):
+            source_page = SourcePage(run_id=run_id, url=source_url, title=title)
+            session.add(source_page)
+            session.flush()
+            session.add(
+                AssetCandidate(
+                    run_id=run_id,
+                    source_page_id=source_page.id,
+                    project_name="待核验项目",
+                    asset_type=ArchitectureAssetType.section.value,
+                    source_url=source_url,
+                    image_url=image_url,
+                    storage_path=str(tmp_path / f"browser-lead-{index}.png"),
+                    perceptual_hash=f"browser-lead-{index}",
+                )
+            )
+        session.commit()
+
+    for index, (source_url, title, image_url, excerpt) in enumerate(cases, start=1):
+        project_context = f"项目条件 {index}"
+        design_mechanism = f"空间机制 {index}"
+        page = ParsedPublicPage(
+            source_url=source_url,
+            title=title,
+            markdown=f"{excerpt} Project condition {index}. Spatial mechanism {index}.",
+        )
+        source = ProviderSource(
+            url=source_url,
+            title=title,
+            publication_tier=PublicationTier.trusted_secondary,
+        )
+        drawing = PublicPageDrawing(
+            drawing_id="drawing_1",
+            asset_type=ArchitectureAssetType.section,
+            image_url=image_url,
+        )
+        analysis = PublicPageAnalysis(
+            relevance=4,
+            direct_match=True,
+            drawing_ids=[drawing.drawing_id],
+            project_context=project_context,
+            design_mechanism=design_mechanism,
+            transfer_strategy=[f"转译步骤 {index}"],
+            facts=[
+                PublicPageSupportedFact(
+                    statement=project_context,
+                    text_excerpt=f"Project condition {index}.",
+                ),
+                PublicPageSupportedFact(
+                    statement=design_mechanism,
+                    text_excerpt=f"Spatial mechanism {index}.",
+                ),
+            ],
+        )
+
+        changed = workflow_module._persist_public_page_analysis(
+            database,
+            run_id,
+            source,
+            page,
+            [drawing],
+            analysis,
+            question="如何组织建筑空间关系？",
+            subquestion_id="spatial_options",
+        )
+        assert changed == 1
+
+    with database.session_factory() as session:
+        assets = list(
+            session.scalars(
+                select(AssetCandidate)
+                .where(AssetCandidate.run_id == run_id)
+                .order_by(AssetCandidate.source_url)
+            )
+        )
+
+    assert {asset.source_url: asset.project_name for asset in assets} == {
+        cases[0][0]: "Courtyard Archive",
+        cases[1][0]: "Harbor Workshop",
+    }
+
+
+def test_verified_browser_visual_lead_reuses_existing_source_project_name(
+    tmp_path: Path,
+) -> None:
+    database, run_id = _database_with_run(tmp_path)
+    source_url = "https://magazine.example/projects/courtyard-archive"
+    source_title = "Courtyard Archive / Studio Example | Architecture Magazine"
+    existing_image_url = "https://cdn.example/courtyard-plan.png"
+    browser_image_url = "https://cdn.example/courtyard-section.png"
+
+    with database.session_factory() as session:
+        source_page = SourcePage(run_id=run_id, url=source_url, title=source_title)
+        session.add(source_page)
+        session.flush()
+        session.add_all(
+            [
+                AssetCandidate(
+                    run_id=run_id,
+                    source_page_id=source_page.id,
+                    project_name=source_title,
+                    asset_type=ArchitectureAssetType.plan.value,
+                    source_url=source_url,
+                    image_url=existing_image_url,
+                ),
+                AssetCandidate(
+                    run_id=run_id,
+                    source_page_id=source_page.id,
+                    project_name="待核验项目",
+                    asset_type=ArchitectureAssetType.section.value,
+                    source_url=source_url,
+                    image_url=browser_image_url,
+                ),
+            ]
+        )
+        session.commit()
+
+    project_context = "项目条件"
+    design_mechanism = "空间机制"
+    drawings = [
+        PublicPageDrawing(
+            drawing_id="drawing_1",
+            asset_type=ArchitectureAssetType.plan,
+            image_url=existing_image_url,
+        ),
+        PublicPageDrawing(
+            drawing_id="drawing_2",
+            asset_type=ArchitectureAssetType.section,
+            image_url=browser_image_url,
+        ),
+    ]
+    changed = workflow_module._persist_public_page_analysis(
+        database,
+        run_id,
+        ProviderSource(
+            url=source_url,
+            title=source_title,
+            publication_tier=PublicationTier.trusted_secondary,
+        ),
+        ParsedPublicPage(
+            source_url=source_url,
+            title=source_title,
+            markdown="Project condition. Spatial mechanism.",
+        ),
+        drawings,
+        PublicPageAnalysis(
+            relevance=4,
+            direct_match=True,
+            drawing_ids=[drawing.drawing_id for drawing in drawings],
+            project_context=project_context,
+            design_mechanism=design_mechanism,
+            transfer_strategy=["转译步骤"],
+            facts=[
+                PublicPageSupportedFact(
+                    statement=project_context,
+                    text_excerpt="Project condition.",
+                ),
+                PublicPageSupportedFact(
+                    statement=design_mechanism,
+                    text_excerpt="Spatial mechanism.",
+                ),
+            ],
+        ),
+        question="如何组织建筑空间关系？",
+        subquestion_id="spatial_options",
+    )
+    assert changed == 2
+
+    with database.session_factory() as session:
+        project_names = list(
+            session.scalars(
+                select(AssetCandidate.project_name)
+                .where(AssetCandidate.run_id == run_id)
+                .order_by(AssetCandidate.image_url)
+            )
+        )
+
+    assert project_names == [source_title, source_title]
 
 
 def test_trusted_direct_project_page_promotes_exact_drawing_evidence(
@@ -10177,6 +10623,53 @@ def test_page_budget_allows_one_normal_and_one_recovery_browser_attempt(tmp_path
     assert run.coverage_report["gaps"] == ["browser_inspection_incomplete"]
     assert run.browser_pages_attempted == 2
     assert len(assets) == 1
+
+
+def test_workflow_records_sanitized_browser_response_validation_details(
+    tmp_path: Path,
+) -> None:
+    class InvalidMediaBrowser(RecordingBrowser):
+        def send_command_sync(
+            self,
+            action: str,
+            payload: dict[str, Any],
+            *,
+            timeout_seconds: float = 30,
+        ) -> Any:
+            response = super().send_command_sync(
+                action,
+                payload,
+                timeout_seconds=timeout_seconds,
+            )
+            if action == "enumerate_media":
+                response["media"][0]["intrinsic_width"] = "private-page-value"
+            return response
+
+    database, run_id = _database_with_run(tmp_path)
+
+    execute_research_run(
+        database,
+        run_id,
+        SingleBatchProvider(_provider_result("https://studio.example/project")),
+        browser_client=InvalidMediaBrowser(),
+        visual_classifier=RecordingClassifier(),
+        candidate_root=tmp_path / "candidates",
+    )
+
+    with database.session_factory() as session:
+        event = session.scalar(
+            select(TraceEvent).where(
+                TraceEvent.run_id == run_id,
+                TraceEvent.tool == "browser",
+            )
+        )
+    assert event is not None
+    assert event.summary["status"] == "skipped"
+    assert event.summary["error_type"] == "ValidationError"
+    assert event.summary["validation_model"] == "MediaEnumeration"
+    assert event.summary["validation_path"] == "media.0.intrinsic_width"
+    assert event.summary["validation_error"] == "int_parsing"
+    assert "private-page-value" not in json.dumps(event.summary)
 
 
 def test_workflow_shares_a_quick_run_inspection_budget_across_pages(

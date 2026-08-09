@@ -249,15 +249,15 @@ def test_openai_provider_plans_local_browser_queries_without_web_search_tools() 
             SearchQuery(
                 query=(
                     "new-build community library atrium stepped reading "
-                    "project description floor plan"
+                    "project description case study"
                 ),
                 language="en",
-                strategy="project_context",
+                strategy="evidence_angle",
                 anchors=SearchQueryAnchors(
                     building_type="community library",
                     project_condition="new-build",
                     spatial_focus="atrium stepped reading",
-                    evidence_type="project description floor plan",
+                    evidence_type="project description case study",
                 ),
             ),
         ]
@@ -309,7 +309,86 @@ def test_openai_provider_plans_local_browser_queries_without_web_search_tools() 
     assert "does not need to restate every requested space" in request["input"]
     assert "spatial objects and relationships are the primary retrieval signals" in request["input"]
     assert "target building type is project context" in request["input"]
-    assert "one space_first query and one project-context query" in request["input"]
+    assert "one space_first discovery query and one evidence query" in request["input"]
+    assert "discovery lane" in request["input"]
+    assert "verification lane" in request["input"]
+    assert "objects, actors, spaces, relationships, states, and evidence" in request["input"]
+    assert "generic retrieval lanes" in request["input"]
+    assert "do not branch on a subquestion ID" in request["input"]
+    assert (
+        "Do not put operational evidence terms into the first space_first query" in request["input"]
+    )
+
+
+def test_initial_query_plan_corrects_project_context_to_an_evidence_lane() -> None:
+    calls: list[dict[str, Any]] = []
+    discovery = SearchQuery(
+        query="shared public spaces activity relationships floor plan",
+        language="en",
+        strategy="space_first",
+        anchors=SearchQueryAnchors(
+            building_type="community center",
+            project_condition="new-build",
+            spatial_focus="shared public spaces activity relationships",
+            evidence_type="floor plan",
+        ),
+    )
+    generic_context = SearchQuery(
+        query="new-build community center shared public spaces floor plan",
+        language="en",
+        strategy="project_context",
+        anchors=SearchQueryAnchors(
+            building_type="community center",
+            project_condition="new-build",
+            spatial_focus="shared public spaces",
+            evidence_type="floor plan",
+        ),
+    )
+    evidence = SearchQuery(
+        query=("new-build community center shared public spaces project description case study"),
+        language="en",
+        strategy="evidence_angle",
+        anchors=SearchQueryAnchors(
+            building_type="community center",
+            project_condition="new-build",
+            spatial_focus="shared public spaces",
+            evidence_type="project description case study",
+        ),
+    )
+    initial = SearchQueryPlan(queries=[discovery, generic_context])
+    corrected = SearchQueryPlan(queries=[discovery, evidence])
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> SimpleNamespace:
+            calls.append(kwargs)
+            return SimpleNamespace(output_parsed=initial if len(calls) == 1 else corrected)
+
+    provider = OpenAIResearchProvider(
+        api_key=None,
+        model="gpt-5.5",
+        client=SimpleNamespace(responses=FakeResponses()),
+    )
+
+    result = provider.plan_search_queries(
+        question="新建社区中心如何组织共享公共空间？",
+        subquestion=ResearchSubquestion(
+            id="shared-spaces",
+            question="共享公共空间如何联系不同日常活动？",
+            rationale="比较空间关系与项目正文证据。",
+        ),
+        round_number=1,
+        preferred_language="en",
+        research_context="new-build community center",
+        previous_queries=[],
+        excluded_sources=[],
+        failure_reasons=[],
+        query_limit=2,
+    )
+
+    assert [item.strategy for item in result.queries] == ["space_first", "evidence_angle"]
+    assert len(calls) == 2
+    assert "Validation feedback:" in calls[1]["input"]
+    assert "evidence" in calls[1]["input"].casefold()
 
 
 def test_openai_query_planning_treats_broad_concept_topics_as_research_dimensions() -> None:
@@ -527,9 +606,9 @@ def test_openai_query_planning_corrects_a_multi_program_building_type_anchor() -
     corrected = SearchQueryPlan(
         queries=[
             SearchQuery(
-                query="community center arrival relationships floor plan",
+                query="arrival relationships floor plan",
                 language="en",
-                strategy="project_context",
+                strategy="space_first",
                 anchors=SearchQueryAnchors(
                     building_type="community center",
                     project_condition="",
@@ -634,9 +713,8 @@ def test_query_planning_correction_receives_bounded_validation_feedback() -> Non
 
     assert result == corrected
     assert len(calls) == 2
-    assert (
-        "With one query slot in round 1, return exactly one space_first query" in calls[0]["input"]
-    )
+    assert "Required retrieval lane: spatial_discovery" in calls[0]["input"]
+    assert "Required single-query strategy: space_first" in calls[0]["input"]
     assert "Validation feedback:" in calls[1]["input"]
     assert "evidence_type" in calls[1]["input"]
 
@@ -937,6 +1015,7 @@ def test_openai_recovery_query_planning_rotates_equivalent_extension_terms() -> 
                     "community cultural center new wing public stair bridge circulation axonometric"
                 ),
                 language="en",
+                strategy="evidence_angle",
                 anchors=SearchQueryAnchors(
                     building_type="community cultural center",
                     project_condition="new wing",
@@ -984,14 +1063,14 @@ def test_openai_recovery_query_planning_rotates_equivalent_extension_terms() -> 
     assert "does not appear" in prompt
 
 
-def test_openai_recovery_query_planning_uses_the_project_context_lane() -> None:
+def test_openai_recovery_query_planning_uses_the_spatial_relationship_lane() -> None:
     calls: list[dict[str, Any]] = []
     expected = SearchQueryPlan(
         queries=[
             SearchQuery(
-                query=("new-build community sports center shared foyer circulation floor plan"),
+                query=("shared foyer circulation spatial relationships floor plan"),
                 language="en",
-                strategy="project_context",
+                strategy="space_first",
                 anchors=SearchQueryAnchors(
                     building_type="community sports center",
                     project_condition="new-build",
@@ -1031,7 +1110,8 @@ def test_openai_recovery_query_planning_uses_the_project_context_lane() -> None:
 
     assert result == expected
     prompt = calls[0]["input"]
-    assert "project_context" in prompt
+    assert "Required retrieval lane: spatial_relationships" in prompt
+    assert "Required single-query strategy: space_first" in prompt
     assert "target building type is project context" in prompt
     assert "generic public building" in prompt
     assert "local_search_no_candidates" in prompt
@@ -1202,7 +1282,7 @@ def test_late_candidate_shortage_recovery_advances_to_a_new_strategy() -> None:
         "named_precedent",
     ]
     assert len(calls) == 2
-    assert "one space_first query and one project-context query" in calls[1]["input"]
+    assert "one space_first query and one evidence query" in calls[1]["input"]
 
 
 def test_very_late_recovery_keeps_cross_type_discovery_in_space_first() -> None:
@@ -1282,6 +1362,11 @@ def test_very_late_recovery_keeps_cross_type_discovery_in_space_first() -> None:
     assert "new-build" not in spatial_query.query
     assert len(calls) == 1
     assert "Cross-type discovery stays in space_first" in calls[0]["input"]
+    assert (
+        "Use neutral professional retrieval synonyms for user-stated activities"
+        in calls[0]["input"]
+    )
+    assert "retrieval vocabulary is not a proposed design solution" in calls[0]["input"]
 
 
 def test_retired_mechanism_analogy_is_corrected_to_a_normal_search_lane() -> None:
@@ -1304,9 +1389,9 @@ def test_retired_mechanism_analogy_is_corrected_to_a_normal_search_lane() -> Non
     corrected = {
         "queries": [
             {
-                "query": "new-build coastal observatory controlled visitor sequence floor plan",
+                "query": "controlled visitor sequence spatial relationships floor plan",
                 "language": "en",
-                "strategy": "project_context",
+                "strategy": "space_first",
                 "anchors": {
                     "building_type": "coastal observatory",
                     "project_condition": "new-build",
@@ -1343,7 +1428,7 @@ def test_retired_mechanism_analogy_is_corrected_to_a_normal_search_lane() -> Non
         query_limit=1,
     )
 
-    assert result.queries[0].strategy == "project_context"
+    assert result.queries[0].strategy == "space_first"
     assert len(calls) == 2
 
 
@@ -1463,10 +1548,11 @@ def test_openai_public_query_planning_removes_xhs_source_terms_from_context() ->
         queries=[
             SearchQuery(
                 query=(
-                    "社区文化中心扩建 新旧结构界面 公共楼梯 连桥 平面图 剖面图 "
-                    "轴测图 项目说明 登录态小红书图纸来源"
+                    "新旧结构界面 公共楼梯 连桥 空间组织关系 平面图 剖面图 "
+                    "轴测图 登录态小红书图纸来源"
                 ),
                 language="zh",
+                strategy="space_first",
                 anchors=SearchQueryAnchors(
                     building_type="社区文化中心",
                     project_condition="扩建",
@@ -1509,7 +1595,10 @@ def test_openai_public_query_planning_removes_xhs_source_terms_from_context() ->
     assert "小红书" not in query
     assert "登录态" not in query
     assert "xhs" not in query.casefold()
-    for required in ("社区文化中心", "扩建", "新旧结构界面", "平面图", "剖面图", "轴测图"):
+    assert result.queries[0].anchors is not None
+    assert result.queries[0].anchors.building_type == "社区文化中心"
+    assert result.queries[0].anchors.project_condition == "扩建"
+    for required in ("新旧结构界面", "平面图", "剖面图", "轴测图"):
         assert required in query
     assert "Xiaohongshu" in calls[0]["input"]
     assert "public web query" in calls[0]["input"]
@@ -1810,6 +1899,9 @@ def test_openai_candidate_reranking_keeps_exact_typology_pages_readable_without_
     assert "semantically equivalent building type" in calls[0]["input"]
     assert "does not require a design mechanism to be known" in calls[0]["input"]
     assert "The full local page read is the evidence check" in calls[0]["input"]
+    assert "architectural_scale" in calls[0]["input"]
+    assert "one supplementary mechanism context probe" in calls[0]["input"]
+    assert "interior, room, furniture, product, or temporary installation" in calls[0]["input"]
 
 
 def test_openai_provider_analyzes_a_collected_project_page_without_another_web_search() -> None:
@@ -2257,6 +2349,20 @@ def test_deterministic_page_analysis_rejects_sentences_without_the_requested_mec
         page_text=(
             "Completed in 2020 in Cajamar, Brazil. "
             "The project creates successive surprises and an architecture of open spaces."
+        ),
+        drawings=[],
+    )
+
+    assert analysis is None
+
+
+def test_deterministic_flow_analysis_does_not_treat_service_industry_as_service_access() -> None:
+    analysis = deterministic_public_page_analysis(
+        question="后勤活动与公众到达相邻时，服务界面和装卸流线如何组织？",
+        title="Rural Renewal Project / Studio Example",
+        page_text=(
+            "The village is located near a regional scenic area. "
+            "Residents work either in the tourism service industry or in nearby mines."
         ),
         drawings=[],
     )

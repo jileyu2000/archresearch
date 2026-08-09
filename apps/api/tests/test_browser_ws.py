@@ -13,6 +13,7 @@ import archresearch_api.browser as browser_module
 from archresearch_api.browser import (
     CHROME_BOARD_URL,
     BrowserBroker,
+    BrowserCommand,
     BrowserNavigationError,
     is_allowed_chrome_board_url,
     open_board_in_chrome,
@@ -527,6 +528,70 @@ def test_broker_sends_only_enumerated_commands_and_correlates_results() -> None:
             await broker.send_command("page_metadata", {"tab_id": 1, "selector": "body"})
 
     asyncio.run(exercise())
+
+
+def test_browser_command_allows_only_bounded_xiaohongshu_note_navigation() -> None:
+    command = BrowserCommand.model_validate(
+        {
+            "action": "open_xiaohongshu_note",
+            "payload": {
+                "search_url": (
+                    "https://www.xiaohongshu.com/search_result?keyword=section"
+                    "&source=web_search_result_notes"
+                ),
+                "note_url": "https://www.xiaohongshu.com/explore/note-42?xsec_token=visible",
+            },
+        }
+    )
+
+    assert command.action == "open_xiaohongshu_note"
+    assert command.payload == {
+        "search_url": (
+            "https://www.xiaohongshu.com/search_result?keyword=section"
+            "&source=web_search_result_notes"
+        ),
+        "note_url": "https://www.xiaohongshu.com/explore/note-42?xsec_token=visible",
+    }
+
+    search_result_note = BrowserCommand.model_validate(
+        {
+            "action": "open_xiaohongshu_note",
+            "payload": {
+                "search_url": "https://www.xiaohongshu.com/search_result?keyword=section",
+                "note_url": "https://www.xiaohongshu.com/search_result/68da3657000000001400aedf",
+            },
+        }
+    )
+    assert search_result_note.payload["note_url"] == (
+        "https://www.xiaohongshu.com/search_result/68da3657000000001400aedf"
+    )
+
+    invalid_payloads = [
+        {
+            "search_url": "https://www.xiaohongshu.com/explore",
+            "note_url": "https://www.xiaohongshu.com/explore/note-42",
+        },
+        {
+            "search_url": "https://www.xiaohongshu.com/search_result?keyword=section",
+            "note_url": "https://example.com/explore/note-42",
+        },
+        {
+            "search_url": "https://www.xiaohongshu.com/search_result?keyword=section",
+            "note_url": "https://www.xiaohongshu.com/explore/",
+        },
+        {
+            "search_url": "https://www.xiaohongshu.com/search_result?keyword=section",
+            "note_url": "https://www.xiaohongshu.com/search_result/",
+        },
+    ]
+    for payload in invalid_payloads:
+        with pytest.raises(ValidationError):
+            BrowserCommand.model_validate(
+                {
+                    "action": "open_xiaohongshu_note",
+                    "payload": payload,
+                }
+            )
 
 
 def test_broker_rejects_open_url_when_any_resolved_address_is_not_global() -> None:

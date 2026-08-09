@@ -214,6 +214,28 @@ describe("content operations", () => {
     ).toEqual({ opened: false });
   });
 
+  it("matches a note by its safe path when the card adds a query token", () => {
+    window.history.replaceState({}, "", "/search_result?keyword=architecture");
+    document.body.innerHTML = `
+      <section class="note-item">
+        <a id="target" href="https://www.xiaohongshu.com/search_result/note-42?xsec_token=visible">
+          精细线稿剖面图
+        </a>
+      </section>
+    `;
+    const target = document.querySelector<HTMLAnchorElement>("#target")!;
+    const click = vi.fn((event: Event) => event.preventDefault());
+    target.addEventListener("click", click);
+
+    expect(
+      executeContentCommand(document, window, {
+        action: "open_xiaohongshu_note",
+        note_url: "https://www.xiaohongshu.com/search_result/note-42",
+      }),
+    ).toEqual({ opened: true });
+    expect(click).toHaveBeenCalledOnce();
+  });
+
   it("associates deeply nested media with the bounded semantic card link", () => {
     document.body.innerHTML = `
       <section class="note-item">

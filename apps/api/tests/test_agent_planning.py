@@ -293,6 +293,74 @@ def test_new_library_fallback_query_keeps_condition_from_the_research_question()
     assert "adaptive reuse" not in query
 
 
+def test_entry_operations_fallback_expands_explicit_activities_safely() -> None:
+    query = build_public_search_query(
+        ResearchGoal.precedent_research,
+        "en",
+        "在客流与后勤活动随时段变化的案例中，入口空间如何容纳不同流线的动态使用需求？",
+        4,
+        research_question="入口人车冲突时，落客、步行和后勤流线怎样重组？",
+        trusted_domain="dezeen.com",
+    )
+
+    explicit_dimensions = (
+        "passenger drop-off",
+        "pedestrian access",
+        "back-of-house",
+        "operating periods",
+    )
+    assert 2 <= sum(term in query for term in explicit_dimensions) <= 3
+    assert "project description" in query
+    assert "circulation circulation" not in query
+    assert "loading dock" not in query
+    assert "service court" not in query
+
+
+def test_public_fallback_extracts_user_dimensions_and_rotates_generic_lanes() -> None:
+    subquestion = (
+        "How can visitors, staff, deliveries, and changing operating periods "
+        "relate across shared public spaces?"
+    )
+    queries = [
+        build_public_search_query(
+            ResearchGoal.precedent_research,
+            "en",
+            subquestion,
+            round_number,
+            research_question="Public building precedent research",
+            trusted_domain="archdaily.com",
+        )
+        for round_number in range(1, 8)
+    ]
+
+    assert len(set(queries)) == 7
+    assert "visitor" in queries[0]
+    assert "spatial relationships" in queries[0]
+    assert "spatial organization" in queries[1]
+    assert "operational evidence" in queries[2]
+    assert "project description" in queries[3]
+    assert "spatial organization" in queries[4]
+    assert "operational evidence" in queries[5]
+    assert "project description" in queries[6]
+    assert all(subquestion not in query for query in queries)
+    assert "management rules" not in queries[0]
+    assert "post-occupancy evaluation" not in queries[0]
+
+
+def test_drawing_fallback_query_does_not_inherit_precedent_flow_keywords() -> None:
+    query = build_public_search_query(
+        ResearchGoal.visual_reference_search,
+        "en",
+        "剖面图的线型、构图和留白怎样形成清晰表达？",
+        1,
+        research_question="帮我找几种剖面图风格",
+    )
+
+    assert "architecture drawing visual reference" in query
+    assert "service entrance" not in query
+    assert "flexible circulation" not in query
+
+
 def test_broad_early_inspiration_fallback_search_uses_neutral_research_dimensions() -> None:
     query = build_public_search_query(
         ResearchGoal.precedent_research,

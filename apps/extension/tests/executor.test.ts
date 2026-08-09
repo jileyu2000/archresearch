@@ -126,6 +126,30 @@ describe("browser command executor", () => {
     });
   });
 
+  it("accepts the canonical detail path after a search-result click", async () => {
+    const port = makeBrowserPort();
+    const searchUrl =
+      "https://www.xiaohongshu.com/search_result?keyword=architecture";
+    const noteUrl = "https://www.xiaohongshu.com/search_result/note-42";
+    const canonicalUrl =
+      "https://www.xiaohongshu.com/explore/note-42?xsec_token=visible";
+    port.createTab.mockResolvedValue({ id: 42, url: searchUrl });
+    port.getTab
+      .mockResolvedValueOnce({ id: 42, url: searchUrl })
+      .mockResolvedValue({ id: 42, url: canonicalUrl });
+    port.sendContentCommand.mockResolvedValue({ opened: true });
+    const executor = new BrowserCommandExecutor(port);
+
+    await expect(
+      executor.execute(
+        command("open_xiaohongshu_note", {
+          search_url: searchUrl,
+          note_url: noteUrl,
+        }),
+      ),
+    ).resolves.toEqual({ tab_id: 42, url: canonicalUrl });
+  });
+
   it("waits for a late-rendered Xiaohongshu note link before failing", async () => {
     const port = makeBrowserPort();
     const searchUrl =

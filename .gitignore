@@ -32,6 +32,7 @@ test-results/
 .artifacts/coverage/
 .artifacts/*.log
 .artifacts/build/
+.artifacts/ci/
 .artifacts/qa/
 .artifacts/releases/
 apps/api/.artifacts/
@@ -43,6 +44,7 @@ apps/extension/.impeccable/
 
 # Planning companion
 .superpowers/
+.planning/
 
 # Codex scratch and generated handoff artifacts
 work/
