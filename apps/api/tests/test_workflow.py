@@ -736,6 +736,7 @@ def test_article_ready_project_counts_distinct_drawings_from_its_verified_source
             project_name: str,
             evidence_url: str,
             supporting_url: str,
+            asset_suffix: str = "",
         ) -> None:
             context = f"{project_name} 的项目条件。"
             mechanism = f"{project_name} 的空间机制。"
@@ -744,7 +745,7 @@ def test_article_ready_project_counts_distinct_drawings_from_its_verified_source
                 project_name=project_name,
                 asset_type=ArchitectureAssetType.section.value,
                 source_url=evidence_url,
-                image_url=f"{evidence_url}/section.jpg",
+                image_url=f"{evidence_url}/section{asset_suffix}.jpg",
                 result_tier=ResultTier.partial.value,
                 relevance=3,
                 subquestion_ids=[subquestion_id],
@@ -764,7 +765,7 @@ def test_article_ready_project_counts_distinct_drawings_from_its_verified_source
                 project_name=project_name,
                 asset_type=ArchitectureAssetType.axonometric.value,
                 source_url=supporting_url,
-                image_url=f"{supporting_url}/axonometric.jpg",
+                image_url=f"{supporting_url}/axonometric{asset_suffix}.jpg",
                 result_tier=ResultTier.partial.value,
                 relevance=3,
             )
@@ -788,6 +789,7 @@ def test_article_ready_project_counts_distinct_drawings_from_its_verified_source
 
         same_source = "https://studio.example/verified-project"
         add_project_assets("Verified project", same_source, same_source)
+        add_project_assets("Verified project", same_source, same_source, "-alternate")
         add_project_assets(
             "Name collision project",
             "https://studio.example/name-collision",
@@ -799,6 +801,7 @@ def test_article_ready_project_counts_distinct_drawings_from_its_verified_source
 
     assert coverage["project_count"] == 2
     assert coverage["multi_asset_projects"] == 1
+    assert coverage["projects_per_subquestion"] == {subquestion_id: 2}
 
 
 def test_partial_asset_without_a_source_claim_does_not_complete_its_subquestion(

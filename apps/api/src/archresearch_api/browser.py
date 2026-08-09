@@ -33,6 +33,7 @@ INSTALLED_CHROME_BOARD_URL = installed_chrome_board_url(8000)
 
 BrowserAction = Literal[
     "open_url",
+    "open_xiaohongshu_note",
     "wait",
     "page_metadata",
     "page_snapshot",
@@ -111,6 +112,45 @@ class OpenUrlPayload(StrictModel):
         return self
 
 
+def _is_safe_xiaohongshu_url(value: str, *, path_prefix: str, exact_path: bool = False) -> bool:
+    try:
+        parsed = urlparse(value)
+    except ValueError:
+        return False
+    hostname = (parsed.hostname or "").rstrip(".").lower()
+    if (
+        parsed.scheme != "https"
+        or parsed.username is not None
+        or parsed.password is not None
+        or (hostname != "xiaohongshu.com" and not hostname.endswith(".xiaohongshu.com"))
+    ):
+        return False
+    if exact_path:
+        return parsed.path.rstrip("/") == path_prefix
+    remainder = (
+        parsed.path[len(path_prefix) + 1 :] if parsed.path.startswith(path_prefix + "/") else ""
+    )
+    return bool(remainder) and not remainder.startswith("/")
+
+
+class OpenXiaohongshuNotePayload(StrictModel):
+    search_url: str = Field(min_length=1, max_length=4_000)
+    note_url: str = Field(min_length=1, max_length=4_000)
+
+    @model_validator(mode="after")
+    def require_approved_urls(self) -> OpenXiaohongshuNotePayload:
+        if not _is_safe_xiaohongshu_url(
+            self.search_url, path_prefix="/search_result", exact_path=True
+        ):
+            raise ValueError("Xiaohongshu note navigation requires a safe search URL")
+        if not any(
+            _is_safe_xiaohongshu_url(self.note_url, path_prefix=prefix)
+            for prefix in ("/explore", "/discovery/item", "/search_result")
+        ):
+            raise ValueError("Xiaohongshu note navigation requires a safe note URL")
+        return self
+
+
 class WaitPayload(StrictModel):
     milliseconds: int = Field(ge=0, le=10_000)
 
@@ -157,6 +197,7 @@ class TypeSearchQueryPayload(TabPayload):
 
 PAYLOAD_ADAPTERS: Mapping[BrowserAction, TypeAdapter[Any]] = {
     "open_url": TypeAdapter(OpenUrlPayload),
+    "open_xiaohongshu_note": TypeAdapter(OpenXiaohongshuNotePayload),
     "wait": TypeAdapter(WaitPayload),
     "page_metadata": TypeAdapter(TabPayload),
     "page_snapshot": TypeAdapter(TabPayload),

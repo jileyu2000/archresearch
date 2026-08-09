@@ -28,8 +28,8 @@ $workflowContracts = @(
     @{ Pattern = '\./scripts/test-windows-installer-package\.ps1'; Message = "CI must install-smoke and uninstall the packaged Windows application." }
     @{ Pattern = '\./scripts/build-extension-package\.ps1'; Message = "CI must build the separately distributed Chrome extension package." }
     @{ Pattern = 'actions/upload-artifact@v4'; Message = "CI must upload release artifacts." }
-    @{ Pattern = 'ArchResearch-Windows-x64-Setup-v2\.2\.10\.exe'; Message = "CI must publish the clearly named v2.2.10 Windows installer artifact." }
-    @{ Pattern = 'archresearch-chrome-extension-only-v2\.2\.10\.zip'; Message = "CI must keep the clearly named v2.2.10 Chrome extension package separate." }
+    @{ Pattern = 'ArchResearch-Windows-x64-Setup-v2\.3\.0\.exe'; Message = "CI must publish the clearly named v2.3.0 Windows installer artifact." }
+    @{ Pattern = 'archresearch-chrome-extension-only-v2\.3\.0\.zip'; Message = "CI must keep the clearly named v2.3.0 Chrome extension package separate." }
 )
 foreach ($contract in $workflowContracts) {
     if ($workflow -notmatch $contract.Pattern) {
@@ -107,7 +107,7 @@ if ($verifyScript -match '@archresearch/(web|edge)|verify-web|wrangler') {
     throw "The authoritative local gate must not invoke the retired Web or Edge runtime."
 }
 
-$expectedVersion = "2.2.10"
+$expectedVersion = "2.3.0"
 $boardPackage = Get-Content -Raw -LiteralPath (Join-Path $workspace "apps\board\package.json") |
     ConvertFrom-Json
 $extensionPackage = Get-Content -Raw -LiteralPath (Join-Path $workspace "apps\extension\package.json") |
@@ -139,7 +139,7 @@ foreach ($versionSource in @($pythonProject, $pythonPackage, $pythonApp)) {
 $readme = Get-Content -Raw -LiteralPath (Join-Path $workspace "README.md")
 foreach ($readmeContract in @(
     'Windows 11 \+ Google Chrome',
-    'ArchResearch-Windows-x64-Setup-v2\.2\.10\.exe',
+    'ArchResearch-Windows-x64-Setup-v2\.3\.0\.exe',
     'Windows 安装器不会捆绑扩展',
     '不需要另外安装 Python 或 Node\.js',
     'OpenAI-compatible API 地址和 API Key',
@@ -152,8 +152,8 @@ foreach ($readmeContract in @(
     '## 本地数据与安全',
     '真实项目和来源链接',
     '图纸类型和视觉方向',
-    '\[下载 Windows 安装版 v2\.2\.10\]',
-    '\[下载 Chrome 扩展 v2\.2\.10\]',
+    '\[下载 Windows 安装版 v2\.3\.0\]',
+    '\[下载 Chrome 扩展 v2\.3\.0\]',
     '\[Chrome 扩展安装说明\]\(docs/chrome-extension\.md\)',
     '\[从源码运行与维护\]\(docs/development\.md\)'
 )) {

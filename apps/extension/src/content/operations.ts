@@ -224,7 +224,7 @@ function openXiaohongshuNote(
     if (!link) continue;
     try {
       const candidate = new URL(link.href, view.location.href);
-      if (candidate.href !== target.href) continue;
+      if (!isSameSafeXiaohongshuNotePath(candidate, target)) continue;
       link.click();
       return { opened: true };
     } catch {
@@ -232,6 +232,14 @@ function openXiaohongshuNote(
     }
   }
   return { opened: false };
+}
+
+function isSameSafeXiaohongshuNotePath(actual: URL, target: URL): boolean {
+  return (
+    isSafeXiaohongshuNoteUrl(actual.href) &&
+    actual.origin === target.origin &&
+    actual.pathname.replace(/\/+$/u, "") === target.pathname.replace(/\/+$/u, "")
+  );
 }
 
 function readXiaohongshuSessionStatus(

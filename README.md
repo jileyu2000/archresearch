@@ -1,7 +1,7 @@
 # ArchResearch 建筑研究工作台
 
 [![verify](https://github.com/jileyu2000/archresearch/actions/workflows/verify.yml/badge.svg)](https://github.com/jileyu2000/archresearch/actions/workflows/verify.yml)
-![version](https://img.shields.io/badge/version-2.2.10-2F5BFF)
+![version](https://img.shields.io/badge/version-2.3.0-2F5BFF)
 ![platform](https://img.shields.io/badge/platform-Windows%2011-171A18)
 
 > 从一个还没想清楚的设计问题出发，找到真实案例、核对原始来源，整理成能继续用于方案的研究板。
@@ -10,25 +10,32 @@ ArchResearch 面向建筑学生和青年设计师，处理方案前期最费时�
 
 它会保存研究过程、来源、图片、收藏和未完成结果。所有数据留在自己的电脑上，之后可以继续研究、比较案例或备份迁移。
 
+### v2.3.0 更新
+
+- 建筑设计研究与图纸灵感使用各自独立的检索和执行路径，互不降级或混用来源。
+- 建筑研究会从子问题的空间关系、证据角度和恢复阶段生成互补检索词，提高案例召回与项目多样性，同时继续保留正文证据门槛。
+- 修复图纸灵感中的浏览器标签时序、窗口状态和笔记路径识别问题，减少空结果、错误素材和流程卡住。
+- 每个子问题的案例数量只作为补查提示，不是完成研究的硬配额；已有结果和证据缺口都会如实保留。
+
 ![ArchResearch 首页](.artifacts/portfolio/current-2026-07-28/home-desktop.png)
 
 ## 下载与安装
 
 ArchResearch 当前支持 **Windows 11 + Google Chrome**。
 
-[下载 Windows 安装版 v2.2.10](https://github.com/jileyu2000/archresearch/releases/download/v2.2.10/ArchResearch-Windows-x64-Setup-v2.2.10.exe)
+[下载 Windows 安装版 v2.3.0](https://github.com/jileyu2000/archresearch/releases/download/v2.3.0/ArchResearch-Windows-x64-Setup-v2.3.0.exe)
 
-1. 下载并运行 `ArchResearch-Windows-x64-Setup-v2.2.10.exe`。
+1. 下载并运行 `ArchResearch-Windows-x64-Setup-v2.3.0.exe`。
 2. 首次启动时填写自己的 OpenAI-compatible API 地址和 API Key，再从接口返回的模型列表中选择模型。
 3. 以后从桌面或开始菜单打开 ArchResearch，研究工作台会自动显示在 Chrome 中。
 
-安装器已经包含本地服务、工作界面、数据库和运行环境，不需要另外安装 Python 或 Node.js。安装程序暂未签名，Windows 可能显示 SmartScreen 或“未知发布者”，可以在 [v2.2.10 Release](https://github.com/jileyu2000/archresearch/releases/tag/v2.2.10) 核对附件和 SHA-256。
+安装器已经包含本地服务、工作界面、数据库和运行环境，不需要另外安装 Python 或 Node.js。安装程序暂未签名，Windows 可能显示 SmartScreen 或“未知发布者”，可以在 [v2.3.0 Release](https://github.com/jileyu2000/archresearch/releases/tag/v2.3.0) 核对附件和 SHA-256。
 
 ### 使用图纸灵感
 
 “图纸灵感”需要单独安装 Chrome 扩展。Windows 安装器不会捆绑扩展。
 
-[下载 Chrome 扩展 v2.2.10](https://github.com/jileyu2000/archresearch/releases/download/v2.2.10/archresearch-chrome-extension-only-v2.2.10.zip) · [查看安装说明](docs/chrome-extension.md)
+[下载 Chrome 扩展 v2.3.0](https://github.com/jileyu2000/archresearch/releases/download/v2.3.0/archresearch-chrome-extension-only-v2.3.0.zip) · [查看安装说明](docs/chrome-extension.md)
 
 扩展装好后，从 ArchResearch 进入“图纸灵感”即可。若尚未登录小红书，工作台会打开登录页并等待；登录完成后会自动继续检测。
 

@@ -10,6 +10,7 @@ from time import monotonic
 from typing import Literal, NamedTuple, TypedDict
 from urllib.parse import unquote, urlparse
 
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -77,6 +78,8 @@ from .providers import (
     SearchQuery,
     SearchQueryPlan,
     SearchQueryPlanningProvider,
+    architecture_retrieval_lane,
+    architecture_retrieval_strategy,
     deterministic_public_page_analysis,
     explicit_project_names,
     is_recoverable_public_page_analysis_error,
@@ -399,13 +402,18 @@ def _execute_run_with_policy(
                 )
             )
         public_queries_by_subquestion: dict[str, list[str]] = {}
+        public_queries_seen: set[str] = set()
         public_search_feedback_by_subquestion: dict[str, list[str]] = {}
         public_search_low_yield_domains_by_subquestion: dict[str, set[str]] = {}
         for prior_query in prior_queries:
             if prior_query.subquestion_id:
-                public_queries_by_subquestion.setdefault(prior_query.subquestion_id, []).extend(
+                query_parts = [
                     part.strip() for part in prior_query.query.split(" || ") if part.strip()
+                ]
+                public_queries_by_subquestion.setdefault(prior_query.subquestion_id, []).extend(
+                    query_parts
                 )
+                public_queries_seen.update(query_parts)
         excluded_public_urls = set() if retrying_without_coverage else set(prior_source_urls)
         excluded_project_keys = (
             set()
@@ -522,14 +530,37 @@ def _execute_run_with_policy(
                 {"status": "skipped", "error_type": "BrowserUnavailableError"},
                 tool="xiaohongshu_search",
             )
-        for query_index, (round_number, language, subquestion_id, query) in enumerate(
-            queries, start=1
-        ):
+        query_offset = 0
+        while query_offset < len(queries):
             current_coverage = calculate_coverage(
                 db,
                 run_id,
                 require_article_analysis=require_article_analysis,
             )
+            round_number = queries[query_offset][0]
+            round_start = query_offset == 0 or queries[query_offset - 1][0] != round_number
+            if (
+                round_start
+                and path.uses_precedent_sources
+                and completion_satisfied(current_coverage)
+            ):
+                round_end = query_offset
+                while round_end < len(queries) and queries[round_end][0] == round_number:
+                    round_end += 1
+                round_queries = queries[query_offset:round_end]
+                projects_per_subquestion = current_coverage.get("projects_per_subquestion")
+                round_subquestion_ids = {item[2] for item in round_queries}
+                if (
+                    projects_per_subquestion is not None
+                    and round_subquestion_ids <= projects_per_subquestion.keys()
+                ):
+                    queries[query_offset:round_end] = sorted(
+                        round_queries,
+                        key=lambda item: projects_per_subquestion[item[2]],
+                    )
+            round_number, language, subquestion_id, query = queries[query_offset]
+            query_offset += 1
+            query_index = query_offset
             coverage_incomplete = (
                 current_coverage["covered_subquestions"] < current_coverage["subquestion_count"]
             )
@@ -759,15 +790,23 @@ def _execute_run_with_policy(
                 ]
                 query_limit = (
                     2
-                    if any(
-                        reason
-                        in {
-                            "local_search_no_candidates",
-                            "no_new_local_candidates",
-                            "candidate_reranking_rejected_all",
-                            "public_page_analysis_incomplete",
-                        }
-                        for reason in stage_failure_reasons
+                    if path.uses_precedent_sources
+                    and (
+                        round_number == 1
+                        or (
+                            normal_rounds == 1
+                            and round_number > normal_rounds
+                            and any(
+                                reason
+                                in {
+                                    "local_search_no_candidates",
+                                    "no_new_local_candidates",
+                                    "candidate_reranking_rejected_all",
+                                    "public_page_analysis_incomplete",
+                                }
+                                for reason in stage_failure_reasons
+                            )
+                        )
                     )
                     else 1
                 )
@@ -804,7 +843,10 @@ def _execute_run_with_policy(
                     round_number=round_number,
                     preferred_language=preferred_language,
                     research_context=research_context,
-                    previous_queries=previous_public_queries,
+                    previous_queries=[
+                        *previous_public_queries,
+                        *sorted(public_queries_seen),
+                    ],
                     excluded_sources=sorted(excluded_public_urls),
                     excluded_projects=sorted(excluded_search_project_names),
                     failure_reasons=failure_reasons,
@@ -836,6 +878,7 @@ def _execute_run_with_policy(
                 )
                 excluded_search_project_names.update(structured_project_names)
                 previous_public_queries.extend(planned_public_queries)
+                public_queries_seen.update(planned_public_queries)
                 _update_query_attempt_text(
                     db,
                     query_attempt_id,
@@ -1308,15 +1351,32 @@ def _execute_run_with_policy(
                                 browser_inspection_failed = True
                             else:
                                 public_page_inspection_failed = True
+                        browser_summary: dict[str, object] = {
+                            "source_url": _redacted_trace_url(source.url),
+                            "status": "skipped",
+                            "error_type": type(exc).__name__,
+                        }
+                        if isinstance(exc, ValidationError):
+                            validation_errors = exc.errors(
+                                include_input=False,
+                                include_url=False,
+                            )
+                            if validation_errors:
+                                first_error = validation_errors[0]
+                                browser_summary.update(
+                                    {
+                                        "validation_model": exc.title,
+                                        "validation_path": ".".join(
+                                            str(part) for part in first_error["loc"]
+                                        ),
+                                        "validation_error": first_error["type"],
+                                    }
+                                )
                         checkpoint(
                             db,
                             run_id,
                             RunStatus.inspecting,
-                            {
-                                "source_url": _redacted_trace_url(source.url),
-                                "status": "skipped",
-                                "error_type": type(exc).__name__,
-                            },
+                            browser_summary,
                             tool="browser",
                         )
 
@@ -1783,7 +1843,9 @@ def _execute_run_with_policy(
             if enrichment_satisfied(coverage) and visual_completion_allowed:
                 stop_reason = "coverage_satisfied"
                 break
-            round_finished = query_index == len(queries) or queries[query_index][0] != round_number
+            round_finished = (
+                query_offset == len(queries) or queries[query_offset][0] != round_number
+            )
             if (
                 round_finished
                 and round_number >= normal_rounds + recovery_rounds
@@ -2124,8 +2186,8 @@ def _try_search_query_plan(
                 tool="search_query_planning",
             )
             return plan
-    normalized_previous = {item.casefold() for item in previous_queries}
-    deterministic_query = fallback_query
+    normalized_previous = {" ".join(item.casefold().split()) for item in previous_queries}
+    deterministic_query = " ".join(fallback_query.split())
     if deterministic_query.casefold() in normalized_previous:
         deterministic_query = (
             f"{fallback_query[:430].rstrip()} alternative evidence round {round_number}"
@@ -2133,11 +2195,13 @@ def _try_search_query_plan(
     fallback_language: Literal["en", "zh"] = (
         "zh" if preferred_language == "zh" or not deterministic_query.isascii() else "en"
     )
+    fallback_strategy = architecture_retrieval_strategy(architecture_retrieval_lane(round_number))
     fallback = SearchQueryPlan(
         queries=[
             SearchQuery(
                 query=deterministic_query,
                 language=fallback_language,
+                strategy=fallback_strategy,
             )
         ]
     )
@@ -2152,6 +2216,7 @@ def _try_search_query_plan(
             "subquestion_id": subquestion.id,
             "round": round_number,
             "query_count": len(fallback.queries),
+            "strategies": [item.strategy for item in fallback.queries],
         },
         tool="search_query_planning",
     )
@@ -2333,9 +2398,41 @@ def _try_candidate_reranking(
                 ),
                 reverse=True,
             )
+            mechanism_context_assessments = sorted(
+                (
+                    item
+                    for item in eligible_assessments
+                    if item.architectural_scale
+                    and item.spatial_relevance == 1
+                    and item.source_trust >= 3
+                ),
+                key=lambda item: (
+                    item.relevance,
+                    item.drawing_availability,
+                    item.source_trust,
+                    item.typology_match,
+                ),
+                reverse=True,
+            )
             retained_assessments = spatial_assessments[:4]
             if len(retained_assessments) < 4 and type_context_assessments:
                 retained_assessments.append(type_context_assessments[0])
+            retained_candidate_ids = {item.candidate_id for item in retained_assessments}
+            if len(retained_assessments) < 4:
+                mechanism_probe = next(
+                    (
+                        item
+                        for item in mechanism_context_assessments
+                        if item.candidate_id not in retained_candidate_ids
+                    ),
+                    None,
+                )
+                if mechanism_probe is not None:
+                    retained_assessments.append(mechanism_probe)
+            type_context_candidate_ids = {item.candidate_id for item in type_context_assessments}
+            mechanism_context_candidate_ids = {
+                item.candidate_id for item in mechanism_context_assessments
+            }
             selected = [
                 candidate_sources[item.candidate_id]
                 for item in retained_assessments
@@ -2361,13 +2458,27 @@ def _try_candidate_reranking(
                         [item for item in retained_assessments if item.typology_match < 2]
                     ),
                     "type_context_probe_count": len(
-                        [item for item in retained_assessments if item.spatial_relevance < 2]
+                        [
+                            item
+                            for item in retained_assessments
+                            if item.candidate_id in type_context_candidate_ids
+                        ]
+                    ),
+                    "mechanism_context_probe_count": len(
+                        [
+                            item
+                            for item in retained_assessments
+                            if item.candidate_id in mechanism_context_candidate_ids
+                            and item.candidate_id not in type_context_candidate_ids
+                        ]
                     ),
                 },
                 tool="candidate_reranking",
             )
             return selected
-    space_first_planned = any(item.strategy == "space_first" for item in planned_queries)
+    space_first_planned = any(
+        item.strategy == "space_first" and item.anchors is not None for item in planned_queries
+    )
     fallback_relevance_context = _candidate_fallback_relevance_context(
         planned_queries,
         relevance_context,
@@ -2417,7 +2528,7 @@ def _try_candidate_reranking(
             ),
         ),
         reverse=True,
-    )[: 4 if provider is None else 2]
+    )[:4]
     checkpoint(
         db,
         run_id,
@@ -4028,7 +4139,6 @@ def _persist_public_page_analysis(
             selected_urls = {audit_drawing.image_url}
     if not selected_urls and not has_supported_analysis:
         return 0
-
     with db.session_factory() as session:
         source_candidates = list(
             session.scalars(
@@ -4039,6 +4149,16 @@ def _persist_public_page_analysis(
                 )
                 .order_by(AssetCandidate.rank_index, AssetCandidate.created_at)
             )
+        )
+        verified_project_name = next(
+            (
+                candidate.project_name.strip()
+                for candidate in source_candidates
+                if candidate.project_name.strip() and candidate.project_name.strip() != "待核验项目"
+            ),
+            _project_display_name(
+                page.title.strip() or source.title.strip() or analysis.project_name_zh.strip()
+            ),
         )
         candidates = [
             candidate for candidate in source_candidates if candidate.image_url in selected_urls
@@ -4057,18 +4177,11 @@ def _persist_public_page_analysis(
                         SourcePage.url == source.url,
                     )
                 )
-                project_name = (
-                    source_candidates[0].project_name
-                    if source_candidates
-                    else _project_display_name(
-                        page.title.strip() or source.title.strip() or "项目正文案例"
-                    )
-                )
                 missing_candidates = [
                     AssetCandidate(
                         run_id=run_id,
                         source_page_id=source_page_id,
-                        project_name=project_name,
+                        project_name=verified_project_name,
                         asset_type=drawing.asset_type.value,
                         source_url=source.url,
                         image_url=drawing.image_url,
@@ -4177,6 +4290,7 @@ def _persist_public_page_analysis(
         changed = 0
         for candidate in candidates:
             before = (
+                candidate.project_name,
                 candidate.project_context,
                 candidate.design_mechanism,
                 tuple(candidate.transfer_strategy or []),
@@ -4186,6 +4300,8 @@ def _persist_public_page_analysis(
                 tuple(candidate.subquestion_ids or []),
                 dict((candidate.subquestion_analysis or {}).get(subquestion_id, {})),
             )
+            if candidate.project_name.strip() == "待核验项目":
+                candidate.project_name = verified_project_name
             if supported_context and not candidate.project_context:
                 candidate.project_context = supported_context
             if supported_mechanism and not candidate.design_mechanism:
@@ -4268,6 +4384,7 @@ def _persist_public_page_analysis(
                         )
                     )
             after = (
+                candidate.project_name,
                 candidate.project_context,
                 candidate.design_mechanism,
                 tuple(candidate.transfer_strategy or []),

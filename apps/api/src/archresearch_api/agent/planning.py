@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from typing import NamedTuple
 
 from ..providers import (
     ResearchPlanningProvider,
     ResearchProvider,
+    architecture_retrieval_lane,
     requested_visual_drawing_type,
     visual_style_directions,
 )
@@ -46,7 +48,9 @@ _EXPLICIT_PUBLIC_ISSUE_VOCABULARY = (
     (("保留结构", "旧结构", "retained structure"), "保留结构", "retained structure"),
     (("屋顶结构", "roof structure"), "屋顶结构", "roof structure"),
     (("柱网", "column grid"), "柱网", "column grid"),
-    (("桁架", "truss"), "桁架", "truss"),
+    (("保留柱", "retained columns"), "保留柱", "retained columns"),
+    (("楼板", "slab", "slabs"), "楼板", "slabs"),
+    (("桁架", "truss", "trusses"), "桁架", "trusses"),
     (("大跨", "long-span", "long span"), "大跨", "long-span"),
     (("天窗", "skylight"), "天窗", "skylight"),
     (("高侧窗", "侧高窗", "clerestory"), "高侧窗", "clerestory"),
@@ -61,6 +65,37 @@ _EXPLICIT_PUBLIC_ISSUE_VOCABULARY = (
         "公众流线",
         "visitor circulation",
     ),
+    (("入口", "entrance"), "入口", "entrance"),
+    (("门厅", "lobby"), "门厅", "lobby"),
+    (("前场", "forecourt"), "前场", "forecourt"),
+    (("访客", "visitor", "visitors"), "访客", "visitor"),
+    (("车辆", "vehicle", "vehicles"), "车辆", "vehicle"),
+    (("工作人员", "staff", "staff members"), "工作人员", "staff"),
+    (("人车", "pedestrian vehicle"), "人车关系", "pedestrian vehicle"),
+    (("服务活动", "service activity", "service activities"), "服务活动", "service activity"),
+    (("共享", "shared"), "共享", "shared"),
+    (("变化状态", "changing use states", "changing states"), "变化状态", "changing use states"),
+    (
+        (
+            "冲突节点",
+            "冲突点",
+            "人车冲突",
+            "流线冲突",
+            "conflict node",
+            "conflict point",
+            "pedestrian vehicle conflict",
+            "circulation conflict",
+        ),
+        "冲突节点",
+        "conflict points",
+    ),
+    (("落客", "上下客", "drop-off", "drop off"), "落客", "passenger drop-off"),
+    (("步行", "行人", "pedestrian"), "步行到达", "pedestrian access"),
+    (("车辆流线", "车流", "vehicle circulation"), "车辆流线", "vehicle circulation"),
+    (("装卸", "配送", "delivery", "deliveries"), "配送装卸", "service deliveries"),
+    (("等候", "排队", "waiting", "queuing"), "等候排队", "waiting queuing"),
+    (("核验", "检票", "check-in", "screening"), "入口核验", "entry screening"),
+    (("时段", "高峰", "峰值", "operating hours", "peak"), "时段变化", "operating periods"),
     (("工作人员流线", "staff circulation"), "工作人员流线", "staff circulation"),
     (("后勤流线", "后勤", "back-of-house"), "后勤流线", "back-of-house circulation"),
     (("服务廊道", "service corridor"), "服务廊道", "service corridor"),
@@ -76,7 +111,7 @@ _EXPLICIT_PUBLIC_ISSUE_VOCABULARY = (
     (("屋顶加建", "roof extension"), "屋顶加建", "roof extension"),
     (("竖向交通", "vertical circulation"), "竖向交通", "vertical circulation"),
     (("垂直关系", "竖向关系", "vertical relationship"), "竖向关系", "vertical relationships"),
-    (("连桥", "bridge"), "连桥", "bridge"),
+    (("连桥", "bridge", "bridges"), "连桥", "bridges"),
     (("开洞", "opening"), "开洞", "openings"),
     (("退让", "setback"), "退让", "setbacks"),
     (("声学分区", "acoustic zoning"), "声学分区", "acoustic zoning"),
@@ -298,20 +333,36 @@ def build_public_search_query(
     )[min(round_number - 1, 4)]
     full_scope = f"{research_question} {subquestion} {research_context}"
     early_inspiration = _is_broad_early_inspiration(f"{research_question} {research_context}")
+    normalized_subquestion = subquestion.casefold()
     issue_focus = _public_issue_focus(
         full_scope if early_inspiration else subquestion,
         query_language,
+        round_number,
+        context="" if early_inspiration else f"{research_question} {research_context}",
     )
     typology_focus = "" if early_inspiration else _public_typology_focus(full_scope, query_language)
+    has_explicit_issue_terms = bool(
+        _explicit_public_issue_terms(normalized_subquestion, query_language)
+    )
+    declared_scope = (
+        _concise_declared_project_scope(research_question)
+        if typology_focus
+        in {"", "new-build", "adaptive reuse", "extension", "architecture project"}
+        else ""
+    )
     if query_language == "zh":
-        source_focus = "" if early_inspiration else focus
+        source_focus = (
+            declared_scope if has_explicit_issue_terms else "" if early_inspiration else focus
+        )
         query = (
             f"建筑项目图纸：{issue_focus} {typology_focus} {source_focus} "
             f"{zh_terms} {round_focus[0]}"
         )
     else:
         source_focus = (
-            ""
+            declared_scope
+            if has_explicit_issue_terms
+            else ""
             if early_inspiration
             else focus
             if focus.isascii()
@@ -326,10 +377,11 @@ def build_public_search_query(
             f"architecture project drawings: {issue_focus} {typology_focus} {source_focus} "
             f"{en_terms} {round_focus[1]}"
         )
+    query_length = 300 if round_number >= 3 else 500
     if trusted_domain:
         suffix = f" site:{trusted_domain}"
-        return f"{query[: 500 - len(suffix)].rstrip()}{suffix}"
-    return query[:500]
+        return f"{query[: query_length - len(suffix)].rstrip()}{suffix}"
+    return query[:query_length]
 
 
 def select_public_search_domains(
@@ -407,19 +459,99 @@ def _public_typology_focus(subquestion: str, language: str) -> str:
         terms.append("社区文化中心" if language == "zh" else "community cultural center")
     elif any(term in normalized for term in ("社区", "community")):
         terms.append("社区中心" if language == "zh" else "community center")
-    return " ".join(terms) or ("建筑项目" if language == "zh" else "architecture project")
+    return " ".join(terms)
 
 
-def _public_issue_focus(subquestion: str, language: str) -> str:
+def _concise_declared_project_scope(research_question: str) -> str:
+    scope = " ".join(research_question.split()).strip(" ?？")
+    scope = re.split(r"\bhow\b|如何|怎样|怎么", scope, maxsplit=1, flags=re.IGNORECASE)[0]
+    scope = re.sub(
+        r"\s+(?:architecture\s+)?(?:precedent|case)\s+research$",
+        "",
+        scope,
+        flags=re.IGNORECASE,
+    ).strip()
+    scope = re.sub(r"^(?:请研究|研究)", "", scope).strip()
+    if not scope or re.search(r"[,，;；:：]", scope):
+        return ""
+    normalized = scope.casefold()
+    if normalized in {
+        "architecture",
+        "architecture project",
+        "building",
+        "concept stage architecture",
+        "public building",
+        "建筑",
+        "建筑项目",
+        "公共建筑",
+    }:
+        return ""
+    latin_terms = re.findall(r"[a-z0-9]+", normalized)
+    cjk_characters = re.findall(r"[\u4e00-\u9fff]", scope)
+    if cjk_characters:
+        return scope if len(cjk_characters) <= 14 and len(latin_terms) <= 5 else ""
+    return scope if 1 <= len(latin_terms) <= 5 else ""
+
+
+_PUBLIC_RETRIEVAL_LANE_TERMS = {
+    "spatial_discovery": ("空间关系", "spatial relationships"),
+    "spatial_relationships": ("空间组织关系", "spatial organization relationships"),
+    "operational_evidence": ("使用与运营证据", "use and operational evidence"),
+    "project_description": ("项目说明 技术案例", "project description technical case study"),
+}
+_PUBLIC_VERIFICATION_TERMS = {
+    "配送装卸",
+    "等候排队",
+    "入口核验",
+    "时段变化",
+    "变化状态",
+    "service deliveries",
+    "waiting queuing",
+    "entry screening",
+    "operating periods",
+    "changing use states",
+}
+
+
+def _public_issue_focus(
+    subquestion: str,
+    language: str,
+    round_number: int = 1,
+    *,
+    context: str = "",
+) -> str:
     normalized = subquestion.casefold()
+    intent = infer_research_issue_intent(normalized)
     explicit_terms = _explicit_public_issue_terms(normalized, language)
+    context_terms = _explicit_public_issue_terms(context.casefold(), language) if context else []
+    has_verification_dimensions = any(
+        term in _PUBLIC_VERIFICATION_TERMS for term in [*explicit_terms, *context_terms]
+    )
+    context_limit = 6 if round_number >= 4 else 2
+    if round_number >= 4 and context_terms:
+        explicit_terms = list(dict.fromkeys([*context_terms[:context_limit], *explicit_terms]))
+    elif len(explicit_terms) < 2 and context:
+        for term in context_terms:
+            if term not in explicit_terms:
+                explicit_terms.append(term)
+            if len(explicit_terms) >= context_limit:
+                break
+    lane = _PUBLIC_RETRIEVAL_LANE_TERMS[architecture_retrieval_lane(round_number)][
+        0 if language == "zh" else 1
+    ]
+    if round_number < 4:
+        explicit_terms = [term for term in explicit_terms if term not in _PUBLIC_VERIFICATION_TERMS]
+    if has_verification_dimensions and len(explicit_terms) > 3:
+        start = ((round_number - 1) * 3) % len(explicit_terms)
+        explicit_terms = [
+            explicit_terms[(start + offset) % len(explicit_terms)] for offset in range(3)
+        ]
     if explicit_terms:
         relationship_focus = _neutral_relationship_focus(normalized, language)
-        evidence_focus = _neutral_evidence_focus(normalized, language)
-        return " ".join(dict.fromkeys([*explicit_terms, relationship_focus, evidence_focus]))
+        return " ".join(dict.fromkeys([*explicit_terms, relationship_focus, lane]))
     if _is_broad_early_inspiration(normalized):
         if any(term in normalized for term in ("体验", "使用", "活动", "experience", "use")):
-            return (
+            broad_focus = (
                 "使用体验 活动关系 空间联系 项目说明 平面图"
                 if language == "zh"
                 else "user experience activity relationships spatial connections floor plan"
@@ -428,50 +560,32 @@ def _public_issue_focus(subquestion: str, language: str) -> str:
             term in normalized
             for term in ("环境", "场地", "气候", "建造", "environment", "site", "climate")
         ):
-            return (
+            broad_focus = (
                 "环境关系 场地回应 空间组织 项目说明 剖面图"
                 if language == "zh"
                 else "environmental relationships site response spatial organization section"
             )
-        return (
-            "功能关系 空间组织 项目说明 平面图 剖面图"
-            if language == "zh"
-            else "program relationships spatial organization project description floor plan section"
-        )
-    intent = infer_research_issue_intent(normalized)
+        else:
+            broad_focus = (
+                "功能关系 空间组织 项目说明 平面图 剖面图"
+                if language == "zh"
+                else (
+                    "program relationships spatial organization project description "
+                    "floor plan section"
+                )
+            )
+        return " ".join(dict.fromkeys([broad_focus, lane]))
     if intent == "interface":
-        return (
-            "结构关系 空间关系 项目说明 剖面图"
-            if language == "zh"
-            else "structural relationships spatial relationships project description section"
-        )
+        relationship_focus = "结构关系" if language == "zh" else "structural relationships"
     if intent == "flow":
-        return (
-            "流线关系 空间联系 项目说明 平面图"
-            if language == "zh"
-            else "circulation relationships spatial connections project description floor plan"
-        )
-    if intent == "daylight":
-        return (
-            "采光关系 环境回应 项目说明 剖面图"
-            if language == "zh"
-            else "daylight relationships environmental response project description section"
-        )
-    if intent == "program":
-        return (
-            "功能关系 空间组织 项目说明 平面图"
-            if language == "zh"
-            else "program relationships spatial organization project description floor plan"
-        )
-    if intent == "section":
-        return (
-            "剖面关系 空间层次 项目说明 剖面图"
-            if language == "zh"
-            else "sectional relationships spatial organization project description section"
-        )
-    return (
-        "项目说明 平面图 剖面图" if language == "zh" else "project description floor plan section"
-    )
+        relationship_focus = "流线关系" if language == "zh" else "circulation relationships"
+    elif intent == "daylight":
+        relationship_focus = "环境关系" if language == "zh" else "environmental relationships"
+    elif intent == "section":
+        relationship_focus = "剖面关系" if language == "zh" else "sectional relationships"
+    else:
+        relationship_focus = "功能关系" if language == "zh" else "program relationships"
+    return " ".join(dict.fromkeys([relationship_focus, lane]))
 
 
 def _explicit_public_issue_terms(normalized: str, language: str) -> list[str]:
@@ -479,6 +593,9 @@ def _explicit_public_issue_terms(normalized: str, language: str) -> list[str]:
     for markers, zh_term, en_term in _EXPLICIT_PUBLIC_ISSUE_VOCABULARY:
         if any(marker in normalized for marker in markers):
             term = zh_term if language == "zh" else en_term
+            circulation_term = "流线" if language == "zh" else "circulation"
+            if term == circulation_term and any(circulation_term in existing for existing in terms):
+                continue
             if term not in terms:
                 terms.append(term)
     return terms

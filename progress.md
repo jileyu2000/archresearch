@@ -944,3 +944,1189 @@
 - 2026-08-03：PR #15 已 squash 合并为远端 `main` 提交 `d80f715d88781810eda7624d9f1d65b3754228fb`。正式 `v2.2.4` Release 已发布，非草稿、非预发布，tag 精确指向该合并提交。
 - 2026-08-03：GitHub 附件复核通过：扩展 ZIP 18,719 bytes、SHA-256 `4349E77FEFDEF8AF0F0C22F59D0F6C79AEFB398F17F2AA911CF45EEF76FAA26B`；Windows 安装器 69,748,597 bytes、SHA-256 `AB2D0D19B4260C89A9F7DE02D277A4EC946707E9AE0D40492E3ABAE27B97A70B`。
 - 2026-08-03：发布后项目管理收口：Phase 15 标记 complete，HANDOFF 仅保留当前合同与已验证基线；`.artifacts/build/`、`.artifacts/qa/`、`.artifacts/releases/` 改为精确忽略并继续保留，不删除约 1.1 GB 的构建、QA 和发布产物。
+- 2026-08-03 20:39 +08:00：用户要求为同目录新对话准备无缝交接；使用 planning catch-up 恢复未同步上下文，只发现 PR #16 管理文件历史核对与交接请求，没有遗漏的产品开发。
+- 2026-08-03 20:39 +08:00：planning catch-up 首次因系统 `python` 命中 Microsoft Store 占位符失败，改用 Codex 附带 Python 后成功；两组只读 PowerShell 命令因变量提前展开失败，改用单引号保护后完成核验。错误均未写产品或研究数据。
+- 2026-08-03 20:39 +08:00：交接修改前 Git 工作树干净；SQLite `mode=ro` 统计 96 条历史 Run，27 completed、38 partial、13 blocked、18 cancelled，非终态 Run 为 0。
+- 2026-08-03 20:39 +08:00：确认 `v2.2.4` 产品、6/6 真实验收、Board QA、完整门禁、安装 smoke、PR #15、CI、合并和 Release 全部完成；当前无未完成产品任务、无阻塞、无活动 Run。
+- 2026-08-03 20:39 +08:00：仅更新 `HANDOFF.md`、`task_plan.md`、`findings.md`、`progress.md` 供新对话恢复；没有重跑已完成验收，没有修改产品代码、创建 Run、删除本地产物或提交。
+- 2026-08-03 20:40 +08:00：交接补丁最终核对通过：`git diff --check` 无错误，Git 状态只包含上述四个管理文件的未提交修改；按用户要求不暂存、不提交、不推送。
+- 2026-08-03：开始 Phase 17 小红书登录检测恢复。已检查用户截图并确认现状缺少登录入口、等待状态和自动复检；本阶段不创建 Run、不读取凭据、不使用 Codex 内置浏览器。
+- 2026-08-03：加载 `planning-with-files` 与 `impeccable`，完成 session catch-up、Board PRODUCT/DESIGN 与产品界面准则恢复；首次管理文件补丁因旧上下文不精确而整体未应用，读取末尾后成功登记活动阶段。
+- 2026-08-03：下一步只读定位 Board、API、扩展/OpenCLI 的登录检测链路，再写行为红测。
+- 2026-08-03：第一轮链路审计完成：Board 的 `unknown` 状态隐藏登录入口、首次加载不查 XHS 会话、API 的 OpenCLI `unknown` 不回退已连接扩展。已记录为三项通用修复候选，尚未修改产品代码。
+- 2026-08-03：首次本机状态探针因嵌套 PowerShell 提前展开 `$_` 而解析失败，未触达 API；下一次改用无变量的 `curl.exe` 请求。
+- 2026-08-03：`curl.exe` 只读探针成功：浏览器扩展未连接、OpenCLI 可用；OpenCLI 登录检测约 13 秒后返回 `unknown/local_search`。确认首次检测已有触发，下一步审计 OpenCLI auth 实现和固定 Chrome 登录打开路径。
+- 2026-08-03：OpenCLI 适配器检索因假定了不存在的编译目录失败；下一步先列出包内真实文件路径，不重复错误路径。
+- 2026-08-03：确认 OpenCLI auth 使用独立 ephemeral 后台会话而非用户普通 Chrome profile；API 现有 fixed-URL Chrome launcher 可安全扩展为小红书固定登录页。下一步先写 API 通道回退与固定 URL 打开红测，再写 Board 自动打开/轮询红测。
+- 2026-08-03：测试落点已收敛到 `test_browser_ws.py`、`App.test.tsx` 与现有 readiness hook；UI 复用当前 preflight 结构。现在进入红测阶段，生产代码仍未修改。
+- 2026-08-03：API 红测 2/2 准确失败：OpenCLI `unknown` 遮蔽扩展登录态，新固定登录端点不存在。下一步运行 Board 自动打开/既有登录两条红测。
+- 2026-08-03：Board 目标测试 1 红 1 绿：unknown 自动恢复准确失败，既有登录不重复开页保持通过。红测阶段完成，下一步最小实现 API 固定登录端点、Chrome 优先状态合并和 Board 单次自动恢复。
+- 2026-08-03：完成后端最小实现；API 目标测试 3/3 转绿。新端点固定打开小红书 explore，扩展登录态不再被 OpenCLI unknown 遮蔽，原本 Board 固定 URL 启动测试保持通过。
+- 2026-08-03：完成 Board 单次自动恢复、有限轮询和 opening/waiting/timed_out 文案；目标测试 2/2 转绿。下一步运行 App/readiness/component 回归并修正旧静态链接合同，再跑 lint/typecheck。
+- 2026-08-03：首轮相关回归 Board 115 通过、4 失败；确认两项为链接→按钮合同更新，两项为 pairing 场景与真实自动连接竞态。下一步先修竞态和可取消 timer，再更新精确测试断言。
+- 2026-08-03：第二轮相关回归仍有 4 个失败：3 个来自把后台 broker 连接误当当前页面授权，1 个来自旧 fail-closed 测试在异步恢复完成前断言登录页已打开。已恢复页面授权边界，并把打开行为留给新增专用测试；下一步重跑 Board/API 定向回归。
+- 2026-08-03：第三轮 Board 相关回归 118/119，通过权限边界场景，仅 `?connect=chrome` 自动配对仍因同批次双连接取消失败。已把 Chrome 配对收敛为 single-flight Promise，使登录恢复等待既有连接；下一步重跑同一组 119 项。
+- 2026-08-03：single-flight 后仍为 118/119，证明竞态推断不成立；实际是 XHS 登录成功清空了已成功的 Chrome 配对提示。已撤回无效连接改动，只让 XHS 恢复停止改写配对反馈；下一步再次运行 119 项。
+- 2026-08-03：Board 相关回归 119/119、API XHS/浏览器协议回归 48/48 全绿，`git diff --check` 通过且旧静态登录链接断言为空。静态门禁首次仅发现 `browser.py` 需要 Ruff 机械排版；下一步格式化后分别重跑 Board/Python 门禁。
+- 2026-08-03：完整回归 API 571/571、Board 183/183、Extension 182/182 全绿；Board lint/typecheck/build、Ruff check/format、strict Mypy 26 源文件也全绿。收口只读 Run 查询首次被 PowerShell 提前解析 SQL `*`，未连接数据库、未重启服务；下一步用安全 here-string 重查。
+- 2026-08-03：安全 here-string 已以 SQLite `mode=ro` 打开数据库，但误用表名 `runs`，返回 `no such table`；没有写入，服务仍未重启。下一步只读取得真实表名后完成统计。
+- 2026-08-03 21:30 +08:00：只读确认真实表为 `research_runs`，96 条历史 Run、活动 Run=0；项目 stop/start 重载源码服务成功，API 8000 health=ok、Board 5173=200、新小红书固定登录端点已注册。
+- 2026-08-03 21:30 +08:00：服务重载后再以 SQLite `mode=ro` 核对，活动 Run 仍为 0；`git diff --check` 通过。Phase 17 标记 complete，本地修复未 commit、push、PR 或发布，唯一下一步为用户在自己的 Chrome 做真实登录验收。
+- 2026-08-03：用户授权 Codex 代做真实验收。开始 Phase 18；加载 `planning-with-files` 与系统 Chrome 控制规范，session catch-up 只包含 Phase 17 收口和本次验收请求，Git 产品修改范围未变，活动 Run=0。
+- 2026-08-03：系统 Chrome 连接成功并命名验收会话；只发现一个本地 Board 标签，无小红书标签。已接管并刷新 `http://127.0.0.1:5173/`，未使用内置浏览器。
+- 2026-08-03：Board 首页 DOM 正常，唯一“图纸灵感 配色、线型、版式与分析图”入口可见；Chrome 控制层 Statsig 遥测超时但页面快照完整，记录为非产品噪声。下一步点击该入口并观察登录预检。
+- 2026-08-03：真实点击图纸灵感后页面直接显示“研究环境已就绪”，详情为“小红书负责查找灵感 · Chrome 可读取当前页面高清图”；已有登录路径通过，未点击“查找灵感”。下一步核对没有新增登录标签、API 返回通道和活动 Run。
+- 2026-08-03：就绪后 Chrome 仍只有 Board 标签，无重复小红书页；API 返回 `logged_in/chrome_extension`，浏览器连接与本地搜索均可用。已有登录真实路径通过；不通过登出用户账号来破坏性制造未登录路径。
+- 2026-08-03 21:37 +08:00：Board 页面错误日志 0；验收后 SQLite 仍为 96 条历史 Run、活动 Run=0，diff check 通过。Phase 18 complete；只验证可安全执行的已有登录路径，未登录路径不以登出用户账号的方式强行制造。
+- 2026-08-03 21:37 +08:00：首次 Phase 18 收口补丁因 Statsig 错误行此前误插到 Phase 14 而整体未应用；已移除误插行并用精确 Phase 18 上下文完成记录，没有修改产品代码或浏览器状态。
+- 2026-08-03：用户确认已自行退出小红书；Phase 18 重新标记 in_progress。只读确认活动 Run=0，下一步复用系统 Chrome 补测未登录自动打开与自动复检，不触发研究。
+- 2026-08-03：系统 Chrome 未登录验收基线为 Board + 1 个既有 XHS explore + 1 个 Google 搜索标签；已记录固定 XHS 标签基线数量 1，并刷新 Board 重置自动恢复。下一步进入图纸灵感观察状态与标签增量。
+- 2026-08-03：刷新后的 Board 首页正常，唯一图纸灵感入口已点击；没有点击“查找灵感”。下一步读取研究环境状态并核对固定 XHS explore 标签是否从基线 1 增加。
+- 2026-08-03：未登录真实路径首次失败：用户已退出系统 Chrome，但 Board 仍显示就绪；API 为 `logged_in/local_search`。定位为 OpenCLI 独立登录覆盖 Chrome 明确未登录。下一步先写 API 红测，再最小修复扩展明确状态优先级。
+- 2026-08-03：新增“Chrome not_logged_in 覆盖 local logged_in”API 红测，旧实现准确失败为 `logged_in/local_search`。确认不是扩展未更新；下一步修改后端通道合并并运行相关回归。
+- 2026-08-03：通道优先级最小修改完成，登录/退出两条目标测试 2/2，完整 API 572/572 全绿。静态门禁仅要求 Ruff 机械格式化 `browser.py`；下一步格式化、重跑静态门禁并重启现场复测。
+- 2026-08-03：Ruff format/check、strict Mypy 26 源文件全绿；活动 Run=0 时重启服务。真实 API 现为 `not_logged_in/chrome_extension`、health=ok、活动 Run=0。下一步刷新 Board 验证自动打开与等待状态。
+- 2026-08-03：重启后 Chrome 标签基线未变，仍有 1 个用户既有 XHS explore；Board 已刷新并加载新后端。下一步从首页进入图纸灵感，观察等待文案和 XHS 标签增量。
+- 2026-08-03：修复后真实未登录路径已通过前半段：进入图纸灵感后 Board 显示“等待小红书登录”，固定 XHS explore 标签从 1 增至 2；未点击“查找灵感”。下一步暂停让用户本人登录，再验证 Board 自动转为就绪。
+- 2026-08-03：用户本人登录后，旧 8 次轮询已超时；点击“重新检测”立即就绪，API 为 `logged_in/local_search`。确认扩展版本不是阻塞，但真人登录窗口仍偏短；下一步先写晚登录红测。
+- 2026-08-03：晚登录行为测试最终在旧 8 次常量下准确失败，最小改为 20 次后转绿；登录页仍只打开一次。完整 Board 184/184、lint/typecheck/build 全绿。
+- 2026-08-03：最终真实冷启动验收通过：刷新 Board 后首次进入图纸灵感直接就绪，固定 XHS explore 标签保持 2 个、Board error 日志 0；未点击“查找灵感”。下一步只读核对活动 Run 与 Git 后收口。
+- 2026-08-03：收口只读确认 96 条历史 Run、活动 Run=0，`git diff --check` 通过；Phase 18 complete。本地修复继续保持未提交，未 push、PR 或发布。
+- 2026-08-03：用户授权准备并发布 `v2.2.5`，同时要求把 GitHub README 从开发/测试说明改为产品功能、使用方式和运作流程。开始 Phase 19；已读取 planning-with-files、humanizer-zh（含深度改写模式）与 GitHub yeet 规范，下一步按 catch-up 建议审查 diff、规划文件和 README。
+- 2026-08-03：完成 Phase 19 首轮审计：12 个现有修改均属登录修复与管理记录，无未跟踪文件；README 当前主要问题是开发架构、验证与技术取舍压过产品功能。GitHub CLI 已安装并登录，仓库 `jileyu2000/archresearch` 默认分支为 `main`。
+- 2026-08-03：完成版本与发布链审计：`2.2.5` 需同步 API、Board、Extension manifest/package、Release/installer 合同、README 与用户文档；当前发布分支提交图相对 main 为 behind 1/ahead 12，下一步先核对 PR #16 与提交关系，再决定安全分支策略。
+- 2026-08-03：确认 PR #16 已把旧分支 squash 合入 main。为避免旧分支冗余历史，发布时将从 `origin/main` 建立独立 `codex/v2.2.5` worktree并复制确认范围；原工作区保持原样。README 信息架构已收敛，进入重写。
+- 2026-08-03：README 已重写为下载安装、三类功能、用户运作流程、两种研究方式、结果内容、使用步骤和本地安全；开发架构、验证矩阵、技术取舍与退役技术已移出首页。新增 `v2.2.5` 产品/README 合同后，旧 workflow 准确红灯在 `v2.2.4` 安装器名称。
+- 2026-08-03：已同步 workflow、API、Board、Extension manifest/package、architecture 与 extension guide 到 `2.2.5`；Release/README 合同转绿。下一步做残留版本/README 自审，再进入完整门禁。
+- 2026-08-03：残留 `2.2.4` 与 README 开发者章节扫描为 0，diff check 通过；coverage 门禁 Board 184/184、Extension 182/182。首轮权威 verify 的 API 572/572 通过，随后只因两个版本文件需要 Ruff 机械格式化而停止。
+- 2026-08-03：机械格式化两个版本文件后完整重跑权威 verify，全绿：API 572/572、Board 184/184、Extension 182/182、Ruff/Mypy、lint/typecheck/build、Windows/Release 合同和 packaged E2E 8/8 全部通过。下一步构建两个 `v2.2.5` 发布附件并做真实安装 smoke。
+- 2026-08-03：已生成 `ArchResearch-Windows-x64-Setup-v2.2.5.exe` 和独立 `archresearch-chrome-extension-only-v2.2.5.zip`；真实静默安装/启动/快捷方式/扩展排除/卸载 smoke 通过。下一步记录最终 digest、创建干净发布 worktree并复跑最小提交核验。
+- 2026-08-03：记录发布候选 digest：安装器 69,750,435 bytes / `9CE2FCA...777D2`，扩展 18,719 bytes / `0C61CA...A334`；smoke 后活动 Run=0、安装残留=0。准备从 `origin/main` 创建 `codex/v2.2.5` worktree，只复制 19 个产品/测试/README/版本文件，四个本地交接文件继续留在原工作区。
+- 2026-08-03：已创建 `codex/v2.2.5` worktree 于最新 `origin/main`，机械复制确认的 19 文件 diff；worktree 无额外文件且 diff check 通过。原工作区未切换分支、未 reset/checkout/clean，四个交接文件继续保持未提交。
+- 2026-08-03：worktree 首次逐字节文件比较因 Git CRLF/LF 规范化报告 16 个文本哈希差异；未发现补丁失败或额外文件。下一步改用统一换行后的内容比较并运行 worktree Release 合同。
+- 2026-08-03：统一 CRLF/LF 后 19/19 候选文件内容完全一致，干净 `codex/v2.2.5` worktree 的 Release/README 合同通过。下一步显式暂存这 19 个文件、提交并推送后创建 draft PR。
+- 2026-08-03：19 个显式文件提交为 `4d40cbb` 并推送 `codex/v2.2.5`；draft PR #17 创建，原工作区及四个交接文件未进入提交。
+- 2026-08-03：PR #17 两套 Hosted CI `verify` 全绿（18:06、18:53），转 Ready 后 squash 合并为 `a691a0e141d9863672886b8c868cee03da0a818c`。
+- 2026-08-03：创建并推送 annotated tag `v2.2.5`，正式 Release 发布；GitHub README 已切换为产品功能、运作流程、研究结果、使用步骤与本地安全说明。
+- 2026-08-03：远端附件名称、大小与 digest 复核通过：安装器 69,750,435 bytes / `9CE2FCA...777D2`，扩展 18,719 bytes / `0C61CA...A334`；tag 解引用精确命中合并提交。
+- 2026-08-03：发布后只读确认 96 条历史 Run、活动 Run=0；Phase 19 complete。原工作区同内容修改和四个交接文件继续保留，未 reset、checkout、clean。
+- 2026-08-03：用户发现 GitHub About 仍是旧的 Chrome 扩展/Web Edition 介绍；已只修改仓库 description 为本地优先建筑研究工作台及其两类核心产出，远端回读一致，代码、Release 与 Topics 未改。
+- 2026-08-03：开始 Phase 20。用户报告 v2.2.5 安装版的小红书登录动作反复新开 Board；已加载 planning-with-files 与系统 Chrome 控制规范，恢复当前发布/工作树上下文。下一步先记录截图与真实标签基线，再审计安装版 URL 调度链，生产代码尚未修改。
+- 2026-08-03：系统 Chrome 只读标签基线确认安装版端口 3630；最近两次点击均新增 `/?connect=chrome&attempt=...` Board 标签，没有新增小红书。真实缺陷已复现，未再次点击、未创建 Run；下一步定位安装版为何把固定 XHS 动作路由到 Board 配对启动器。
+- 2026-08-03：定位安装版根因为 `create_desktop_app()` 的 launcher lambda 丢弃所有请求 URL 并恒定打开动态 Board URL；源码路径不受影响。下一步在最新 main 独立 worktree 先写安装版 Board 映射 + XHS 保留红测，再做最小实现。
+- 2026-08-03：安装版行为红测准确失败：第二次请求应传 `https://www.xiaohongshu.com/explore`，实际仍为 `http://127.0.0.1:49152/?connect=chrome`。红测完成，进入桌面 URL 映射最小修复。
+- 2026-08-03：桌面最小修复完成：只有 `CHROME_BOARD_URL` 被映射到安装版动态端口，固定 XHS URL 原样传给 `open_known_url_in_chrome`；目标红测转绿。下一步运行 desktop/browser 回归与 Python 静态门禁。
+- 2026-08-03：首轮定向静态门禁中 Ruff check 通过，format check 要求机械重排两个已改文件；并行调用没有可靠返回 pytest/Mypy 输出。下一步先格式化，再独立重跑所有结果，不能沿用缺失输出。
+- 2026-08-03：格式化后 desktop/browser 回归 45/45、Ruff check/format、strict Mypy 26 源文件全绿。下一步审计构建脚本，选择不覆盖 v2.2.5 正式产物、不破坏当前安装的冻结版验证路径。
+- 2026-08-03：首次整仓 verify 在 571/572 停止，新红测再次得到旧 Board URL；定位为复用 editable venv 导入了原工作区源码，而测试来自 worktree。下一步显式设置 worktree `PYTHONPATH` 后完整重跑，不修改产品实现。
+- 2026-08-03：修正 `PYTHONPATH` 后 API 572/572、Ruff 与 Mypy 全绿；verify 随后仅因 pnpm 不允许在无 TTY 下重建临时 junction node_modules 停止。决定不让 pnpm改临时依赖，把两文件补丁应用到原工作区未修改文件后完整重跑。
+- 2026-08-03：原工作区权威完整门禁全绿：API 572、Board 184、Extension 182、packaged E2E 8，以及 Ruff/Mypy、lint/typecheck/build 与全部 Windows/Release 合同通过。
+- 2026-08-03：真实启动验证通过：修复后的桌面端点返回 200/opened=true，Chrome Board 标签保持 3、XHS 由 2 增至 3，唯一新增页为固定 explore；没有创建 Run。
+- 2026-08-03：SQLite `mode=ro` 收口为 96 条历史 Run、活动 Run=0，两个工作树 diff check 通过。当前等待用户明确授权是否继续 v2.2.6 版本、安装器、提交与发布；现有 v2.2.5 安装二进制不会自动获得源码修复。
+- 2026-08-03：清理本轮临时 worktree 的 4 个依赖 junction 被安全策略拦截，未删除内容且未尝试绕过；它们均在临时 worktree 内、Git 忽略，可留待 v2.2.6 构建使用，原依赖与用户数据不受影响。
+- 2026-08-04：用户明确授权发布 v2.2.6。重新加载 planning-with-files 与 GitHub yeet 规范，catch-up 仅补回授权与上一轮最终结论；GitHub CLI 2.96.0 已认证 `jileyu2000`，默认分支 main。下一步先做 v2.2.6 Release 合同红测。
+- 2026-08-04：Release 合同先提升到 2.2.6，在旧 workflow 上准确红灯于 v2.2.5 安装器名；现已同步 API、Board、Extension manifest/package、workflow、README 与用户文档，下一步运行合同与残留版本扫描。
+- 2026-08-04：首次同步后合同发现 3 个 README 正则仍转义写死 v2.2.5，普通扫描未命中；已同步为 v2.2.6，并将普通/转义旧版本一起扫描。
+- 2026-08-04：v2.2.6 Release/README 合同转绿，普通与转义活动 v2.2.5 扫描均为 0，diff check 通过。下一步重跑权威整仓门禁。
+- 2026-08-04：首轮 v2.2.6 权威 verify 的 API 572/572 与 Ruff check 通过，随后只因两个版本文件需要 Ruff 机械格式化停止；下一步格式化后从头完整重跑。
+- 2026-08-04：格式化后权威 verify 全绿：API 572、Board 184、Extension 182、packaged E2E 8，Ruff/Mypy、lint/typecheck/build 与全部 Windows/Release 合同通过。独立扩展 ZIP 已生成；下一步在最新 main 的干净 v2.2.6 worktree 构建安装器，避免改写原 `.artifacts/build`。
+- 2026-08-04：确认 `origin/main` 已是完整 v2.2.5 基线；在独立 `codex/v2.2.6` worktree 用 `apply_patch` 落入 13 个已验证发布文件，统一换行后 13/13 与原工作区一致，Release 合同通过。
+- 2026-08-04：干净 worktree 独立安装依赖并构建两个附件；冻结程序 `--self-test` 退出码 0、desktop 测试 9/9、安装器 payload 扩展文件数 0。首个普通 PowerShell GUI EXE 调用因拿不到 `$LASTEXITCODE` 误判，改用等待进程读取真实退出码后通过。
+- 2026-08-04：13 文件提交 `5701911` 推送并创建 draft PR #18。第一轮 PR CI 在既有 Provider 测试的浮点严格相等处失败 1/572：`89.99999999999989 != 90.0`；其余 571 项通过。
+- 2026-08-04：只把该测试断言改为 `pytest.approx`，生产逻辑不变；目标测试连续 10 次与 Ruff 全绿，提交 `4814fc6` 推送重新触发 CI。
+- 2026-08-04：最终 push/PR 两套 Hosted CI run `30833250631`、`30833258563` 全绿，均完成完整仓库门禁、Windows 安装器构建、真实安装/卸载 smoke 和两个附件上传。
+- 2026-08-04：PR #18 转 Ready 后 squash 合并为 `7512a45bfec010cde8a701c910afbd43af813137`；创建并推送 annotated tag `v2.2.6`，tag 解引用精确命中该合并提交。
+- 2026-08-04：正式 [ArchResearch 本地版 v2.2.6](https://github.com/jileyu2000/archresearch/releases/tag/v2.2.6) 已发布，非草稿、非预发布。CI 安装器 70,087,718 bytes / `4BDC30F5...B6916B2`，扩展 ZIP 18,697 bytes / `40634B85...EDA30FA`；GitHub asset digest 完全一致。
+- 2026-08-04：发布后 SQLite `mode=ro` 为 96 条历史 Run、活动 Run=0。Phase 20 complete；原工作区 21 个已发布产品/测试/版本修改与四个管理文件继续保留，未 reset、checkout、clean、提交或覆盖。
+- 2026-08-04：开始 Phase 21。用户确认 v2.2.6 已能打开小红书，但登录、退出重登后仍检测不到登录；已加载 planning-with-files 与系统 Chrome 控制规范。下一步只读确认安装版版本、动态端口、API 登录通道、扩展连接和系统 Chrome 可见状态，不立即改代码、不创建 Run。
+- 2026-08-04：现场只读确认安装版为 v2.2.6、PID 48400、动态端口 3824；ArchResearch 扩展已连接，本地搜索不可用，登录 API 为 `unknown/chrome_extension`。SQLite 仍为 96 条历史 Run、活动 Run=0。
+- 2026-08-04：Codex Chrome 控制旧会话断开；按规范等待重试并运行只读诊断，Chrome、Codex 扩展与 native host 均正常但控制连接仍不可用。该通道与已经连接的 ArchResearch 扩展独立，下一步直接审计 ArchResearch 扩展的 XHS 可见页面判定。
+- 2026-08-04：扩展链路审计确认登录检查新开临时 XHS search_result，并只把旧 `section.note-item` 结构判为已登录；任何其他结构或异常都变成 `unknown`。下一步核对运行日志和安装扩展版本，区分 DOM/等待问题与命令异常。
+- 2026-08-04：日志没有暴露命令错误、WebSocket 不传扩展版本；搜索页已有 3.5 秒等待。新增“扩展连接但研究权限未恢复”高优先级假设，下一步追踪 permission 消息链后再决定红测落点。
+- 2026-08-04：权限链审计确认 Board 可区分持久 host 权限，但 API 把扩展命令异常吞成 unknown；现场请求远短于必经 3.5 秒等待，优先怀疑命令即时拒绝而非 DOM。下一步单次计时并审计 browser command 错误传播。
+- 2026-08-04：单次现场计时为 196 ms，确认失败发生在临时页等待前；Broker 可能在 DNS 公网校验或扩展 `permission_required` 处即时失败，且当前错误 code 被丢失。下一步检查生产 DNS 解析结果。
+- 2026-08-04：XHS DNS 全部为公网地址，排除 SSRF 门禁；扩展 open_url 正常失败应更慢，当前 196 ms 与 executor 前 permission 拒绝一致。下一步检查 WebSocket 重连是否会把内存权限清零，并写 status 重同步红测。
+## 2026-08-04 — Phase 21 source narrowing
+
+- Read `BrowserSocketClient` connection lifecycle and permission gate: reconnect uses `disconnect(false)` and preserves permission; command rejection occurs before execution when the in-memory gate is false.
+- Read `ExtensionController` and its tests: startup/pair/request paths synchronize permission, while `ui.status` only reports persisted permission and does not repair a stale active client gate.
+- Next: inspect the actually loaded extension version/declared permissions without accessing browser login data, then add a failing controller behavior test.
+
+## 2026-08-04 — Phase 21 RED and minimal implementation
+
+- Verified the loaded desktop extension is v2.2.6 and byte-identical to the repository build; Chrome host access is active/granted.
+- Found a second obsolete unpacked extension registration whose source directory no longer exists, creating a possible single-socket race.
+- Added RED test `repairs a stale command gate when status confirms web access`; it failed with zero synchronization calls.
+- Implemented connected `ui.status` gate repair in `ExtensionController`; targeted controller suite is green (10/10).
+- Next: run full extension gates, build a test artifact, and complete real-Chrome acceptance without touching research data.
+- Full extension gates passed: lint, typecheck, 183 unit tests, build, and 8 packaged E2E tests.
+- Backed up the official loaded background bundle, copied the verified candidate bundle into the current desktop extension directory, and confirmed source/target SHA-256 equality. Chrome still runs the old worker: the next API probe returned `unknown/chrome_extension` in 219 ms.
+- Real acceptance now requires disabling the obsolete unpacked registration and reloading the current extension in `chrome://extensions`; no Run has been created.
+- User loaded and paired the candidate. Production check now follows the full 3.5-second chain instead of failing immediately, confirming permission repair; three checks still returned DOM-level `unknown` at 3.7–3.9 seconds.
+- Compared current public XHS adapter behavior: it waits for content/login-wall mutation on one tab, while ArchResearch performs one observation then closes the tab. Next: add an executor RED for unknown→logged_in on the same managed tab, then implement a bounded retry.
+- Added and confirmed the second RED (`unknown` then `logged_in` on the same managed tab); implemented five 1-second bounded rechecks with host validation and explicit fail-closed exhaustion coverage.
+- Updated gates passed: executor 18/18, full extension 185/185, lint, typecheck, build, and packaged E2E 8/8.
+- Backed up the first candidate and copied the second verified background bundle into the current desktop extension folder. Next: user reloads the current extension once, then repeat production session check.
+- Same-tab retry candidate reloaded successfully but real status stayed unknown after 8.816 seconds.
+- Added and verified visible login-control/user-avatar REDs; 187 unit tests and 8 packaged E2E passed, candidate reloaded, real status still unknown.
+- Added and verified profile-link/classless-note-link REDs; 189 unit tests and 8 packaged E2E passed, candidate reloaded, real status still unknown after 8.824 seconds.
+- Next: inspect a screenshot of the exact fixed search URL in the same Chrome profile to distinguish login wall, risk/error page, empty shell, or delayed search results before any further code change.
+- User authorized direct Chrome inspection. Recovered Chrome control, opened the exact fixed URL in Default profile, and observed an authoritative `/website-login/captcha` redirect titled `安全验证`; kept the verification tab open for handoff.
+- Added RED coverage for the real captcha redirect and implemented bounded not-ready detection. Final extension verification passed: 190 unit tests, lint, typecheck, build, and 8 packaged E2E.
+- Copied the final candidate content bundle to the loaded desktop extension folder. Next: obtain action-time CAPTCHA permission or let the user complete the safety verification, reload the extension, then rerun production session/API and Run-count acceptance.
+- User completed the XHS safety verification. Production acceptance passed: connected=true and session=`logged_in/chrome_extension` in 3.910 seconds.
+- SQLite mode=ro acceptance passed: project DB 96 Runs/0 active; installed DB 0 Runs/0 active. `git diff --check` passed. Phase 21 complete; no commit, push, PR, or release.
+# 2026-08-04 — Phase 22
+
+- User requested one modal that combines Chrome extension preparation and Xiaohongshu login when switching to drawing inspiration.
+- Loaded `planning-with-files` and `impeccable`, ran session catch-up, read Board product/design guidance, and inspected current readiness behavior.
+- Confirmed no product code has been changed for Phase 22 yet; worktree's existing modifications and research data remain preserved.
+- Next: add failing Board behavior tests for the unified preparation dialog before implementation.
+- Inspected current App overlay lifecycle, readiness state machine, ResearchComposer controls, orphaned install-dialog CSS, and the historical extension-only dialog. Chosen implementation: a dedicated preparation-dialog component rendered by App and driven entirely by existing readiness actions.
+- Added two Phase 22 App behavior REDs. Targeted Vitest run failed 2/2 at the missing dialog while 109 unrelated tests were skipped, confirming the intended regression before production changes.
+- User simplified the task before the first implementation was verified. Updating the RED and replacing the unverified stateful dialog draft with a static usage guide; no existing readiness behavior will be moved or removed.
+- Revised RED passed after the minimal implementation: first visual-mode switch shows the static usage guide, closing stores the one-time acknowledgement, the visual-only “使用方法” button reopens it, and the existing environment-control component test still passes.
+- Final Phase 22 verification passed: focused App/Home 113/113, full Board 185/185, ESLint, TypeScript, production build, and `git diff --check`.
+- Read-only SQLite verification remains project DB 96 total/0 active and installed DB 0 total/0 active. No Research Run, commit, push, PR, tag, or release was created.
+
+# 2026-08-04 — Phase 23
+
+- User explicitly authorized publication. Planned v2.2.7 scope is limited to Phase 21 extension login detection, Phase 22 Board usage guidance, their behavior tests/product contract, and required version/release files.
+- Release will use a clean worktree from current remote main; the original dirty worktree and all local research/build data remain untouched.
+- Release contract RED failed on the old v2.2.6 Windows artifact name, then turned green after synchronizing the v2.2.7 workflow, API/Board/Extension versions, README, user docs, and contract.
+- Created clean `agent/v2.2.7` worktree from `7512a45`; 13/13 Phase 21/22 files matched the accepted original-worktree content ignoring checkout line endings. The unrelated API provider test and planning files were excluded.
+- First full verify passed API 572/572 but stopped on Ruff formatting for two version lines; formatted only those files and reran from the beginning.
+- Final local verify passed API 572, Board 185, Extension 190, packaged E2E 8, all lint/typecheck/build checks, and Windows/Release contracts.
+- Built local v2.2.7 extension ZIP and self-contained installer; frozen runtime self-test passed and installer payload contained no Chrome extension. The user's existing installation was preserved, so authoritative install/start/uninstall smoke was delegated to clean Hosted CI.
+- Explicitly staged 24 files and committed `931b4eb`; pushed `agent/v2.2.7`. GitHub App PR creation returned 403, then authenticated `gh` created draft PR #19.
+- PR run `30843780159` passed in 21m12s, including real Windows install/start/uninstall smoke and both artifact uploads. PR #19 was marked Ready and squash-merged as `256c70dc52fcb5b0cd0fbfaf7382ba2834d087ef`.
+- Final main push run `30845419827` passed in 24m52s with the same complete gate and smoke. Downloaded its two artifacts and verified extension manifest version 2.2.7.
+- Created/pushed annotated tag `v2.2.7` at `256c70d` and published [ArchResearch 本地版 v2.2.7](https://github.com/jileyu2000/archresearch/releases/tag/v2.2.7), non-draft and non-prerelease.
+- Formal GitHub assets: installer 70,082,901 bytes / `DB3B135DF4A6A87690FCAE3B16B13F01E3BA6C7095BA28B89718B445C78FD1C7`; extension ZIP 18,862 bytes / `EB27455944BEC200ECE8809CB8B9389EFFD76A82FBD17D3A38BC9ECA2530BD31`. Remote digests match the main CI files.
+- Post-release SQLite `mode=ro`: project 96 Runs/0 active; installed 0 Runs/0 active. Original worktree modifications, `.artifacts/`, `.archresearch/`, and research data remain preserved.
+
+# 2026-08-04 — Phase 24
+
+- 用户报告小红书登录检查遇到安全验证后进入循环：验证页在完成前消失，检测持续新建小红书页面，最终始终不能确认登录。
+- 已按交接顺序完整读取 `HANDOFF.md`、`AGENTS.md`，读取当前计划与 findings/progress 末尾，运行 planning catch-up、`git status --short --branch` 和 `git diff --stat`；既有 33 个跟踪修改及未跟踪组件全部保留。
+- SQLite URI `mode=ro` 复核：项目库 96 条历史 Run/活动 0，安装版库 0 条/活动 0；未创建、重试、取消或修改 Research Run。
+- 恢复阶段三次环境错误均发生在读取/查询前或命令解析层：PowerShell 变量提前展开、系统缺少 `sqlite3`、编排环境缺少 `btoa`；均已换用安全只读方法，没有修改产品或数据库。
+- 当前唯一下一步：只读审计 Board 自动检测、API 会话检查与扩展受管标签关闭链路，先建立“验证码页保留且不重复开页”的行为红测。
+- 根因确认：API 的扩展检查每次新建搜索标签，captcha 被内容层立即归为 `not_logged_in`，随后 `finally` 无条件关闭；Board 对所有非登录状态继续最多 20 次轮询，形成重复新建/关闭循环。App 外层自动恢复只启动一次，不是主要重复源。
+- 选定最小合同：新增不含凭据的枚举状态 `verification_required`；API 在该状态保留并复用同一受管标签，Board 立即暂停自动轮询并提示完成安全验证后重新检测，普通登录自动检测与 fail-closed 保持。
+- 下一步先只修改测试，取得 Extension 内容判定、API 标签复用和 Board 停止轮询三层 RED；生产代码仍未修改。
+- 已只修改测试：Extension captcha 期望 `verification_required`；API 期望第一次保留验证标签、第二次复用并在登录后关闭；路由两次请求期望共享同一检查器；Board 期望安全验证状态停止 30 秒自动轮询且手动重新检测可转为就绪。
+- 下一步运行三组定向测试，确认它们在 v2.2.7 旧生产实现上按预期失败；红灯成立前不修改生产代码。
+- 三层 RED 已准确失败：Extension 实际 `not_logged_in`；API Pydantic 拒绝新枚举且路由退化为 `unknown`；Board 找不到安全验证标题。其他定向用例未被这些红测误伤。
+- 当前进入最小生产实现：不增加通用浏览器命令，不读取页面敏感数据；只传播专属状态、缓存一个扩展 checker、保留/复用一个验证标签并暂停 Board 自动轮询。
+- 最小实现已落入：Extension 内容层返回 `verification_required`；API checker 用锁保留/复用一个验证标签，路由复用同一 checker；非验证状态恢复原关闭行为。Board 传播新状态、停止恢复轮询、隐藏重复开登录按钮，并提示完成后重新检测。
+- 下一步先重跑四个定向 RED；若转绿，再运行受影响文件的完整回归与 lint/typecheck/format。
+- 四个定向 RED 全部转绿：Extension content 25/25；API 新增 2/2；Board 新行为 1/1。测试证明第一次安全验证不关闭标签、30 秒内不继续 API 轮询、不额外调用系统登录入口，手动重新检测复用标签并转为登录后关闭。
+- 下一步运行受影响的 API 两文件、Board App/Home 与 Extension 全量单测，并并行执行对应 lint、format、typecheck；发现回归时只修复本阶段改动。
+- 模块回归通过：API 51/51、Board App/Home 114/114、Extension 全量 190/190；API Ruff lint、Board/Extension lint 与 typecheck 全绿。唯一失败是 Ruff 要求机械格式化两个已改 API 源文件。
+- 下一步只格式化 `browser.py` 与 `xiaohongshu.py`，再重跑 API 目标全集、Ruff format/lint 和 strict Mypy。
+- Ruff 已仅机械格式化上述两个 API 源文件；没有触碰邻近文件或改变行为。下一步重跑 API 51 项、Ruff lint/format 与项目 strict Mypy。
+- 格式化后 API 51/51 再次通过；四个改动 API/测试文件的 Ruff lint/format 全绿，strict Mypy 对 26 个源文件无问题。
+- 下一步审查本阶段精确 diff 与并发/断连边界，再运行 Board/Extension production build、全 Board 单测和必要的 API 完整回归。
+- 代码审查确认路由 checker 跨请求复用且锁保护并发；异常会清空缓存并 fail closed。增强 API 行为测试为“连续两次仍在安全验证时 open=1/close=0，第三次登录后才 close=1”，直接覆盖用户重复点击重新检测的边界。
+- 下一步重跑增强测试与 format check；通过后执行整仓权威 `scripts/verify.ps1`（含完整 API/Board/Extension、构建与 packaged E2E）。
+- 增强测试行为已通过，Ruff lint 通过；format check 只要求机械重排该新增测试函数。下一步仅格式化该测试文件后启动整仓 verify。
+- 新增 API 测试已机械格式化。现在启动权威 `scripts/verify.ps1`；该门禁使用 mock Provider，不读取真实 Key，不创建 Research Run。
+- 权威 `scripts/verify.ps1` 用时 246.9 秒并全绿：API 574、Board 186、Extension 190、packaged E2E 8；Ruff、64 文件 format、strict Mypy 26 源文件、ESLint、TypeScript、production builds、Windows/Release/Provider/security/process 合同全部通过。
+- 收口 `git diff --check` 通过；工作区全部既有修改、未跟踪组件、`.artifacts/`、`.archresearch/` 和研究数据保持原位。SQLite `mode=ro` 仍为项目 96/活动 0、安装版 0/活动 0。
+- Phase 24 本地开发完成但未发布，正式版本仍为 v2.2.7。当前唯一下一步是等待用户明确是否发布下一补丁；未获授权不 commit、push、PR、安装或发布。
+- 最终恢复文件已同步：Phase 24 标记 complete，`HANDOFF.md` 明确本地修复未发布且 Windows 应用/扩展需同时更新；计划中无 `in_progress` 或 `proposed` 阶段。最终工作区状态保留全部既有修改，未跟踪组件仍在。
+
+# 2026-08-04 — Phase 25
+
+- 用户明确授权正式发布；目标版本确定为 v2.2.8，Windows 应用和独立 Chrome 扩展必须同时更新。
+- 已重新加载 `planning-with-files` 与 `github:yeet` 规范并运行 catch-up；原工作区仍保留全部既有修改与未跟踪组件，没有 reset、checkout、clean 或研究数据操作。
+- 发布提交范围限定为 Phase 24 的 10 个 API/Board/Extension 源码/测试文件，以及 v2.2.8 必需版本、CI artifact、README/文档和 Release 合同；四个交接文件不提交。
+- 当前唯一下一步：核对 `gh` 版本/认证、远端默认分支、最新 main 与 v2.2.8 tag/Release 不冲突，然后做 Release 合同红测。
+- GitHub 前提通过：`gh` 2.96.0，已认证 `jileyu2000`；仓库 `jileyu2000/archresearch`，默认分支 `main`。`origin/main=256c70dc`，正是 v2.2.7 合并基线。
+- `agent/v2.2.8` 远端分支、`v2.2.8` tag/Release 和目标 worktree 路径均不存在；既有 v2.2.5/v2.2.6/v2.2.7 worktree 全部保留不动。
+- 当前唯一下一步：把 Release 合同测试期望先提升为 2.2.8，运行红测确认旧 workflow/版本面被准确拦截。
+- 原脏工作区的版本/Release 合同仍停在 v2.2.6，因为 v2.2.7 曾从隔离 worktree 发布且没有覆盖回原工作区；远端 main 才是正式 v2.2.7 基线。此次必须直接把确认发布面提升到 v2.2.8，并在新 worktree 与 main 比较，不能把原工作区旧版本号误当成产品回退。
+- 已只把 Release 测试期望提升到 v2.2.8，生产 workflow、包版本和 README 尚未同步；下一步运行合同红测，预期准确失败在旧 artifact/版本面。
+- Release 合同红测准确失败在旧 CI Windows artifact 名；现已同步所有确认发布面到 v2.2.8。下一步运行 Release/README 合同、旧版本残留扫描与 `git diff --check`。
+- v2.2.8 Release/README 合同已转绿；受控发布文件中不再残留 2.2.6/2.2.7，`git diff --check` 通过（仅既有 Windows 换行提示）。
+- 当前唯一下一步：在原工作区从头运行完整 `scripts/verify.ps1`；通过后再创建干净发布 worktree，交接记录与本地研究数据不进入产品提交。
+- 首轮完整 verify 通过 API 574/574 和发布前置合同，随后仅因 `__init__.py`、`main.py` 的版本号行需 Ruff 机械格式化而停止；已只格式化这两个已改文件。
+- 当前唯一下一步：从头重跑完整 verify，不能复用首轮部分结果。
+- 第二轮权威 `scripts/verify.ps1` 用时 230.3 秒并全绿：API 574/574、Board 186/186、Extension 190/190、packaged E2E 8/8；Ruff、strict Mypy、ESLint、TypeScript、production builds、Windows/Release/Provider/security/process 合同全部通过。
+- 当前唯一下一步：从 `origin/main=256c70dc` 创建隔离 `agent/v2.2.8` worktree，只带入 Phase 24 十个文件与十一项版本/发布文件。
+- 已创建 `C:\Users\76384\Documents\archresearch-v2.2.8-release` / `agent/v2.2.8`，基线为 `256c70d`；使用 `apply_patch` 只落入 21 个白名单文件。
+- 原工作区混合行尾导致普通 diff 误报整段换行；首次补丁在写入前被拒绝。改用 `--ignore-cr-at-eol` 生成语义补丁后成功，21/21 文件逐项 `git diff --no-index --ignore-cr-at-eol` 一致，worktree `git diff --check` 通过。
+- 当前唯一下一步：在隔离 worktree 运行 setup 与完整 verify；不复用原工作区的 editable Python 环境。
+- 隔离 setup 成功并绑定自身 editable Python 环境；首轮 verify 通过 API 574/574，只因 `apply_patch` 后 6 个 Python 文件存在混合行尾而在 Ruff format check 停下。
+- 当前唯一下一步：仅机械格式化 `__init__.py`、`main.py`、`browser.py`、`xiaohongshu.py` 及两个对应测试，再从头重跑完整 verify。
+- 6 个 Python 文件 Ruff 格式化后与原工作区逐项一致，定向 Ruff lint/format 与 `git diff --check` 通过。
+- 隔离 worktree 第二轮权威 verify 用时 241.3 秒并全绿：API 574/574、Board 186/186、Extension 190/190、packaged E2E 8/8，以及所有 lint/typecheck/build/Windows/Release 合同。
+- 当前唯一下一步：构建两个 v2.2.8 独立附件并执行本地产物结构与冻结程序自检。
+- 本地扩展 ZIP 与 Windows 安装器构建成功；冻结运行时 `--self-test` 退出 0，ZIP 根 manifest 为 2.2.8，安装器输入负载未发现 `manifest.json/background.js/content.js/sidepanel.html/popup.html`。
+- 本地产物：安装器 72,536,012 bytes / `A1DCA547BBE1C40838A8CE9AD3A6FD3E1C8F2A2F06BAF854A7B424CD178B87F9`；扩展 ZIP 18,880 bytes / `0262CF42A9339097A8A227C836AE7CFBA1055187FD920F9652616F7204ADFBB9`。
+- verify 生成的 108 个 SVG 与 `samples.jsonl` 因 worktree 行尾策略显示修改；它们不是产品改动，将不暂存、不清理并保留在隔离 worktree。
+- 当前唯一下一步：显式暂存并核对恰好 21 个发布文件，然后提交、推送与创建 draft PR。
+- 已显式暂存并核对恰好 21 个白名单文件（232 additions/56 deletions）；staged `git diff --check` 通过，fixture、交接记录、artifacts 和研究数据均未暂存。
+- 当前唯一下一步：提交并推送 `agent/v2.2.8`，再创建 draft PR。
+- 21 文件已提交为 `66c37cc` 并推送 `agent/v2.2.8`。GitHub App 创建 PR 因 integration 403 失败，已用认证 `gh` 回退创建 draft PR #20：https://github.com/jileyu2000/archresearch/pull/20 。
+- 当前唯一下一步：等待 PR Hosted CI 全绿并确认真实 Windows 安装/启动/卸载 smoke，再转 Ready 与 squash merge。
+- PR run `30879655088` 首轮在完整门禁末段失败：API 574、Board 186、Extension 190、lint/typecheck/build 均绿；唯一失败是既有 lazy-media packaged E2E 首次枚举偶发返回空数组，后续打包/smoke 因此未执行。
+- 本次 `operations.ts` diff 只拆分 captcha 状态，不触碰媒体枚举；单独 `--grep` 因测试前序 socket 依赖而无效，按真实文件顺序重跑完整 E2E 已 8/8 通过。GitHub App 重跑仍 403，当前只用 `gh` 重跑失败 job，不改产品代码。
+- PR run `30879655088` attempt 2 用时 15m19s 全绿：完整门禁、独立扩展/安装器构建、真实 Windows 安装/启动/卸载 smoke 与两个附件上传均成功。
+- 当前唯一下一步：将 PR #20 转 Ready 并 squash merge，再等待最终 main push CI。
+- PR #20 已 Ready 并 squash merge 为 `b5223649f03f152a4b96d159da65c743832f542c`；`origin/main` 已更新，最终 push run `30881344666` 正在运行。
+- 当前唯一下一步：等待最终 main CI 全绿，下载其 Windows 安装器与扩展附件并核对 digest。
+- 最终 main push run `30881344666` 用时 21m19s 全绿：完整门禁、Windows 安装器/扩展构建、真实安装/启动/卸载 smoke 和两个附件上传全部成功。
+- 已下载 main CI 文件：安装器 70,089,863 bytes / `B091208BF13B7E12D7A21770B7D56CE77EC1625266C2CC46DD55F6642209CBAD`；扩展 ZIP 18,878 bytes / `5BDD32F7C67C75641F56DE6756FF2631979063CEDC1474DE76A6F5356E817130`。
+- 当前唯一下一步：创建 annotated `v2.2.8` tag 并发布这两个 CI 文件。
+- annotated `v2.2.8` tag 已创建并推送；tag object `42520558` 解引用到合并提交 `b5223649f03f152a4b96d159da65c743832f542c`。
+- 正式 [ArchResearch 本地版 v2.2.8](https://github.com/jileyu2000/archresearch/releases/tag/v2.2.8) 已发布，非草稿、非预发布；GitHub asset 名称、大小和服务器 digest 与 main CI 下载文件一致。
+- 正式安装器：70,089,863 bytes / SHA-256 `B091208BF13B7E12D7A21770B7D56CE77EC1625266C2CC46DD55F6642209CBAD`；独立扩展 ZIP：18,878 bytes / SHA-256 `5BDD32F7C67C75641F56DE6756FF2631979063CEDC1474DE76A6F5356E817130`。
+- 发布后 SQLite URI `mode=ro`：项目库 96 条历史 Run/活动 0，安装版库 0/活动 0；未读取凭据，未创建、重试、取消或修改 Research Run。
+- Phase 25 完成。原工作区全部既有修改与未跟踪组件保持；隔离 worktree 的 CI 下载件、本地产物及 108 个 SVG + `samples.jsonl` 行尾变化也保留未清理。当前唯一下一步是等待用户下一项明确任务，不重做 v2.2.8。
+- 用户准备开启新对话进行交接；已将 `HANDOFF.md` 的唯一下一步更新为竞赛提交材料准备。产品开发与 v2.2.8 发布不重做、不回滚。
+- 下一阶段需要比赛通知/提交模板、组别、截止时间、字数、视频时长和附件格式；材料重点是产品功能、运作流程、用户价值、演示脚本和安装说明，不堆开发过程说明。
+- 2026-08-06 Phase 26：复核确认 `App.tsx` 的视觉模式初始化 effect 会在未连接时调用登录恢复，触发 `open-chrome` 与 `open-xiaohongshu-login`。
+- 已先添加红测；旧行为下 Board 测试捕获了 `/browser/open-chrome`，Hook 测试暴露了未连接时启动 20 轮登录轮询的问题。
+- 已移除视觉模式初始化自动登录；未连接 Chrome 扩展时隐藏小红书登录入口，登录恢复 fail closed，不再自动连接或打开 Board。
+- 已更新两个旧自动登录测试为显式点击登录；Board/App 与 `useBrowserReadiness` 定向回归 121/121 通过。待运行 lint、typecheck、build 与完整 Board 测试。
+- 首轮 Board lint 发现删除 effect 后遗留的 `xiaohongshuLoginRecoveryActive` 未使用；已只移除该解构变量。
+- 最终 Board 门禁全绿：15 个测试文件、188/188；ESLint、TypeScript typecheck、Vite 生产构建和 `git diff --check` 均通过。
+- 本地开发 Board `http://127.0.0.1:5173/` 与 API `/health` 均返回 200。Phase 26 完成；未修改数据库、扩展、API 或研究 Run，未 commit/push/release。
+- 2026-08-06 Phase 27：现场确认当前小红书搜索页有 20 个笔记链接、11 张有效可见封面，现有 DOM/URL 规则可识别；根因收敛为受管页面 loading 阶段已可枚举，但 API 两次固定时点均可能早于结果卡渲染。
+- 已建立 Phase 27；下一步先用“前两次空枚举、第三次出现笔记卡”的 API 行为红测锁定修复边界，再增加有上限的结果就绪轮询。
+- Phase 27 红测已确认旧实现两次枚举后返回空列表；现已在小红书搜索层加入最多 5 次、每次 1 秒的有效笔记结果轮询，已就绪时不增加等待，始终为空时有固定上限。
+- Phase 27 验证完成：小红书测试 16/16、完整 API 测试全绿、Ruff、strict Mypy、diff check 全绿；扩展内容协议测试 25/25 全绿。未创建或重试 Research Run，正式 v2.2.8 尚未包含该补丁。
+
+# 2026-08-07 — Phase 28
+
+- 用户明确授权发布 `v2.2.9`；产品改动范围为 Phase 26 登录跳转修复与 Phase 27 小红书结果就绪轮询，Windows 安装器和 Chrome 扩展继续作为两个独立交付物。
+- PR [#21](https://github.com/jileyu2000/archresearch/pull/21) 已合并，主分支提交 `97669e0b28b13260197628c08a29113317b964da`；PR CI `31115430369` 与手动主分支验证 run `31121126690` 均全绿。
+- 主分支验证包含 API 576/576、Board 188/188、Extension 190/190、packaged E2E 8/8、Ruff、strict Mypy、ESLint、TypeScript、生产构建、Windows 安装/启动/卸载 smoke，以及两个附件上传。
+- 从 run `31121126690` 下载并核验最终附件：`ArchResearch-Windows-x64-Setup-v2.2.9.exe` 为 70,137,821 bytes / SHA-256 `FA7DFE24CC8CD67E0DA3B46972148836D778FDAF9989C2CDE9199B264FF31AA`；`archresearch-chrome-extension-only-v2.2.9.zip` 为 18,878 bytes / SHA-256 `958FDCC09655181F096A40C712BD1069EF4915DE075CD4B6FD8B7B307B454715`。扩展根 manifest 版本为 2.2.9。
+- 已创建并推送 annotated tag `v2.2.9`，验证解引用到 `97669e0b28b13260197628c08a29113317b964da`；正式 Release 已发布为非草稿、非预发布，GitHub asset digest 与本地 SHA-256 一致。
+- 当前唯一下一步：用户重新安装 v2.2.9 并验证图纸灵感流程，然后继续整理竞赛演示视频和提交包。原始工作区、临时附件、fixture 行尾变化和真实研究数据均未清理或加入产品提交。
+
+# 2026-08-07 — Phase 29 continuation
+
+- 已重新读取 `HANDOFF.md`、`AGENTS.md`、活动阶段计划和 findings/progress 末尾，运行 planning catch-up；原始工作区既有修改、未跟踪组件和研究数据均保留。
+- Chrome 诊断技能已按要求读取并连接到当前 Chrome；搜索页 URL 与失败查询一致。尝试接管/截图该搜索页时浏览器读取连续超时，之后只成功读取标签列表，没有修改页面、账号或登录状态。
+- 源码核对确认：扩展执行失败不会伪装为空媒体；`XiaohongshuBrowserSearch.search()` 会把成功的 `{media: []}` 过滤为 0 条并写入 `completed/result_count=0`。下一步读取失败 Run 的非敏感 Trace 统计并建立媒体过滤边界红测。
+- 公开无会话 HTTP 请求无法提供可用搜索结构；已先添加扩展内容层红测，覆盖“卡片有 8 个辅助链接、笔记链接位于第 9 个”的真实边界，生产修复尚未验证。
+- 已完成红绿闭环：旧实现对超限卡片返回 `link_url=null`，新实现只从超限卡片中优先取 `/explore/`、`/discovery/item/`、`/search_result/` 路径；Extension 191/191、lint、typecheck 通过，尚未构建或发布新包。
+- 再次尝试可见 DOM 读取仍超时；不再调用 Chrome 控制。下一步执行权威 `scripts/verify.ps1`，然后保留一个独立本地候选包供用户验证，不覆盖正式 v2.2.9。
+
+# 2026-08-07 — Phase 29
+
+- 用户反馈 v2.2.9 现场复测仍失败，并提供结果页截图：0 条可用参考，三个方向均为 0/3。
+- 已恢复 HANDOFF、计划、findings/progress 和工作区状态；原工作区全部既有修改保持，未 reset、checkout、clean 或读取凭据。
+- 已建立 Phase 29，诊断顺序改为最新 Run Trace → 当前 Chrome 受管页面 → Extension 枚举 → API URL/媒体过滤；不再直接增加固定等待时间。
+- 当前唯一下一步：只读定位安装版端口、最新失败 Run 与当前 Chrome 搜索页状态，不创建或重试 Research Run。
+
+# 2026-08-07 — Phase 29 candidate package
+
+- 安装版 SQLite 只读 trace 已确认失败发生在小红书扩展搜索返回空媒体之后：三次搜索均为 `completed/result_count=0`，候选池、页面读取和图像分析均为 0。
+- 已更新独立候选目录 `C:\Users\76384\Desktop\Archsearch\archresearch-chrome-extension-only-v2.2.10-candidate` 的 manifest 为 `2.2.10`，并生成 ZIP；ZIP SHA-256 为 `E62059828CD0A348138B7B02A72F6BD36DF25E66AAE4285719F08C897EA0CDD7`。
+- 候选未覆盖正式 v2.2.9，也未提交、推送或发布；下一步由用户停用旧扩展、加载候选目录后复测一次图纸研究。
+# 2026-08-07 — Phase 29 isolated live acceptance
+
+- 新增忽略目录下的 `.artifacts/qa/live_xiaohongshu_harness.py`，只作为本轮隔离验收入口，不改产品运行代码；它注入 mock Provider/视觉分类器和真实扩展小红书搜索器。
+- 已启动隔离 API `18072` 和 Board `15172`，健康检查分别为 JSON `status=ok/provider_mode=mock` 与 HTTP 200；数据库位于 `.artifacts/qa/phase29-live/archresearch.db`。
+- Chrome 已打开隔离 Board，但 ArchResearch 扩展桥当前未连接；正式/隔离 API 均报告 `connected=false`。本轮尚未提交查询或创建 Run，下一步只读确认现有扩展加载状态并恢复候选扩展连接。
+- 定向 API `54/54`、扩展 `54/54` 通过；Ruff check/format、strict Mypy、Extension lint/typecheck/build 全部通过。
+- 完整 API 回归正常完成：`577 passed, 65 warnings in 211.57s`。警告来自 FastAPI/httpx 与 Python 3.12 SQLite 适配器，不影响退出码。
+- 浏览器策略拒绝直接访问 `chrome-extension://.../popup.html`，因此不能代替用户重载/授权扩展；真实 Board→扩展→小红书流程仍未提交 Run，不能宣称修复已完成。
+
+# 2026-08-07 — Phase 29 service recovery
+
+- 用户反馈隔离入口打不开；只读端口检查确认 `15172`、`18072`、`9872` 当前均无监听，符合 Board/API 进程退出的现象。
+- 本轮仅恢复隔离 API `18072` 与 Board `15172`，继续使用 mock Provider、隔离 SQLite 和真实扩展桥；正式安装版端口与研究数据不触碰。
+
+# 2026-08-07 — Phase 29 live run after service recovery
+
+- 隔离 Board 页面已刷新为正常首页，扩展桥连接成功；API 状态为 `connected=true`，小红书会话为 `logged_in/chrome_extension`。
+- 已按验收查询创建真实隔离 Run `f49ef969-2e7a-4a8a-9e5f-3efcbcd933cd`。第一轮搜索返回 3 条并进入候选池，但三次笔记 inspecting 都是 `candidate_count=0`，第二方向搜索出现 `BrowserCommandError`，最终 `blocked/no_usable_assets`。
+- 端口恢复已完成，但真实结果链路仍未通过；下一步定位笔记页面媒体提取命令与扩展内容脚本返回。
+# 2026-08-07 — Phase 29 screenshot and service check
+
+- 已读取用户截图：隔离 Board 当时为 `127.0.0.1:15172` `ERR_CONNECTION_REFUSED`。
+- 只读复核后隔离 Board/API 已恢复，`15172`、`18072` 均在监听；Board `/`、API `/health` 和浏览器状态接口均返回 200。未修改正式 `9872`，当前正式端口未监听。
+- 继续进入 Phase 29 的代码修复：先为“按搜索结果卡点击笔记再读取详情”补红测，旧实现仍应直达笔记并失败。
+- 已完成红测并实现最小修复：API 为浏览器搜索结果缓存来源搜索页，详情读取通过 `open_xiaohongshu_note` 让扩展在搜索页按完整白名单链接点击；通用网页仍使用原 `open_url`。
+- 定向门禁：API 小红书 18/18、专用 inspection opener 1/1；Extension 协议/内容/执行器 89/89，ESLint、TypeScript、Ruff 和 strict Mypy 通过。
+- 全量门禁：API 全量测试通过；Extension 17 个测试文件 196/196，生产构建通过。尚未完成候选包现场复测。
+- 补充 fail-closed 覆盖后，Extension 定向协议/内容/执行器测试为 91/91；扩展 lint、typecheck、build 与 API Ruff/strict Mypy 均再次通过。候选 ZIP 已同步最新构建。
+- 真实验收预检未创建 Run：隔离 Board/API 为 200，API `connected=true`，但 `/v1/browser/xiaohongshu-session` 返回 `unknown/chrome_extension`；外部 Chrome Board 接管连续超时，不能替用户重载扩展管理页或授权候选扩展。
+- 当前需用户动作：重新加载 `C:\Users\76384\Desktop\Archsearch\archresearch-chrome-extension-only-v2.2.10-candidate`，打开 `http://127.0.0.1:15172/?connect=chrome` 并完成网页读取授权；完成后继续真实 Run 验收。
+
+# 2026-08-07 continuation
+
+- 已按交接要求恢复 `HANDOFF.md`、根 `task_plan.md`、`findings.md`、`progress.md` 和工作树状态；未执行 reset、checkout 或清理。
+- 用户最新截图确认隔离 Board `127.0.0.1:15172` 再次出现 `ERR_CONNECTION_REFUSED`。当前任务回到“服务可用性复现 + 真实图纸流程验收”，未把截图当作新的前端代码证据。
+- 已读取候选扩展、详情点击修复和既有真实 Run 的交接记录；下一步检查端口/进程/启动日志，再复现最小服务启动链路。
+
+# 2026-08-07 detail timing fix
+
+- Chrome 当前隔离 Board/API 进程持续监听；HTTP Board、API health、browser status 均返回 200，API `connected=true`，但 XHS session POST 返回 `unknown/chrome_extension`，当前标签仍是安全限制页。
+- 详情执行器红测复现：目标卡片首轮未渲染时旧实现立即失败；修复后同页重试测试通过。
+- 扩展回归完成：`199/199`、ESLint、TypeScript typecheck、production build 全部通过。下一步同步 `v2.2.10` 候选包并继续隔离现场验收。
+
+# 2026-08-07 candidate refresh
+
+- 已用最新生产构建同步桌面候选目录，并将候选 manifest 保持为 `2.2.10`；正式 `v2.2.9` 未覆盖、未发布。
+- 候选 ZIP 为 20,304 bytes，SHA-256 `634022A1469BAA5AF6B7FD854397E458C30E7BDBC9F7C70BD0856076132561BF`；background bundle SHA-256 `07E912ADA0E5FBFC4F413FE95F2909ABB1A94A2B64CDE2F7258649942C37A5F5`。
+
+# 2026-08-07 final verification notes
+
+- 连续 30 秒服务稳定性检查：隔离 Board `15172` 与 API `18072` 各 6/6 次返回 200；正式端口 `9872` 未监听、未触碰。
+- `git diff --check` 通过。候选 bundle 中可检索到详情动作与“目标笔记不存在”重试逻辑。
+- 打包 E2E 串行复验仍失败于静态页 `page_metadata` 返回 `ok=false` 和 FastAPI fixture 没有本地结果；这两条不涉及本次详情重试，已记录为当前 E2E 基线缺口。
+- XHS session POST 当前返回 `unknown/chrome_extension`，Chrome 页面为小红书安全限制页；没有绕过安全验证，也没有创建新的真实 Run。
+
+# 2026-08-07 repeated login recovery diagnosis
+
+- 新增 Board Hook 红测，旧实现准确复现：一次登录恢复在 30 秒内调用 20 次 `checkXiaohongshuSession()`。
+- 已移除 Board 登录恢复的 20 次定时循环；显式打开登录页后只发起一次恢复检测请求，扩展在同一受管标签内对 `unknown`/`not_logged_in` 最多重查 20 次，仍保留自动检测。
+- 定向恢复/登录/安全验证测试 5/5、Board 全量 190/190、Extension 全量 200/200，两端 lint/typecheck/build 和 diff check 全部通过。
+- 正式 v2.2.9 未覆盖或发布；桌面 `v2.2.10` 候选扩展已同步，ZIP SHA-256 为 `80A3F3CA9246D142164956261FCD65B17A843839737030B007C836A834B690B8`；未创建、重试、取消或修改 Research Run。
+# 2026-08-07 — login launcher and session recovery fix
+
+- 从实际 Chrome 标签复现：点击 Board 的“再次打开小红书登录”一次后新增的是带 `attempt` 的 Board；根因不是 Board Hook，而是隔离 `.artifacts/qa/live_xiaohongshu_harness.py` 的 `launch_isolated_board(_url)` 无条件调用 Board launcher，已改为按固定小红书 URL 分流。
+- 重启隔离 API `18072` 后，Board `15172` → API `18072` 真实单击复测通过：新增小红书登录页和检测页，没有新增 Board。正式 `9872` 未触碰。
+- 读取当前 Chrome 可见页面确认小红书登录页和搜索页均有“我”入口与用户 profile 链接；旧扩展 session API 仍约 8.6 秒返回 `unknown`，证实当前加载的是旧包。
+- 先补红测：`ChromeBrowserPort` 在小红书 session 状态命令首次无内容接收端时旧实现直接失败；修复为将 `xiaohongshu_session_status` 纳入只读重注入恢复。定向测试由失败转为 `29/29`。
+- 扩展全量门禁：`201/201`、lint、typecheck、production build 全部通过。
+- 已同步独立候选目录并重打包：`C:\Users\76384\Desktop\Archsearch\archresearch-chrome-extension-only-v2.2.10-candidate.zip`；manifest `2.2.10`，ZIP SHA-256 `BFE11B6D126779E602F7DA576105D54E3554BF29C8A2A2343A081A93B1E9A51`，background SHA-256 `C1E8D6AF5AF6E7D2057919A2654D60414779A4A18E2CACEF59A7776F755B5718`。
+- 当前阻塞不是代码：Chrome 扩展管理页重载候选属于扩展安装/重载 UI 操作，未获得本轮明确确认，因此未代用户执行。候选重载并刷新隔离 Board 后，才能完成新扩展的真实 `logged_in/chrome_extension` 和图纸 Run 验收。
+- 已清理本轮复现产生的手动搜索页和错误新增 Board，保留原有 Board、扩展管理页和小红书登录页供用户继续操作。
+
+# 2026-08-07 — current live recheck
+
+- 重新读取项目交接、计划、发现和进度文件；未 reset、checkout、clean 或覆盖用户既有修改。
+- 现场检查：隔离 Board/API `15172/18072` 正常，`connected=true`；正式端口 `9872` 未监听。
+- Chrome 页面证据显示小红书会话已登录，但 session API 仍返回 `unknown/chrome_extension`；真实单击“再次打开小红书登录”前后标签列表无变化，没有新增 Board。
+- 发现候选扩展为 `2.2.10`，工作区源码 manifest 为 `2.2.8`；下一步核实实际加载的扩展包与通信恢复，再决定是否需要最小代码变更。
+- 使用完整 Chrome 标签列表复核后，确认真实点击新增的是小红书登录页，不是 Board；旧 Board 标签是此前错误调度的遗留页。下一步只读检查已经打开的扩展管理页。
+- 候选包静态核对通过：候选 `assets/background.js` 含 `xiaohongshu_session_status` 与重注入逻辑，SHA-256 与刚刚生产构建的 `apps/extension/dist/assets/background.js` 均为 `C1E8D6AF5AF6E7D2057919A2654D60414779A4A18E2CACEF59A7776F755B5718`。
+- 回归验证通过：Extension `201/201`，lint、TypeScript typecheck、production build；API 浏览器/小红书定向测试全部通过，`git diff --check` 通过。
+- 最终现场阻塞仍是 Chrome 扩展管理页未能由当前浏览器控制接口代为重载；当前 session API 仍为 `unknown/chrome_extension`，不能把它报告为代码修复后的失败。
+
+# 2026-08-07 — safety verification regression
+
+- 用户报告候选扩展遇到安全验证时直接刷新；恢复 Chrome 现场后只发现 Board，验证码页已丢失，Board 状态为 `unknown`。
+- 本轮成功标准改为：验证码导航一旦出现，停止自动检测，保留同一标签供用户验证；验证完成后只由用户点击“重新检测”恢复。
+- Chrome 控制模块首次使用了错误子目录，已定位插件根目录入口并成功恢复；未触碰页面数据或登录信息。
+- 单次真实“重新检测”观察到两次验证码标签：第一次在约 250ms 出现，第二次约 3.75s 出现；约 20s 后两页都不在 Chrome 中，Board 为 `unknown`。证据确认存在重复 checker 与验证码 URL 未及时优先识别两层问题。
+- 下一步先写 Extension 执行器与 API router 红测，旧实现必须失败；修复后再运行扩展/API/Board 回归并重启隔离服务验证验证页保留。
+- 红测准确失败后已完成两层修复：扩展在每次 session 内容命令前优先识别 captcha URL；API 对同一 `XiaohongshuBrowserSearch` 不再重复执行第二轮检测。
+- 定向红测转绿；Extension `203/203`、Board `190/190`、API 浏览器/小红书定向测试、两端 lint/typecheck/build、Ruff、strict Mypy 全部通过。
+- API 全量测试最终 `580/580` 通过；格式化 `browser.py` 后定向 API、Ruff check/format、strict Mypy 与 diff check 再次通过。
+- 隔离 API `18072` 已重启并由新源码监听，`/health` 正常、`connected=true`；正式安装端口未触碰。
+- 最新 `v2.2.10` 候选 ZIP 已重建并读取 ZIP 内 manifest 复核，SHA-256 `1126A1C73F9D8FF7A534A368D579D43CDE9FD92662E84EE03E085E984179E1AE`。真实验证码保留验收等待用户重载扩展。
+
+# 2026-08-07 — Phase 31 foreground Xiaohongshu candidate
+
+- 用户已重载上一版 `v2.2.10` 候选后，唯一 session 现场仍返回 `unknown/chrome_extension`；标签时序显示小红书搜索页以后台标签打开并持续到超时回收，未新增 Board 或验证码。
+- 红测先失败后转绿：普通网页仍 `active=false`；小红书搜索和笔记详情改为 `active=true`，以支持小红书前台渲染动态登录壳和结果卡。
+- Extension `206/206`、Board `190/190`、API 浏览器/小红书 `56/56`、lint、typecheck、生产构建、diff check 全部通过。
+- 已同步新候选：`C:\Users\76384\Desktop\Archsearch\archresearch-chrome-extension-only-v2.2.10-candidate.zip`；manifest `2.2.10`、12 文件、20,479 bytes、ZIP SHA-256 `A49AB175C11401070D8FA5723650CB83214B8D8D2EA815E0DF30A65DD138D2F5`，background SHA-256 `29579B7D5F4AF4BDD0A8FAE3FE3ACD8FEF6CDC57B48FA1D4D140D32F9DA8C2E9`。
+- 当前未创建、重试、取消或修改 Research Run；正式 `v2.2.9` 未覆盖或发布。等待用户重载新候选后做一次登录检测，成功再做一次完整图纸研究。
+
+# 2026-08-07 — live captcha hold passed, post-scan recovery failed
+
+- 用户已重载候选扩展。外部 Chrome 现场只触发一次“重新检测”，只创建一个安全验证标签；Board 最终为 `verification_required`，没有重复打开、刷新或关闭验证码页。
+- 未操作或尝试绕过验证码；Board 与验证码页均作为 handoff 保留给用户。
+- 用户完成扫码后反馈“小红书连接不上，一直检测不到”。已停止继续点击检测，先恢复项目计划并转入扫码后会话恢复的只读诊断。
+- 当前未修改生产代码、未创建或重试 Research Run、未读取凭据或浏览器存储。
+- 只读接管扫码后的 Board 与小红书首页：小红书可见 DOM 有“我”和 profile 链接，登录真实成功；Board 仍为 unknown。下一步读取 session API 响应/耗时与隔离服务日志。
+- Session API 只读探针耗时 3838 ms，返回 `unknown/chrome_extension`；Board 无页面日志错误。已停止继续触发现场检测，转为源码与行为测试审计。
+- 完成唯一一次并发标签时序探针：搜索标签成功加载，约 4.1 秒 API 返回 unknown 并关闭；没有验证码或重复标签。结论转为内容命令异常被 API 吞并非 DOM 返回 unknown。
+- 新增扩展适配层红测，旧实现 29/30：补注入第一次遇到导航中的 `Document is not ready` 时直接失败。已开始最小修复，仅在既有 5 秒上限内重试只读内容脚本注入。
+- 最小修复后定向 30/30、Extension 204/204、Board 190/190、API 浏览器/小红书 56/56 全绿；Extension lint、typecheck、build 全绿。下一步同步独立 v2.2.10 候选并做真实登录复测。
+- 已同步候选目录并重打 ZIP：manifest `2.2.10`、12 文件、20,500 bytes，ZIP SHA-256 `5DF577E2B942D54BA47528D385D2F8819CAD0F334F0AFAD31248B0E842F9E33D`；background SHA-256 `07D2B0E48FC4D8AE1BC126CBB8D4C1DFE8A9199FB29897B71B1E6F04318DD71C`。正式 v2.2.9 未覆盖或发布。
+- 用户重载后唯一一次真实复测仍为 3966 ms `unknown/chrome_extension`；未创建验证码或 Board，搜索标签约 4.18 秒被关闭。适配层补注入重试未改变现场行为，将撤销而不继续叠加。
+- 已撤销未通过现场的适配层补注入重试及其测试。新增执行器两条红测，旧实现 2 项准确失败；生产修复只把瞬时 session 内容命令异常纳入既有同标签有限复检，验证码 URL 优先检查保持。
+- 新执行器修复门禁：Executor 26/26、Extension 205/205、Board 190/190、API 定向 56/56、Extension lint/typecheck/build 全绿。准备覆盖同一 v2.2.10 候选目录；旧 `5DF577...` ZIP 作废。
+- 最新候选已覆盖：manifest `2.2.10`、12 文件、20,476 bytes；ZIP SHA-256 `B438562A5BDBFF97CCDC8A703AAAA9EC3DCF16EEB48E935A6A727015B74822B7`，background SHA-256 `61D960D004EBE620A5A2F291490058829003EDDC0E8E6EE3C30B5814A01C5601`，与 dist 完全一致。等待用户再次重载后做唯一 session 现场验收。
+
+# 2026-08-07 — diagnostic candidate preparation
+
+- 完整恢复 `HANDOFF.md`、`AGENTS.md`、活动计划、findings/progress 与工作区状态；未 reset、checkout、clean 或触碰正式 v2.2.9。
+- 重跑错误分类红测确认旧实现为 3 failed / 49 passed；实现内容脚本注入、消息不可用、内容操作拒绝和命令超时的安全分类，并让 WebSocket 只返回有限错误码。
+- 扩展定向测试 52/52、全量 209/209、ESLint、TypeScript、QA harness `py_compile` 与 `git diff --check` 通过。
+- 首次 typecheck 因类型守卫不够具体失败一次；改为类型谓词后通过，未重复原失败实现。
+- 下一步构建扩展并覆盖桌面同一 `v2.2.10-candidate`，重启隔离 QA API 以加载记录器；用户重载后只运行一次 session 探针。
+
+- 扩展 production build 通过；桌面候选已覆盖并重打 ZIP：20,714 bytes、SHA-256 `AE70C064DB1931E05A5CD98049A193C843FFC0B71E3E5198FCD73510A6F3E4D7`，background SHA-256 `439A0A4491005EC00509E32DC4F07A7DD169AE8AC2C44A19C4B44A9305988A02`，content SHA-256 `9D3ED6DD1BC1D06008DF34E1A0556C017BFB272B9ADF3C7457FFF8E3A7525120`；ZIP 内 manifest `2.2.10`、12 文件。
+- 隔离 QA API 精确停止 PID 41560 后，首次误用无 `uvicorn` 的 runtime Python，未能启动；随后按项目既有记录改用 `apps/api/.venv`，`18072 /health` 恢复 `ok/mock`。Board `15172` 仍为 200，正式 `9872` 未监听。
+- API 重启后扩展当前 `connected=false`，这是新候选尚未重载/Board 尚未刷新时的预期阻塞；没有执行 session 探针或创建 Research Run。
+
+- 用户确认重载后，系统 Chrome Board 实际停在无 `connect=chrome` 参数的根 URL；复用原标签恢复连接，API 状态转为 `connected=true`。
+- 唯一一次诊断 session 已完成：24,337ms、`unknown/chrome_extension`，QA 精确记录 `error_code=content_message_unavailable`。没有第二次检测、验证码或新增 Board。
+- 下一步为该错误建立内容监听器/documentId 生命周期红测，并撤销未获现场支持的小红书前台开页改动；成功标准仍是现场 `logged_in/chrome_extension` 后再跑完整图纸研究。
+
+- 检查 production bundle 确认 `content.js` 含静态 `import "./protocol.js"`；新增真实 Vite build 红测，旧实现 1/1 准确失败。
+- 将小红书 note URL 校验移到 content 专属模块，避免 background/content 共享 chunk；撤销两个 `active=true` 前台开页改动。构建红测及相关测试 122/122 转绿。
+- Extension 全量 210/210、ESLint、TypeScript、production build、diff check 通过。packaged E2E 首轮 6 项通过、1 项仅因旧错误码断言失败；更新为安全分类后完整 8/8 通过。
+- 同一桌面候选已覆盖：ZIP 22,329 bytes / SHA-256 `71FF6FFEC100C150C0858F77A9AA5B9C2B5E11590E7EA69FD21D9484FE9E2A9B`，manifest `2.2.10`、12 文件，content 自包含。
+- 尝试接管已打开的 `chrome://extensions` 自动重载被 Chrome 内部页策略拒绝；保留现有 Board 作为 handoff。下一步仅需用户手动重载同一候选目录，随后做一次 session 真实验收。
+
+- 用户重载根因修复候选后，session 真实验收通过：`logged_in/chrome_extension`，4,243ms，无验证码、重复标签或 Board。
+- 创建隔离图纸 Run `b9bb962a-67e1-4d8a-afec-0efdea37f373`；Run 完整走过三个方向但最终 `blocked/visual_budget_exhausted`，结果、Board 选中项与候选均为 0。
+- Trace 证明 3 个搜索动作都成功、无浏览器异常，但 `result_count=0`；失败进一步收敛到搜索页 enumerate/link association。
+- 两种 Chrome DOM 读取均超时，未重复第三次。下一步扩展 QA recorder 的安全媒体计数并提供单次搜索探针，不创建新 Run。
+# 2026-08-07 — Phase 32 media enumeration diagnosis
+
+- 收到用户“已重载”后，仅运行一次隔离搜索探针；未创建 Research Run，未触碰正式 `v2.2.9` 或端口 `9872`。
+- 探针确认扩展连接和小红书登录态正常，但搜索页连续媒体枚举均为 0。
+- 下一步按 RED→GREEN：读取现有枚举合同，为新版结果卡媒体表示补失败测试，再实施最小生产修复。
+- Chrome 只读 DOM 统计和截图均超时，已停止重复此路径并记录错误。
+- Executor 红测准确得到 2 failed / 26 passed；最小修复后 28/28 通过。普通网页及小红书登录入口仍后台，只有图纸研究搜索和详情搜索页前台渲染。
+- Extension 全量 211/211、lint、typecheck、生产构建、packaged E2E 8/8 全绿。
+- 最新候选已覆盖并重打 ZIP：manifest `2.2.10`、11 文件、20,131 bytes、SHA-256 `64ED320256FEC5D777748D8C1AAC9DF7570DBA193BB755A5AF57456B92B21FD5`；正式 `v2.2.9` 未修改或发布。
+- 当前唯一下一步：用户在 `chrome://extensions` 对同一候选目录点击一次“重新加载”，随后运行一次搜索探针；探针非零后再创建唯一完整图纸 Run。
+- 用户重载后单次搜索探针通过：`source_count=3`，媒体统计由修复前连续 0 变为首轮 12/12、滚动后 15/15；下一步创建唯一隔离图纸 Run 并验证 Board。
+- 已创建唯一隔离 Run `e45719b0-5d05-4815-99db-17e262666e6b`；约 71 秒后自然终止为 `partial/visual_budget_exhausted`，但 3/3 方向全部覆盖，保留 9 个可用参考和 4 个帖子来源。
+- 9/9 本地 PNG 内容端点返回 200；Trace 39 个事件、浏览器失败 0，实际执行 3 次搜索、12 次详情检视和 24 次视觉检查。
+- Board 刷新后打开最新同名 Run，实际显示“4 篇帖子 · 9 张灵感图”、三个方向、6 个帖子分组；0 个失败占位、0 个控制台错误。Phase 31/32 现场验收完成。
+- 当前唯一下一步：等待用户明确是否正式发布 `v2.2.10`。正式 `v2.2.9` 未修改，未 commit、push、PR 或发布。
+
+# 2026-08-07 — reopen visual quality acceptance
+
+- 按项目恢复顺序完整读取 `HANDOFF.md`、`AGENTS.md`、活动计划与 findings/progress 末尾，并核对工作树；未 reset、checkout、clean 或覆盖用户修改。
+- 查看用户截图和 Run `e45719b0-5d05-4815-99db-17e262666e6b` 的 9 个本地 PNG，确认 0/9 是可用图纸素材。
+- 撤销“Phase 32 已完成、候选可发布”的计划结论，新增 Phase 33 作为活动阶段；成功标准改为逐张内容验收。
+- 首次四文件规划补丁因 `findings.md` 锚点不匹配而整体未应用；已改为按文件实际末尾分别更新，未造成部分写入。
+- 本轮尚未修改生产代码、测试、候选目录或正式 `v2.2.9`，未创建/重试 Research Run，未 commit、push、PR 或发布。
+- 下一步：审计扩展媒体元素/region、截图激活与坐标链路、API 视觉分类输入；先写能稳定复现空白、页面 UI 和坐标失效的行为红测。
+- 已完成首轮只读链路审计：`operations.ts`、`browser-command-executor.ts`、`chrome-browser-port.ts`、`inspection.py` 及相关内容/截图测试。
+- 本地 API 只读查询确认 9 个结果均有具体 XHS CDN `image_url`，并通过内容 SHA-256 映射到 9 个坏截图；没有修改 Run 或下载外部凭据。
+- 一次 PowerShell 资产映射命令因在 `foreach` 后直接接管道产生解析错误；改为先收集 `$rows` 再排序，第二种写法成功，未重复原失败命令。
+- 当前最强根因组合：详情页候选范围过宽 + region 缺少稳定媒体身份 + 截图前页面状态可能变化。下一步先补扩展行为红测，不先改生产代码。
+- 已将 9 个结果的 XHS CDN 直链无凭据下载到 `.artifacts/qa/phase33-direct-probe/` 并逐张检查；4 张是正确完整图纸，5 张是弹层外无关页面图片。
+- 按 Chrome 控制 skill 复用现有搜索标签做只读 DOM 检查；DOM snapshot 与可见 DOM 各超时一次，未刷新、未重复开页、未点击帖子，已停止该诊断路径。
+- 修复范围现已明确为两层：XHS note-detail 只保留实际未被遮挡的图片媒体；这些候选优先保存受限 `*.xhscdn.com` 原图，普通网页继续使用 region 截图。
+- 新增内容层与 API 行为红测：旧实现 Extension 1 项准确失败；API 在修正测试 fixture 后 2 项准确失败。
+- 完成最小实现并转绿：XHS note-detail 遮挡过滤 + 受限 CDN 原图下载；非批准主机保留原截图路径。
+- 回归完成：Extension 212/212、lint、typecheck、production build；API 582/582、Ruff、format、strict Mypy；packaged E2E 8/8；diff check 通过。
+- 生产下载器真实无凭据探针通过：24,612 bytes、WEBP、585×966。
+- 桌面候选目录已只更新新 `content.js`，哈希 `BAA18814...A083`；另生成 phase33 ZIP，20,361 bytes、SHA-256 `79B60463...07536`，旧候选 ZIP 不作为本阶段产物。
+- 首次合并停止/启动 QA API 的复杂命令被策略拒绝；随后精确停止 PID 25176，分步隐藏启动 18072，健康检查恢复 `ok/mock`，正式端口未触碰。
+- 当前扩展桥在 API 重启后为 `connected=false`。下一步由用户手动重载同一候选目录并刷新 Board；随后只跑一次 session 与一条隔离 Run，逐张检查 PNG。
+
+# 2026-08-07 — Phase 33 post-reload live acceptance
+
+- 按恢复合同完整读取 `HANDOFF.md`、`AGENTS.md`、Phase 33、近期 `findings.md`/`progress.md`，并核对 `git status --short` 与 `git diff --stat`；保留全部用户工作树修改。
+- 首个计划片段读取命令因 PowerShell 嵌套引号失败一次；改用单引号和精确行号完成只读恢复，未触碰生产代码。
+- 使用 Chrome 控制复用现有 Board 标签，导航至 `http://127.0.0.1:15172/?connect=chrome`；未新建 Board、未触发小红书登录检测、未创建 Research Run。
+- `GET /health` 返回 `ok/mock`；`GET /v1/browser/status` 返回 `connected=true`、`xiaohongshu_search_available=true`。
+- 当前唯一下一步：执行一次 `POST /v1/browser/xiaohongshu-session`，按返回状态决定继续 Run、保留验证码页或停止诊断。
+- 已执行且只执行一次 `POST /v1/browser/xiaohongshu-session`：4,779 ms 返回 `logged_in/chrome_extension`；未出现验证码、重复小红书页或新 Board。
+- 当前唯一下一步：创建一条新的隔离图纸研究，等待自然终止并定位最终本地 PNG 做逐张内容验收。
+- 已读取本地 OpenAPI 与工作区列表，确认创建参数和默认工作区；近期 Run 全部为 `partial/blocked/completed`，没有活动租约。
+- 已创建且只创建一条新隔离 Run `6e9ef544-b8af-4086-abd9-f392bf2c76ed`；HTTP 201，初始状态 `created`。未重试、取消或创建并行任务。
+- 等待该 Run 自然终止：最终为 `partial/visual_budget_exhausted`，6 个结果、4/4 子方向覆盖；未重试或取消。
+- 已读取 Run、Results、Trace 与 Board：浏览器检视无异常，6 个候选均有本地内容。下一步定位并逐张打开实际 PNG，不以 API 数量判定通过。
+- 已在隔离数据目录定位 6 个候选 PNG。首次默认 `rg --files` 因忽略规则无结果，改用 `--hidden --no-ignore` 成功；未写入或复制图片。
+- 已完成 Rank 0–1 原图人工验收：2/2 为完整、清晰的剖面表达，没有小红书页面 UI、遮罩或错误局部裁剪；均判定合格。
+- 已完成 Rank 2–3 原图人工验收：2/2 为完整的功能图/拼贴剖面合集，无网页 UI、遮罩或错误裁切；累计 4/4 合格。
+- 已完成 Rank 4–5 原图人工验收：Rank 4 合格；Rank 5 为完整但不相关的黑白室内效果图/封面，不是图纸，判定失败。最终 5/6 合格，Phase 33 未完成。
+- 下一步按 RED→GREEN 审计 visual classifier/结果接纳边界，为 `photograph` 不得进入图纸灵感结果建立行为红测，再做最小修复并重新跑完整现场验收。
+- 已完成只读源码审计：类型 mismatch 过滤仅存在于 OpenCLI 下载分支，Chrome/browser 分支缺失。下一步先增加 browser 路径红测，旧实现应持久化 photograph 并准确失败。
+- 首版红测因页面预算过小没有触发浏览器检视，属于无效假绿；已增加路径前置断言并调整为代表性预算。修正后测试准确失败：旧实现持久化 6 个 photograph。
+- 下一步只修改 workflow 的已证实边界：让 Chrome/browser 分支在持久化前执行与 OpenCLI 分支一致的 requested drawing type 过滤，并删除被拒绝项的本地 PNG。
+- 已实现共享 requested drawing type 过滤；新增 browser 行为测试由失败（持久化 6 个 photograph）转为通过（0 个资产、0 个残留 PNG）。
+- 下一步运行相关类型过滤、XHS 原图保存、extension browser workflow 回归，再执行 API 全量测试、Ruff、format 与 strict Mypy。
+- Ruff format check 首轮要求格式化 `workflow.py`，已机械格式化。检查时发现宽泛测试补丁误改两个既有预算，已精确恢复。
+- 相关回归最终 8/8 通过。下一步重新运行 API 全量测试、Ruff check/format check、strict Mypy 和 `git diff --check`。
+- API 全量 583/583、Ruff check、Ruff format check、strict Mypy、`git diff --check` 全部通过。
+- 下一步精确识别并重启隔离 QA API `18072`，刷新既有 Board 恢复扩展桥；正式端口 `9872` 不触碰。
+- 已核对 18072 原进程确为 `live_xiaohongshu_harness:app` 后精确停止 PID 28264；首次组合启动命令被策略拒绝，拆分后新 PID 5196 健康监听 18072。
+- Board 15172 未中断，正式 9872 未监听。下一步刷新既有 `?connect=chrome` Board 恢复扩展桥，然后仅执行一次 session 检测和唯一一次新 Run。
+- 已复用现有 Board 标签导航回 `?connect=chrome`；`GET /v1/browser/status` 返回 `connected=true`、`xiaohongshu_search_available=true`。未新建 Board 或登录标签。
+- 已执行本轮唯一 session POST：5,266 ms 返回 `logged_in/chrome_extension`。
+- 已创建唯一复验 Run `ad270123-244e-4295-98c7-cef6c7bd7f86`，HTTP 201，初始状态 `created`；未并行创建或重试。
+- 复验 Run 自然结束为 `blocked/visual_budget_exhausted`、0 结果。Trace/QA events 显示 4 个搜索方向均枚举 0 个媒体，未进入详情分类；不归因于本轮类型过滤。
+- Chrome 标签列表无验证码或新 Board；旧 XHS 搜索页截图调用超时并重置控制会话，已停止重复该路径。
+- 下一步仅执行一次 `/qa/xiaohongshu-search` 探针；探针非零前不创建第三条 Run。
+- 单次 `/qa/xiaohongshu-search` 探针返回 `source_count=0`；确认搜索枚举问题持续存在。
+- 下一步做一次替代诊断：探针运行期间只读取 Chrome 标签 URL/标题时序，确认是否自动进入 `type=51`、安全限制或空搜索壳；不创建 Run。
+- 用户重载后已完成且只完成一次带观察搜索探针：新标签 `1497398334` 由 `about:blank` → 无 `type` 搜索 URL → 约 1.88 秒稳定为 `type=51`，没有验证码、登录页或新 Board；13,050 ms 后仍为 `source_count=0` 并正常关闭。
+- 当前已排除搜索 URL 未进入笔记模式。下一步只读核对该标签的 QA 命令事件与激活/枚举时序，继续区分前台渲染失败、空搜索壳或页面限制；不创建新 Run，不直接改 URL/选择器。
+- QA events 已确认同一新标签 10 次媒体枚举均为 0 且无命令错误；源码确认该 URL 按 `active=true` 创建。Chrome 控制尝试取得该现有 XHS 标签绑定仍超时并重置控制内核，和历史失败一致，已停止重复页面接管。
+- 仅修改忽略目录中的隔离 QA harness，新增安全页面状态探针；`py_compile` 通过。下一步精确重启 `18072` 加载该诊断端点，恢复扩展桥后只运行一次状态探针；正式 `9872` 和产品代码不触碰。
+- 隔离 API 首次重启误用无 `uvicorn` 的 runtime Python而未启动；读取 stderr 后改用项目 `apps/api/.venv`，服务恢复 `ok/mock`、`connected=true`。正式端口未触碰。
+- 首版状态探针因误用 API 未枚举的 `viewport_metrics` 返回 500；删除该诊断动作后完整通过。真实页面为 `logged_in`、正常 `type=51` URL/标题、metadata 可读，但 media 仍为 0，排除敏感页拦截。
+- 第二次安全探针增加 `page_snapshot` 计数：0 个可见文本块、0 个媒体，未发现登录、验证码、空状态或网络错误文本信号。
+- 最终通过 QA `preserve=true` 保留新标签 `1497398350`，供用户不刷新地目视确认实际页面。当前 API PID `37204`、18072 `ok/mock`、扩展桥已连接；不创建新 Run、不改产品代码。
+- 用户截图确认保留页是正常完整的图片瀑布流。为区分加载时长与窗口状态，新建同会话受管标签 `1497398354`：3.5 秒首次枚举即为 12/12，等待 30 秒后仍为 12/12，并已自动关闭。
+- 结论：不是 13 秒等待不足，也不是 `type=51`、登录、敏感页或媒体筛选问题；人工打开/恢复 Chrome 窗口后枚举立即恢复。下一步按 RED→GREEN 为 XHS 图纸研究标签补“恢复并聚焦宿主 Chrome 窗口”合同，普通网页和登录入口不变。
+- 窗口恢复红测旧实现准确 1 项失败；最小修复只在 `active=true` 研究标签创建后恢复 minimized 窗口并聚焦，随后才导航。后台普通网页与小红书登录入口不触发窗口更新。
+- 首轮并行静态检查暴露两个类型夹具问题：窗口状态需按 Chrome 枚举类型传入，背景入口测试桩缺少 `windows`；修正后定向 63/63、lint、typecheck 全绿。
+- Extension 全量 214/214、production build、packaged MV3 E2E 8/8、diff check 全绿。
+- 已更新同一候选目录的 `assets/background.js` 并生成 `archresearch-chrome-extension-only-v2.2.10-phase33-windowfocus-candidate.zip`：20,459 bytes、SHA-256 `6A22C9F48A5650FCBF07306A2FF474DA9447E2CE6E958E75916F6BE632084C6E`，ZIP/目录 manifest 均为 2.2.10、11 文件。当前 API PID 49136、Board PID 39772、扩展桥已连接，正式 9872 未监听。
+
+# 2026-08-07 — Phase 33 final PNG acceptance continuation
+
+- 用户重载后完成单次无人工前台干预的搜索探针：4,996 ms，`source_count=3`，首次枚举 11/11、滚动后 16/16，标签正常关闭。
+- 已创建且只创建 Run `50f90fc6-dae0-4d80-bc4f-0f1f72e65b87`；自然终止为 `partial/visual_budget_exhausted`，7 个结果、7 个项目、4/4 方向覆盖，未重试、取消或创建并行任务。
+- 恢复会话后重新读取 `HANDOFF.md`、`AGENTS.md`、Phase 33 与 planning 文件末尾，运行 session catchup、`git status --short` 和 `git diff --stat`；保留全部用户工作树状态。
+- 隔离 API 当前为 `ok/mock`，扩展桥 `connected=true`；API Run、Results、Trace 与 Board 已只读复核，7 个 PNG 均已在最新 Run 候选目录定位。
+- 当前只做 7 张 PNG 的 rank 映射和原图人工验收；不创建新 Run、不改代码、不触碰正式 `v2.2.9`、不发布 `v2.2.10`。
+- 已完成 Rank 0–1 原图检查：Rank 0 合格；Rank 1 类型和清晰度正确，但右/下边界截断主体与说明文字，完整性暂存疑。继续检查剩余 5 张后统一作严格结论。
+- 已完成 Rank 2–3 原图检查：两张均为清晰完整的图解/拼贴剖面集合，没有网页 UI、遮罩、正文评论面板或错误裁切，均合格。当前确定 3 张合格、1 张完整性待定。
+- 已完成 Rank 4–5 原图检查：两张均为完整且方向匹配的图解/渲染剖面，未混入网页页面层或 photograph，均合格。当前确定 5 张合格、Rank 1 待最终完整性判断、Rank 6 尚未检查。
+- 已完成 Rank 6 原图检查：为完整的景观剖面拼贴，方向匹配且无网页 UI、遮罩或错误裁切，判定合格。
+- 结合用户小红书搜索页截图确认 Rank 1 的边缘构图来自原始帖子卡片，不是 ArchResearch 二次裁切；作为线稿细节研究清晰有效，最终判定合格。
+- 最新 Run `50f90fc6-dae0-4d80-bc4f-0f1f72e65b87` 的 7 张 PNG 最终 7/7 合格；Phase 33 已完成。未创建额外 Run，未改生产代码，未 commit、push、PR 或发布。
+
+# 2026-08-07 — Phase 34 architecture live regression
+
+- 用户询问 Phase 33 是否影响建筑研究；只读检查确认三项修复均受图纸灵感/XHS 边界约束。
+- 补跑建筑研究专项测试 5/5、扩展 `chrome-browser-port` 与 executor 回归 61/61，全部通过。
+- 用户明确要求“跑一条”。已建立 Phase 34：下一步只创建一条隔离 `precedent_research` Run，等待自然终态并核验 Results、Trace、Evidence 与 Board。
+- 已确认隔离 API 健康且没有活动租约；隔离库无历史建筑研究记录。下一步从 `.archresearch/archresearch.db` 只读取得一条既有验收问题，再在隔离环境创建唯一 Run。
+- 本地正式库题目查询因缺少 sqlite CLI、两种内联脚本解析失败而停止；没有触碰数据库。改用覆盖结构保留、公共动线、自然采光和迁移策略的代表性工业建筑更新问题。
+- 已读取本地 OpenAPI：创建参数明确，建筑研究将使用 `precedent_research/balanced` 并省略只适用于 XHS 的 `research_sources`。
+- 已确认隔离 harness 使用确定性 `MockResearchProvider`；它适合验证建筑研究路径、证据和 Board 合同，但不会调用用户 API Key。继续创建唯一回归 Run。
+- 已创建且只创建 Run `6d540f6f-d54d-4ada-86e5-d40bd9bcddd7`（HTTP 201，初始 `created`）。当前等待自然终态；不取消、不重试、不并行创建。
+- Run 已自然完成：`completed/coverage_satisfied`，12 个结果、4 个项目、4/4 子问题覆盖。逐项 API 检查确认 12/12 均有 facts 和 EvidenceClaims。
+- Trace 中可选 XHS 来源只发生一次 skipped，不影响正式建筑案例；下一步仅验证 Board 实际显示该 Run 与 12 个结果。
+- Board 首次无头检查发现 `apps/board` 未直接安装 `playwright`；一次复杂正则依赖搜索又被 PowerShell 解析拒绝。未安装新依赖，改为定位仓库现有 Playwright 运行时。
+- 已定位 Playwright 仅由 `apps/extension` 的 `@playwright/test` 声明；直接加载底层 `playwright` 仍失败。下一步使用声明包本身，不新增依赖。
+- 使用 `@playwright/test` 成功打开 Board、找到并点击最新 Run；结果页未显示 12 个结果，而是空状态，且无浏览器错误。Phase 34 尚未完成，开始只读诊断 Board 状态衔接。
+- 延长等待并记录网络后确认 Board 正常：4 个子问题、4 个项目、4 个出处、4 组策略全部可见；首次空页是假阴性。当前仅核对 style-profile 404 是否为设计内的可选缺省响应。
+- 已确认 style-profile 404 为前后端明确支持的“尚未创建表达规范”状态，前端回退到默认样式；不构成建筑研究回归。
+- 已查看最终 Board 全页截图：4 个子问题、4 个案例、来源、策略和后续操作区完整可见。Phase 34 完成，未改生产代码、未重试或新建第二条 Run，未 commit、push、PR 或发布。
+
+# 2026-08-07 — Phase 35 started
+
+- 按恢复规则完整读取 `HANDOFF.md`、`AGENTS.md`、计划与近期 findings/progress，运行 session catchup、`git status --short --branch` 和 `git diff --stat`；保留全部用户工作树修改与真实研究数据。
+- 新增 Phase 35，范围为建筑/图纸两类状态判定、停止文案和默认预算；成功标准明确为先红后绿、完整门禁和两条隔离现场 Run。
+- 首个四文件合并补丁因 `findings.md` 锚点不匹配而整体未应用；已改为按文件真实末尾分别更新，没有造成部分写入。
+- 当前尚未修改生产代码或测试，未创建 Research Run，未触碰正式 `9872`，未 commit、push、PR 或发布。
+- 完成状态与预算链路审计：运行中富集逻辑可保留，最终终态应改用 `completion_satisfied()`；视觉 stop reason 只能由 `inspection_budget.exhausted` 产生。Board 已有 completed+enrichment gaps 的“案例不足/图纸较少”展示。
+- 已先修改行为测试：建筑与图纸完整覆盖但富集未满应 completed；真实视觉额度预占满仍 blocked/visual_budget_exhausted；预算合同提高；Board 增加 query/visual 预算准确文案。尚未修改生产代码，下一步运行定向红测。
+- 首轮 API 红测为 5 failed/1 passed：预算合同、建筑状态和视觉预算常量准确失败；两条图纸状态测试因夹具把来源池先硬断言为新值而提前 blocked。已将状态夹具改为兼容当前/新来源池，保留独立预算常量红测，下一步重新确认图纸失败点落在终态语义。
+- 修正夹具后 API 红测为 5 failed/1 passed：建筑完整覆盖仍为 partial；两条图纸完整覆盖分别在 24/48 与 20/48 调用下仍为 `partial/visual_budget_exhausted`；预算值仍为旧值。真实预占满额度测试继续通过。
+- Board 红测为 2 failed/117 passed：旧实现未识别 `query_budget_exhausted`，且视觉额度文案仍错误限定为“图纸数量上限”。红灯现已覆盖全部目标，开始最小生产实现。
+- 已完成第一版最小实现：终态 completed 改由硬覆盖 `completion_satisfied()` 决定；只有视觉预算真实 exhausted 且覆盖未完成时才设置 `visual_budget_exhausted`；运行中仍保留富集目标作为提前完成条件。
+- 默认预算已提高：建筑/通用查询上限、补查轮次、每分支补页、总页面和时间提高约 15%–33%；普通视觉调用/字节与图纸专用视觉调用/字节、帖子检查/来源池提高 25%。Board 同步增加 query budget 文案并把视觉文案改为同时适用于调用数和字节额度。
+- 第一轮生产实现定向测试：API 核心 6/6 通过，覆盖建筑完成、两种图纸完成、真实视觉耗尽和新预算合同；Board `App + contracts` 119/119 通过。
+- 定向转绿过程中只调整了两类合法期望：新增补查轮次使 quick 恢复测试查询数从 15 增至 18；统一检索预算文案后更新两处旧 UI 文案断言。下一步运行更广回归并处理仅由新合同导致的旧断言。
+- 第一轮完整回归：Board 190/190 全绿；API 564/584，通过 20 条失败。失败集中在旧来源池/视觉额度固定值和旧“`gaps=[]` 仍 partial”断言，没有运行异常、数据库错误或证据链失败。
+- 已定位 6 处 `limit==8`、多处 48/12 视觉额度断言，以及 9 个建筑 enrichment-only partial 测试。下一步逐项核对 coverage gaps 后再更新，真实缺口测试不会改成 completed。
+- 一次批量状态断言补丁因文本完全相同，误命中“仅执行 1 次查询、覆盖不全的真实时间耗尽”测试；核对后已精确恢复为 `partial/time_budget_exhausted`，并把 completed 更新移到实际 3/3 覆盖的 OpenAI 时间预算测试。生产代码未受影响。
+- 复跑首轮 20 个 API 失败点后 19/20 通过；唯一剩余是扩展图纸路径因新预算从 8 篇/48 次提升到 9 篇/54 次，第三方向现在达到 3 篇富集目标并 completed。已按这一预期收益更新测试。
+- 第二轮完整门禁全绿：API 584/584；Ruff check、55 文件 format check、strict Mypy；Board 190/190、lint、typecheck、production build；Extension 214/214、lint、typecheck、production build；`git diff --check` 通过（仅既有 CRLF 提示）。
+- 当前自动化已证明更高预算未破坏 API、Board 或扩展协议。下一步补跑 packaged extension E2E，然后进入隔离环境建筑/图纸各一条现场验收。
+- Packaged MV3 E2E 8/8 通过，覆盖连接、权限、媒体枚举、懒加载、协议边界、重连和 FastAPI 真实浏览器裁图。自动化门禁全部完成。
+- 现场服务盘点首条 PowerShell 因 `foreach` 后直接接管道产生解析错误；命令未执行任何进程操作。下一步改用 `$rows` 收集后只读输出精确 PID/命令行。
+- 已按恢复规则再次运行 session catchup、读取 Phase 35 与规划文件末尾并核对工作树；全部用户既有修改和真实研究数据保持不动。
+- 当前隔离环境：Board `15172`/PID 39772、QA API `18072`/PID 43784，健康 `ok/mock`；正式 `9872` 未监听。API 已加载新预算与状态源码，但扩展桥为 `connected=false`。
+- Chrome 控制首次连接和等待 2 秒后的唯一重试均返回不可用。只读诊断确认 Chrome、ChatGPT 浏览器扩展和 native host 均安装正确，唯一原因是 Chrome 进程当前未运行。
+- 下一步需先取得用户授权启动系统 Chrome；启动后复用现有 Board `?connect=chrome` 恢复 ArchResearch 扩展桥，再只执行一次小红书 session 检测，并顺序跑建筑与图纸各唯一一条现场 Run。
+- 用户授权后已启动系统 Chrome；ArchResearch 扩展桥恢复 `connected=true`。本轮唯一一次小红书 session 检测用时 4,291 ms，返回 `logged_in/chrome_extension`，未出现验证码或重复 Board。
+- 已创建 Phase 35 首条建筑 Run `2669dd7d-1a99-4adf-ac02-244e700ed8c1`。新预算字段准确生效，Run 自然结束时已有 12 条结果、4 个项目、4/4 子问题覆盖，但被标为 `blocked/browser_inspection_incomplete`。
+- 只读 Trace、Results 与 QA events 证明失败来自 QA fixture 的 `research.example` 无法解析；12/12 结果仍有 facts 和 EvidenceClaims。未重试、取消或并行创建任务。
+- 已只修改忽略目录中的隔离 QA harness：新增 `PublicPageMockResearchProvider`，仅把 Mock 正文来源映射到 `https://example.com/`，不修改产品代码或 `BrowserBroker` 的公网地址安全限制。下一步先做语法检查并精确重启 18072，再跑一次建筑复验。
+- QA harness 语法检查通过，`example.com` 解析为公网地址；精确停止旧 PID 43784 后，首次复杂启动命令被策略拒绝且未启动进程，改用简化分步命令成功启动 PID 29088。18072 恢复 `ok/mock`，扩展桥自动重连。
+- 建筑复验 Run `9bc42dff-7d45-4fa3-857c-e789fed6b6cb` 自然结束为 `completed/coverage_satisfied`，新预算正确，17 个结果、4/4 覆盖；但用户指出建筑不应搜索小红书。Trace 证实执行了 4 次 XHS 搜索并混入 5 条候选，因此该 Run 作废。
+- 已确认 Board 正常创建路径对建筑显式发送 `research_sources: []`、对图纸发送 `[xiaohongshu]`；本次手动请求漏传字段，同时后端 schema 默认值错误为 XHS。
+- 已先将 schema 行为测试改为“默认来源必须为空”，尚未修改生产 schema。下一步运行定向红测，确认旧实现准确失败后再做一行最小修复。
+- 定向 schema 红测准确失败；随后只把 `ResearchSpec.research_sources` 默认工厂改为空列表，并在既有 Run 集成测试增加 `research_sources == []` 断言。
+- 定向 schema/Run 测试 42/42 通过；API 全量 584/584、Ruff check、55 文件 format check、strict Mypy 26 个源文件全部通过。
+- 下一步精确重启隔离 API 加载来源默认修复；建筑现场请求将显式传 `research_sources: []`，验收 Trace 中 XHS 搜索次数必须为 0。
+- 用户要求把既有代码路径也分开。已完成交叉点审计：历史建筑 Run 的旧 XHS 字段和 Provider 返回的 XHS URL 都能绕过 schema，说明仅改请求默认值不足。
+- 已先把旧“建筑可选 XHS 失败不影响完成”测试改为“建筑必须完全不调用 XHS”，并新增 Provider 混入 XHS 时建筑只保留公开建筑来源的行为测试；尚未修改 workflow，下一步确认两项红测准确失败。
+- 两项 workflow 红测准确失败：建筑旧标记调用 XHS 3 次，Provider 返回的 3 个 XHS 资产全部进入数据库。
+- 已完成目标限定的最小实现：建筑入口忽略遗留 XHS 来源，公共搜索和 Provider 结果均过滤 XHS；图纸 workflow 代码未改。
+- 建筑两项隔离测试、API/schema 路由测试和既有图纸 XHS-only 测试合计 5/5 通过。下一步运行 API 全量、Ruff、format、strict Mypy，再重启隔离 API 做两条现场验收。
+- 首次 API 全量为 583/585，通过 2 条旧混合路径测试失败；Ruff 与 strict Mypy 通过，format 要求机械格式化 `workflow.py`。
+- 已机械格式化并把两条旧 XHS 测试改为明确 visual goal；其中浏览器回退测试新增 `provider.queries == []`。定向 5/5 重新通过。
+- 下一步再次运行完整 API 门禁；全绿后才重启隔离服务和创建新的建筑/图纸现场 Run。
+- 第二轮 API 全量 585/585、Ruff check、55 文件 format check、strict Mypy、`git diff --check` 全部通过（仅既有 CRLF 提示）。
+- 下一步精确重启隔离 API 加载 schema/workflow 路径隔离；新的建筑 Run 必须显式来源为空、Trace XHS 调用为 0，随后再单独创建图纸 XHS-only Run。
+- 隔离 API 已精确重启并自动恢复扩展桥。建筑现场 Run `71b77948-d3cf-4665-b344-70d5bf063858` 显式使用 `research_sources: []`，自然完成为 `completed/coverage_satisfied`。
+- API/Trace 验收：12 个结果、4 个项目、4/4 覆盖、12/12 facts/EvidenceClaims；XHS 搜索和资产事件均为 0，浏览器公开页 12 次 completed、0 skipped。
+- Board 无头验收及截图人工查看通过：4 章节、4 案例、4 来源，无“小红书”文案、alert、pageerror 或本地响应错误。下一步只创建一条图纸 XHS-only Run并逐张验收 PNG。
+- 已创建唯一图纸 XHS-only Run `3fa69853-1b6a-41be-b9fa-7fca388fa4f4`；它自然结束为 `blocked/no_usable_assets`，未取消或重试。
+- Trace 确认图纸未调用公共网页或建筑 Provider；失败来自 Chrome 搜索页媒体枚举持续为 0，第二次搜索尾部出现扩展 `execution_failed`。扩展桥当前仍连接。
+- 下一步只执行一次 `/qa/xiaohongshu-page-state` 安全状态探针；如为验证码则保留页面等待用户，不刷新；如非验证码再检查窗口/内容脚本状态。
+- 唯一页面状态探针返回 `logged_in`、无验证码，正确 `type=51` 页面并枚举 11 张媒体；探针正常关闭标签。
+- 已满足“探针非零后才允许复验”的门槛。下一步只再创建一条图纸 XHS-only Run；若仍失败则停止重复创建并回到扩展命令层诊断。
+- 已创建第二条且最后一条诊断用图纸 Run `3bc25c99-604f-4329-a66b-5ff02be9cbfb`；自然结束为 `partial/time_budget_exhausted`，3 个结果、2/4 方向覆盖，未取消或并行创建。
+- 恢复后按项目规则完整读取 `HANDOFF.md`、Phase 35 与 planning 文件末尾，运行 session catchup、`git status --short` 和 `git diff --stat`；保留全部用户修改和真实研究数据。
+- 当前 API 只读复核确认该 Run 实际约 91 秒，balanced 时间预算 4320 秒；视觉仅 10 次、约 1.77 MiB，停止原因不是真实预算耗尽。
+- 源码只读审计确认根因：统一 workflow 的 `xiaohongshu_searched_subquestions` 限制每方向只搜一次；四个方向首轮后，图纸 XHS-only 三种搜索能力都为 false，统一无分支逻辑错误写入 `time_budget_exhausted`。
+- 用户进一步要求既有代码也要分开。下一步先写红测，要求图纸在覆盖缺口和预算充足时允许受限的后续 XHS 补查，同时锁定建筑不调用 XHS、图纸不调用建筑 Provider；红灯准确后再做最小策略分离。
+- 首次只读 Run 查询因猜测不存在的 `/trace` 端点而整体 404；随后从 FastAPI 路由确认使用 `/events` SSE，并成功读取完整 Run、Results 与 55 条 Trace，未修改服务或数据。
+- 继续审计查询构造与恢复状态：图纸 balanced 已生成 3 轮查询，`QueryAttempt` 按轮次+方向去重；旧 XHS 方向集合是多余且破坏补查的并行状态。
+- 已确定红测目标：首轮某方向无结果、另一方向已覆盖时，第 2 轮必须跳过已覆盖方向并重新搜索缺口方向；整个过程中建筑 Provider 与公共搜索保持零调用，最终不得误报时间耗尽。
+- 已新增图纸后续轮次行为测试。首次夹具仅含 2 个方向，被 `ResearchPlan(min_length=3)` 正确拒绝；修正为 3 个方向后，旧实现准确红灯：只执行 `linework/collage/rendered` 首轮 3 次搜索，没有第 2 轮 `collage` 补查。
+- 红测同时锁定 Provider 搜索为 0；因此后续生产修复不能通过恢复建筑/通用搜索来“让测试通过”。
+- 已完成最小生产策略分离：删除图纸每方向终身只搜一次的集合；建筑显式禁用 XHS；图纸显式禁用公共/Provider 搜索，覆盖未完成时跳过已覆盖方向并在后续轮次补查缺口。
+- 图纸第 2–5 轮使用受控视觉补查词，避免重复搜索同一关键词；不引入建筑类型、用户主问题或 Provider 指令文本。
+- 新红测已转绿；随后 11 项建筑/图纸边界回归全部通过。下一步检查差异和格式，再运行 API 全量、Ruff、format、strict Mypy 与 diff check。
+- Ruff 首轮仅要求机械格式化 `workflow.py`；已只格式化该文件。并行 API/Mypy 因 Ruff 非零提前结束，未误报为完成。
+- API 全量复跑为 579 passed / 6 failed。已逐项确认都是旧测试依赖已退役混合路径或固定单轮 XHS 次数；下一步只修测试边界，不修改生产策略。
+- 6 个旧失败中 5 个已转绿。最后一项已确认生产行为正确：可信建筑项目页远程图片只分类一次；测试仍用 visual_lead 过滤导致取不到该 `partial` 资产，下一步只更新断言到建筑证据合同。
+- 最后一项已更新为可信建筑项目页证据断言并转绿。第二次 API 全量 586/586 通过；Ruff、55 文件格式检查、strict Mypy 及 diff check 全绿。
+- 自动化阶段完成。下一步只读盘点隔离 Board/API/正式端口和扩展桥，精确重启 QA API `18072` 加载策略分离代码，然后顺序做建筑与图纸现场验收。
+- 已完成端口盘点：15172/PID 39772、18072/PID 48840；隔离 API 健康且扩展桥 connected，正式 9872 未监听。下一步只读确认 QA 数据库环境路径后精确重启 18072。
+- 用户中断后只读确认旧 QA API 已退出、数据库无活动 Run；stderr 显示误用 runtime Python 缺少 uvicorn。改用项目 venv 分步启动后 18072 恢复 `ok/mock`。
+- 重启后扩展桥 initially disconnected；只调用一次 ArchResearch `/v1/browser/open-chrome`，随后 `connected=true`、XHS search available。下一步先创建唯一建筑现场 Run。
+- 建筑唯一现场 Run `178890fd-80e6-45fc-955b-99a801d3a23b` 已完成并通过路径隔离/证据验收。随后一次 XHS session 检测返回 logged_in/chrome_extension。
+- 图纸唯一现场 Run `cb66cf77-a426-4a97-ae18-1f60838d60e7` 已 completed/coverage_satisfied，4/4 方向；Trace 证明 3 轮补查真实执行且 Provider/公共网页为 0。
+- 开始 6 张 PNG 严格人工验收：Rank 0 因照片和巨大标题混入不合格，Rank 1 合格。当前 1/2 合格，继续 Rank 2–3。
+- Rank 2–3 已检查：Rank 2 内容干净但 collage_style 方向存疑，Rank 3 合格。当前确定 Rank 0 不合格，Rank 1/3 合格，Rank 2 待最终方向判断；继续 Rank 4–5。
+- 已补记 Rank 4–5 人工结论：两张均为完整且方向匹配的图解/剖面研究素材，无网页 UI、遮罩、正文评论或应用侧错误裁切，均合格；Rank 0 不合格，Rank 2 方向匹配仍存疑。
+- 按用户要求开始物理路径拆分：先写结构/行为红测，旧代码准确因缺少 `research_paths` 模块而失败；随后新增建筑/图纸独立策略模块，共享入口只选择一次策略。
+- 已将建筑来源归一化、公开/Provider/XHS 搜索许可、建筑恢复轮次和终态规则迁入 `research_paths/precedent.py`；将图纸 XHS-only、视觉补查查询、图纸类型过滤和视觉终态规则迁入 `research_paths/drawing.py`。
+- API 定向 workflow 回归通过；Ruff、format、strict Mypy 通过；API 全量 591/591 通过。下一步补跑最终静态/差异检查，并重启隔离 API 进行建筑与图纸两条现场回归，随后继续处理 Rank 0 复合封面筛选。
+- 物理拆分后建筑现场 Run `e5536a6f-00b5-45a1-bab0-fc106e4ade92` 通过：`completed/coverage_satisfied`，4/4 覆盖，12/12 facts 与 EvidenceClaims，XHS 搜索事件和 XHS URL 均为 0。
+- 物理拆分后图纸现场 Run `bb20e775-6a03-4c6d-a6dd-165692e602e4` 通过流程/路径验收：`completed/coverage_satisfied`，4/4 方向，三轮 12 次 XHS 搜索，公共页面事件 0，Mock Provider 12 次均 skipped；但开始逐张 PNG 检查后，Rank 0 复合封面不合格，Rank 1 为外立面效果图/照片也不合格，尚不能宣告图纸内容验收通过。
+
+## 2026-08-07 — execution runner split started
+
+- 完成新会话只读恢复，确认现有工作树和 Phase 35 交接状态。
+- 为“旧执行代码也要分开”先写结构红测；当前准确失败，因为 `research_paths/precedent_runner.py`、`drawing_runner.py` 尚不存在，且 `workflow.execute_research_run` 仍承载两条路径的执行分支。
+- 下一步：把路径专属搜索/检视执行代码迁入两个 runner，保留共享数据库、证据、预算和 checkpoint 底座。
+- 已新增 `precedent_runner.py` 与 `drawing_runner.py`，入口 `execute_research_run` 只按目标分发一次；建筑 runner 丢弃视觉搜索依赖，图纸 runner 丢弃公共页面解析器。
+- 定向回归已通过：路径 7/7、workflow 53/53、browser inspection 168/168、XHS 24/24。
+- 完整 API 门禁已通过；Ruff check、Ruff format check、strict Mypy 32 个源文件和 `git diff --check` 全部通过。Board/Extension 未改动，本轮未发布、未创建新现场 Run。
+
+# 2026-08-08 — isolated E2E result
+
+- 重启并核对隔离服务：API `18072` 加载最新源码且健康，Board `15172` 正常，扩展桥 connected，正式 `9872` 未监听。
+- 通过 Board 创建建筑 Run `18c6edd1-3361-4e66-9869-c6305c3d759d`，自然终态 `completed/coverage_satisfied`；12 结果、4 项目、4/4 覆盖、12/12 facts/EvidenceClaims，XHS Trace/URL 均为 0。建筑路径通过。
+- 通过 Board 创建图纸 Run `f09b3e6c-695a-4076-9d9a-81e501b81c00`，严格 XHS-only；6 次 XHS 搜索、公共/Provider 0 调用，但所有搜索媒体枚举均为 0，终态 `blocked/no_usable_assets`，0 结果/0 PNG。图纸路径当前未通过。
+- 失败层级已从 workflow 收敛到 Chrome 扩展媒体枚举：搜索 URL 打开、等待、滚动和关闭均执行，未进入图纸质量门禁。
+- 当前不继续创建 Run。先加载桌面已有 `C:\Users\76384\Desktop\Archsearch\archresearch-chrome-extension-only-v2.2.10-phase33-windowfocus-candidate.zip`，再进行唯一一次图纸复验；本轮无生产代码变更。
+
+## 2026-08-08 — v2.2.10 release preparation
+
+- 用户明确授权先发布 `v2.2.10`，再使用发布版扩展复验图纸灵感；现有隔离失败 Run 不重试、不取消、不并行创建。
+- 发布范围审计确认当前产品改动、测试、用户文档和 CI/Release 合同属于本次发布；`.planning/`、QA 数据、桌面候选 ZIP、`HANDOFF.md`、`findings.md`、`progress.md` 和 `task_plan.md` 仅作本地交接，不纳入提交。
+- GitHub CLI `2.96.0` 已认证，远端默认分支为 `main`；远端尚无 `v2.2.10` 标签或 Release。
+- Release 合同红测先准确失败于旧 v2.2.8 CI artifact 名；已将 API、Board、Extension、manifest、CI artifact、README、Chrome 安装说明、架构附件名和 Release 测试统一为 `2.2.10`，合同测试已转绿。
+- 当前分支为 `agent/local-release-v2.2.2`，不执行 reset、checkout、clean 或 rebase；下一步运行完整本地门禁并构建两个独立发布附件。
+- 首次完整门禁在 API 594/594 后只因版本同步造成的 `__init__.py`、`main.py` 格式检查失败；Ruff 机械格式化后重跑全量门禁通过：API 594/594、Board 190/190、Extension 214/214、packaged E2E 8/8、lint/typecheck/build、strict Mypy 全部通过。
+- 扩展 ZIP `archresearch-chrome-extension-only-v2.2.10.zip`：20,459 bytes，SHA-256 `9A8EEB5D18B47742040F48706DA5264572944504E4C73D31253E3CC5EDDCDB6E`，11 entries，manifest `2.2.10`。
+- Windows 安装器 `ArchResearch-Windows-x64-Setup-v2.2.10.exe`：69,759,127 bytes，SHA-256 `5C1D73C36F296AB0C284084F3CF851A9D2A5B93C38B52D4681BCD970598787B5`；安装/启动/卸载 smoke 通过，安装器未捆绑扩展。
+- 当前下一步：提交 staged 产品变更，推送分支并创建 draft PR；PR/主分支 CI 通过后再创建 v2.2.10 Release 并上传这两个独立附件。
+
+# 2026-08-08 — v2.2.10 release completed
+
+- 最新提交 `81087c4` 已推送，PR #22 已 squash 合并到 `main`，合并提交 `a2ff995bfed696980df61962ca592f2a2b56d5d6`。
+- 主线 Hosted CI run `31245075246` 成功；完整门禁、扩展包、Windows 安装器、安装/启动/卸载 smoke 和两个附件上传全部通过。
+- annotated tag `v2.2.10` 已推送，正式 Release 已发布且为非草稿、非预发布。
+- Release 附件已从主线 CI 下载并核验：扩展 ZIP 20,438 bytes / SHA-256 `3ADD848F3A094410B2C2295B5F5CA88B6FD924C9F64F4F00CB6763DB0F1C7624`；Windows 安装器 70,255,649 bytes / SHA-256 `B01936155FC6692CABD0124DB9FDB97137DCE34D4A31BEEC425E5D868466AE7F`；GitHub digest 与本地文件一致。
+- 当前下一步：确认 Chrome 实际加载正式 `v2.2.10` 独立扩展后，只创建一条图纸现场复验；发布前失败 Run 不重试、不取消。
+
+# 2026-08-08 — thread handoff closeout
+
+- 已修正 GitHub Release `v2.2.10` 说明中的字面量 `\\n`，现在页面显示为正常分段和项目符号；附件和版本 tag 未改变。
+- 产品提交、PR #22、主线 CI `31245075246`、`v2.2.10` tag 和正式 Release 均已收口。
+- 工作区只保留本地交接记录、CI 下载件和竞赛材料规划；不执行清理，不将这些文件加入产品提交。
+- 换线程后的唯一下一步：加载并确认正式 `v2.2.10` 独立扩展，再创建一条图纸现场复验。
+
+## 2026-08-08 — installed version is the acceptance target
+
+- 按恢复规则重新读取 `HANDOFF.md`、`AGENTS.md`、Phase 35、`findings.md` 与 `progress.md` 末尾；未读取旧对话作为项目依据。
+- 只读确认安装版进程为 `C:\Users\76384\AppData\Local\Programs\ArchResearch\ArchResearch.exe`，版本 `2.2.10`，动态端口 `9325`；安装版 Board 标签也位于 `http://127.0.0.1:9325/`。
+- 读取安装版 Run `d1c0f6f9-1933-47a2-a0df-08e00c3eb836`：12/12 XHS 搜索成功、每次 8 个候选；20/20 浏览器检视为 `ValidationError`，终态 `blocked/no_usable_assets`，没有结果或 PNG。
+- 运行安装版登录态只读探针，返回 `logged_in/chrome_extension`。未读取 Cookie、账号、密码或 API Key；未创建第二条 Run。
+- 比较桌面扩展目录与正式 `v2.2.10` CI ZIP，11 个文件长度和 SHA-256 全部一致。浏览器管理页访问被安全策略阻止，未尝试绕过；XHS DOM 探针超时后停止重复。
+- 当前状态：Phase 35 仍为 `in_progress`。下一步只读定位 `MediaEnumeration` 的具体 Pydantic 校验失败或取得活动扩展实例版本证据，不改生产代码、不重复现场 Run。
+
+## 2026-08-08 — sanitized validation trace patch
+
+- 新增浏览器响应校验诊断红测；旧实现准确失败于缺少 `validation_model`，既有 `error_type=ValidationError` 保持可见。
+- 生产实现只在 Pydantic 校验异常时记录首个错误的模型名、字段路径和错误类型；使用 `include_input=False`、`include_url=False`，测试确认原始非法值未进入 Trace。
+- 定向测试和完整 `test_browser_inspection.py` 回归通过；API 全量通过，Ruff check、70 文件 format check、strict Mypy 32 个源文件和 `git diff --check` 全绿。
+- 首次 strict Mypy 因摘要字典被推断为 `dict[str, str]` 失败；只增加 `dict[str, object]` 类型注解后转绿，运行时行为未改。
+- 当前下一步：构建并覆盖安装诊断版，确认实际安装进程加载新代码后继续协议诊断。重新安装前不创建新 Research Run。
+
+## 2026-08-08 — installed protocol root cause and red-green fix
+
+- 诊断安装版启动成功：`2.2.10`、动态端口 `11154`、Provider/model 保持 `openai/gpt-5.6-sol`；数据库安装前后 SHA-256 均为 `5F16017462324C8D0EE5BEEBEEABCFC82441B8FD158616BA2563D2EAD8313F29`。
+- 安装版登录态探针返回 `logged_in/chrome_extension`。唯一诊断 Run `99670d73-73fd-4e5a-8d80-c3ff4818cdd2` 自然终止为 `blocked/no_usable_assets`，15/15 browser 事件均为 `BrowserCommand.action/literal_error`，没有结果或 PNG。
+- 审计确认 API 漏枚举 `open_xiaohongshu_note`；扩展端已经支持该固定协议。新增协议红测先准确失败，生产补齐动作枚举和小红书搜索/详情 URL 校验后转绿。
+- API 全量、browser/XHS 定向回归、Ruff、70 文件 format check、strict Mypy 32 个源文件和 diff check 全绿。
+- 当前下一步：重新构建并覆盖安装包含协议修复的版本，确认安装版桥和登录态后只 retry 现有诊断 Run 一次；不创建第三条 Run。
+
+## 2026-08-08 — installed protocol-fix acceptance retry
+
+- 协议修复后的实际安装版 `2.2.10` 已启动在动态端口 `11100`；`/desktop-health`、`/health` 正常，Provider/model 保持 `openai/gpt-5.6-sol`，扩展桥 `connected=true`。
+- 只调用一次 `/v1/browser/xiaohongshu-session`，4.3 秒返回 `logged_in/chrome_extension`；没有安全验证状态，也未读取 Cookie、账号、密码、浏览器存储或 API Key。
+- 只对既有 Run `99670d73-73fd-4e5a-8d80-c3ff4818cdd2` 调用一次 `/retry`；返回 HTTP 200，同一 Run 进入 `created`、`attempt=1`，未创建第三条 Run。
+- 当前下一步：等待该 Run 自然终止，不取消、不再次重试；终态后核对浏览器 Trace 是否已消除 `BrowserCommand.action/literal_error` 并进入页面元数据与媒体枚举。
+- 同一 Run 在约 25 秒后自然终止为 `blocked/no_usable_assets`，0 个 Results/PNG；未取消、未再次重试。
+- 本次 Trace 序号 59–116：15 个 browser 事件的旧 `action/literal_error` 为 0，但 15/15 均为 `BrowserCommand` 根级 `value_error`，目标全部是 `/search_result/<note-id>` 详情 URL。
+- 根因是协议修复中的 URL helper 把搜索页“精确 `/search_result`”规则错误复用于详情 URL，因而拒绝真实候选链接。下一步先新增实际 `/search_result/<note-id>` 的协议红测，再做最小安全修复。
+- 只读 Trace 首两次时间筛选误得 0：PowerShell 7 的 `ConvertFrom-Json` 已将 `created_at` 自动转为 `System.DateTime`，字符串比较失效；改按 `.Hour` 切分后得到正确 58 条 retry 事件。该错误未调用写接口，也未改变 Run 或数据。
+- 按计划新增真实 `/search_result/<note-id>` 协议红测；旧实现准确失败于 `Xiaohongshu note navigation requires a safe note URL`。
+- 生产修复将小红书搜索页的精确路径检查与详情 URL 前缀检查分开，仍限制 HTTPS、官方小红书主机、无凭据和固定详情前缀；同时拒绝空 `/search_result/` 详情路径。
+- `test_browser_ws.py` + `test_xiaohongshu.py` 定向回归 57/57 通过。此前根目录 `.venv` 路径不存在，已改用 `apps/api/.venv/Scripts/python.exe`；缺失 README/pyproject 的并行查询未改文件或运行服务。
+- API 全量回归 600/600 通过；Ruff check 通过；Ruff format check 71 文件通过；strict Mypy 32 个源文件通过；`git diff --check` 通过（仅既有 LF/CRLF 提示）。
+- 当前源码验证完成。下一步重新构建包含详情路径修复的独立安装器，覆盖安装并保护当前 SQLite；启动后只做健康/桥/登录态核对，不再重试已用尽的现场 Run。
+- 新安装器构建成功：`.artifacts/qa/phase35-installed-note-path-fix/ArchResearch-Windows-x64-Setup-v2.2.10.exe`，69,760,819 bytes，SHA-256 `2D8879868BA5836680C84D9CE0A91C0BBDC3B4F40645703F78A1873CDBE397E1`。
+- 新冻结 EXE 为 17,994,165 bytes，SHA-256 `F69D9463BC9A165102359C7E29C253CC63BF16E260FA3BD61741F4A7D951D6CC`；当前安装 EXE 仍为上一包的 `1A4C2CD7C048A5FC913DC64C82C4998F41932FD75A0FCC75E9E19879D0545265`。
+- 首次并行基线脚本因 PowerShell `foreach` 后直接管道导致 ParserError；命令在解析阶段终止，未停止进程、未安装、未写数据库。改为先收集数组再输出后成功。
+- 已精确核验并停止安装路径完全匹配的 PID `44944`。进程关闭后 SQLite 只有主文件、无 WAL/SHM；安装前 SHA-256 `5CC8B0551390D36AE30330EEC2D9181D6CF09950FFDECAEF4D63195B5CE2D4E4`。
+- 静默覆盖安装退出码 0；安装后 SQLite 哈希仍为 `5CC8B0551390D36AE30330EEC2D9181D6CF09950FFDECAEF4D63195B5CE2D4E4`，包含现有 Run/Trace 的用户数据未改变。
+- 已安装 EXE 为 17,994,165 bytes，SHA-256 `F69D9463BC9A165102359C7E29C253CC63BF16E260FA3BD61741F4A7D951D6CC`，与本次冻结构建完全一致；安装器 ProductVersion 为 `2.2.10`。
+- 新安装版只启动一个进程 PID `46888`，动态端口 `7016`；`/desktop-health` 返回 `ArchResearch/2.2.10`，扩展桥 `connected=true`。
+- 首次组合健康轮询误用不存在的 `/v1/health`，导致把健康服务错误归为超时；正确端点是 `/health`。后续只读拆分检查确认进程与桌面健康正常，未启动第二个进程。
+- 两次并行诊断编排分别因 PowerShell/JavaScript 转义语法在执行前失败；改为单条简单命令后取得结果，未改变应用或数据。
+- 正确 `/health` 返回 `ok/openai/gpt-5.6-sol`；本次安装进程只调用一次 XHS session，3,973 ms 返回 `logged_in/chrome_extension`，未出现安全验证状态。
+- 已安装 EXE `--self-test` 退出码 0，运行后 EXE 哈希仍为 `F69D9463BC9A165102359C7E29C253CC63BF16E260FA3BD61741F4A7D951D6CC`。
+- 误用不存在的 `GET /v1/runs` 得到 404；PowerShell 非终止错误后输出的 `RunCount=0` 作废。改用目标 Run 真实端点确认 `99670d73-73fd-4e5a-8d80-c3ff4818cdd2` 仍为 `blocked/no_usable_assets`、`attempt=1`，安装过程未再次重试。
+- 产品安装版没有详情页 QA 探针；隔离 harness 的 `/qa/xiaohongshu-page-state` 不能替代安装版。若要完成真实 `open_xiaohongshu_note` 到媒体枚举验收，必须明确允许一个额外 Run/attempt；当前不擅自消耗。
+- 最终只读一致性检查通过：PID `46888` 路径为实际安装目录，端口 `7016` 的 desktop/health 正常，目标 Run 仍为 `blocked/no_usable_assets`、`attempt=1`；规划文件已同步，`git diff --check` 通过（仅既有换行提示）。
+
+## 2026-08-08 — verification appeared during installed retry follow-up
+
+- 用户报告刚刚出现小红书安全验证页；从该报告起未再调用安装版浏览器接口、session 检测、刷新、重试、取消或新建 Run。
+- 当前必须保留验证页，等待用户本人完成验证；完成后再由用户明确通知，下一步只做一次状态确认。Phase 35 继续 `in_progress`。
+
+## 2026-08-08 — attempt 2 and verification closeout
+
+- 用户明确允许对同一 Run 再 retry 一次；未创建新 Run。`99670d73-73fd-4e5a-8d80-c3ff4818cdd2` 进入 `attempt=2` 后自然终止为 `blocked/no_usable_assets`。
+- attempt 2 Trace 共 32 条（序号 117–148）：API `BrowserCommand` 校验错误 0；首轮 XHS 搜索完成并返回 8 个候选，保留 5 个；5 个详情检视均为扩展 `BrowserCommandError`。后续一次搜索返回 0，另一次搜索也因扩展命令错误跳过；0 Results、0 PNG。
+- 用户随后报告出现安全验证页；已停止浏览器操作并等待用户完成。完成后唯一 session 确认返回 `logged_in/chrome_extension`；未刷新、重复开页、取消或再次 retry。
+- 最终状态：协议层修复已在实际安装版生效，但扩展详情执行层仍未通过，Phase 35 保持 `in_progress`。当前不再创建或 retry Run；下一步需先有新的扩展层诊断方案或用户明确授权额外现场执行。
+
+## 2026-08-08 — extension note-link matching red-green
+
+- 只读审计确认扩展内容脚本 `openXiaohongshuNote()` 原先要求候选卡片 `candidate.href === target.href`；这会拒绝同一详情路径上由小红书卡片附加 `xsec_token` 等查询参数的链接。
+- 新增内容脚本红测：目标为无查询参数的安全 `/search_result/note-42`，卡片链接带 `?xsec_token=visible`；旧实现准确返回 `{opened:false}`。
+- 最小修复让候选 URL 先通过现有小红书详情白名单，再比较同源 `origin + pathname`，忽略查询参数和尾部斜杠；未增加任意导航或脚本能力。
+- 红测转绿：目标测试 1/1 通过。尚未构建或安装扩展，也未触发新的 Research Run。
+
+## 2026-08-08 — extension note-link fix packaged
+
+- Extension 全量测试 `215/215` 通过；ESLint、TypeScript typecheck、生产 build 通过；packaged E2E `8/8` 通过。
+- 独立候选 ZIP 已生成：`C:\Users\76384\Documents\灵感agent\.artifacts\qa\phase35-extension-note-link-fix\archresearch-chrome-extension-only-v2.2.10.zip`，SHA-256 `9CB91FCFF8DD04B41C8FF676006482790DF1031D1A272EADDDA29CC319F6D455`。
+- 候选 ZIP 仍未加载到用户 Chrome；没有访问 `chrome://extensions`、刷新页面、读取 Cookie/账号/密码/浏览器存储，也没有创建或 retry 新 Run。
+- 当前唯一下一步：用户加载/重载该候选扩展后，先做一次安装版 session 状态确认；真实详情/媒体链路是否再执行需单独确认现场执行授权。Phase 35 保持 `in_progress`。
+
+## 2026-08-08 — extension candidate loaded
+
+- 用户已加载/重载候选扩展 `phase35-extension-note-link-fix`。
+- 安装版端口 `7016` 只做一次 session 确认，返回 `logged_in/chrome_extension`；未刷新、关闭或新开小红书页面。
+- 现有 Run 已到 `attempt=2`，候选扩展修复尚未通过真实 Research Run 验收。下一步需要用户明确授权一次新的现场执行；未授权前不创建或 retry。
+
+## 2026-08-08 — new installed run created
+
+- 按用户“创建”授权，确认安装版 `7016` 健康且活动 Run=0。
+- 只 POST 创建 Run `0633b2a4-b76a-458d-bf00-6beab6a19458`：`帮我找几种剖面图风格`、`visual_reference_search`、`quick`、`[xiaohongshu]`。
+- 首轮轮询：Run 从 `created` 进入 `inspecting`，Provider 生成 3 个视觉方向；未取消、未 retry、未创建并行 Run。
+
+## 2026-08-08 — new installed run audit
+
+- Run `0633b2a4-b76a-458d-bf00-6beab6a19458` 约 2.5 分钟内自然终止：`blocked/no_usable_assets`，`usable_assets=0`、`covered_subquestions=0`、0 结果/0 PNG。
+- 只读 Events 审计：58 条 Trace，`xiaohongshu_search=5`、`browser=15`、`openai=5`；15 次详情检视全部 `skipped / BrowserCommandError`，BrowserCommand 校验错误为 0，未进入 page metadata/media enumeration。
+- 按约束停止现场消耗；未取消、未 retry、未创建第二条新 Run。下一步回到扩展详情命令层诊断。
+
+## 2026-08-08 — canonical detail path fix
+
+- 对 15 次详情 `BrowserCommandError` 做时间审计：每次约 8 秒，定位到扩展点击后等待 canonical 详情 URL 的边界。
+- 先新增执行器红测，旧逻辑在 `/search_result/note-42` → `/explore/note-42?xsec_token=visible` 时 5,012 ms 超时；最小实现改为同源批准路径下相同 note ID 匹配。
+- 定向测试 `29/29` 通过；扩展全量 `216/216`、ESLint、TypeScript、生产 build、packaged E2E `8/8` 通过。
+- 打包候选：`.artifacts/qa/phase35-extension-canonical-note-path-fix/archresearch-chrome-extension-only-v2.2.10.zip`，20,530 bytes，SHA-256 `59B625E44296E4F6356E6F4F24D941FEBCAC485B542F42F6EC9C96A7F2D211B4`。
+- 当前候选未加载；未改安装版、未重启服务、未创建或 retry Run。下一步等待用户加载/重载后只确认一次安装版 session。
+
+## 2026-08-08 — candidate loaded and authorized run started
+
+- 用户重载 canonical detail-path 候选；一次正确的安装版 session POST 返回 `logged_in/chrome_extension`。此前 GET 404 为方法误用，未触发浏览器状态变化。
+- 用户明确授权后，确认活动 Run=0，只创建 `e41c3560-ead1-42e4-8960-f3791abdd42d`：`帮我找几种剖面图风格`、quick、XHS-only。
+- 首轮轮询从 `planning` 进入 `searching`、`inspecting`；当前无安全验证，不取消、不 retry、不创建并行 Run。
+
+## 2026-08-08 — canonical candidate run terminal audit started
+
+- 只读确认安装版 `7016` 健康，Run `e41c3560-ead1-42e4-8960-f3791abdd42d` 已自然终止为 `completed/coverage_satisfied`、`attempt=0`。
+- 覆盖报告为 18 个可用资产、9 个项目、3/3 方向；Events 37 条，终态 Trace 无待执行阶段。
+- Results API 返回 20 条，先审计记录类型、浏览器/扩展错误、详情元数据和媒体枚举，再定位并逐张验收本地 PNG；Phase 35 暂不改为 complete。
+- Trace 审计完成：10/10 browser 详情检视 completed，API 校验错误、扩展执行错误和安全验证均为 0；3 条 OpenAI skipped 是预期的 XHS-only 分流。
+- 详情链路新增资产合计 18，质量拒绝 3，累计视觉调用 28 次、预览 5,082,606 bytes。下一步定位安装版数据库/本地内容映射并解释 Results=20。
+- 已定位安装版 `data\runs` 文件根和 Results 内容路由；接下来只读核对 SQLite `asset_candidates.storage_path` 与实际 PNG，不读取 pairing token、Provider 配置或凭据。
+- 文件清单确认目标 Run 有 20 个独立 PNG；系统无 `sqlite3` CLI，下一步用 Python 标准库的只读 SQLite URI 查询精确记录并对照覆盖统计实现。
+- 已确认 20 条 Results 中 Rank 0–17 为 18 个 usable assets，Rank 18–19 relevance=0；Results=20 与 coverage=18 是合同允许的统计口径差异。开始按 Rank 0–19 逐张视觉验收。
+- 视觉验收 Rank 0–3 完成，4/4 合格：均为完整剖面/技术图像；Rank 1 的文字和 Rank 2 的原始边缘贴字均非应用 UI 或错误裁切。继续 Rank 4–7。
+- 视觉验收 Rank 4–7 完成，4/4 合格；Rank 6 是渲染景观与地下雨洪剖面的一体化图解，不是单独 photograph。累计 8/8，继续 Rank 8–11。
+- 视觉验收 Rank 8–11 完成，4/4 合格；Rank 11 留白较大但图纸主体清晰，不是空白轮播。累计 12/12，继续 Rank 12–15。
+- 视觉验收 Rank 12–15 完成，4/4 合格；四宫格、竖向构造、黑白线重和粉灰拼贴均为完整图纸。累计 16/16，继续 Rank 16–19。
+- 视觉验收 Rank 16–19 完成：Rank 16–17 合格，Rank 18–19 因正文/混合渲染占比过大不合格；两条均为 relevance=0。18 个 usable assets 18/18 合格，20 个本地 PNG 总计 18/20 合格。
+- 下一步核对安装版 Board/导出是否过滤 relevance=0 候选；未确认前 Phase 35 仍保持 in_progress。
+- 安装版 Board 首页真实渲染目标 Run 为“18 张参考 · 已完成”；继续打开详情页检查实际灵感卡片。
+- 安装版详情真实渲染为“18 条可用参考 · 2 条只作线索”，并展示 20 张图；低相关 Rank 18–19 保留为线索。控制台错误/警告为 0。
+- 下一步审计 Board 现有测试和产品合同，确认“低相关候选继续展示但不计 usable”是既定行为还是应修复的回归。
+
+## 2026-08-08 — Phase 35 completed
+
+- 按恢复规则完整读取 `HANDOFF.md`、`AGENTS.md`、Phase 35、`findings.md` 与 `progress.md` 末尾，并执行 `git status --short --branch`；全部既有修改与本地产物保持原样。
+- 只读审计 Board 当前实现、产品规范、Git 引入历史、覆盖统计和导出边界。确认 `relevance=0` 候选继续显示为“只作线索”是既有批准语义，不是应在本 Phase 隐藏的正式结果回归。
+- 现场 Run `e41c3560-ead1-42e4-8960-f3791abdd42d` 的 18 个 usable assets 已逐张 18/18 合格；两条不合格持久化候选均为 `relevance=0`，未计入覆盖或首页结果数，且不会自动进入导出。
+- Phase 35 已改为 `complete`。本轮未修改生产代码、安装版、扩展或 Run 数据，未创建、retry、取消任何 Run。
+- 三个只读路径误判已记录到 Phase 35 错误表：不存在的 `apps/board/tests`、`ResultViews.tsx` 和 `exports.py`；均在执行阶段停止且无状态改动。
+- 最终只读一致性检查确认 PID `46888` 仍指向实际安装目录；`/desktop-health` 返回 `ArchResearch 2.2.10 / 7016`，`/health` 返回 `ok`。未调用浏览器 session 或任何 Run 写接口。
+
+## 2026-08-08 — Phase 36 started
+
+- 用户要求改善建筑搜索经常只返回部分结果的问题，并明确方案前期不需要过严筛选。
+- 已检查用户截图并建立 Phase 36：先诊断截图对应的实际安装版 Run，再决定放宽候选排序、正文分析准入或完成判定中的哪一层。
+- 当前不预设“筛选太严格”为唯一根因；6 条参考/2 个项目与两个缺口表明召回和完整文章分析都需要用 Trace 量化。
+- 尚未修改生产代码、安装版或 Run 数据；下一步只读定位目标 Run 及其 Events。
+- 安装版仍在 `7016` 返回 `ArchResearch 2.2.10` 与 `/health=ok`。已确认只读列表路由为 `/v1/workspaces`、`/v1/workspaces/{id}/runs`，Events 为 `/v1/runs/{id}/events`。
+- 首次路由正则因 PowerShell 双引号解析失败；已改用单引号分拆查询并记录到 Phase 36 错误表，没有访问或修改应用数据。
+
+## 2026-08-08 — Phase 36 recovery and installed Run baseline
+
+- 按仓库恢复流程完整读取 `HANDOFF.md`、`AGENTS.md`、Phase 36 以及 `findings.md`/`progress.md` 末尾，并运行 planning session catchup 与 `git diff --stat`；全部既有产品修改、规划记录和本地产物保持原样。
+- Catchup 报告 10 条未同步上下文，已将目标安装版 Run `3ad135af-85c2-4706-a922-2d7a1c09f616`、3/4 覆盖、唯一空白分支 `time-sharing`、218 条 Events 与禁止 retry 的约束同步到 `findings.md`。
+- `HANDOFF.md` 顶部仍称 Phase 35 为活动阶段，但文件末尾和 `task_plan.md` 均确认 Phase 35 已完成；当前权威活动阶段是 Phase 36。
+- 恢复阶段的路径引号、错误标题层级和误触不可用工具均已记录到 Phase 36 错误表；这些失败没有调用应用写接口、没有改变 Run，也没有改生产代码。
+- 下一步只读解析目标 Run 的 Events，并将 `time-sharing` 的 8 轮与三个成功分支逐层比较；定位真实过严条件后才开始行为红测。
+
+## 2026-08-08 — Phase 36 first event-layer diagnosis
+
+- 只读确认安装版仍为 `7016 / health=ok / openai / gpt-5.6-sol`，目标 Run 状态与覆盖未改变。
+- 改按 SSE `data:` 行解析后取得完整 218 条 Trace；汇总各工具字段并按 `workflow/searching` 批次重建了初次执行与 retry 的分支流。
+- `time-sharing` 在初次执行和 retry 中各跑 8 轮。正文分析过的 Courthouse、Busan Opera House、Charles Library 均为 relevance 2，但全部 `direct_match=false`、supported facts 0；模型 rerank 的 analogical/spatial retain 始终为 0。
+- 已把候选数、保留数、重复候选在 rerank 前清除以及 Provider fallback/timeout 的实际损失写入 `findings.md`。未修改生产代码、安装版或 Run 数据。
+- 下一步读取 gap-check/终止事件和预算实现，确认 `budget_exhausted` 对应 query/page/time 的哪项；随后定位查询文本持久化位置及 rerank/article-analysis 提示合同。
+
+## 2026-08-08 — Phase 36 budget diagnosis completed
+
+- 对照最终 gap-check、两次 composing 事件、`research_paths/precedent.py` 和 workflow 循环后，确认 `budget_exhausted` 是 3 个普通轮次加 5 个恢复轮次自然走完后的默认原因。
+- 该 Run 未耗尽 72 分钟时间预算、48 页正文预算或视觉预算；不需要扩大总预算。真正需要审计的是查询生成、候选 rerank 与 article direct-match 的语义门。
+- 只读源码与安装版 Events；未改生产代码或 Run。下一步读取 `QueryAttempt` 的实际文本和候选/页面提示实现，再把真实候选与当前合同逐条对照。
+
+- 已确认实际安装版数据库为 `%LOCALAPPDATA%\ArchResearch\data\archresearch.db`；下一步仅通过 SQLite read-only URI 查询目标 Run 的 `query_attempts`，不读取同目录 Provider 配置、配对 token 或凭据文件。
+
+## 2026-08-08 — Phase 36 query text audit completed
+
+- 通过 SQLite read-only URI 读取目标 Run 的 20 条 `query_attempts`；未读取 Provider 配置、配对 token、Cookie、账号或 API Key。
+- 查询审计确认 `time-sharing` 过度绑定运营时段/配送记录等罕见正文词，确定性回退模板还存在重复词和中英整段拼接。已将“直接时段事实”与“空间机制类比但需运营校核”分层原则写入 `findings.md`。
+- 下一步只读列出本 Run 持久化的候选页面及 access status，确认哪些真实建筑页在 rerank 前后被拒；随后审计 provider prompts 和现有行为测试。
+
+- 已通过 SQLite read-only URI 列出目标 Run 的 42 个 `source_pages`。候选同时包含可迁移的建筑尺度条目和应拒绝的室内/住宅/产品噪声，证明不能用无条件多保留解决。
+- 下一步审计 rerank schema、Provider prompt、deterministic fallback 和文章 direct-match 合同，找出为何 spatial/analogical 计数始终为 0。
+
+## 2026-08-08 — Phase 36 admission-contract audit started
+
+- 已读取 CandidateAssessment schema、OpenAI 查询规划/rerank/公共页面分析提示，以及 workflow 候选选择实现。
+- 确认文章 Evidence/direct-match 门已允许跨类型和部分回答，且目标 Run 的三个失败页面确实为 0 supported facts；不降低该门。
+- 首个代码级过严点是正文前的候选准入与不可达的 type-only context probe；第二个是查询规划禁止从已知活动关系扩展行业机制词。下一步读取现有 cross-type、spatial、type-probe 和 direct-match 测试，确定最小红测应落在哪个既有合同上。
+
+- 已审计现有 cross-type/spatial/type-only probe 测试。下一步读取 deterministic query builder 与 query-planning Provider 测试，确认搜索词放宽的最小位置；之后开始添加失败行为测试，仍先不改生产实现。
+
+- 已定位 deterministic fallback query 的真实重复词和入口活动词汇缺口；该路径与目标 Run 中两个 Provider query-planning fallback 直接对应。
+- 下一步读取 Provider/query-builder 现有断言并确定红测组合：入口活动专业词扩展、无重复 circulation、单个建筑尺度机制探针，以及非建筑反例继续拒绝。
+
+## 2026-08-08 — Phase 36 behavior RED
+
+- 新增三条目标行为测试并运行：3/3 按预期失败。
+- 查询红测失败于缺少 `passenger drop-off`，旧结果准确复现真实 Run 的 `back-of-house circulation circulation circulation relationships`。
+- 候选红测失败于只返回强 spatial 案例，没有返回受信的 Vehicle Inspection Station 建筑尺度机制探针；室内产品反例仍在同一测试中。
+- Provider 提示红测失败于没有 `architectural_scale` 和机制探针合同。另已补充非回退 query-planning 提示断言，要求把用户已陈述活动转换为中性专业检索同义词，并明确这些词不是预设设计答案。
+- 下一步只做最小生产实现：补入口活动词汇和重复关系词处理；增加默认 false 的建筑尺度 assessment；限额保留一个 spatial=1 的受信机制探针；文章分析与 EvidenceClaim 门不变。
+
+## 2026-08-08 — Phase 36 target tests GREEN
+
+- 首次生产补丁因 Provider 提示上下文不匹配而整体未应用；拆成按文件精确补丁后成功，错误已记录到 Phase 36 表。
+- 首轮 GREEN 中 Candidate/Provider 3 条已通过，deterministic query 仍缺父问题中的落客/步行词；只对 flow 分支增加父问题活动白名单继承后，四条目标测试 4/4 通过。
+- 生产修改涉及 `agent/planning.py`、`providers.py`、`workflow.py`；测试涉及 `test_agent_planning.py`、`test_providers.py`、`test_browser_inspection.py`。
+- 当前进入自动回归：先规划/候选/Provider 相邻测试，再完整 API 与静态门禁。尚未构建、安装或创建现场 Run。
+
+- 相邻回归第一组：`test_agent_planning.py` 20/20 通过；`test_providers.py -k "query_planning or candidate_reranking"` 12/12 通过。仅有既有 Starlette/httpx 弃用警告。
+- 相邻回归第二组：`test_browser_inspection.py -k "candidate_reranking or public_recovery_changes_search_strategy_for_the_same_uncovered_branch"` 6/6 通过；Ruff check 通过。
+- Ruff format check 报告 `agent/planning.py`、`workflow.py`、`test_agent_planning.py`、`test_providers.py` 需要机械格式化；下一步仅格式化这 4 个本轮文件并回归。
+- 已仅格式化上述 4 个文件；目标测试再次 4/4 通过，Ruff format check 为 62 files already formatted。
+- 完整高风险回归 `test_agent_planning.py + test_providers.py + test_browser_inspection.py` 全绿；仅有既有 Starlette/httpx 与 SQLite datetime 弃用警告。
+- 下一步运行 API 全量测试，然后 strict Mypy、Ruff 复核和 diff check。
+- API 全量测试通过；仅有既有 Starlette/httpx 与 SQLAlchemy/SQLite datetime 弃用警告。
+- strict Mypy 通过：32 个源文件无问题。下一步复跑 Ruff lint/format、`git diff --check` 并审计本轮差异。
+- Ruff check 通过；Ruff format check 为 62 files already formatted。
+- `git diff --check` 通过，仅有既有 LF/CRLF 提示。差异审计确认 `workflow.py` 与 `test_browser_inspection.py` 还包含 Phase 35 已有的浏览器校验诊断改动，本轮未覆盖或回退；本轮产品差异仅叠加在查询、Provider assessment 与候选 probe 路径。
+- Board 完整测试 190/190 通过，ESLint 通过；Vitest 输出两个既有 jsdom `requestSubmit()` not implemented 提示，但退出码为 0。
+- Board TypeScript typecheck 与 production build 通过；Vite 成功产出生产 bundle。
+- 缩短后的查询测试名已单独回归通过；最终 Ruff lint 与 62 文件 format check 再次全绿。
+- 已读取现有 Windows 构建脚本，确认输出可限定在工作区 `.artifacts/qa`，安装器仍不捆绑扩展；下一步构建 Phase 36 验收安装器。
+- Phase 36 安装器构建成功并通过冻结程序自检；安装器与冻结 EXE 的大小、SHA-256 已写入 `findings.md`。
+- 下一步运行 Windows installer 合同测试；通过后再建立实际安装目录进程和 SQLite 哈希基线。
+- Windows installer 合同测试通过。首次组合安装基线因运行中 SQLite 文件锁无法哈希而终止，无状态改动；改为先确认健康/活动 Run，再停止精确安装进程后取数据库哈希。
+- 安装版 PID `46888`、精确安装路径、`7016`、desktop/health 正常；但 PowerShell 将 Runs 响应嵌套导致活动计数不可采用。下一步用 Python 逐项展开只读响应确认活动 Run。
+- Python 逐项展开确认 5 条历史 Run 全部 terminal、活动 Run=0。精确停止 PID `46888` 后数据库仍被另一进程占用，安装未开始；下一步只读定位实际持锁进程。
+- 后续确认没有残留安装进程或 `7016` listener；数据库锁为退出后的短暂释放延迟，重试哈希成功。
+- Phase 36 安装器静默覆盖退出码 0；安装后 EXE 与冻结构建哈希一致，SQLite 安装前后哈希一致。下一步启动实际安装版并核对健康与活动租约。
+- 实际安装版已启动为 PID `45652`、动态端口 `5202`；精确安装路径、`/desktop-health=2.2.10`、`/health=ok/openai/gpt-5.6-sol` 正常。
+- 已安装 EXE `--self-test` 退出码 0；自检结束后仍只有 PID `45652` 的实际服务进程。下一步确认活动 Run=0 并创建唯一建筑验收 Run。
+- 创建前再次确认活动 Run=0；只创建 Phase 36 唯一现场 Run `55dcb0ad-cce2-4ecb-b79c-25302f63e72b`：原入口人车冲突问题、`precedent_research`、`balanced`、`research_sources=[]`、`attempt=0`。
+- 下一步只等待自然终态并审计 Trace/Results/Board；不取消、不 retry、不创建第二条 Run。
+- 首轮现场轮询：Run 从 `searching` 进入 `inspecting`，Provider query planning 成功；首个已检视来源为 ArchDaily 的 Dongchang Elevated Passage，browser completed。当前无停止原因，继续只读轮询。
+- 首个真实 rerank 为 4→1，且 `mechanism_context_probe_count=1`、analogical/spatial 各 1；旧 Run 的该路径始终为 0。候选形成 2 个资产但尚未成为正式项目或覆盖分支，证明文章证据门仍在。
+- 第二个进入 browser 检视的是 Designboom 的 Rail Baltica Pärnu Passenger Terminal，仍为建筑/交通基础设施尺度。`arrival_sequence` 完成首轮 pass 后依旧 0 个正式项目、0/4 覆盖；Run 已继续到下一分支搜索。
+- 四个分支现均完成首轮 pass，仍是 2 个候选资产、0 个正式项目、0/4 覆盖；Run 已进入 round 2 `conflict_nodes` 的 `evidence_angle` 补查。安全门保持。
+- round 2 `conflict_nodes` 检视到一个住宅入口项目，但没有新增资产、正式项目或覆盖；该边缘建筑尺度案例被后续门挡住。Run 继续 round 2 `arrival_sequence`。
+- round 2 `arrival_sequence` 的候选为 ArchDaily 大庆西综合公路客运站，属于直接相关的交通建筑尺度页面；browser completed，等待正文分析。
+- 大庆西综合公路客运站已通过正文分析并提升：7 usable assets、1 个正式项目、`arrival_sequence` 覆盖、1 个 multi-asset project。Run 继续补其余分支。
+- round 2 已完成 `service_access` 与 `conflict_nodes` 补查，`temporal_adaptation` 进入第二个 query；覆盖仍稳定为 7 assets、1 project、1/4，未出现错误或安全来源分流。
+- round 2 四个分支均已完成，覆盖仍为 7 assets、1 project、1/4；Run 已进入 round 3 `conflict_nodes`，开始更深的 space-first/evidence-angle 查询。
+- 会话恢复补记：round 3 已找到 Lourosa-Fiaes Transport Interface，仍属于与人车到达直接相关的交通建筑案例；当前项目数仍为 1，说明该页面尚未重复提升或缺少新的分支证据。继续等待同一 Run 自然终态，不创建 retry、取消或第二条 Run。
+
+## 2026-08-08 — Phase 36 completed
+
+- 唯一现场 Run `55dcb0ad-cce2-4ecb-b79c-25302f63e72b` 已自然终止为 `partial/query_budget_exhausted`，Trace 222 条；没有小红书、retry、取消或并行 Run。
+- 最终为 10 个 usable assets、2 个正式项目、1 个 multi-asset project，覆盖 2/4。Lourosa-Fiães 与大庆西均有 `direct_match=true`、完整 evidence chain 和 EvidenceClaim；Dongchang 仅为建筑尺度机制线索，不计正式项目。
+- Results/Board 审计完成：10 条资产来自 3 个可信 ArchDaily 来源页，全部 EvidenceClaim 有 text excerpt；Board `caseResults` 只把 `analysisReady` 的正文案例归入正式案例分组，未让无正文线索绕过证据门。
+- Phase 36 全部 6 项完成，安装前后 SQLite 哈希保持一致，安装版 Board HTTP 200；阶段标记为 complete。后续若继续优化，应创建新的 Phase/Run，不得 retry 本 Run。
+
+## 2026-08-09 — Phase 37 建筑关键词分层收口
+
+- 建筑查询已拆为“空间发现 lane → 项目/证据核验 lane”。service 首轮优先使用 `service entrance public entrance site circulation`；temporal 首轮优先使用 `arrival space flexible circulation peak event`，后续轮次再轮换 `shared forecourt`、`arrival sequence`、`project description`、`operational` 等词。
+- 首轮不再强绑 `post-occupancy evaluation`、`management rules`、`delivery vehicle swept path`、配送窗口等窄运营词；但保留用户明确提出的 `visitor circulation`、`back-of-house circulation`、`independent entrance`、`service corridor` 等空间关系，避免“放宽”反而丢掉问题本身。
+- 明确的项目条件继续保留，例如 `adaptive reuse industrial building community cultural center`；无类型/无条件时不再重复拼接泛化的 `architecture project`。没有新增建筑类型字典，也没有把 `loading dock`、`service court` 变成默认答案。
+- Provider 提示同步明确：检索同义词只是召回词，不是设计结论；候选仍须通过建筑尺度、正文、direct match、逐字 EvidenceClaim 和来源可信度门槛。`architectural_scale` 机制探针规则保持有限，不改变正式覆盖合同。
+- 验证完成：相关 307 项、API 全量 576 项、Ruff lint、62 文件 format、strict Mypy 32 个源文件和 `git diff --check` 全部通过。图纸 fallback 隔离回归通过；`apps/api/src/archresearch_api/research_paths/drawing.py` 等图纸路径文件未改动。
+- 本轮没有创建、retry 或取消 Research Run，没有重建安装器，也没有触碰图纸现场数据。Phase 37 的安装版静态复核保留为后续发布/现场验证项，需另行授权；当前唯一工作目标已完成。
+
+## 2026-08-08 — Coverage follow-up diagnosis
+
+- 复查实际安装版 SQLite 中的 20 条 `query_attempts`：`service_access` 运行 8 次、`temporal_adaptation` 运行 7 次，覆盖不足不是分支未执行。
+- 根因确认是检索词把建筑空间发现与运营事实核验混为一体：后勤分支偏向 `delivery vehicle swept path/loading operations`，时段分支偏向 `post-occupancy evaluation/management rules/event scheduling`，这些词在建筑媒体正文中稀疏且候选质量低。
+- 当前不改代码、不 retry 已完成 Run。下一次若继续，应新建 Phase，先把两层检索拆开：宽召回空间机制案例，再补查后勤/时段事实；缺少运营证据的案例保留为类比，不计 direct-match 覆盖。
+
+## 2026-08-09 Phase 37 实际安装版建筑 Run 完成
+
+- 用户授权后已覆盖安装实际 `ArchResearch.exe`，当前 PID `34308`、端口 `4849`；`/health` 返回 `ok/openai/gpt-5.6-sol`，安装 EXE SHA-256 为 `FE09A116584D5E972966A33CEAF6C6616B207567A7086BD5A9C8B9B18FDFD7B9`。
+- 只创建建筑 Run `ea8c5c8d-915c-4d83-80c3-942046d88eb5`，自然终止为 `partial/budget_exhausted`；最终 7 个资产、3 个正式项目、3/4 子问题覆盖。`arrival_sequence`、`service_access`、`temporal_adaptation` 已覆盖；`conflict_nodes` 仍未覆盖。未 retry、未取消、未创建第二条 Run。
+- 现场 Trace 156 条，XHS=0；有 2 次 `BrowserCommandError`，但没有阻止建筑 Run。实际 SQLite 只读审计为 12 条查询尝试、32 个来源页（13 available、19 irrelevant），确认新空间优先关键词已进入安装版运行。
+- 结果审计完成：Madrid-Barajas T4（1 张，direct match，4 个 supported facts）、Flinders Street Station proposal（2 张，direct match，5 个 supported facts）、Busan Opera House（4 张，direct match，2 个 supported facts）。7 个资产共 23 条 EvidenceClaim，均有 URL 和逐字 excerpt。
+- 安装版活动数据库被进程占用，未强行停止服务取当前文件哈希；安装前后保护哈希已验证。图纸路径未改动、未参与本 Run，`drawing.py` 与图纸查询/数据保持不变。
+
+## 2026-08-09 Phase 38 conflict_nodes 红测与最小实现
+
+- 只读审计 Phase 37 安装版 Run 后确认：`conflict_nodes` 8 轮均执行，但候选正文只能证明到达或扩容，未证明访客、车辆、工作人员冲突节点的空间缓解；后续查询还过早混入 `post-occupancy`、`management`、`vehicle operations`。
+- 新增红测后旧实现按预期失败：fallback 没有 `arrival forecourt`、`entrance threshold`、`pedestrian vehicle separation` 等冲突空间词；Provider query-planning 提示也没有冲突节点专业同义词。
+- 最小实现仅在建筑 precedent 查询路径增加 conflict-node discovery lane：首轮加入前场、入口阈值、人车关系、前台/后勤关系、交叉点和导向；第 4 轮才加入 `operational`、`project description`、`conflict management`。图纸 fallback、候选准入、正文 direct-match 和 EvidenceClaim 门未改。
+- 目标红测及 service/temporal 相邻测试 4/4 通过；下一步运行完整 planner/provider/browser 回归和静态门禁。尚未构建、安装或创建新的现场 Run。
+
+- 完整验证完成：`test_agent_planning.py` 24/24、Provider 查询/候选 12/12、browser 相关 6/6、API 全量 576/576；Ruff lint、4 文件 format check、strict Mypy 32 个源文件和 `git diff --check` 全部通过。
+- 差异审计确认该改动只按冲突语义扩展建筑检索流程：首轮空间发现词与后续证据 lane；没有写入案例名称、URL、项目类型特例，也没有修改图纸 fallback。Phase 38 现场验证保持 pending，等待用户明确授权后再构建/安装并创建新的建筑 Run。
+- 2026-08-09 Phase 39 开始：完成三次建筑 Run 与当前 planner/provider/workflow 控制流复核。确定本轮先写红测，覆盖通用检索 lane 轮换、首轮双 query slot、确定性候选回退数量和图纸隔离；暂不构建、安装或创建现场 Run。
+- 2026-08-09 Phase 39 RED：首轮 query slot 测试按预期失败（旧实现首轮 `query_limit=1`）；候选回退初测未命中损失分支，已改为 Provider rerank 异常场景后再测。
+- 2026-08-09 Phase 39 实现中发现并修正 fallback 去重缺口：跨子问题重复查询由 Run 级集合发现，重复判断最初受双空格影响，现改为与 `SearchQuery` 相同的空白归一化。
+
+## 2026-08-09 — Phase 39 完成
+
+- 复核三次建筑 Run 后，将优化边界确定为“检索召回与调度层”，没有降低正文证据、建筑尺度或 EvidenceClaim 门，也没有把图纸路径纳入建筑逻辑。
+- 已完成通用语义拆槽、通用 lane 轮换、首轮双 query slot、Run 级规范化去重和 rerank 异常时最多 4 条合格候选回退；实现不读取或判断具体子问题 ID 来注入案例空间答案。
+- 定向测试通过：planner 22/22、Provider query/candidate 12/12、browser/workflow 恢复与预算相关测试全部通过。
+- 完整 API 测试通过；Ruff check、Ruff format check（62 files）、`python -m mypy src`（32 files）和 `git diff --check` 通过。直接运行 `mypy.exe` 的一次空失败码改用模块入口复核并确认无问题。
+- 差异审计确认 `apps/api/src/archresearch_api/research_paths/drawing.py` 未修改；本轮没有构建、安装或创建新的 Research Run。
+- 下一步：等待用户明确授权后，才在当前安装版上创建一条全新的建筑 Run，审计 query count、lane/strategy、候选数、覆盖和 EvidenceClaim；不 retry 已完成的旧 Run。
+
+## 2026-08-09 — Phase 40 开始
+
+- 用户明确授权进行安装版现场验证。
+- 旧安装版 PID `34308`、端口 `4849` 健康，活动 Run=0；当前服务为 Phase 37 安装版，尚未覆盖安装。
+- 已确认本阶段只创建一条全新的建筑 Run；旧 Run `ea8c5c8d-915c-4d83-80c3-942046d88eb5` 不 retry，图纸路径不参与。
+- 运行中 SQLite 被旧服务持锁，保护哈希将在精确停止 PID 后计算；未执行任何 Research Run 写操作。
+
+## 2026-08-09 — Phase 40 完成
+
+- 构建 `.artifacts/qa/phase40-installed-architecture/ArchResearch-Windows-x64-Setup-v2.2.10.exe` 并通过冻结程序与安装器合同检查；安装目录没有扩展文件。精确停止旧 PID `34308` 后取得 SQLite 保护哈希，静默安装前后均为 `354E53402B7E80850ABEAC788CCDF56AFA7CD8D0DBC856B52C170D4DA49CAE66`。
+- 新安装版以 PID `40596`、端口 `6158` 启动，EXE SHA-256 为 `BF71D01FD477619B9B4FF2484AD54427BC2F75501A7DC53F2D6523267772DEC3`；健康、版本和活动租约检查通过。
+- 只创建建筑 Run `94c7d473-3f0d-41b1-9ad1-dcaec089c75e`，自然终止为 `completed/coverage_satisfied`：11 个 usable assets、4 个项目、4/4 子问题覆盖；未 retry 旧 Run，未创建并行 Run。
+- 完成查询、来源、rerank、正文分析和证据审计：15 条实际查询全部去重，首轮四个子问题均为双槽；8 个 available 来源页、26 个 irrelevant；Provider fallback=0；11 次正文分析为 6 次接受、5 次拒绝；43 条 EvidenceClaim 缺 URL/excerpt 均为 0；XHS/图纸事件为 0。
+- Board 首页和详情页只读验收完成。首次用完整按钮名称定位因换行/省略号归一化差异超时，改用唯一“11 张参考”文本后成功；详情页另有一个预览资源 404，主体与四个子问题正常。
+- 现场发现两个不同来源的已核验项目仍共享顶层 `project_name=待核验项目`，Board 分组后误合并。已将 Phase 40 标记 complete，并建立 Phase 41 处理全局项目身份提升；尚未修改生产代码。
+
+## 2026-08-09 — Phase 41 行为红测
+
+- 只读链路审计确认占位名由普通网页 browser visual lead 持久化生成；正文分析成功后 `_persist_public_page_analysis()` 会写入 `project_name_zh`、设计分析与 EvidenceClaim，但不更新顶层 `project_name`。Board、导出和收藏都消费顶层字段，因此不能只在 Board 做展示补丁。
+- 新增通用行为测试 `test_verified_browser_visual_leads_adopt_distinct_page_project_names`：两个无具体案例依赖的来源页分别完成 `direct_match=true` 和逐字证据链后，应从共享占位名升级为各自页面项目名。
+- 旧实现按预期失败：两个资产实际仍均为 `待核验项目`，其余证据持久化断言通过。下一步只在正文持久化成功路径升级仍为占位状态的项目名；已有明确项目名和未核验 lead 保持不变。
+- 最小生产实现完成：正文持久化成功路径先从页面标题、来源标题或已核验中文名得到规范项目名，只替换仍为 `待核验项目` 的候选；项目名纳入 before/after 变更比较。
+- 目标测试与既有未核验占位名测试 2/2 通过。下一步运行正文分析、跨来源项目身份、缓存重分析和 browser 持久化相邻回归。
+- 相邻正文/项目身份回归 13/13 通过；完整 `test_browser_inspection.py` 156/156 通过。
+- API 全量测试通过；Ruff lint、33 文件 format check、strict Mypy 32 个源文件与 `git diff --check` 均通过。差异复核确认 Board 和 `research_paths/drawing.py` 未修改。
+- 因生产修复只影响新持久化数据，不修改旧 Run，Phase 41 增加安装版现场复验：重建并保护性覆盖当前安装版后，只创建一条新建筑 Run。
+- Phase 41 安装器构建成功：69,768,970 bytes，SHA-256 `894D598B4DEF216A475ED185F684D0B45B666B0F602AB1B1F93A5415E4A039BE`；冻结运行目录递归核对扩展路径和 `manifest.json` 文件数为 0。
+- 首次清单核对错误假定冻结根目录存在 `manifest.json`，读取失败但命令未中止；改为递归文件枚举后得到有效结果，未修改安装器或应用状态。
+- 当前安装版 PID `40596`、端口 `6158`、精确安装路径和健康/版本正常。首次活动检查误用不存在的 `/v1/runs` 且产生错误计数；按路由定义改用 workspace runs 并显式扁平化后，确认 8 条历史 Run、活动 Run=0。
+- 精确停止 PID `40596` 后，SQLite 安装前哈希为 `F154BC95F20F8C1C4307B3A6F9432248C85BC8A6CCBADB69B11736480B90B4E2`；静默覆盖安装退出码 0，安装后哈希完全一致。新安装 EXE SHA-256 为 `CDD90C6DCF454D2EE43B556E40681B710FE50F6920C719AB0F960AE2DA8CD71A`，冻结自检通过。
+- 新安装版 PID `25168`、端口 `7595`，`/health=ok/openai/gpt-5.6-sol`、`/desktop-health=2.2.10`；创建前重新确认 8 条历史 Run、活动 Run=0。
+- 本阶段只创建现场 Run `699ff718-a17b-44ef-8b1b-cd4ce233ab29`。运行中已形成两个正式项目、4 个 usable assets、3/4 覆盖：Tammela Hybrid Stadium 与 Adelaide Zoo Entrance Precinct 各 2 张，同页资产仍正确归组，4 张资产顶层占位名数量为 0。
+- 一次附加 source/name pair 计数因 PowerShell 字符串多余转义报错，错误的 `DistinctSourceNamePairs=0` 不采用；有效项目分组表和 `PlaceholderCount=0` 不受影响。继续等待同一 Run 自然终态。
+- 用户指出“一个子问题只看到一个案例”后完成 Board 与 API 对照：上一条 Run 子问题 1/3/4 各 1 个案例，子问题 2 有 2 个可见案例；Board 按正文分支关联过滤，不是把全部项目复制到每个子问题。
+- 进一步定位数量合同：分支 enrichment 当前按资产 ID 计数，不按不同 `project_name` 计数；总项目目标不约束项目在各子问题的分布，终态 `completion_satisfied()` 也忽略 enrichment gaps。用户明确不要求逐子问题硬配额；后续若使用不同项目数，只能作为软诊断/补查优先级，不能阻止已有可靠结果完成。
+- 只读 Board 核对旧 Run：子问题 1/3/4 各 1 个可见案例，子问题 2 有 2 个；再次用独立 `11 张参考` 文本定位失败后，改用 `button` + `hasText` 成功，错误已记录且不再重复。
+- 现场 Run 在首个 20 分钟轮询窗口结束时仍自然执行，状态 4/4 覆盖、2 项目、4 资产、无 stop reason；研究本身未超时。当前仅 7 次 query planning，继续低频只读等待，不取消或 retry。
+- 延长监控也在自身 30 分钟窗口到期，研究 Run 仍持续产生事件；未取消、retry 或创建并行 Run。替代监控随后取得自然终态 `completed/coverage_satisfied`：16 usable、15 verified/partial、4/4 覆盖，仍有 `insufficient_subquestion_assets` 软提示。
+- 终态 HTTP/Trace 审计：332 条事件，35 次实际本地搜索，15 次正文分析（7 接受、8 拒绝、0 失败），query-planning fallback=0、page-analysis deterministic fallback=1，XHS/图纸事件=0。8 个 analysis-ready assets 的 50 条 EvidenceClaim 缺 URL/excerpt 均为 0，正式占位名为 0。
+- 安装版 Board 现场确认同一 Adelaide Zoo 来源在子问题 1 和 3 各被拆成两个 dossier；Results 证明短名和完整标题来自同一 URL，导致覆盖报告把 3 个真实来源项目虚增为 4 个项目。Board 未修改，旧 Run 未改写。
+- 新增红测 `test_verified_browser_visual_lead_reuses_existing_source_project_name`；合法测试夹具下旧实现按预期失败。最小实现让同源占位资产优先复用已有非占位名称，两个相关项目身份测试与相邻回归转绿。
+- Board 同时显示 Zaiwan Village 的所谓后勤机制只有 `service industry` 就业句。新增通用红测证明确定性 flow 回退误把裸 `service` 当建筑流线语义；改为仅保留 `service access/entrance/circulation/route` 后红测与既有确定性正文测试转绿。
+- 完整 browser/provider 回归、API 全量、Ruff lint/format、strict Mypy 32 个源文件和 `git diff --check` 全部通过；图纸差异计数为 0。Phase 41 继续 `in_progress`，下一步需用户授权第二次安装版构建/覆盖与一条全新建筑 Run；不得 retry 当前 Run。
+- 用户已明确授权 Phase 41 第二次安装版现场复验。安装前基线：实际安装版 PID `25168`、端口 `7595`、`/health=ok`、`/desktop-health=2.2.10`，活动 Run=0；本次只构建/覆盖当前源码并创建一条全新建筑 Run，旧 Run 不 retry、不改写，图纸路径不参与。
+- 第二次验收安装器构建成功：`.artifacts/qa/phase41-source-identity-followup/ArchResearch-Windows-x64-Setup-v2.2.10.exe`，69,769,109 bytes，SHA-256 `DC99EB2B1F95C8353C6FC879590EEF7BBE1994DCF79EA5D61941AA72D6FC783D`；冻结 EXE SHA-256 `4340E6918CB8663937FB762D81A31703FE4F5B96336CD45A7915AF66D5D8FA4D`，自检和 Windows 安装器合同通过，扩展/manifest 递归计数均为 0。
+- 精确停止旧 PID `25168` 后，SQLite 安装前 SHA-256 为 `F62ABB35223C024DBCED25E236792D1B3991007A8B7B6502EF3EB1C477A468B2`；静默覆盖退出码 0，安装后哈希完全一致，安装 EXE 与冻结 EXE 哈希一致。
+- 新安装版 PID `29872`、端口 `11561`，`/health=ok/openai/gpt-5.6-sol`、`/desktop-health=2.2.10`，扩展桥 connected；创建前 9 条历史 Run、活动 Run=0。一次路由检索包含不存在的 `browser_api.py` 导致该并行命令非零，改读实际 `browser.py` 后确认 `/v1/browser/status` 正常，不采用失败批次的其他输出。
+- 只创建第二次验收 Run `bef8d1a4-5d09-4624-85e4-6cfff4979b23`：原建筑入口/前场问题、`precedent_research`、`balanced`、`research_sources=[]`、`attempt=0`；创建后活动 Run 恰为 1。后续只等待自然终态并审计，不取消、不 retry、不创建并行 Run。
+
+## 2026-08-09 — Phase 41 第二次现场复验完成
+
+- Run `bef8d1a4-5d09-4624-85e4-6cfff4979b23` 自然终止为 `completed/coverage_satisfied`、`attempt=0`：23 usable/verified-partial assets、8 个项目、4/4 子问题、4 个 multi-asset projects，`gaps=[]`；仅保留 `insufficient_subquestion_assets` 软提示。
+- Trace 审计完成：330 条事件、31 次 query planning、35 次实际浏览器搜索（25 次有结果）、15 次正文分析（12 接受、3 拒绝、0 失败）；query-planning deterministic fallback=1、page-analysis deterministic fallback=1，XHS/图纸事件=0。
+- Results 审计完成：26 条持久化结果，其中 23 条正式 partial、3 条 visual lead；23 条正式资产来自 8 个来源，来源内顶层 `project_name` 分裂数为 0，93 条正式事实缺 URL/excerpt 均为 0，正式 `service industry` 命中为 0。
+- 安装版 Board 只读验收完成：API 按“来源项目 × 受支持子问题”预期 12 个 dossier，界面四问实际为 `1/3/6/2`，合计 12；8 个正式项目全部显示，同一来源在同一子问题内无重复 dossier。
+- 第一问只有 1 个案例与 API 的 `flow_interfaces=1` 完全一致；这不是 UI 截断或检索结果被隐藏。系统继续允许单案例分支完成，不复制其他分支案例、不设置逐子问题硬配额。
+- 弱回退在 Board 明确显示“把来源机制作为待核验假设”，页面无 `service industry`。当前安装版活动 Run=0；旧 Run 未 retry 或改写，图纸路径与现场数据未修改。Phase 41 标记 complete。
+
+## 2026-08-09 — Phase 42 开始
+
+- 用户要求继续下一步；确定新阶段只处理建筑研究的逐子问题软多样性调度，不增加硬案例配额，不修改 Board 或图纸逻辑。
+- 已运行 planning session catchup、`git diff --stat` 并重读规划文件末尾；Phase 41 记录已同步，没有遗留活动 Run。
+- Phase 42 计划已写入：先只读审计 coverage 与 workflow 调度，再写红测；当前尚未修改生产代码、尚未构建安装器、尚未创建或 retry Research Run。
+- 已完成第一轮源码审计：`verification.py` 的分支 enrichment 只按资产 ID 计数；`precedent.py` 只实现 coverage-first 跳过；`workflow.py` 在 4/4 覆盖后恢复固定查询顺序，没有不同项目数信号。
+- 当前判断是增加软诊断并调整 enrichment 查询选择，保持 `completion_satisfied()`、终态和 Board 证据归属不变。下一步继续读取 query 生成顺序、恢复键和相邻测试，再写失败行为测试。
+- 已确认 `build_queries()` 是固定的 round-major 顺序，现有 coverage-first 测试将完整覆盖后的 enrichment 写死为第一个分支。Phase 42 红测将把这一预期替换为“不同项目数最少者优先、同数时原顺序稳定”。
+- 兼容策略已确定：真实 coverage 新增分支项目数映射；测试 stub 缺字段时 workflow 回退到原顺序，避免无关测试大面积改写。尚未修改生产代码。
+- 用户中断后已按 planning skill 再次执行 session catchup、差异统计与四份规划文件恢复；中断前的只读命令已结束，没有后台测试或部分代码写入。Phase 42 仍停在红测前，现继续执行。
+- 设计复核否决了“跳过富集分支直到最弱分支追平”的方案，因为失败分支可能长期独占预算。确定采用每轮稳定排序：项目少者先执行，但不删除同轮其他查询，保持软优先和公平性。
+- 已核对 `query_index` 与域槽使用：重排只影响执行先后，不改变每个分支的 domain slot、query key、查询总数或恢复键。红测边界可以落在 round-local 顺序上。
+- Phase 42 首次 RED：调度参数组已准确失败，旧实现把第二轮执行为 `A/B/C/A/B/C`，没有把项目最少的 C 提前。coverage 去重测试先因夹具重复图片 URL 触发数据库唯一约束，该结果不采用；已改成同项目、同来源但不同图片 URL，待重新运行。
+- Phase 42 有效 RED 已确认：修正夹具后，coverage 测试只因缺少 `projects_per_subquestion` 失败；软调度测试只因旧流程第二轮仍按 A/B/C 固定顺序失败。未覆盖优先与同数稳定顺序两个参数组仍通过。
+- task plan 的现状审计和行为红测已标为 completed，最小软调度实现进入 in_progress。一次规划补丁因跨阶段错误表上下文不匹配整体未应用，已改用 Phase 42 精确上下文。
+- 最小实现完成：`verification.py` 增加 precedent-only 的分支项目去重映射；`workflow.py` 在每轮开始按该映射稳定重排当前轮查询，使用单层索引循环保留原 break/continue 行为。
+- 目标测试 `test_article_ready_project_counts_distinct_drawings_from_its_verified_source` 与 `test_precedent_normal_rounds_prioritize_coverage_before_enrichment` 共 4 个用例全绿。Phase 42 步骤 3 完成，步骤 4 回归与隔离开始。
+- 第一轮相关回归完成：`test_agent_verification.py`、完整 `test_workflow.py`、`test_research_path_separation.py` 全绿。下一步运行完整 browser inspection 高风险套件。
+- 完整 browser inspection 156/156 通过。Phase 42 步骤 4 标记 completed，步骤 5 自动门禁进入 in_progress。
+- 自动门禁首轮：Ruff lint 通过；format check 仅报告本轮 `agent/verification.py` 需机械排版，已记录并准备只格式化该文件。
+- 仅格式化 `agent/verification.py` 后，Ruff lint、62 文件 format check 和 strict Mypy 32 个源文件全部通过。
+- 格式化后目标行为测试 4/4 通过；API 全量 605/605 通过。自动门禁只剩 `git diff --check`、图纸差异和当前安装态/活动 Run 只读确认。
+- 最终源码门禁完成：`git diff --check` 通过，`research_paths/drawing.py` 差异为 0；当前已安装 Phase 41 版本健康正常、活动 Run=0。
+- Phase 42 步骤 5 标记 completed。尚未构建或安装 Phase 42 候选，尚未创建或 retry Research Run；步骤 6 等待用户明确授权。
+- 用户已用“运行”明确授权 Phase 42 的构建、保护性覆盖安装和恰好一条新建筑 Run；步骤 6 进入 in progress。旧 Run 不 retry、不改写，图纸研究保持不变。
+- 首次记录授权的规划补丁因摘要中的英文 Step 6 与文件当前中文步骤不匹配而整体未应用；读取精确尾部后已完成记录，产品代码未受影响。
+- Phase 42 安装前基线通过：`git diff --check` 无错误；Phase 41 安装版仍为 PID `29872`、端口 `11561`，`/health=ok`、`/desktop-health=2.2.10`，安装 EXE SHA-256 为 `4340E6918CB8663937FB762D81A31703FE4F5B96336CD45A7915AF66D5D8FA4D`；1 个 workspace、10 条历史 Run、活动 Run=0。
+- 已完整读取 Windows 构建与安装器 smoke 脚本。构建输出将限定在工作区 `.artifacts/qa/phase42-subquestion-diversity`；覆盖安装前仍需再次确认活动 Run=0，并在精确停止安装版进程后保护 SQLite 哈希。
+- Phase 42 候选安装器构建成功：`.artifacts/qa/phase42-subquestion-diversity/ArchResearch-Windows-x64-Setup-v2.2.10.exe`，69,769,520 bytes，SHA-256 `A4104C688013F9D4D0BB00C3C389906B04B193937C8AA09A7CF3E8496560A169`。冻结 EXE SHA-256 为 `13488684A685B64A8443B5FDE36604CC9097A9AC9045B2AF8A3A46AE58EE4856`，`--self-test` 退出码 0，Windows installer contract 通过，`manifest.json` 递归计数为 0。
+- 宽泛名称审计报告 2 个包含 `extension` 的路径；精确复核为 Playwright 内部 `extension.js` 与 SQLAlchemy `cyextension`，均是冻结 Python 依赖，不是 `apps/extension`、Chrome manifest 或 extension-only 产物。安装器仍保持扩展分离合同。
+- 首个保护安装命令把活动 Run 复核、精确停进程、数据库哈希、安装与重启组合在一起，被本地执行策略在运行前拒绝；旧 PID 仍在、安装器未运行、SQLite 未改。后续拆成五个小步骤执行。
+- 拆分后的保护安装完成：覆盖前再次确认 10 条历史 Run、活动 Run=0，精确停止旧 PID `29872`；SQLite 安装前后 SHA-256 均为 `E2229DC80BB0793EE5D8279FF5C43D9E75E704D5292FD97E671770026B5156B2`。安装器退出码 0，已安装 EXE 与冻结 EXE SHA-256 均为 `13488684A685B64A8443B5FDE36604CC9097A9AC9045B2AF8A3A46AE58EE4856`。
+- 新安装版已启动为 PID `11140`、动态端口 `14523`；`/health=ok`、Provider `OpenAI 兼容 API`、模型 `gpt-5.6-sol`、`/desktop-health=2.2.10`。启动后首个浏览器状态快照为 disconnected，需等待扩展按新端口重连后再创建 Run。
+- 扩展桥随后自动重连，`/v1/browser/status.connected=true`；XHS 能力为 false，符合本次不使用视觉平台的建筑 Run。
+- 一次把安装版自检和 API 基线放入并行工具调用的命令被策略在执行前拒绝，没有调用发生；改为分别执行。创建接口已从当前源码确认：`POST /v1/workspaces/{workspace_id}/runs`，本次 payload 只用全局建筑问题、`precedent_research`、`balanced` 和空 `research_sources`。
+- 直接调用 GUI 子系统 EXE 时 `$LASTEXITCODE` 为 null，未采用；改用 `Start-Process -Wait -PassThru` 后安装版 `--self-test` 可靠退出码为 0。
+- 创建前最终基线：workspace `00000000-0000-4000-8000-000000000001`，10 条历史 Run、活动 Run=0，扩展桥 connected，服务仍为 PID `11140`。现在只提交一次新建筑 Run 创建请求。
+- 只创建 Phase 42 新建筑 Run `9fab66b8-feec-40fd-b4ae-feecc17124e0`：问题为全局入口/前场流线冲突与状态变化研究，`precedent_research`、`balanced`、`research_sources=[]`、`attempt=0`；初始状态 `created`。后续只等待自然终态并做只读审计，不取消、不 retry、不创建第二条 Run。
+- 首轮只读轮询：Run 从 `planning` 自然进入 `searching`，Provider 已生成 4 个子问题；当前结果数 0、无停止原因。继续低频只读等待。
+- Provider 生成的 4 个分支为 `flow-interface`、`state-change`、`arrival-sequence`、`service-integration`，均为通用建筑研究维度，没有项目名或案例特例。首个候选页正文分析为 `direct_match=false`，按原证据门拒绝，未形成正式资产。
+- 新安装版现场 coverage 已实际返回 `projects_per_subquestion`，首个 gap-check 为四分支均 0；这证明 Phase 42 统计已进入安装运行时。Run 继续到 `state-change`，无停止原因。
+- `state-change` 首轮未保留来源，coverage 仍为 0/4；Run 自然推进到 `arrival-sequence`，首个结构化搜索返回 4 个候选。当前无错误终态或停止原因，继续等待。
+- 批量轮询脚本因工具缓冲不能提供中途快照，已仅终止该只读脚本；研究 Run 未取消或修改。恢复单次快照后，Run 已有 10 个 usable/verified-partial 资产、2 个项目，`arrival-sequence` 获 2 个不同项目并成为首个覆盖分支。
+- 两个 `arrival-sequence` 来源均为 `direct_match=true` 且证据链 complete；coverage 为 `projects_per_subquestion={arrival-sequence:2, flow-interface:0, service-integration:0, state-change:0}`。Run 已自然推进到首轮 `service-integration`，无停止原因。
+- 首轮 `service-integration` 无 direct-match 资产后，第二轮在核心覆盖不完整状态下按原顺序进入 `flow-interface`，符合 coverage-first 边界。该轮保留一个 Designboom 正文来源并完成视觉检视；当前 12 条持久化结果中 coverage 仍只计 10 条正式资产，等待正文分析结果。
+- Designboom `flow-interface` 来源只形成 2 条 usable visual lead，未增加 `verified_or_partial` 或 `projects_per_subquestion`，说明占位预览没有冒充正式分支项目。
+- 第二轮 `state-change` 的 Calgary Central Library 正文分析为 `direct_match=true`、4 条 supported facts、证据链 complete；coverage 现为 13 usable、3 项目、11 verified/partial、2/4 分支，项目分布 `arrival=2/state=1/flow=0/service=0`。Run 正在第二轮 `service-integration`。
+- 第二轮 `service-integration` 两个来源未形成 direct-match；其中 Powerhouse Arts 的视觉浏览有 1 次 `BrowserCommandError`，但公共正文仍完成分析并按 `direct_match=false` 拒绝。Run 未失败，进入第三轮 `flow-interface`。
+- 第三轮 `flow-interface` 搜索只返回 1 个候选且未保留来源，coverage 仍为 2/4。已覆盖的 `arrival-sequence` 与 `state-change` 后续应继续由 coverage-first 跳过，剩余机会用于未覆盖分支。
+- 第三轮通过已缓存的 Montesanto Station 正文为 `flow-interface` 新增 6 条 supported facts，证据链 complete；同一项目同时支持 arrival 与 flow，结果数未虚增，项目分布变为 `arrival=2/flow=1/state=1/service=0`，coverage 3/4。
+- 第三轮 `service-integration` query planning 因 `APITimeoutError` 使用通用 deterministic template，但 4 个候选均未保留。核心覆盖仍不完整，所以第 4 轮 recovery 直接从唯一未覆盖的 `service-integration` 开始，没有执行已覆盖分支；这不是软多样性重排，而是既有 coverage-first 行为。
+- Recovery 第 4–8 轮都只执行唯一未覆盖的 `service-integration`；第 5 和第 8 轮结构化搜索为 0 结果，第 6 轮搜索超时，其余没有保留候选。最终 query index 32/32，coverage 仍为 3/4、13 usable、3 项目、11 verified/partial，项目分布 `arrival=2/flow=1/state=1/service=0`。
+- Run 当前停留在最终 `gap_check` 之后等待自然终态，attempt 仍为 0、无 stop reason；不会取消或 retry。由于核心覆盖未达到 4/4，本次现场没有进入 Phase 42 的“核心覆盖完成后按项目数软排序”分支，不能用该 Run 宣称现场重排已触发。
+- Run 已自然终止为 `partial/no_new_assets`、attempt 0：156 条 Trace、14 次 query-planning、15 次实际搜索（12 次有结果）、9 次正文分析（5 direct match、4 rejected）、1 次 deterministic query fallback、1 次 BrowserCommandError；XHS/图纸事件均为 0。
+- Results 审计：13 total = 11 partial + 2 visual lead；3 个正式来源、3 个正式项目、同源名称分裂 0、正式占位名 0。50 条 fact claims 缺 URL/excerpt 均为 0；3 条 observation claims 使用 image region。正式 `service industry` 命中 0。
+- 安装版 Board 异步加载后完整呈现：四问 dossier 为 `2/1/2/0`，总计 5；正式来源×分支的 4 个展示位全部存在，另一个为 Designboom 两张 visual lead 合并后的同一正文项目。后勤问题明确显示暂无结果，没有跨分支复制；页面无 `service industry`，控制台错误 0。Chrome 控制技能使本次 UI 审计采用实际安装版 Board，而非仅凭 API 推断。
+- 只读对照 Phase 41 成功 Run：两次后勤首轮都使用 Designboom 域槽；旧 Run 的 `space_first + evidence_angle` 得到 4+2 候选并保留 Casino du Lac，本 Run 的 `space_first + project_context` 只有 1+2 候选且保留 0。后续 recovery 查询逐渐收窄为 `delivery/service vehicle stopping` 等少见字面组合，出现 0 结果或超时。
+- 根因不是硬案例数量、Board 隐藏或筛选阈值，而是 query strategy 不稳定与 recovery 词形低召回。Phase 43 已作为 proposed 阶段写入，只允许通用 lane 合同与词形轮换；不使用旧 Run 项目名作规则。
+- 最终门禁通过：`git diff --check` 无错误，`research_paths/drawing.py` 差异 0；安装版 PID `11140`、端口 `14523` 健康，扩展桥 connected，11 条历史 Run、活动 Run=0；安装/冻结 EXE 哈希一致，安装目录 `manifest.json` 计数 0。
+- 用户以“开始”授权进入 Phase 43 源码与自动测试阶段。当前只处理建筑研究的全局查询策略：先写首轮互补 lane 与 recovery 语义轮换的行为红测，再做最小修复；不修改图纸研究、证据门槛、已完成 Run，也不构建安装或创建新 Run。
+- Session catchup 确认 Phase 42 已完成、Phase 43 尚为 proposed，并检测到 10 条未同步上下文。第一次规划补丁因终端视觉换行与文件真实单行不一致而未应用；随后一次精确读取命令因嵌套 PowerShell 提前展开 `$lines` 而失败。两次均未改产品文件，改用精确单行补丁与无变量只读命令后恢复。
+- 首次向 `findings.md` 追加 Phase 43 结论时误用了 `progress.md` 的末行作为补丁锚点，补丁未应用且源码未变；读取准确末尾后已补记。
+- Phase 43 已切换为 `in_progress`，行为红测正在进行。源码定位到 `SearchQueryPlan`/`plan_search_queries()` 的双槽策略校验与 `planning.py` 的 deterministic recovery lane；下一步用抽象查询写 RED，先证明首轮 `project_context` 漂移会被接受、以及后期字面枚举可能主导 fallback。
+- 已确认 workflow 的 query slot 分配：建筑首轮为 2，普通 recovery 为 1，特定候选失败恢复可再给 2；搜索预算会在调用前裁剪。Phase 43 将保留这些预算与轮次规则，只修每个槽承担的角色。
+- 两次通用 query 探针先后因系统 Python 缺少 Pydantic、以及从错误模块导入 `ResearchGoal` 而失败；均为只读且无项目写入。改用 `apps/api/.venv/Scripts/python.exe` 和 `archresearch_api.schemas.ResearchGoal` 后成功，确认完整英文子问题在每轮被复写、round 4–8 lane 不再轮换。
+- 一次并行只读检查因 `rg` 无匹配返回退出码 1，导致组合调用未展示其他结果；改用 `Promise.allSettled` 后完成。该错误没有修改文件。
+- Phase 43 三条行为 RED 已稳定复现，结果 0/3：Provider 首轮接受 `space_first + project_context`；deterministic round 1 忽略双槽并返回默认 `project_context`；deterministic round 1–7 只有 4 个唯一查询、完整英文子问题每轮被复写且 late recovery 不轮换。步骤 2 完成，步骤 3 进入最小实现。
+- 第一份生产补丁因 Provider 长提示的精确换行与补丁上下文不匹配而整体未应用，源码仍处于 RED；改为拆分小补丁并读取精确行后完成实现。
+- Phase 43 三条目标行为初次转绿（3/3）：首轮 Provider context 漂移会触发纠错、deterministic fallback 使用明确 architecture lane、round 1–7 recovery 查询唯一且三类语义 lane 循环，完整 subquestion 不再逐轮复写。后续完整 browser 回归证明 deterministic 双槽会破坏公平预算，因此该测试已收紧为“单槽 discovery + 不额外耗预算”。
+- 邻近回归首轮发现 planner 2 个兼容失败（未知英文/中文类型范围被一并删去）、Provider 7 个旧策略预期失败、browser fallback 1 个无关医院候选进入。前两类通过“简短声明范围”与按新 lane 更新抽象测试修正；后一类通过只对带结构化 anchors 的 `space_first` 放宽候选回退修正。planner + browser 邻近 23/23、Provider query-planning 邻近 19/19 均已通过。
+- 一次并行回归调度因 JavaScript 变量重名产生语法错误，命令未执行；修正后同组通过。随后用于确认旧提示文案已清空的 `rg` 无匹配并返回退出码 1，这是预期的只读检查结果。
+- 第一轮完整回归：Provider 88/88、workflow/verification/path 55/55 通过；browser 146/157，通过 146、失败 11，全部来自 deterministic 双槽改变搜索调用数与预算顺序。撤回 fallback 的第二次真实搜索、保留 lane strategy 后，browser 157/157 全绿。
+- 只读通用 query 探针确认 round 1–7 唯一数 7、完整问题复写为 false；同时发现 late recovery 仍拼入过多显式维度，因此在正式全量门禁前补充“每条最多 3 个维度、按轮次轮换”的行为红测。
+- 运营枚举有界测试先以 4 个维度稳定 RED，再转绿。第一次 API 全量为 3 个失败，均因限制误伤空间/构造词；把限制收窄到含运营核验维度的长枚举后，4 个定向行为 4/4 通过。
+- 第二轮最终源码门禁全绿：API 全量全部通过；Ruff lint 通过；62 文件 format check 通过；strict Mypy 对 32 个源文件无问题。测试环境仍只有既有 Starlette/SQLite 弃用警告。
+- 收集确认 API 共 607 个测试；最终 `git diff --check` 通过，`research_paths/drawing.py` 差异为 0。安装版 PID `11140`、端口 `14523` 仍为 `ok/openai/gpt-5.6-sol`、版本 `2.2.10`；Run API 返回 11 条历史 Run、活动 Run=0。
+- Phase 43 步骤 4 完成，步骤 5 保持 pending authorization。本阶段没有构建、安装、retry 或创建 Research Run；唯一下一步是等待用户授权一次保护安装与一条新建筑 Run。
+- 用户以“可以开始”明确授权 Phase 43 的构建、保护性覆盖安装与恰好一条新建筑 Run。步骤 5 进入 in_progress；授权不包含 retry 旧 Run、第二条 Run 或图纸研究。
+- Planning session catchup 检出 5 条未同步上下文；`git diff --stat` 与 Phase 43 计划/末尾记录一致，工作树既有修改全部保留。
+- Phase 43 安装前基线：11 条历史 Run、活动 Run=0；当前安装版 PID `11140`、端口 `14523`。已完整读取 Windows 构建和安装器 smoke 脚本，确认 smoke 不允许覆盖现有安装，因此现场采用既有保护性覆盖流程，不直接运行卸载 smoke。
+- 数据目录确认在 `%LOCALAPPDATA%\ArchResearch\data`，SQLite 为 `archresearch.db`；构建输出将限定在 `.artifacts/qa/phase43-query-lane-stability`。
+- Phase 43 候选构建完成。安装器 69,772,830 bytes、SHA-256 `FA6CFDABDF9D3DB260329941FC79F67BA01A8824D24959559E0D9ED0E20DB1A0`；冻结 EXE 18,000,318 bytes、SHA-256 `CE47B35AA558DF6116245FBBB6C68219C625AF3360BE805B1ACE97FE7BD759B1`。
+- 候选冻结自检退出码 0，Windows 安装器契约通过；冻结目录 `manifest.json=0`、扩展专属路径=0。旧安装进程 PID `11140` 仍在运行，尚未执行覆盖安装或创建 Run。
+- 最终正确解析 Run API 为 11 条历史 Run、活动 Run=0；首次使用 `@(...)` 包裹 `Invoke-RestMethod` 时把返回数组嵌套成单元素，显示的总数 1 不可采用，改用返回数组本身的 `.Count/.Where()` 后确认基线。
+- 服务运行时 SQLite 被独占，在线 `Get-FileHash` 只读失败且无数据改动。校验安装路径后已精确停止 PID `11140`，安装前数据库为 2,985,984 bytes、SHA-256 `9B7D9C3DC084827F7E5BCBA27F2D6DBD767B151933D8678D77B37B2D21EA26DF`；下一步执行候选覆盖安装。
+- Phase 43 保护性覆盖安装成功，安装器退出码 0。SQLite 安装前后 SHA-256 均为 `9B7D9C3DC084827F7E5BCBA27F2D6DBD767B151933D8678D77B37B2D21EA26DF`；安装 EXE 与冻结 EXE SHA-256 均为 `CE47B35AA558DF6116245FBBB6C68219C625AF3360BE805B1ACE97FE7BD759B1`，安装版自检退出码 0。
+- 新安装版 PID `43912`、动态端口 `3303`，健康为 `ok/openai/gpt-5.6-sol`、版本 `2.2.10`，扩展桥已重新连接；安装目录 `manifest.json=0`、扩展专属路径=0。尚未创建 Phase 43 Run。
+- 创建前再次确认 11 条历史 Run、活动 Run=0、扩展桥 connected；唯一 POST 创建 Run `3d85f4f0-1988-41b9-9e83-47e11e3bb4b9`，初始状态 `created`、attempt 0。后续只做低频只读轮询和终态审计，不取消、不 retry、不创建第二条 Run。
+- 首次现场快照：Run 已自然进入 `searching`，4 个子问题生成。`spatial_relations` 首轮实际策略为 `space_first + evidence_angle`，首个结构化 ArchDaily 搜索返回 4 个候选；attempt 仍为 0、无停止原因。
+- `spatial_relations` 首轮两次搜索均返回 4 个候选，正文来源 `direct_match=false`，coverage 仍为 0/4；3 个视觉 leads 没有冒充正式项目。`user_experience` 首轮计划继续为 `space_first + evidence_angle`，当前无 Browser error。
+- `state_change` 首轮实际为 `space_first + evidence_angle`，8 个候选保留 3 个；2 个正文 direct-match、1 个拒绝。gap-check 为 11 usable、2 个项目、覆盖 1/4，项目分布 `state_change=2`、其余 0；Run 继续进入首轮 `site_conditions`。
+- 四个子问题首轮计划全部实际为 `space_first + evidence_angle`。首轮后为 15 usable、4 项目、覆盖 2/4；第二轮两个未覆盖分支均按单槽 `space_first` 的空间关系 lane 执行。
+- `spatial_relations` 通过缓存 Nanterre 正文的确定性 page-analysis fallback 获得 2 条来源事实；`user_experience` 新项目正文 direct-match、5 条事实、证据链 complete。最新 gap-check 为 25 usable、5 项目、覆盖 4/4、`gaps=[]`，每问项目数 `3/1/2/1`；软数量提示未阻止流程自然继续。
+- 第三轮实际先执行项目较少的 `spatial_relations`、`user_experience`，策略均为 `evidence_angle`；Tribut Stadium 为 user 分支增加 4 条支持事实后，Run 自然完成为 `completed/coverage_satisfied`、attempt 0，33 usable、7 项目、4/4、`gaps=[]`、`enrichment_gaps=[]`，项目分布 `5/1/2/2`。
+- 终态 Trace 为 133 条、query planning 10（全部 Provider）、搜索 14（12 有结果、2 TimeoutError）、正文分析 14（10 direct-match、4 rejected）、确定性 page-analysis fallback 2、browser failure 0、XHS 0。
+- 首次按摘要文本搜索 `drawing` 把 14 个正文事件中的 `drawing_count` 字段误计成图纸事件，该数字作废；后续按 event tool/goal 重算。Results 初步 39 条，不能把全部 32 个 partial 都当 coverage 正式项目，Legacy/Plaine 无正式 subquestion analysis；Board-ready 项目应按既有分支证据门审计为 7 个。
+- 第二次自动筛选尝试直接读取空 `PSObject.Properties.Count`，一度把 7 个视觉线索混入正式集合并得到 8 项目/3 同源分裂/7 占位名；该结果与 Board 冲突并作废。改为过滤非空属性名后，Board-ready 为 19 资产、7 来源、7 项目、同源分裂 0、占位名 0。
+- Board-ready 证据链为 97 条 fact claims，缺 URL/excerpt 均为 0；5 条 observation claims 均有 image region。Trace 按 tool 重算 XHS=0、drawing/visual-reference=0。
+- Chrome 控制技能打开实际安装版 Board，程序化确认 10 个 dossier、四问分布 `1/2/2/5`，每问来源 URL 唯一；2 个确定性回退均显示“待核验假设”，Legacy/Plaine 不展示，`service industry` 为 0。
+- 源码只读确认 `evidence_angle` 在底层结构化搜索被统一映射到二值 `search_scope=project_context`；这解释 Trace 标签，不代表策略退化。query-planning 记录仍为首轮四问双 lane、第二轮 `space_first`、第三轮 `evidence_angle`。
+- Phase 43 最终门禁通过：`git diff --check`、图纸差异 0；安装版 PID `43912`/端口 `3303` 健康，扩展 connected、12 条历史 Run、活动 Run=0；安装 EXE 哈希与候选一致，安装目录 `manifest.json=0`、扩展专属路径=0。
+- Phase 43 已标记 completed。唯一 Run 不 retry、不改写，未创建第二条 Run；图纸研究未修改、未参与现场流程。
+- 用户授权正式发布 `v2.3.0` 并要求整理工作区、提交发布更新。已启用 planning-with-files 与 GitHub publish 技能；Phase 44 建立为 in_progress。
+- Session catchup 检出 17 条未同步上下文；重新读取 Phase 43 计划/发现/进度并核对 `git diff --stat`，当前 18 个 tracked 修改文件、`.artifacts/ci/` 与 `.planning/` 两个未跟踪目录。
+- 发布基线确认远端 latest 为 `v2.2.10`，本地版本合同和 CI 仍硬编码 `2.2.10`；`v2.3.0` 必须作为新 tag/Release，从同一最终提交生成独立 Windows 与 Extension 两个附件。
+## 2026-08-09 — Phase 44 发布审计脚本失误
+
+- 首次并行只读审计脚本因 JavaScript 多余右括号而在调用任何仓库命令前失败。
+- 影响：无文件、Git 或发布状态变更；改用校正后的脚本继续。
+## 2026-08-09 — Phase 44 分支基线确认
+
+- `git fetch origin --prune` 后确认 `origin/main=a2ff995`，当前 HEAD 与主线为 14/1 分叉；不会直接从旧分支历史开 PR。
+- GitHub CLI 已登录且发布权限可用。当前相对主线的产品/测试/记录范围已冻结，图纸研究实现差异为 0。
+- 本地 `.artifacts/ci/` 与 `.planning/` 不删除，只加入忽略规则；下一步完成 `2.3.0` 全表面版本统一和发布说明。
+## 2026-08-09 — Phase 44 发布文件审计路径修正
+
+- 一组并行只读检查引用了不存在的旧脚本名 `scripts/package-extension.ps1` 与 `scripts/build-windows.ps1`，因此该分组退出码为 1；没有修改任何文件或 Git 状态。
+- 仓库实际构建入口为 `scripts/build-extension-package.ps1` 与 `scripts/build-windows-installer.ps1`，后续按真实路径继续。
+## 2026-08-09 — Phase 44 版本表面冻结
+
+- API、Board、Extension package、Extension manifest、FastAPI 元数据、README、GitHub workflow 与 release contract 已统一为 `2.3.0`；当前代码/发布表面已无 `2.2.10` 残留，历史验收记录保持不变。
+- README 新增 v2.3.0 用户摘要，明确两条研究路径拆分、建筑检索 lane 优化、图纸浏览器/笔记路径修复，以及“子问题案例数不是硬配额”。
+- `.gitignore` 新增 `.artifacts/ci/` 与 `.planning/`，本地缓存没有删除且不再出现在待提交状态。
+- `scripts/tests/release.tests.ps1` 通过，`git diff --check` 通过，图纸研究实现文件相对 `origin/main` 差异为 0。
+- 构建脚本审计命令还引用了一个不存在的 `scripts/build-windows-exe.ps1`，导致该只读子命令退出码 1；实际 Windows 构建入口已完整读取且为 `scripts/build-windows-installer.ps1`，没有状态改动。
+## 2026-08-09 — Phase 44 第一轮完整门禁
+
+- `scripts/verify.ps1` 第一轮在 Ruff format check 退出 1：API `607 passed`，前置 release/windows/security/process/autostart/evaluation 合同均通过；`apps/api/src/archresearch_api/__init__.py` 与 `main.py` 因版本号编辑后的格式需要规范化。
+- 这是格式门禁失败，不是功能测试失败；只运行 Ruff formatter 处理这两个文件，然后从头重跑权威门禁。
+## 2026-08-09 — Phase 44 权威门禁全绿
+
+- 格式修正后从头运行 `scripts/verify.ps1`，退出码 0，用时 177.8 秒。
+- 结果：API 607/607、Board 190/190、Extension 216/216、packaged MV3 E2E 8/8；Ruff lint/format、strict Mypy 32 source files、前端 lint/typecheck、production build、release/windows/security/process/autostart/evaluation 合同全部通过。
+- 门禁后没有 fixtures 或图纸研究实现差异；工作树只保留已冻结的 v2.3.0 发布范围。
+- 本机已有用户安装版 PID `43912`，正式 smoke 脚本按设计拒绝覆盖现有安装。不会为本地 smoke 卸载用户安装；本地构建执行冻结 EXE self-test，完整安装/启动/卸载 smoke 由干净 GitHub Actions runner 执行。
+## 2026-08-09 — Phase 44 本地双产物完成
+
+- Chrome 扩展 ZIP：`.artifacts/releases/archresearch-chrome-extension-only-v2.3.0.zip`，20,530 bytes，SHA-256 `32E52AF8A7D3489A6367A5D0F1EFDB1B1E8A9018AAA1109B2EC669DC29AE7DEC`；11 entries，根 manifest `2.3.0`。
+- Windows 安装器：`.artifacts/releases/ArchResearch-Windows-x64-Setup-v2.3.0.exe`，69,769,701 bytes，SHA-256 `36FD8847915D48F8428E165CE4D3F751ADEC2DF09A63D435FCD579B5E9F80895`；Product/File version 均为 `2.3.0`。
+- 冻结 EXE 为 18,000,317 bytes、SHA-256 `7F96EC4B0471A96CA9AD8CDD862C9DC573E6CC2046060BD0497FBED4F6780747`，构建内置 self-test 已通过。
+- Windows bundle 中 `manifest.json=0`、Extension 专属文件计数 0；安装器与 Chrome 扩展继续为两个独立附件。
+- 相对 `origin/main` 的新增行敏感信息扫描：API Key 赋值 0、`sk-` secret prefix 0、private key block 0。正式提交范围为 28 个 tracked 文件，忽略产物未进入状态。

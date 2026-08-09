@@ -361,16 +361,23 @@ function isSameXiaohongshuNote(actualUrl: string, targetUrl: string): boolean {
   try {
     const actual = new URL(actualUrl);
     const target = new URL(targetUrl);
+    const actualNoteId = xiaohongshuNoteId(actual);
+    const targetNoteId = xiaohongshuNoteId(target);
     return (
       actual.origin === target.origin &&
-      actual.pathname === target.pathname &&
-      /^\/(?:explore|discovery\/item|search_result)\/[^/]+/u.test(
-        actual.pathname,
-      )
+      actualNoteId !== null &&
+      actualNoteId === targetNoteId
     );
   } catch {
     return false;
   }
+}
+
+function xiaohongshuNoteId(url: URL): string | null {
+  const match = /^\/(?:explore|discovery\/item|search_result)\/([^/]+)\/?$/u.exec(
+    url.pathname,
+  );
+  return match?.[1] ?? null;
 }
 
 function defaultDelay(milliseconds: number): Promise<void> {
